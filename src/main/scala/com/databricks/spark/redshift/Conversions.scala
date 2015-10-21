@@ -28,33 +28,35 @@ import org.apache.spark.sql.Row
  */
 private[redshift] object Conversions {
 
-  // Redshift may or may not include the fraction component in the UNLOAD data, and there are
-  // apparently not clues about this in the table schema. This format delegates to one of the above
-  // formats based on string length.
   private val redshiftTimestampFormat: DateFormat = new DateFormat() {
 
-    // Imports and exports with Redshift require that timestamps are represented
-    // as strings, using the following formats
-    private val PATTERN_WITH_MILLIS = "yyyy-MM-dd HH:mm:ss.SSS"
-    private val PATTERN_WITHOUT_MILLIS = "yyyy-MM-dd HH:mm:ss"
+    // Snowflake needs to use either of these formats
+    private val PATTERN_BASE = "yyyy-MM-dd HH:mm:ss.SSS"
+    private val PATTERN_TZ= "yyyy-MM-dd HH:mm:ss.SSS Z"
 
-    private val redshiftTimestampFormatWithMillis = new SimpleDateFormat(PATTERN_WITH_MILLIS)
-    private val redshiftTimestampFormatWithoutMillis = new SimpleDateFormat(PATTERN_WITHOUT_MILLIS)
+    private val formatBase= new SimpleDateFormat(PATTERN_BASE)
+    private val formatTz = new SimpleDateFormat(PATTERN_TZ)
 
     override def format(
         date: Date,
         toAppendTo: StringBuffer,
         fieldPosition: FieldPosition): StringBuffer = {
-      // Always export with milliseconds, as they can just be zero if not specified
-      redshiftTimestampFormatWithMillis.format(date, toAppendTo, fieldPosition)
+      // Always export w/ timezone
+      formatTz.format(date, toAppendTo, fieldPosition)
     }
 
     override def parse(source: String, pos: ParsePosition): Date = {
-      if (source.length < PATTERN_WITH_MILLIS.length) {
-        redshiftTimestampFormatWithoutMillis.parse(source, pos)
-      } else {
-        redshiftTimestampFormatWithMillis.parse(source, pos)
+      val idx = pos.getIndex
+      val errIdx = pos.getErrorIndex
+      var res = formatBase.parse(source, pos)
+      if (res == null) {
+        // Restore pos
+        pos.setIndex(idx)
+        pos.setErrorIndex(errIdx)
+        // Try again
+        res = formatTz.parse(source, pos)
       }
+      res
     }
   }
 

@@ -33,7 +33,7 @@ class ParametersSuite extends FunSuite with Matchers {
 
     mergedParams.rootTempDir should startWith (params("tempdir"))
     mergedParams.createPerQueryTempDir() should startWith (params("tempdir"))
-    mergedParams.jdbcUrl shouldBe params("url")
+    mergedParams.sfURL shouldBe params("sfurl")
     mergedParams.table shouldBe Some(TableName("test_schema", "test_table"))
 
     // Check that the defaults have been added

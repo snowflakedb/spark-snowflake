@@ -44,8 +44,9 @@ private[redshift] object Parameters {
     if (!userParameters.contains("tempdir")) {
       throw new IllegalArgumentException("'tempdir' is required for all Redshift loads and saves")
     }
-    if (!userParameters.contains("url")) {
-      throw new IllegalArgumentException("A JDBC URL must be provided with 'url' parameter")
+    // Snowflake-todo Add more parameter checking
+    if (!userParameters.contains("sfurl")) {
+      throw new IllegalArgumentException("A snowflake URL must be provided with 'sfurl' parameter, e.g. 'host:port'")
     }
     if (!userParameters.contains("dbtable") && !userParameters.contains("query")) {
       throw new IllegalArgumentException(
@@ -103,27 +104,52 @@ private[redshift] object Parameters {
     }
 
     /**
-     * A JDBC URL, of the format:
-     *
-     *    jdbc:subprotocol://host:port/database?user=username&password=password
-     *
-     * Where:
-     *  - subprotocol can be postgresql or redshift, depending on which JDBC driver you have loaded.
-     *    Note however that one Redshift-compatible driver must be on the classpath and match this
-     *    URL.
-     *  - host and port should point to the Redshift master node, so security groups and/or VPC will
-     *    need to be configured to allow access from the Spark driver
-     *  - database identifies a Redshift database name
-     *  - user and password are credentials to access the database, which must be embedded in this
-     *    URL for JDBC
+     * ----------------------------------------- Database connection specification
      */
-    def jdbcUrl: String = parameters("url")
 
+    /**
+     * URL pointing to the snowflake database, simply
+     *   host:port
+     */
+    def sfURL: String = parameters("sfurl")
+
+    /**
+     * Snowflake database name
+     */
+    def sfDatabase: String = parameters("sfdatabase")
+    /**
+     * Snowflake schema
+     */
+    def sfSchema: String = parameters.getOrElse("sfschema", "public")
+    /**
+     * Snowflake warehouse
+     */
+    def sfWarehouse: Option[String] = parameters.get("sfwarehouse")
+    /**
+     * Snowflake user
+     */
+    def sfUser: String = parameters("sfuser")
+    /**
+     * Snowflake password
+     */
+    def sfPassword: String = parameters("sfpassword")
+    /**
+     * Snowflake account - optional
+     */
+    def sfAccount: Option[String] = parameters.get("sfaccount")
+    /**
+     * Snowflake SSL on/off - "on" by default
+     */
+    def sfSSL: String = parameters.getOrElse("sfssl", "on")
     /**
      * The JDBC driver class name. This is used to make sure the driver is registered before
      * connecting over JDBC.
      */
     def jdbcDriver: Option[String] = parameters.get("jdbcdriver")
+
+    /**
+     * -----------------------------------------Various other options
+     */
 
     /**
      * If true, when writing, replace any existing data. When false, append to the table instead.

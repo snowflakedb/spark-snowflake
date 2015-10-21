@@ -21,6 +21,8 @@ import java.net.URI
 import java.sql.{Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
 import java.util.Properties
 
+import com.databricks.spark.redshift.Parameters.MergedParameters
+
 import scala.util.Try
 
 import org.apache.spark.SPARK_VERSION
@@ -41,7 +43,9 @@ private[redshift] class JDBCWrapper {
    * that class will be used. Otherwise, we will attempt to load the correct driver class based on
    * the JDBC subprotocol.
    *
-   * @param jdbcSubprotocol 'redshift' or 'postgres'
+   * Snowflake-todo Probably not needed
+   *
+   * @param jdbcSubprotocol 'redshift' or 'postgres' or 'snowflake'
    * @param userProvidedDriverClass an optional user-provided explicit driver class name
    * @return the driver class
    */
@@ -50,6 +54,14 @@ private[redshift] class JDBCWrapper {
       userProvidedDriverClass: Option[String]): Class[Driver] = {
     userProvidedDriverClass.map(Utils.classForName).getOrElse {
       jdbcSubprotocol match {
+        case "snowflake" =>
+          try {
+            Utils.classForName("com.snowflake.client.jdbc.SnowflakeDriver")
+          } catch {
+              case e: ClassNotFoundException =>
+                throw new ClassNotFoundException(
+                  "Could not load a Snowflake JDBC driver", e)
+          }
         case "redshift" =>
           try {
             Utils.classForName("com.amazon.redshift.jdbc41.Driver")
@@ -128,6 +140,8 @@ private[redshift] class JDBCWrapper {
   /**
    * Given a driver string and a JDBC url, load the specified driver and return a DB connection.
    *
+   * Snowflake-todo Probably not needed
+   *
    * @param userProvidedDriverClass the class name of the JDBC driver for the given url. If this
    *                                is None then `spark-redshift` will attempt to automatically
    *                                discover the appropriate driver class.
@@ -136,9 +150,49 @@ private[redshift] class JDBCWrapper {
   def getConnector(userProvidedDriverClass: Option[String], url: String): Connection = {
     val subprotocol = new URI(url.stripPrefix("jdbc:")).getScheme
     val driverClass: Class[Driver] = getDriverClass(subprotocol, userProvidedDriverClass)
+    println(driverClass)
     registerDriver(driverClass.getCanonicalName)
     DriverManager.getConnection(url, new Properties())
   }
+
+  /**
+   *  Get a connection based on the provided parameters
+   */
+  def getConnector(params: MergedParameters): Connection = {
+    // Derive class name
+    val driverClassName = params.jdbcDriver.
+      getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
+    // Load class
+    try {
+      val driverClass = Utils.classForName(driverClassName)
+      registerDriver(driverClass.getCanonicalName)
+    } catch {
+      case e: ClassNotFoundException =>
+        throw new ClassNotFoundException(
+          "Could not load a Snowflake JDBC driver", e)
+    }
+
+    val sfURL = params.sfURL
+    val jdbcURL = s"""jdbc:snowflake://$sfURL"""
+
+    val jdbcProperties = new Properties()
+    // Obligatory properties
+    jdbcProperties.put("db", params.sfDatabase)
+    jdbcProperties.put("schema", params.sfSchema)  // Has a default
+    jdbcProperties.put("user", params.sfUser)
+    jdbcProperties.put("password", params.sfPassword)
+    jdbcProperties.put("ssl", params.sfSSL)  // Has a default
+    // Optional properties
+    if (params.sfAccount.isDefined) {
+      jdbcProperties.put("account", params.sfAccount.get)
+    }
+    if (params.sfWarehouse.isDefined) {
+      jdbcProperties.put("warehouse", params.sfWarehouse.get)
+    }
+
+    DriverManager.getConnection(jdbcURL, jdbcProperties)
+  }
+
 
   /**
    * Compute the SQL schema string for the given Spark SQL Schema.

@@ -25,7 +25,9 @@ private[redshift] case class TableName(unescapedSchemaName: String, unescapedTab
   private def quote(str: String) = '"' + str.replace("\"", "\"\"") + '"'
   def escapedSchemaName: String = quote(unescapedSchemaName)
   def escapedTableName: String = quote(unescapedTableName)
-  override def toString: String = s"$escapedSchemaName.$escapedTableName"
+  // override def toString: String = s"$escapedSchemaName.$escapedTableName"
+  // Snowflake-todo See if we need escaping here
+  override def toString: String = s"$unescapedTableName"
 }
 
 private[redshift] object TableName {

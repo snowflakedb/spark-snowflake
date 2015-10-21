@@ -361,7 +361,7 @@ private[redshift] class RedshiftWriter(
 
     Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
 
-    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl)
+    val conn = jdbcWrapper.getConnector(params)
 
     try {
       val tempDir = params.createPerQueryTempDir()

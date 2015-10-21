@@ -53,7 +53,7 @@ private[redshift] case class RedshiftRelation(
     userSchema.getOrElse {
       val tableNameOrSubquery =
         params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl)
+      val conn = jdbcWrapper.getConnector(params)
       try {
         jdbcWrapper.resolveTable(conn, tableNameOrSubquery)
       } finally {
@@ -83,7 +83,7 @@ private[redshift] case class RedshiftRelation(
       val tableNameOrSubquery = params.query.map(q => s"($q)").orElse(params.table).get
       val countQuery = s"SELECT count(*) FROM $tableNameOrSubquery $whereClause"
       log.info(countQuery)
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl)
+      val conn = jdbcWrapper.getConnector(params)
       try {
         val results = conn.prepareStatement(countQuery).executeQuery()
         if (results.next()) {
@@ -102,7 +102,7 @@ private[redshift] case class RedshiftRelation(
       val tempDir = params.createPerQueryTempDir()
       val unloadSql = buildUnloadStmt(requiredColumns, filters, tempDir)
       log.info(unloadSql)
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl)
+      val conn = jdbcWrapper.getConnector(params)
       try {
         conn.prepareStatement(unloadSql).execute()
       } finally {
@@ -132,7 +132,10 @@ private[redshift] case class RedshiftRelation(
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
     val creds = params.temporaryAWSCredentials.getOrElse(
       AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration))
-    val credsString: String = AWSCredentialsUtils.getRedshiftCredentialsString(creds)
+    // val credsString: String = AWSCredentialsUtils.getRedshiftCredentialsString(creds)
+    // Snowflake-todo: token support
+    val awsAccessKey = creds.getAWSAccessKeyId
+    val awsSecretKey = creds.getAWSSecretKey
     val query = {
       // Since the query passed to UNLOAD will be enclosed in single quotes, we need to escape
       // any single quotes that appear in the query itself
@@ -144,7 +147,19 @@ private[redshift] case class RedshiftRelation(
     }
     val fixedUrl = Utils.fixS3Url(tempDir)
 
-    s"UNLOAD ('$query') TO '$fixedUrl' WITH CREDENTIALS '$credsString' ESCAPE"
+    // Snowflake-todo Compression support
+
+    s"""
+COPY INTO '$fixedUrl'
+FROM ($query)
+CREDENTIALS = ( AWS_KEY_ID='$awsAccessKey' AWS_SECRET_KEY='$awsSecretKey')
+FILE_FORMAT = (
+    TYPE=CSV COMPRESSION=none
+    FIELD_DELIMITER='|' ESCAPE='\\\\'
+    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'
+  )
+MAX_FILE_SIZE = 10000000
+"""
   }
 
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {

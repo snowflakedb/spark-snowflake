@@ -42,23 +42,39 @@ object SparkRedshiftTutorial {
    */
 
   def main(args: Array[String]): Unit = {
-
-    if (args.length < 6) {
-      println("Needs 6 parameters only passed " + args.length)
-      println("parameters needed - $awsAccessKey $awsSecretKey $rsDbName $rsUser $rsPassword $rsURL")
+    // Note: we use 4 args from command line, the rest is hardcoded for now
+    if (args.length != 4) {
+      println("Needs 4 parameters only passed " + args.length)
+      println("parameters needed - $awsAccessKey $awsSecretKey $sfUser $sfPassword")
+      System.exit(1)
     }
     val awsAccessKey = args(0)
     val awsSecretKey = args(1)
-    val rsDbName = args(2)
-    val rsUser = args(3)
-    val rsPassword = args(4)
-    //Sample Redshift URL is swredshift.czac2vcs84ci.us-east-1.redshift.amazonaws.com:5439
-    val rsURL = args(5)
-    val jdbcURL = s"""jdbc:redshift://$rsURL/$rsDbName?user=$rsUser&password=$rsPassword"""
-    println(jdbcURL)
+    val sfUser = args(2)
+    val sfPassword = args(3)
+    // These are hardcoded for now
+    val tempS3Dir = "s3n://sfc-dev1-regression/SPARK-SNOWFLAKE"
+    val sfDatabase = "sparkdb"
+    val sfSchema = "public"
+    val sfWarehouse = "sparkwh"
+    val sfAccount = "snowflake"
+    val sfURL = "fdb1-gs.dyn.int.snowflakecomputing.com:8080"
+    val sfSSL = "off"
+
+    // Prepare Snowflake connection options as a map
+    val sfOptions = Map(
+      "sfURL" -> sfURL,
+      "sfDatabase" -> sfDatabase,
+      "sfSchema" -> sfSchema,
+      "sfWarehouse" -> sfWarehouse,
+      "sfUser" -> sfUser,
+      "sfPassword" -> sfPassword,
+      "sfAccount" -> sfAccount,
+      "sfSSL" -> sfSSL
+    )
+
     val sc = new SparkContext(new SparkConf().setAppName("SparkSQL").setMaster("local"))
 
-    val tempS3Dir = "s3n://redshift-spark/temp/"
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", awsAccessKey)
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", awsSecretKey)
 
@@ -69,14 +85,16 @@ object SparkRedshiftTutorial {
     //Load from a table 
     val eventsDF = sqlContext.read
       .format("com.databricks.spark.redshift")
-      .option("url", jdbcURL)
+      .options(sfOptions)
       .option("tempdir", tempS3Dir)
-      .option("dbtable", "event")
+      .option("dbtable", "testdt")
       .load()
-    eventsDF.show()
     eventsDF.printSchema()
+    eventsDF.show()
 
-    //Load from a query 
+
+/*** ------------------------------------ FINITO
+    //Load from a query
     val salesQuery = """SELECT salesid, listid, sellerid, buyerid, 
                                eventid, dateid, qtysold, pricepaid, commission 
                         FROM sales 
@@ -158,5 +176,8 @@ object SparkRedshiftTutorial {
       .option("dbtable", "redshift_sales_agg")
       .mode(SaveMode.Overwrite)
       .save()
+
+    }
+*** ------------------------------------ FINITO ***/
   }
 }
