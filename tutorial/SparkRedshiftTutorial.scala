@@ -108,6 +108,8 @@ object SparkRedshiftTutorial {
       .option("dbtable", "testdt")
       .load()
     eventsDF3.filter(eventsDF3("S") > "o'ne").show()
+    eventsDF3.filter(eventsDF3("S") > "o'ne\\").show()
+    eventsDF3.filter(eventsDF3("T") > "2013-04-05 01:02:03").show()
 
 
     /*** ------------------------------------ FINITO
