@@ -81,8 +81,8 @@ object SparkRedshiftTutorial {
     val sqlContext = new SQLContext(sc)
 
     import sqlContext.implicits._
-    
-    //Load from a table 
+
+    //Load from a table
     val eventsDF = sqlContext.read
       .format("com.databricks.spark.redshift")
       .options(sfOptions)
@@ -92,8 +92,25 @@ object SparkRedshiftTutorial {
     eventsDF.printSchema()
     eventsDF.show()
 
+    val eventsDF2 = sqlContext.read
+      .format("com.databricks.spark.redshift")
+      .options(sfOptions)
+      .option("tempdir", tempS3Dir)
+      .option("query", "select * from testdt where i > 2")
+      .load()
+    eventsDF2.printSchema()
+    eventsDF2.show()
 
-/*** ------------------------------------ FINITO
+    val eventsDF3 = sqlContext.read
+      .format("com.databricks.spark.redshift")
+      .options(sfOptions)
+      .option("tempdir", tempS3Dir)
+      .option("dbtable", "testdt")
+      .load()
+    eventsDF3.filter(eventsDF3("S") > "o'ne").show()
+
+
+    /*** ------------------------------------ FINITO
     //Load from a query
     val salesQuery = """SELECT salesid, listid, sellerid, buyerid, 
                                eventid, dateid, qtysold, pricepaid, commission 
