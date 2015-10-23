@@ -1,4 +1,21 @@
-# `spark-redshift`
+# `spark-snowflake`
+
+Based heavily on **spark-redshift**, very much WIP.
+
+## Using in IntelliJ Idea
+After opening a project in Idea, and after each Idea restart, you need to (while Idea is running)
+
+- Run this
+
+```bash
+perl -i -p -e 's/ scope="PROVIDED"//g;' .idea/modules/spark-redshift.iml
+```
+
+- Go to File->Project Structure ->Modules ->Sources
+  - choose Sources, add "tutorial" as Source
+  - choose Dependencies, add a snowflake-jdbc.jar there
+
+# `Below is info for spark-redshift`
 
 [![Build Status](https://travis-ci.org/databricks/spark-redshift.svg?branch=master)](https://travis-ci.org/databricks/spark-redshift)
 [![codecov.io](http://codecov.io/github/databricks/spark-redshift/coverage.svg?branch=master)](http://codecov.io/github/databricks/spark-redshift?branch=master)
