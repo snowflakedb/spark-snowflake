@@ -8,7 +8,7 @@ After opening a project in Idea, and after each Idea restart, you need to (while
 - Run this
 
 ```bash
-perl -i -p -e 's/ scope="PROVIDED"//g;' .idea/modules/spark-redshift.iml
+perl -i -p -e 's/ scope="PROVIDED"//g;' .idea/modules/spark-snowflakedb.iml
 ```
 
 - Go to File->Project Structure ->Modules ->Sources
