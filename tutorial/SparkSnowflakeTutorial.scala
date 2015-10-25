@@ -19,7 +19,8 @@ import org.apache.spark.{SparkConf,SparkContext}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.{StructType,StructField,DecimalType,IntegerType,LongType,StringType}
-  
+import org.slf4j.LoggerFactory
+
 
 /**
  * Source code accompanying the spark-redshift tutorial.
@@ -30,6 +31,18 @@ import org.apache.spark.sql.types.{StructType,StructField,DecimalType,IntegerTyp
  * 4. Database Password
  */
 object SparkSnowflakeTutorial {
+  // Helpers to log various steps
+  private val log = LoggerFactory.getLogger(getClass)
+  def step(msg : String) = {
+    var line = "* "
+    line += (" " * ((66 - msg.length) / 2))
+    line += msg
+    line = line + " " * (68 - line.length) + " *"
+    log.info("*" * 70)
+    log.info(line)
+    log.info("*" * 70)
+  }
+
   /*
    * For Windows Users only
    * 1. Download contents from link 
@@ -56,7 +69,7 @@ object SparkSnowflakeTutorial {
     val sfSchema = "public"
     val sfWarehouse = "sparkwh"
     val sfAccount = "snowflake"
-    val sfURL = "fdb1-gs.dyn.int.snowflakecomputing.com:8080"
+    val sfURL = "FDB1-gs.dyn.int.snowflakecomputing.com:8080"
     val sfSSL = "off"
 
     // Prepare Snowflake connection options as a map
@@ -80,35 +93,74 @@ object SparkSnowflakeTutorial {
 
     import sqlContext.implicits._
 
-    //Load from a table
-    val eventsDF = sqlContext.read
+    // df1: Load from a table
+    step("Creating df1")
+    val df1 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("tempdir", tempS3Dir)
       .option("dbtable", "testdt")
       .load()
-    eventsDF.printSchema()
-    eventsDF.show()
+    df1.printSchema()
+    df1.show()
 
-    val eventsDF2 = sqlContext.read
+
+    // df2: Load from a query
+    step("Creating df2")
+    val df2 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("tempdir", tempS3Dir)
       .option("query", "select * from testdt where i > 2")
       .load()
-    eventsDF2.printSchema()
-    eventsDF2.show()
+    df2.printSchema()
+    df2.show()
 
-    val eventsDF3 = sqlContext.read
+    // Test pushdowns
+    step("Creating df3")
+    val df3 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("tempdir", tempS3Dir)
       .option("dbtable", "testdt")
       .load()
-    eventsDF3.filter(eventsDF3("S") > "o'ne").show()
-    eventsDF3.filter(eventsDF3("S") > "o'ne\\").show()
-    eventsDF3.filter(eventsDF3("T") > "2013-04-05 01:02:03").show()
+    df3.filter(df3("S") > "o'ne").show()
+    df3.filter(df3("S") > "o'ne\\").show()
+    df3.filter(df3("T") > "2013-04-05 01:02:03").show()
 
+    /*
+     * Register our df1 table as temporary table 'mytab'
+     * so that it can be queried via sqlContext.sql
+     */
+    df1.registerTempTable("mytab")
+
+    /*
+     * Create a new table sftab (overwriting any existing sftab table)
+     * from spark "mytab" table,
+     * filtering records via query and renaming a column
+     */
+    step("Creating SQL mytab")
+    sqlContext.sql("SELECT * FROM mytab WHERE I != 7").withColumnRenamed("I", "II")
+      .write.format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("tempdir", tempS3Dir)
+      .option("dbtable", "sftab")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    /*
+     * Append to "sftab" with a different query
+     * from spark "mytab" table.
+     * Note - we don't rename the columns, but since the schemas match, it works
+     */
+    step("Appending to SQL mytab")
+    sqlContext.sql("SELECT * FROM mytab WHERE I >= 7")
+      .write.format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("tempdir", tempS3Dir)
+      .option("dbtable", "sftab")
+      .mode(SaveMode.Append)
+      .save()
 
     /*** ------------------------------------ FINITO
     //Load from a query

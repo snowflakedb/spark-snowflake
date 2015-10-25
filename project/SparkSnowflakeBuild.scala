@@ -100,6 +100,11 @@ object SparkSnowflakeBuild extends Build {
         "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()
       ),
+      // Let's add spark-csv and see if we can export using it for export to Snowflake
+      // When trying to use spark-csv_2.11 there were problems
+      libraryDependencies ++= Seq(
+        "com.databricks" % "spark-csv_2.10" % "1.2.0"
+      ),
       // Although spark-avro declares its avro-mapred dependency as `provided`, its version of the
       // dependency can still end up on the classpath during tests, which breaks the tests for
       // Hadoop 1.x. To work around this, we filter out the incompatible JARs here:
@@ -169,11 +174,13 @@ object SparkSnowflakeBuild extends Build {
         runTest,
         setReleaseVersion,
         commitReleaseVersion,
-        tagRelease,
-        publishArtifacts,
-        setNextVersion,
-        commitNextVersion,
-        pushChanges
+        tagRelease
       )
+      // Snowflake-todo: These are removed just in case for now
+//        publishArtifacts,
+//        setNextVersion,
+//        commitNextVersion,
+//        pushChanges
+
     )
 }

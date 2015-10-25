@@ -148,18 +148,22 @@ private[snowflakedb] case class RedshiftRelation(
     val fixedUrl = Utils.fixS3Url(tempDir)
 
     // Snowflake-todo Compression support
-
     s"""
-COPY INTO '$fixedUrl'
-FROM ($query)
-CREDENTIALS = ( AWS_KEY_ID='$awsAccessKey' AWS_SECRET_KEY='$awsSecretKey')
-FILE_FORMAT = (
-    TYPE=CSV COMPRESSION=none
-    FIELD_DELIMITER='|' ESCAPE='\\\\'
-    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'
-  )
-MAX_FILE_SIZE = 10000000
-"""
+       |COPY INTO '$fixedUrl'
+       |FROM ($query)
+       |CREDENTIALS = (
+       |    AWS_KEY_ID='$awsAccessKey'
+       |    AWS_SECRET_KEY='$awsSecretKey'
+       |)
+       |FILE_FORMAT = (
+       |    TYPE=CSV
+       |    COMPRESSION=none
+       |    FIELD_DELIMITER='|'
+       |    ESCAPE='\\\\'
+       |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'
+       |  )
+       |MAX_FILE_SIZE = 10000000
+     """.stripMargin.trim
   }
 
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {

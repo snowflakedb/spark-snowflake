@@ -203,23 +203,23 @@ private[snowflakedb] class JDBCWrapper {
       val name = field.name
       val typ: String = field.dataType match {
         case IntegerType => "INTEGER"
-        case LongType => "BIGINT"
-        case DoubleType => "DOUBLE PRECISION"
-        case FloatType => "REAL"
+        case LongType => "INTEGER"
+        case DoubleType => "DOUBLE"
+        case FloatType => "FLOAT"
         case ShortType => "INTEGER"
-        case ByteType => "SMALLINT" // Redshift does not support the BYTE type.
-        case BooleanType => "BOOLEAN"
+        case ByteType => "INTEGER" // Redshift does not support the BYTE type.
+//        case BooleanType => "BOOLEAN"
         case StringType =>
           if (field.metadata.contains("maxlength")) {
             s"VARCHAR(${field.metadata.getLong("maxlength")})"
           } else {
-            "TEXT"
+            "STRING"
           }
-        case BinaryType => "BLOB"
+//        case BinaryType => "BLOB"
         case TimestampType => "TIMESTAMP"
         case DateType => "DATE"
         case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
-        case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
+        case _ => throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
       }
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s""", "${name.replace("\"", "\\\"")}" $typ $nullable""".trim)
