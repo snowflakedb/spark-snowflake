@@ -3,17 +3,34 @@
 Based heavily on **spark-redshift**, very much WIP.
 
 ## Using in IntelliJ Idea
+
+### Importing the project
+Just open the project directory in Idea, and follow the dialogs
+
+### Fixing the project
 After opening a project in Idea, and after each Idea restart, you need to (while Idea is running)
 
-- Run this
-
+- Fix some problems preventing Tutorial to miss libraries
 ```bash
 perl -i -p -e 's/ scope="PROVIDED"//g;' .idea/modules/spark-snowflakedb.iml
 ```
+- Add snowflake JDBC, either:
+  - manually: Go to File->Project Structure ->Modules, choose Dependencies, add a snowflake-jdbc.jar there
+  - automatically (assumes jar is one level above spark-snowflakedb)
+  ```bash
+perl -i -p -e 's|(\s*</component>)|<orderEntry type="module-library"><library>\n  <CLASSES>\n<root  url="jar://\$MODULE_DIR\$/../../../snowflake_jdbc.jar!/" />\n</CLASSES>\n  <JAVADOC />\n  <SOURCES />\n</library></orderEntry>\n$1|' .idea/modules/spark-snowflakedb.iml
+```
+- Add the tutorial code as source. Go to File->Project Structure ->Modules, choose Sources, add "tutorial" directory as Source
 
-- Go to File->Project Structure ->Modules ->Sources
-  - choose Sources, add "tutorial" as Source
-  - choose Dependencies, add a snowflake-jdbc.jar there
+### Running the Tutorial
+- Right-Click on the tutorial file, choose Run
+- It will create SparkSnowflakeTutorial run configuration in the main bar
+- Select it, click "Edit Configurations"
+- add your "<AWS ID> <AWS SECRET> <fdb1-user-name> <fdb1-user-password>" to "Program arguments"
+- save
+- click "Run", it should work
+
+
 
 # `Below is info for spark-redshift`
 
