@@ -25,6 +25,8 @@ import org.apache.spark.sql.types._
  *
  * Note: the only method which uses this class has been deprecated, so this class should be
  * removed in `spark-redshift` 0.6. We will not accept patches to extend this parser.
+ *
+ * Snowflake-todo: See if we can remove it
  */
 @deprecated("Do not use SchemaParser directly", "0.5.0")
 private[snowflakedb] object SchemaParser extends JavaTokenParsers {

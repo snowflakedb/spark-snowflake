@@ -24,13 +24,13 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
 /**
- * Data type conversions for Redshift unloaded data
+ * Data type conversions for Snowflake unloaded data
  */
 private[snowflakedb] object Conversions {
 
-  private val redshiftTimestampFormat: DateFormat = new DateFormat() {
+  private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
-    // Snowflake needs to use either of these formats
+    // Snowflake needs to use either of these formats, _TZ for TIMESTAMP_TZ
     private val PATTERN_BASE = "yyyy-MM-dd HH:mm:ss.SSS"
     private val PATTERN_TZ= "yyyy-MM-dd HH:mm:ss.SSS Z"
 
@@ -48,43 +48,47 @@ private[snowflakedb] object Conversions {
     override def parse(source: String, pos: ParsePosition): Date = {
       val idx = pos.getIndex
       val errIdx = pos.getErrorIndex
+      // First try with a simpler format
       var res = formatBase.parse(source, pos)
       if (res == null) {
-        // Restore pos
+        // Restore pos to parse from the same place
         pos.setIndex(idx)
         pos.setErrorIndex(errIdx)
-        // Try again
+        // Try again, using the format with a timezone
+
         res = formatTz.parse(source, pos)
       }
       res
     }
   }
 
-  private val redshiftDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+  // We use standard ISO format for dates both ways
+  private val snowflakeDateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
   /**
-   * Parse a string exported from a Redshift TIMESTAMP column
+   * Parse a string exported from a Snowflake TIMESTAMP column
    */
   private def parseTimestamp(s: String): Timestamp = {
-    new Timestamp(redshiftTimestampFormat.parse(s).getTime)
+    new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
   }
 
   /**
-   * Parse a string exported from a Redshift DATE column
+   * Parse a string exported from a Snowflake DATE column
    */
   private def parseDate(s: String): java.sql.Date = {
-    new java.sql.Date(redshiftDateFormat.parse(s).getTime)
+    new java.sql.Date(snowflakeDateFormat.parse(s).getTime)
   }
 
   def formatDate(d: Date): String = {
-    redshiftTimestampFormat.format(d)
+    snowflakeDateFormat.format(d)
   }
 
   def formatTimestamp(t: Timestamp): String = {
-    redshiftTimestampFormat.format(t)
+    snowflakeTimestampFormat.format(t)
   }
 
   /**
+   * Snowflake-todo: We don't handle BOOLEAN yet
    * Parse a boolean using Redshift's UNLOAD bool syntax
    */
   private def parseBoolean(s: String): Boolean = {
@@ -93,17 +97,17 @@ private[snowflakedb] object Conversions {
     else throw new IllegalArgumentException(s"Expected 't' or 'f' but got '$s'")
   }
 
-  private[this] val redshiftDecimalFormat: DecimalFormat = new DecimalFormat()
-  redshiftDecimalFormat.setParseBigDecimal(true)
+  private[this] val snowflakeDecimalFormat: DecimalFormat = new DecimalFormat()
+  snowflakeDecimalFormat.setParseBigDecimal(true)
 
   /**
-   * Parse a decimal using Redshift's UNLOAD decimal syntax
+   * Parse a decimal using Snowflake's UNLOAD decimal syntax
    */
   def parseDecimal(s: String): java.math.BigDecimal = {
-    redshiftDecimalFormat.parse(s).asInstanceOf[java.math.BigDecimal]
+    snowflakeDecimalFormat.parse(s).asInstanceOf[java.math.BigDecimal]
   }
   /**
-   * Construct a Row from the given array of strings, retrieved from Redshift UNLOAD.
+   * Construct a Row from the given array of strings, retrieved from Snowflake's UNLOAD.
    * The schema will be used for type mappings.
    */
   private def convertRow(schema: StructType, fields: Array[String]): Row = {

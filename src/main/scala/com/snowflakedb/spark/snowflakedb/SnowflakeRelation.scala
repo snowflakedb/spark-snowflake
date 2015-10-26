@@ -30,9 +30,9 @@ import org.slf4j.LoggerFactory
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
 /**
- * Data Source API implementation for Amazon Redshift database tables
+ * Data Source API implementation for Amazon Snowflake database tables
  */
-private[snowflakedb] case class RedshiftRelation(
+private[snowflakedb] case class SnowflakeRelation(
     jdbcWrapper: JDBCWrapper,
     s3ClientFactory: AWSCredentials => AmazonS3Client,
     params: MergedParameters,
@@ -68,8 +68,8 @@ private[snowflakedb] case class RedshiftRelation(
     } else {
       SaveMode.Append
     }
-    val writer = new RedshiftWriter(jdbcWrapper, s3ClientFactory)
-    writer.saveToRedshift(sqlContext, data, saveMode, params)
+    val writer = new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
+    writer.saveToSnowflake(sqlContext, data, saveMode, params)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
@@ -77,7 +77,7 @@ private[snowflakedb] case class RedshiftRelation(
       AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
     Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
     if (requiredColumns.isEmpty) {
-      // In the special case where no columns were requested, issue a `count(*)` against Redshift
+      // In the special case where no columns were requested, issue a `count(*)` against Snowflake
       // rather than unloading data.
       val whereClause = FilterPushdown.buildWhereClause(schema, filters)
       val tableNameOrSubquery = params.query.map(q => s"($q)").orElse(params.table).get
@@ -92,13 +92,13 @@ private[snowflakedb] case class RedshiftRelation(
           val emptyRow = Row.empty
           sqlContext.sparkContext.parallelize(1L to numRows, parallelism).map(_ => emptyRow)
         } else {
-          throw new IllegalStateException("Could not read count from Redshift")
+          throw new IllegalStateException("Could not read count from Snowflake")
         }
       } finally {
         conn.close()
       }
     } else {
-      // Unload data from Redshift into a temporary directory in S3:
+      // Unload data from Snowflake into a temporary directory in S3:
       val tempDir = params.createPerQueryTempDir()
       val unloadSql = buildUnloadStmt(requiredColumns, filters, tempDir)
       log.info(unloadSql)
@@ -111,7 +111,7 @@ private[snowflakedb] case class RedshiftRelation(
       // Create a DataFrame to read the unloaded data:
       val rdd = sqlContext.sparkContext.newAPIHadoopFile(
         tempDir,
-        classOf[RedshiftInputFormat],
+        classOf[SnowflakeInputFormat],
         classOf[java.lang.Long],
         classOf[Array[String]])
       val prunedSchema = pruneSchema(schema, requiredColumns)
@@ -132,7 +132,7 @@ private[snowflakedb] case class RedshiftRelation(
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
     val creds = params.temporaryAWSCredentials.getOrElse(
       AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration))
-    // val credsString: String = AWSCredentialsUtils.getRedshiftCredentialsString(creds)
+    // val credsString: String = AWSCredentialsUtils.getSnowflakeCredentialsString(creds)
     // Snowflake-todo: token support
     val awsAccessKey = creds.getAWSAccessKeyId
     val awsSecretKey = creds.getAWSSecretKey

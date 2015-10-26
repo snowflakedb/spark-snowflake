@@ -19,7 +19,7 @@ package com.snowflakedb.spark.snowflakedb
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * Wrapper class for representing the name of a Redshift table.
+ * Wrapper class for representing the name of a Snowflake table.
  */
 private[snowflakedb] case class TableName(unescapedSchemaName: String, unescapedTableName: String) {
   private def quote(str: String) = '"' + str.replace("\"", "\"\"") + '"'
@@ -32,8 +32,10 @@ private[snowflakedb] case class TableName(unescapedSchemaName: String, unescaped
 
 private[snowflakedb] object TableName {
   /**
-   * Parses a table name which is assumed to have been escaped according to Redshift's rules for
+   * Parses a table name which is assumed to have been escaped according to Snowflake's rules for
    * delimited identifiers.
+   *
+   * Snowflake-todo: This is probably mostly unneeded for Snowflake.
    */
   def parseFromEscaped(str: String): TableName = {
     def dropOuterQuotes(s: String) =

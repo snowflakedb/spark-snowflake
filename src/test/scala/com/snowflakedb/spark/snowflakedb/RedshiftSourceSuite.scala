@@ -282,7 +282,7 @@ class RedshiftSourceSuite
       defaultParams("url"),
       Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema))
 
-    val relation = RedshiftRelation(
+    val relation = SnowflakeRelation(
       mockRedshift.jdbcWrapper,
       _ => mockS3Client,
       Parameters.mergeParameters(params),
@@ -307,10 +307,10 @@ class RedshiftSourceSuite
 
     val schema = StructType(Seq(StructField("a", IntegerType), StructField("A", IntegerType)))
     val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
-    val writer = new RedshiftWriter(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val writer = new SnowflakeWriter(mockRedshift.jdbcWrapper, _ => mockS3Client)
 
     intercept[IllegalArgumentException] {
-      writer.saveToRedshift(
+      writer.saveToSnowflake(
         testSqlContext, df, SaveMode.Append, Parameters.mergeParameters(defaultParams))
     }
     mockRedshift.verifyThatConnectionsWereClosed()
@@ -378,7 +378,7 @@ class RedshiftSourceSuite
       Nil)
     val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
     val createTableCommand =
-      DefaultRedshiftWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
+      DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
     val expectedCreateTableCommand =
       """CREATE TABLE IF NOT EXISTS "PUBLIC"."test_table" ("long_str" VARCHAR(512),""" +
         """ "short_str" VARCHAR(10), "default_str" TEXT)"""
@@ -415,7 +415,7 @@ class RedshiftSourceSuite
       "query" -> "select * from test_table")
 
     val e1 = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsRedshiftTable(invalidParams)
+      expectedDataDF.saveAsSnowflakeTable(invalidParams)
     }
     assert(e1.getMessage.contains("dbtable"))
   }
@@ -424,12 +424,12 @@ class RedshiftSourceSuite
     val invalidParams = Map("dbtable" -> "foo") // missing tempdir and url
 
     val e1 = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsRedshiftTable(invalidParams)
+      expectedDataDF.saveAsSnowflakeTable(invalidParams)
     }
     assert(e1.getMessage.contains("tempdir"))
 
     val e2 = intercept[IllegalArgumentException] {
-      testSqlContext.redshiftTable(invalidParams)
+      testSqlContext.snowflakeTable(invalidParams)
     }
     assert(e2.getMessage.contains("tempdir"))
   }
@@ -441,7 +441,7 @@ class RedshiftSourceSuite
   test("Saves throw error message if S3 Block FileSystem would be used") {
     val params = defaultParams + ("tempdir" -> defaultParams("tempdir").replace("s3n", "s3"))
     val e = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsRedshiftTable(params)
+      expectedDataDF.saveAsSnowflakeTable(params)
     }
     assert(e.getMessage.contains("Block FileSystem"))
   }

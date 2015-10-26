@@ -25,8 +25,10 @@ private[snowflakedb] object AWSCredentialsUtils {
 
   /**
    * Generates a credentials string for use in Redshift LOAD and UNLOAD statements.
+   *
+   * Snowflake-todo: Remove or actually use it (the latter makes some sense)
    */
-  def getRedshiftCredentialsString(awsCredentials: AWSCredentials): String = {
+  def getSnowflakeCredentialsString(awsCredentials: AWSCredentials): String = {
     awsCredentials match {
       case creds: AWSSessionCredentials =>
         s"aws_access_key_id=${creds.getAWSAccessKeyId};" +

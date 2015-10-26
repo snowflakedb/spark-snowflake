@@ -19,7 +19,7 @@ import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.language.implicitConversions
 
-import com.snowflakedb.spark.snowflakedb.RedshiftInputFormat._
+import com.snowflakedb.spark.snowflakedb.SnowflakeInputFormat._
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
@@ -85,7 +85,7 @@ class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
       val conf = new Configuration
       conf.setLong(KEY_BLOCK_SIZE, 4)
 
-      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[RedshiftInputFormat],
+      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[SnowflakeInputFormat],
         classOf[java.lang.Long], classOf[Array[String]], conf)
 
       // TODO: Check this assertion - fails on Travis only, no idea what, or what it's for
@@ -106,7 +106,7 @@ class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
       conf.setLong(KEY_BLOCK_SIZE, 4)
       conf.set(KEY_DELIMITER, TAB)
 
-      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[RedshiftInputFormat],
+      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[SnowflakeInputFormat],
         classOf[java.lang.Long], classOf[Array[String]], conf)
 
       // TODO: Check this assertion - fails on Travis only, no idea what, or what it's for
@@ -131,7 +131,7 @@ class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
 
       val sqlContext = new SQLContext(sc)
 
-      val srdd = sqlContext.redshiftFile(
+      val srdd = sqlContext.snowflakeFile(
         dir.toString,
         "name varchar(10) state text id integer score float big_score numeric(4, 0) " +
           "some_long bigint")

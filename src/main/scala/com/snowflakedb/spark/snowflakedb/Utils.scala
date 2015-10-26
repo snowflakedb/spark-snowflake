@@ -52,7 +52,7 @@ private[snowflakedb] object Utils {
   }
 
   /**
-   * Redshift COPY and UNLOAD commands don't support s3n or s3a, but users may wish to use them
+   * Snowflake COPY and UNLOAD commands don't support s3n or s3a, but users may wish to use them
    * for data loads. This function converts the URL back to the s3:// format.
    */
   def fixS3Url(url: String): String = {
@@ -112,8 +112,8 @@ private[snowflakedb] object Utils {
 
   /**
    * Given a URI, verify that the Hadoop FileSystem for that URI is not the S3 block FileSystem.
-   * `spark-redshift` cannot use this FileSystem because the files written to it will not be
-   * readable by Redshift (and vice versa).
+   * `spark-snowflakedb` cannot use this FileSystem because the files written to it will not be
+   * readable by Snowflake (and vice versa).
    */
   def assertThatFileSystemIsNotS3BlockFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
     val fs = FileSystem.get(uri, hadoopConfig)
@@ -123,7 +123,7 @@ private[snowflakedb] object Utils {
     // in some environments (such as EMR). See #92 for details.
     if (fs.getClass.getCanonicalName == "org.apache.hadoop.fs.s3.S3FileSystem") {
       throw new IllegalArgumentException(
-        "spark-redshift does not support the S3 Block FileSystem. Please reconfigure `tempdir` to" +
+        "spark-snowflakedb does not support the S3 Block FileSystem. Please reconfigure `tempdir` to" +
         "use a s3n:// or s3a:// scheme.")
     }
   }

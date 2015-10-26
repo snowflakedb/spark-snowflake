@@ -24,13 +24,13 @@ import org.scalatest.FunSuite
 class AWSCredentialsUtilsSuite extends FunSuite {
   test("credentialsString with regular keys") {
     val creds = new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
-    assert(AWSCredentialsUtils.getRedshiftCredentialsString(creds) ===
+    assert(AWSCredentialsUtils.getSnowflakeCredentialsString(creds) ===
       "aws_access_key_id=ACCESSKEYID;aws_secret_access_key=SECRET/KEY/WITH/SLASHES")
   }
 
   test("credentialsString with STS temporary keys") {
     val creds = new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
-    assert(AWSCredentialsUtils.getRedshiftCredentialsString(creds) ===
+    assert(AWSCredentialsUtils.getSnowflakeCredentialsString(creds) ===
       "aws_access_key_id=ACCESSKEYID;aws_secret_access_key=SECRET/KEY;token=SESSION/Token")
   }
 

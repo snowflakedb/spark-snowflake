@@ -19,7 +19,7 @@ package com.snowflakedb.spark.snowflakedb
 import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 
 /**
- * All user-specifiable parameters for spark-redshift, along with their validation rules and
+ * All user-specifiable parameters for spark-snowflake, along with their validation rules and
  * defaults.
  */
 private[snowflakedb] object Parameters {
@@ -42,7 +42,7 @@ private[snowflakedb] object Parameters {
    */
   def mergeParameters(userParameters: Map[String, String]): MergedParameters = {
     if (!userParameters.contains("tempdir")) {
-      throw new IllegalArgumentException("'tempdir' is required for all Redshift loads and saves")
+      throw new IllegalArgumentException("'tempdir' is required for all Snowflake loads and saves")
     }
     // Snowflake-todo Add more parameter checking
     if (!userParameters.contains("sfurl")) {
@@ -50,7 +50,7 @@ private[snowflakedb] object Parameters {
     }
     if (!userParameters.contains("dbtable") && !userParameters.contains("query")) {
       throw new IllegalArgumentException(
-        "You must specify a Redshift table name with the 'dbtable' parameter or a query with the " +
+        "You must specify a Snowflake table name with the 'dbtable' parameter or a query with the " +
         "'query' parameter.")
     }
     if (userParameters.contains("dbtable") && userParameters.contains("query")) {
@@ -68,7 +68,7 @@ private[snowflakedb] object Parameters {
 
     /**
      * A root directory to be used for intermediate data exchange, expected to be on S3, or
-     * somewhere that can be written to and read from by Redshift. Make sure that AWS credentials
+     * somewhere that can be written to and read from by Snowflake. Make sure that AWS credentials
      * are available for S3.
      */
     def rootTempDir: String = parameters("tempdir")
@@ -79,7 +79,7 @@ private[snowflakedb] object Parameters {
     def createPerQueryTempDir(): String = Utils.makeTempPath(rootTempDir)
 
     /**
-     * The Redshift table to be used as the target when loading or writing data.
+     * The Snowflake table to be used as the target when loading or writing data.
      */
     def table: Option[TableName] = parameters.get("dbtable").map(_.trim).flatMap { dbtable =>
       // We technically allow queries to be passed using `dbtable` as long as they are wrapped
@@ -94,7 +94,7 @@ private[snowflakedb] object Parameters {
     }
 
     /**
-     * The Redshift query to be used as the target when loading data.
+     * The Snowflake query to be used as the target when loading data.
      */
     def query: Option[String] = parameters.get("query").orElse {
       parameters.get("dbtable")
@@ -154,7 +154,7 @@ private[snowflakedb] object Parameters {
     /**
      * If true, when writing, replace any existing data. When false, append to the table instead.
      * Note that the table schema will need to be compatible with whatever you have in the DataFrame
-     * you're writing. spark-redshift makes no attempt to enforce that - you'll just see Redshift
+     * you're writing. spark-snowflake makes no attempt to enforce that - you'll just see Snowflake
      * errors if they don't match.
      *
      * Defaults to false.
@@ -163,41 +163,9 @@ private[snowflakedb] object Parameters {
     def overwrite: Boolean = parameters("overwrite").toBoolean
 
     /**
-     * Set the Redshift table distribution style, which can be one of: EVEN, KEY or ALL. If you set
-     * it to KEY, you'll also need to use the distkey parameter to set the distribution key.
-     *
-     * Default is EVEN.
-     */
-    def distStyle: Option[String] = parameters.get("diststyle")
-
-    /**
-     * The name of a column in the table to use as the distribution key when using DISTSTYLE KEY.
-     * Not set by default, as default DISTSTYLE is EVEN.
-     */
-    def distKey: Option[String] = parameters.get("distkey")
-
-    /**
-     * A full Redshift SORTKEY specification. For full information, see latest Redshift docs:
-     * http://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
-     *
-     * Examples:
-     *   SORTKEY (my_sort_column)
-     *   COMPOUND SORTKEY (sort_col1, sort_col2)
-     *   INTERLEAVED SORTKEY (sort_col1, sort_col2)
-     *
-     * Not set by default - table will be unsorted.
-     *
-     * Note: appending data to a table with a sort key only makes sense if you know that the data
-     * being added will be after the data already in the table according to the sort order. Redshift
-     * does not support random inserts according to sort order, so performance will degrade if you
-     * try this.
-     */
-    def sortKeySpec: Option[String] = parameters.get("sortkeyspec")
-
-    /**
      * When true, data is always loaded into a new temporary table when performing an overwrite.
      * This is to ensure that the whole load process succeeds before dropping any data from
-     * Redshift, which can be useful if, in the event of failures, stale data is better than no data
+     * Snowflake, which can be useful if, in the event of failures, stale data is better than no data
      * for your systems.
      *
      * Defaults to true.
@@ -205,7 +173,7 @@ private[snowflakedb] object Parameters {
     def useStagingTable: Boolean = parameters("usestagingtable").toBoolean
 
     /**
-     * Extra options to append to the Redshift COPY command (e.g. "MAXERROR 100").
+     * Extra options to append to the Snowflake COPY command (e.g. "MAXERROR 100").
      */
     def extraCopyOptions: String = parameters.get("extracopyoptions").getOrElse("")
 
@@ -222,7 +190,7 @@ private[snowflakedb] object Parameters {
     def postActions: Array[String] = parameters("postactions").split(";")
 
     /**
-     * Temporary AWS credentials which are passed to Redshift. These only need to be supplied by
+     * Temporary AWS credentials which are passed to Snowflake. These only need to be supplied by
      * the user when Hadoop is configured to authenticate to S3 via IAM roles assigned to EC2
      * instances.
      */

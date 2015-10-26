@@ -36,11 +36,13 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.types._
 
 /**
- * Functions to write data to Redshift.
+ * Functions to write data to Snowflake.
  *
- * At a high level, writing data back to Redshift involves the following steps:
+ * At a high level, writing data back to Snowflake involves the following steps:
  *
- *   - Use the spark-avro library to save the DataFrame to S3 using Avro serialization. Prior to
+ *   - Use the spark-csv library to save the DataFrame to S3 using CSV serialization.
+ *   snowflake-todo: Verify the below:
+ *     Prior to
  *     saving the data, certain data type conversions are applied in order to work around
  *     limitations in Avro's data type support and Redshift's case-insensitive identifier handling.
  *
@@ -50,18 +52,16 @@ import org.apache.spark.sql.types._
  *
  *   - Use JDBC to issue any CREATE TABLE commands, if required.
  *
- *   - If there is data to be written (i.e. not all partitions were empty), then use the list of
- *     non-empty Avro files to construct a JSON manifest file to tell Redshift to load those files.
- *     This manifest is written to S3 alongside the Avro files themselves. We need to use an
- *     explicit manifest, as opposed to simply passing the name of the directory containing the
- *     Avro files, in order to work around a bug related to parsing of empty Avro files (see #96).
+ *   - If there is data to be written (i.e. not all partitions were empty),
+ *     copy all the files sharing the prefix we exported to into Snowflake.
  *
- *   - Use JDBC to issue a COPY command in order to instruct Redshift to load the Avro data into
- *     the appropriate table. If the Overwrite SaveMode is being used, then by default the data
+ *   - Use JDBC to issue a COPY command in order to instruct Snowflake to load the CSV data into
+ *     the appropriate table.
+ *     If the Overwrite SaveMode is being used, then by default the data
  *     will be loaded into a temporary staging table, which later will atomically replace the
- *     original table via a transaction.
+ *     original table using SWAP.
  */
-private[snowflakedb] class RedshiftWriter(
+private[snowflakedb] class SnowflakeWriter(
     jdbcWrapper: JDBCWrapper,
     s3ClientFactory: AWSCredentials => AmazonS3Client) {
 
@@ -144,10 +144,10 @@ private[snowflakedb] class RedshiftWriter(
   }
 
   /**
-   * Perform the Redshift load, including deletion of existing data in the case of an overwrite,
+   * Perform the Snowflake load, including deletion of existing data in the case of an overwrite,
    * and creating the table if it doesn't already exist.
    */
-  private def doRedshiftLoad(
+  private def doSnowflakeLoad(
       conn: Connection,
       data: DataFrame,
       saveMode: SaveMode,
@@ -206,11 +206,8 @@ private[snowflakedb] class RedshiftWriter(
       sqlContext: SQLContext,
       data: DataFrame,
       tempDir: String): Option[String] = {
-    // spark-avro does not support Date types. In addition, it converts Timestamps into longs
-    // (milliseconds since the Unix epoch). Redshift is capable of loading timestamps in
-    // 'epochmillisecs' format but there's no equivalent format for dates. To work around this, we
-    // choose to write out both dates and timestamps as strings using the same timestamp format.
-    // For additional background and discussion, see #39.
+    // Make sure we export some Date and Timestamp types in the format we
+    // want.
 
     // Convert the rows so that timestamps and dates become formatted strings:
     val conversionFunctions: Array[Any => Any] = data.schema.fields.map { field =>
@@ -246,19 +243,18 @@ private[snowflakedb] class RedshiftWriter(
       }
     }
 
-    // Convert all column names to lowercase, which is necessary for Redshift to be able to load
-    // those columns (see #51).
+    // Convert all column names to lowercase
+    // Snowflake-todo: Check if it's needed
     val schemaWithLowercaseColumnNames: StructType =
       StructType(data.schema.map(f => f.copy(name = f.name.toLowerCase)))
 
     if (schemaWithLowercaseColumnNames.map(_.name).toSet.size != data.schema.size) {
       throw new IllegalArgumentException(
-        "Cannot save table to Redshift because two or more column names would be identical" +
+        "Cannot save table to Snowflake because two or more column names would be identical" +
         " after conversion to lowercase: " + data.schema.map(_.name).mkString(", "))
     }
 
-    // Update the schema so that Avro writes date and timestamp columns as formatted timestamp
-    // strings. This is necessary for Redshift to be able to load these columns (see #39).
+    // Update the schema so that CSV writes date and timestamp columns as formatted strings.
     val convertedSchema: StructType = StructType(
       schemaWithLowercaseColumnNames.map {
         case StructField(name, DateType, nullable, meta) =>
@@ -269,6 +265,7 @@ private[snowflakedb] class RedshiftWriter(
       }
     )
 
+    // Save data using spark-csv
     sqlContext.createDataFrame(convertedRows, convertedSchema)
       .write
       .format("com.databricks.spark.csv")
@@ -296,16 +293,16 @@ private[snowflakedb] class RedshiftWriter(
   }
 
   /**
-   * Write a DataFrame to a Redshift table, using S3 and Avro serialization
+   * Write a DataFrame to a Snowflake table, using S3 and CSV serialization
    */
-  def saveToRedshift(
+  def saveToSnowflake(
       sqlContext: SQLContext,
       data: DataFrame,
       saveMode: SaveMode,
       params: MergedParameters) : Unit = {
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
-        "For save operations you must specify a Redshift table name with the 'dbtable' parameter")
+        "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
     }
 
     val creds: AWSCredentials = params.temporaryAWSCredentials.getOrElse(
@@ -324,10 +321,10 @@ private[snowflakedb] class RedshiftWriter(
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         withStagingTable(conn, params.table.get, stagingTable => {
           val updatedParams = MergedParameters(params.parameters.updated("dbtable", stagingTable))
-          doRedshiftLoad(conn, data, saveMode, updatedParams, creds, filesToCopyPrefix)
+          doSnowflakeLoad(conn, data, saveMode, updatedParams, creds, filesToCopyPrefix)
         })
       } else {
-        doRedshiftLoad(conn, data, saveMode, params, creds, filesToCopyPrefix)
+        doSnowflakeLoad(conn, data, saveMode, params, creds, filesToCopyPrefix)
       }
     } finally {
       conn.close()
@@ -335,6 +332,6 @@ private[snowflakedb] class RedshiftWriter(
   }
 }
 
-object DefaultRedshiftWriter extends RedshiftWriter(
+object DefaultSnowflakeWriter extends SnowflakeWriter(
   DefaultJDBCWrapper,
   awsCredentials => new AmazonS3Client(awsCredentials))

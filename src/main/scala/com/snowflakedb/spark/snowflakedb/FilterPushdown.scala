@@ -20,7 +20,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
 
 /**
- * Helper methods for pushing filters into Redshift queries.
+ * Helper methods for pushing filters into Snowflake queries.
  */
 private[snowflakedb] object FilterPushdown {
   /**
@@ -57,6 +57,7 @@ private[snowflakedb] object FilterPushdown {
       case GreaterThan(attr, value) => buildComparison(attr, value, ">")
       case LessThanOrEqual(attr, value) => buildComparison(attr, value, "<=")
       case GreaterThanOrEqual(attr, value) => buildComparison(attr, value, ">=")
+      // Snowflake-todo: Add more filters, many are possible, see filters.scala
       case _ => None
     }
   }

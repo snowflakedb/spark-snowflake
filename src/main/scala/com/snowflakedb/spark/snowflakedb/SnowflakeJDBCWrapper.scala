@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory
 
 /**
  * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
- * minor modifications for Redshift-specific features and limitations.
+ * minor modifications for Snowflake-specific features and limitations.
  */
 private[snowflakedb] class JDBCWrapper {
 
@@ -207,7 +207,7 @@ private[snowflakedb] class JDBCWrapper {
         case DoubleType => "DOUBLE"
         case FloatType => "FLOAT"
         case ShortType => "INTEGER"
-        case ByteType => "INTEGER" // Redshift does not support the BYTE type.
+        case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
 //        case BooleanType => "BOOLEAN"
         case StringType =>
           if (field.metadata.contains("maxlength")) {
@@ -247,14 +247,16 @@ private[snowflakedb] class JDBCWrapper {
       precision: Int,
       scale: Int,
       signed: Boolean): DataType = {
-    // TODO: cleanup types which are irrelevant for Redshift.
+    // TODO: cleanup types which are irrelevant for Snowflake.
+    // Snowflake-todo: Add support for some types like ARRAY.
+    // Snowflake-todo: Verify all types.
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY         => null
       case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType(20,0) }
-      case java.sql.Types.BINARY        => BinaryType
-      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
-      case java.sql.Types.BLOB          => BinaryType
+//      case java.sql.Types.BINARY        => BinaryType
+//      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
+//      case java.sql.Types.BLOB          => BinaryType
       case java.sql.Types.BOOLEAN       => BooleanType
       case java.sql.Types.CHAR          => StringType
       case java.sql.Types.CLOB          => StringType
@@ -269,7 +271,7 @@ private[snowflakedb] class JDBCWrapper {
       case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
       case java.sql.Types.JAVA_OBJECT   => null
       case java.sql.Types.LONGNVARCHAR  => StringType
-      case java.sql.Types.LONGVARBINARY => BinaryType
+//      case java.sql.Types.LONGVARBINARY => BinaryType
       case java.sql.Types.LONGVARCHAR   => StringType
       case java.sql.Types.NCHAR         => StringType
       case java.sql.Types.NCLOB         => StringType
@@ -283,12 +285,12 @@ private[snowflakedb] class JDBCWrapper {
       case java.sql.Types.REF           => StringType
       case java.sql.Types.ROWID         => LongType
       case java.sql.Types.SMALLINT      => IntegerType
-      case java.sql.Types.SQLXML        => StringType
-      case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => TimestampType
+      case java.sql.Types.SQLXML        => StringType // Snowflake-todo: ?
+      case java.sql.Types.STRUCT        => StringType // Snowflake-todo: ?
+//      case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TINYINT       => IntegerType
-      case java.sql.Types.VARBINARY     => BinaryType
+//      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            => null
       // scalastyle:on

@@ -37,8 +37,8 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
  * a\\\n|\\|b\\\\\n
  * }}},
  * where the in-record `|`, `\r`, `\n`, and `\\` characters are escaped by `\\`.
- * Users can configure the delimiter via [[RedshiftInputFormat$#KEY_DELIMITER]].
- * Its default value [[RedshiftInputFormat$#DEFAULT_DELIMITER]] is set to match Redshift's UNLOAD
+ * Users can configure the delimiter via [[SnowflakeInputFormat$#KEY_DELIMITER]].
+ * Its default value [[SnowflakeInputFormat$#DEFAULT_DELIMITER]] is set to match Snowflake's UNLOAD
  * with the ESCAPE option:
  * {{{
  *   UNLOAD ('select_statement')
@@ -48,19 +48,19 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
  *
  * @see org.apache.spark.SparkContext#newAPIHadoopFile
  */
-class RedshiftInputFormat extends FileInputFormat[JavaLong, Array[String]] {
+class SnowflakeInputFormat extends FileInputFormat[JavaLong, Array[String]] {
 
   override def createRecordReader(
       split: InputSplit,
       context: TaskAttemptContext): RecordReader[JavaLong, Array[String]] = {
-    new RedshiftRecordReader
+    new SnowflakeRecordReader
   }
 }
 
-object RedshiftInputFormat {
+object SnowflakeInputFormat {
 
   /** configuration key for delimiter */
-  val KEY_DELIMITER = "redshift.delimiter"
+  val KEY_DELIMITER = "snowflake.delimiter"
   /** default delimiter */
   val DEFAULT_DELIMITER = '|'
 
@@ -75,7 +75,7 @@ object RedshiftInputFormat {
   }
 }
 
-private[snowflakedb] class RedshiftRecordReader extends RecordReader[JavaLong, Array[String]] {
+private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, Array[String]] {
 
   private var reader: BufferedInputStream = _
 
@@ -106,7 +106,7 @@ private[snowflakedb] class RedshiftRecordReader extends RecordReader[JavaLong, A
       val method = context.getClass.getMethod("getConfiguration")
       method.invoke(context).asInstanceOf[Configuration]
     }
-    delimiter = RedshiftInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
+    delimiter = SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
     require(delimiter != escapeChar,
       s"The delimiter and the escape char cannot be the same but found $delimiter.")
     require(delimiter != lineFeed, "The delimiter cannot be the lineFeed character.")

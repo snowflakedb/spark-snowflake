@@ -24,7 +24,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
 /**
- * Redshift Source implementation for Spark SQL
+ * Snowflake Source implementation for Spark SQL
+ * Major TODO points:
+ *   - Add support for compression in-out
+ *   - Add support for using Snowflake Stage files, so the user doesn't need
+ *       to provide AWS passwords
+ *   - Add support for VARIANT
  */
 class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials => AmazonS3Client)
   extends RelationProvider
@@ -39,29 +44,29 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
   def this() = this(DefaultJDBCWrapper, awsCredentials => new AmazonS3Client(awsCredentials))
 
   /**
-   * Create a new RedshiftRelation instance using parameters from Spark SQL DDL. Resolves the schema
+   * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL. Resolves the schema
    * using JDBC connection over provided URL, which must contain credentials.
    */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
+    SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
   }
 
   /**
-   * Load a RedshiftRelation using user-provided schema, so no inference over JDBC will be used.
+   * Load a `SnowflakeRelation` using user-provided schema, so no inference over JDBC will be used.
    */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    RedshiftRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
+    SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
   }
 
   /**
-   * Creates a Relation instance by first writing the contents of the given DataFrame to Redshift
+   * Creates a Relation instance by first writing the contents of the given DataFrame to Snowflake
    */
   override def createRelation(
       sqlContext: SQLContext,
@@ -75,7 +80,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     val params = Parameters.mergeParameters(parameters)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
-        "For save operations you must specify a Redshift table name with the 'dbtable' parameter")
+        "For save operations you must specify a Snowfake table name with the 'dbtable' parameter")
     }
 
     def tableExists: Boolean = {
@@ -107,7 +112,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
 
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
-      new RedshiftWriter(jdbcWrapper, s3ClientFactory).saveToRedshift(
+      new SnowflakeWriter(jdbcWrapper, s3ClientFactory).saveToSnowflake(
         sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
     }
 
