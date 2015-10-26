@@ -73,7 +73,7 @@ object SparkSnowflakeTutorial {
     val sfSSL = "off"
 
     // Prepare Snowflake connection options as a map
-    val sfOptions = Map(
+    var sfOptions = Map(
       "sfURL" -> sfURL,
       "sfDatabase" -> sfDatabase,
       "sfSchema" -> sfSchema,
@@ -83,6 +83,8 @@ object SparkSnowflakeTutorial {
       "sfAccount" -> sfAccount,
       "sfSSL" -> sfSSL
     )
+    // Add the S3 temporary directory to the options to simplify further code
+    sfOptions += ("tempdir" -> tempS3Dir)
 
     val sc = new SparkContext(new SparkConf().setAppName("SparkSQL").setMaster("local"))
 
@@ -98,7 +100,6 @@ object SparkSnowflakeTutorial {
     val df1 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("tempdir", tempS3Dir)
       .option("dbtable", "testdt")
       .load()
     df1.printSchema()
@@ -110,7 +111,6 @@ object SparkSnowflakeTutorial {
     val df2 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("tempdir", tempS3Dir)
       .option("query", "select * from testdt where i > 2")
       .load()
     df2.printSchema()
@@ -121,7 +121,6 @@ object SparkSnowflakeTutorial {
     val df3 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("tempdir", tempS3Dir)
       .option("dbtable", "testdt")
       .load()
     df3.filter(df3("S") > "o'ne").show()
@@ -139,11 +138,10 @@ object SparkSnowflakeTutorial {
      * from spark "mytab" table,
      * filtering records via query and renaming a column
      */
-    step("Creating SQL mytab")
+    step("Creating Snowflake table sftab")
     sqlContext.sql("SELECT * FROM mytab WHERE I != 7").withColumnRenamed("I", "II")
       .write.format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("tempdir", tempS3Dir)
       .option("dbtable", "sftab")
       .mode(SaveMode.Overwrite)
       .save()
@@ -153,11 +151,10 @@ object SparkSnowflakeTutorial {
      * from spark "mytab" table.
      * Note - we don't rename the columns, but since the schemas match, it works
      */
-    step("Appending to SQL mytab")
+    step("Appending to Snowflake table sftab")
     sqlContext.sql("SELECT * FROM mytab WHERE I >= 7")
       .write.format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("tempdir", tempS3Dir)
       .option("dbtable", "sftab")
       .mode(SaveMode.Append)
       .save()
