@@ -114,7 +114,7 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     val compressionCodecs = new CompressionCodecFactory(conf)
     val codec = compressionCodecs.getCodec(file)
     if (codec != null) {
-      throw new IOException(s"Do not support compressed files but found $file.")
+      throw new IOException(s"Do not support compressed files but found $file with codec $codec.")
     }
     val fs = file.getFileSystem(conf)
     val size = fs.getFileStatus(file).getLen

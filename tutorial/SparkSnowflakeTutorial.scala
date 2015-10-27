@@ -15,6 +15,8 @@
  */
 
 package com.snowflakedb.spark.snowflakedb.tutorial
+
+import com.snowflakedb.spark.snowflakedb.Utils
 import org.apache.spark.{SparkConf,SparkContext}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.SQLContext
@@ -53,45 +55,43 @@ object SparkSnowflakeTutorial {
    */
 
   def main(args: Array[String]): Unit = {
-    // Note: we use 4 args from command line, the rest is hardcoded for now
-    if (args.length != 4) {
-      println("Needs 4 parameters only passed " + args.length)
-      println("parameters needed - $awsAccessKey $awsSecretKey $sfUser $sfPassword")
-      System.exit(1)
-    }
-    val awsAccessKey = args(0)
-    val awsSecretKey = args(1)
-    val sfUser = args(2)
-    val sfPassword = args(3)
-    // These are hardcoded for now
-    val tempS3Dir = "s3n://sfc-dev1-regression/SPARK-SNOWFLAKE"
+    // EXAMPLE ONLY: Values for the connections
+    val awsAccessKey = "AWS_ACCESS_KEY"
+    val awsSecretKey = "AWS_SECRET_KEY"
+    val tempS3Dir = "s3n://S3_PATH_FOR_TEMP_DATA"
     val sfDatabase = "sparkdb"
     val sfSchema = "public"
     val sfWarehouse = "sparkwh"
-    val sfAccount = "snowflake"
-    val sfURL = "FDB1-gs.dyn.int.snowflakecomputing.com:8080"
-    val sfSSL = "off"
+    val sfURL = "ACCOUNT.snowflakecomputing.com:443"
+    val sfAccount = "SNOWFLAKE_ACCOUNT"
+    val sfUser = "SNOWFLAKE_USER"
+    val sfPassword = "SNOWFLAKE_PASSOWRD"
 
-    // Prepare Snowflake connection options as a map
-    var sfOptions = Map(
+    // EXAMPLE ONLY: Prepare Snowflake connection options as a map
+    var exampleOptions = Map(
       "sfURL" -> sfURL,
       "sfDatabase" -> sfDatabase,
       "sfSchema" -> sfSchema,
       "sfWarehouse" -> sfWarehouse,
       "sfUser" -> sfUser,
       "sfPassword" -> sfPassword,
-      "sfAccount" -> sfAccount,
-      "sfSSL" -> sfSSL
+      "sfAccount" -> sfAccount
     )
-    // Add the S3 temporary directory to the options to simplify further code
-    sfOptions += ("tempdir" -> tempS3Dir)
+    // EXAMPLE ONLY: Add the S3 temporary directory and AWS credentials
+    exampleOptions += ("tempdir" -> tempS3Dir)
+    exampleOptions += ("awsAccessKey" -> awsAccessKey)
+    exampleOptions += ("awsSecretKey" -> awsSecretKey)
 
+    // Initialize Spark
     val sc = new SparkContext(new SparkConf().setAppName("SparkSQL").setMaster("local"))
-
-    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", awsAccessKey)
-    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", awsSecretKey)
-
     val sqlContext = new SQLContext(sc)
+
+    /** Read configuration from a file */
+    var sfOptions = Utils.readMapFromFile(sc, "snowflake.conf.private")
+
+    /** Setup our S3 access credentials */
+    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", sfOptions.getOrElse("awsAccessKey",null))
+    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", sfOptions.getOrElse("awsSecretKey",null))
 
     import sqlContext.implicits._
 
@@ -104,7 +104,6 @@ object SparkSnowflakeTutorial {
       .load()
     df1.printSchema()
     df1.show()
-
 
     // df2: Load from a query
     step("Creating df2")
@@ -121,16 +120,26 @@ object SparkSnowflakeTutorial {
     val df3 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("dbtable", "testdt")
+      .option("dbtable", "testdtf")
       .load()
+    step("Testing filter pushdown: string 1")
     df3.filter(df3("S") > "o'ne").show()
+    step("Testing filter pushdown: string 2")
     df3.filter(df3("S") > "o'ne\\").show()
+    step("Testing filter pushdown: date as string")
     df3.filter(df3("T") > "2013-04-05 01:02:03").show()
+    step("Testing filter pushdown: date as string - using .gt")
+    df3.filter(df3("T").gt("2013-04-05 01:02:03")).show()
+    step("Testing filter pushdown: float VS integer")
+    df3.filter(df3("F") > 10).show()
+    step("Testing filter pushdown: float VS float")
+    df3.filter(df3("F") > 10.0f).show()
 
     /*
      * Register our df1 table as temporary table 'mytab'
      * so that it can be queried via sqlContext.sql
      */
+    step("Registering mytab")
     df1.registerTempTable("mytab")
 
     /*

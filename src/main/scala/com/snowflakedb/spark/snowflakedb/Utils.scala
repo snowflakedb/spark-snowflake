@@ -19,13 +19,17 @@ package com.snowflakedb.spark.snowflakedb
 import java.net.URI
 import java.util.UUID
 
+import org.apache.spark.SparkContext
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
+import scala.io._
 
 import com.amazonaws.services.s3.{AmazonS3URI, AmazonS3Client}
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.slf4j.LoggerFactory
 
 /**
@@ -126,5 +130,23 @@ private[snowflakedb] object Utils {
         "spark-snowflakedb does not support the S3 Block FileSystem. Please reconfigure `tempdir` to" +
         "use a s3n:// or s3a:// scheme.")
     }
+  }
+
+  // Reads a Map from a file using the format
+  //     key = value
+  // Snowflake-todo Use some standard config library
+  def readMapFromFile(sc: SparkContext, file: String): Map[String, String] = {
+    val fs = FileSystem.get(URI.create(file), sc.hadoopConfiguration)
+    val is = fs.open(Path.getPathWithoutSchemeAndAuthority(new Path(file)))
+    var src = scala.io.Source.fromInputStream(is)
+
+    var map = new mutable.HashMap[String,String]
+    for (line <- src.getLines()) {
+      val tokens = line.split("=")
+      val key = tokens(0).trim
+      val value = tokens(1).trim
+      map += (key -> value)
+    }
+    map.toMap
   }
 }

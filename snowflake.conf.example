@@ -1,0 +1,10 @@
+sfURL = ACCOUNT.snowflakecomputing.com:443
+sfDatabase = sparkdb
+sfSchema = public
+sfWarehouse = sparkwh
+sfAccount = ACCOUNT
+tempDir = s3n://SOME_PATH
+sfUser=SOME_USER
+sfPassword=SOME_PASSWORD
+awsAccessKey=SOME_ACCESS_KEY
+awsSecretKey=SOME_SECRET_KEY
