@@ -108,6 +108,7 @@ private[snowflakedb] class SnowflakeWriter(
        |    /* COMPRESSION=none */
        |    FIELD_DELIMITER='|'
        |    /* ESCAPE='\\\\' */
+       |    NULL_IF=('null')
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'
        |  )

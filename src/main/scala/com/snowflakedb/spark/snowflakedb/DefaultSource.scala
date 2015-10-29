@@ -30,6 +30,8 @@ import org.slf4j.LoggerFactory
  *   - Add support for using Snowflake Stage files, so the user doesn't need
  *       to provide AWS passwords
  *   - Add support for VARIANT
+ *   - Fix NULL handling both ways, including empty strings, null values, and
+ *     "null" strings
  */
 class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials => AmazonS3Client)
   extends RelationProvider

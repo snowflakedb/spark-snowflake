@@ -113,7 +113,8 @@ private[snowflakedb] object Conversions {
   private def convertRow(schema: StructType, fields: Array[String]): Row = {
     val converted = fields.zip(schema).map {
       case (data, field) =>
-        if (data == null || data.isEmpty) null
+        // We know Snowflake always exports NULLs as \N
+        if (data == null || data == "\\N") null
         else field.dataType match {
           case ByteType => data.toByte
           case BooleanType => parseBoolean(data)

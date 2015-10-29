@@ -100,7 +100,7 @@ object SparkSnowflakeTutorial {
     val df1 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("dbtable", "testdt")
+      .option("dbtable", "testdtn")
       .load()
     df1.printSchema()
     df1.show()
@@ -148,7 +148,7 @@ object SparkSnowflakeTutorial {
      * filtering records via query and renaming a column
      */
     step("Creating Snowflake table sftab")
-    sqlContext.sql("SELECT * FROM mytab WHERE I != 7").withColumnRenamed("I", "II")
+    sqlContext.sql("SELECT * FROM mytab WHERE I != 7 OR I IS NULL").withColumnRenamed("I", "II")
       .write.format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("dbtable", "sftab")

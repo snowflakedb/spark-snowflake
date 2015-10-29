@@ -31,22 +31,12 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
 /**
  * Input format for text records saved with in-record delimiter and newline characters escaped.
  *
- * For example, a record containing two fields: `"a\n"` and `"|b\\"` saved with delimiter `|`
- * should be the following:
- * {{{
- * a\\\n|\\|b\\\\\n
- * }}},
- * where the in-record `|`, `\r`, `\n`, and `\\` characters are escaped by `\\`.
- * Users can configure the delimiter via [[SnowflakeInputFormat$#KEY_DELIMITER]].
- * Its default value [[SnowflakeInputFormat$#DEFAULT_DELIMITER]] is set to match Snowflake's UNLOAD
- * with the ESCAPE option:
- * {{{
- *   UNLOAD ('select_statement')
- *   TO 's3://object_path_prefix'
- *   ESCAPE
- * }}}
- *
- * @see org.apache.spark.SparkContext#newAPIHadoopFile
+ * Note, we support fields that are either:
+ * - double quoted, then only double quote is double-quote-quoted inside, e.g.
+ *   --"--
+ *   becomes
+ *   "--""--"
+ * - escaped, where some characters are backslash escaped.
  */
 class SnowflakeInputFormat extends FileInputFormat[JavaLong, Array[String]] {
 
@@ -90,6 +80,7 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
 
   private var delimiter: Byte = _
   @inline private[this] final val escapeChar: Byte = '\\'
+  @inline private[this] final val quoteChar: Byte = '"'
   @inline private[this] final val lineFeed: Byte = '\n'
   @inline private[this] final val carriageReturn: Byte = '\r'
 
@@ -217,37 +208,77 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     pos
   }
 
+  private def nextChar() : Byte = {
+    val v = reader.read()
+    if (v < 0) {
+      eof = true
+      0
+    } else {
+      val c = v.asInstanceOf[Byte]
+      cur += 1L
+      c
+    }
+  }
+
+  /** Read the next record */
   private def nextValue(): Array[String] = {
     val fields = ArrayBuffer.empty[String]
     var escaped = false
     var endOfRecord = false
     while (!endOfRecord && !eof) {
-      var endOfField = false
       chars.clear()
-      while (!endOfField && !endOfRecord && !eof) {
-        val v = reader.read()
-        if (v < 0) {
-          eof = true
-        } else {
-          cur += 1L
-          val c = v.asInstanceOf[Byte]
-          if (escaped) {
-            if (c != escapeChar && c != delimiter && c != lineFeed && c != carriageReturn) {
-              throw new IllegalStateException(
-                s"Found `$c` (ASCII $v) after $escapeChar.")
+      var endOfField = false
+      // Read the first char
+      var c = nextChar()
+      var ch = c.toChar
+      if (!eof) {
+        var escaped = false
+        if (c == quoteChar) {
+          // Quoted string - the only escape is doubling quoteChar
+          while (!endOfField && !endOfRecord && !eof) {
+            c = nextChar()
+            if (!eof) {
+              if (!escaped) {
+                if (c == quoteChar)
+                  escaped = true
+                else
+                  chars.append(c)
+              } else {
+                if (c == delimiter) {
+                  endOfField = true
+                } else if (c == lineFeed) {
+                  endOfRecord = true
+                } else if (c == quoteChar) {
+                  chars.append(c)
+                  escaped = false
+                }
+              }
             }
-            chars.append(c)
-            escaped = false
-          } else {
-            if (c == escapeChar) {
-              escaped = true
-            } else if (c == delimiter) {
-              endOfField = true
-            } else if (c == lineFeed) {
-              endOfRecord = true
-            } else {
-              // also copy carriage return
+          }
+        } else {
+          // Normal string - note, we already have 'c' here
+          while (!endOfField && !endOfRecord && !eof) {
+            if (escaped) {
+              if (c != escapeChar && c != delimiter && c != lineFeed && c != carriageReturn) {
+                throw new IllegalStateException(
+                  s"Found `$c` after $escapeChar.")
+              }
               chars.append(c)
+              escaped = false
+              c = nextChar()
+            } else {
+              if (c == escapeChar) {
+                escaped = true
+                c = nextChar()
+              } else if (c == delimiter) {
+                endOfField = true
+              } else if (c == lineFeed) {
+                endOfRecord = true
+              } else {
+                // also copy carriage return
+                chars.append(c)
+                c = nextChar()
+              }
             }
           }
         }
