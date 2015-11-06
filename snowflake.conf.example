@@ -8,3 +8,4 @@ sfUser=SOME_USER
 sfPassword=SOME_PASSWORD
 awsAccessKey=SOME_ACCESS_KEY
 awsSecretKey=SOME_SECRET_KEY
+sfCompress=on

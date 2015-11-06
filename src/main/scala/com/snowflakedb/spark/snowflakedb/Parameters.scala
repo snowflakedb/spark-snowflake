@@ -142,6 +142,10 @@ private[snowflakedb] object Parameters {
      */
     def sfSSL: String = parameters.getOrElse("sfssl", "on")
     /**
+     * Snowflake use compression on/off - "on" by default
+     */
+    def sfCompress: String = parameters.getOrElse("sfcompress", "on")
+    /**
      * The JDBC driver class name. This is used to make sure the driver is registered before
      * connecting over JDBC.
      */

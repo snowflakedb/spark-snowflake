@@ -80,11 +80,22 @@ private[snowflakedb] object Conversions {
   }
 
   def formatDate(d: Date): String = {
-    snowflakeDateFormat.format(d)
+    '"' + snowflakeDateFormat.format(d) + '"'
   }
 
   def formatTimestamp(t: Timestamp): String = {
-    snowflakeTimestampFormat.format(t)
+    '"' + snowflakeTimestampFormat.format(t) + '"'
+  }
+
+  // All strings are converted into double-quoted strings, with
+  // quote inside converted to double quotes
+  def formatString(s: String): String = {
+    '"' + s.replace("\"", "\"\"") + '"'
+  }
+
+  def formatAny(v: Any): String = {
+    if (v == null) ""
+    else v.toString
   }
 
   /**

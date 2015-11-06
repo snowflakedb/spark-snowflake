@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, SQLException, Timestamp}
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.TaskContext
 import org.slf4j.LoggerFactory
 
@@ -132,7 +133,7 @@ private[snowflakedb] class SnowflakeWriter(
       action(tempTable.toString)
 
       if (jdbcWrapper.tableExists(conn, table.toString)) {
-        // Rename temp table to final table. Use SWAP to make it atomic.
+        // Rename temp table to final table. Use SWAP to make it atomic.bi
         sql(conn, s"ALTER TABLE ${table} SWAP WITH ${tempTable}")
       } else {
         // Table didn't exist, just rename temp table to it
@@ -206,22 +207,26 @@ private[snowflakedb] class SnowflakeWriter(
   private def unloadData(
       sqlContext: SQLContext,
       data: DataFrame,
+      params: MergedParameters,
       tempDir: String): Option[String] = {
-    // Make sure we export some Date and Timestamp types in the format we
-    // want.
 
-    // Convert the rows so that timestamps and dates become formatted strings:
+    // Prepare the set of conversion functions, based on the data type
     val conversionFunctions: Array[Any => Any] = data.schema.fields.map { field =>
       field.dataType match {
         case DateType => (v: Any) => v match {
-          case null => null
+          case null => ""
           case t: Timestamp => Conversions.formatTimestamp(t)
           case d: Date => Conversions.formatDate(d)
         }
         case TimestampType => (v: Any) => {
-          if (v == null) null else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+          if (v == null) ""
+          else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
         }
-        case _ => (v: Any) => v
+        case StringType => (v: Any) => {
+          if (v == null) ""
+          else Conversions.formatString(v.asInstanceOf[String])
+        }
+        case _ => (v: Any) => Conversions.formatAny(v)
       }
     }
 
@@ -229,51 +234,38 @@ private[snowflakedb] class SnowflakeWriter(
     val nonEmptyPartitions =
       sqlContext.sparkContext.accumulableCollection(mutable.HashSet.empty[Int])
 
-    val convertedRows: RDD[Row] = data.mapPartitions { iter =>
-      if (iter.hasNext) {
-        nonEmptyPartitions += TaskContext.get.partitionId()
-      }
-      iter.map { row =>
-        val convertedValues: Array[Any] = new Array(conversionFunctions.length)
-        var i = 0
-        while (i < conversionFunctions.length) {
-          convertedValues(i) = conversionFunctions(i)(row(i))
-          i += 1
+
+    // Create RDD that will be saved as strings
+    val strRDD = data.rdd.mapPartitionsWithIndex { case (index, iter) =>
+      new Iterator[String] {
+        override def hasNext: Boolean = iter.hasNext
+
+        override def next: String = {
+          nonEmptyPartitions += TaskContext.get.partitionId()
+
+          if (iter.nonEmpty) {
+            val row = iter.next()
+            // Build a simple pipe-delimited string
+            var str = new mutable.StringBuilder
+            var i = 0
+            while (i < conversionFunctions.length) {
+              if (i > 0)
+                str.append('|')
+              str.append(conversionFunctions(i)(row(i)))
+              i += 1
+            }
+            str.toString()
+          } else {
+            ""
+          }
         }
-        Row.fromSeq(convertedValues)
       }
     }
-
-    // Convert all column names to lowercase
-    // Snowflake-todo: Check if it's needed
-    val schemaWithLowercaseColumnNames: StructType =
-      StructType(data.schema.map(f => f.copy(name = f.name.toLowerCase)))
-
-    if (schemaWithLowercaseColumnNames.map(_.name).toSet.size != data.schema.size) {
-      throw new IllegalArgumentException(
-        "Cannot save table to Snowflake because two or more column names would be identical" +
-        " after conversion to lowercase: " + data.schema.map(_.name).mkString(", "))
-    }
-
-    // Update the schema so that CSV writes date and timestamp columns as formatted strings.
-    val convertedSchema: StructType = StructType(
-      schemaWithLowercaseColumnNames.map {
-        case StructField(name, DateType, nullable, meta) =>
-          StructField(name, StringType, nullable, meta)
-        case StructField(name, TimestampType, nullable, meta) =>
-          StructField(name, StringType, nullable, meta)
-        case other => other
-      }
-    )
-
-    // Save data using spark-csv
-    sqlContext.createDataFrame(convertedRows, convertedSchema)
-      .write
-      .format("com.databricks.spark.csv")
-      .option("quote", "\"")
-      .option("escape", "\\")
-      .option("delimiter", "|")
-      .save(tempDir)
+    // Save, possibly with compression. Always use Gzip for now
+    if (params.sfCompress.equals("on"))
+      strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])
+    else
+      strRDD.saveAsTextFile(tempDir)
 
     if (nonEmptyPartitions.value.isEmpty) {
       None
@@ -318,7 +310,7 @@ private[snowflakedb] class SnowflakeWriter(
 
     try {
       val tempDir = params.createPerQueryTempDir()
-      val filesToCopyPrefix = unloadData(sqlContext, data, tempDir)
+      val filesToCopyPrefix = unloadData(sqlContext, data, params, tempDir)
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         withStagingTable(conn, params.table.get, stagingTable => {
           val updatedParams = MergedParameters(params.parameters.updated("dbtable", stagingTable))
