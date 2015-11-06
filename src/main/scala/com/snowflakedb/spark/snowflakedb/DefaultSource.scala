@@ -26,12 +26,10 @@ import org.slf4j.LoggerFactory
 /**
  * Snowflake Source implementation for Spark SQL
  * Major TODO points:
- *   - Add support for compression in-out
+ *   - Add support for compression Snowflake->Spark
  *   - Add support for using Snowflake Stage files, so the user doesn't need
  *       to provide AWS passwords
  *   - Add support for VARIANT
- *   - Fix NULL handling both ways, including empty strings, null values, and
- *     "null" strings
  */
 class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials => AmazonS3Client)
   extends RelationProvider
