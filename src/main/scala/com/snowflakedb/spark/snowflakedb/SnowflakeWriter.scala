@@ -41,26 +41,20 @@ import org.apache.spark.sql.types._
  *
  * At a high level, writing data back to Snowflake involves the following steps:
  *
- *   - Use the spark-csv library to save the DataFrame to S3 using CSV serialization.
- *   snowflake-todo: Verify the below:
- *     Prior to
- *     saving the data, certain data type conversions are applied in order to work around
- *     limitations in Avro's data type support and Redshift's case-insensitive identifier handling.
- *
- *     While writing the Avro files, we use accumulators to keep track of which partitions were
- *     non-empty. After the write operation completes, we use this to construct a list of non-empty
- *     Avro partition files.
- *
+ *   - Use an RDD to save DataFrame content as strings, using customized
+ *     formatting functions from Conversions
+
  *   - Use JDBC to issue any CREATE TABLE commands, if required.
  *
  *   - If there is data to be written (i.e. not all partitions were empty),
  *     copy all the files sharing the prefix we exported to into Snowflake.
  *
- *   - Use JDBC to issue a COPY command in order to instruct Snowflake to load the CSV data into
- *     the appropriate table.
+ *     This is done by issuing a COPY command over JDBC that
+ *     instructs Snowflake to load the CSV data into the appropriate table.
+ *
  *     If the Overwrite SaveMode is being used, then by default the data
- *     will be loaded into a temporary staging table, which later will atomically replace the
- *     original table using SWAP.
+ *     will be loaded into a temporary staging table,
+ *     which later will atomically replace the original table using SWAP.
  */
 private[snowflakedb] class SnowflakeWriter(
     jdbcWrapper: JDBCWrapper,
