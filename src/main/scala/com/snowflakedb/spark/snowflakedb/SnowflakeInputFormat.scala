@@ -31,12 +31,10 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
 /**
  * Input format for text records saved with in-record delimiter and newline characters escaped.
  *
- * Note, we support fields that are either:
- * - double quoted, then only double quote is double-quote-quoted inside, e.g.
- *   --"--
- *   becomes
- *   "--""--"
- * - escaped, where some characters are backslash escaped.
+ * Note, Snowflake exports fields where
+ * - strings/dates are "-quoted, with a " inside represented as ""
+ * - numbers are not quoted
+ * - nulls are empty, unquoted strings
  */
 class SnowflakeInputFormat extends FileInputFormat[JavaLong, Array[String]] {
 
@@ -155,6 +153,8 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
    * Because we don't know whether the first char is escaped or not, we need to first find a
    * position that is not escaped.
    *
+   * Snowflake-todo: Make it work for Snowflake format, or disable it
+   *
    * @param fs file system
    * @param file file path
    * @param size file size
@@ -220,7 +220,12 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     }
   }
 
-  /** Read the next record */
+  /** Read the next record.
+    * Note - special return format:
+    * - input non-quoted fields are returned as they are
+    * - input quoted fields are returned *with* quotes
+    * --- if there was a double quote inside, it's converted to a single quote
+    * This is to distinguish NULLs (empty) from empty string (two quotes)*/
   private def nextValue(): Array[String] = {
     val fields = ArrayBuffer.empty[String]
     var escaped = false
@@ -230,55 +235,43 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
       var endOfField = false
       // Read the first char
       var c = nextChar()
-      var ch = c.toChar
       if (!eof) {
-        var escaped = false
         if (c == quoteChar) {
           // Quoted string - the only escape is doubling quoteChar
+          // Note: we store beginning-end quotes
+          var escaped = false
+          chars.append(c)
           while (!endOfField && !endOfRecord && !eof) {
             c = nextChar()
             if (!eof) {
               if (!escaped) {
                 if (c == quoteChar)
                   escaped = true
-                else
-                  chars.append(c)
+                chars.append(c)
               } else {
                 if (c == delimiter) {
                   endOfField = true
                 } else if (c == lineFeed) {
                   endOfRecord = true
                 } else if (c == quoteChar) {
-                  chars.append(c)
+                  // Don't produce this quote
                   escaped = false
                 }
               }
             }
           }
         } else {
-          // Normal string - note, we already have 'c' here
+          // Normal string
+          // Note, 'c' is initialized above already
           while (!endOfField && !endOfRecord && !eof) {
-            if (escaped) {
-              if (c != escapeChar && c != delimiter && c != lineFeed && c != carriageReturn) {
-                throw new IllegalStateException(
-                  s"Found `$c` after $escapeChar.")
-              }
-              chars.append(c)
-              escaped = false
-              c = nextChar()
+            if (c == delimiter) {
+              endOfField = true
+            } else if (c == lineFeed) {
+              endOfRecord = true
             } else {
-              if (c == escapeChar) {
-                escaped = true
-                c = nextChar()
-              } else if (c == delimiter) {
-                endOfField = true
-              } else if (c == lineFeed) {
-                endOfRecord = true
-              } else {
-                // also copy carriage return
-                chars.append(c)
-                c = nextChar()
-              }
+              // Normal character, just append it
+              chars.append(c)
+              c = nextChar()
             }
           }
         }

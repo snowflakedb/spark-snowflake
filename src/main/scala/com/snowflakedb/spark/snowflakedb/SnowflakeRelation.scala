@@ -162,7 +162,7 @@ private[snowflakedb] case class SnowflakeRelation(
        |    /*ESCAPE='\\\\'*/
        |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    /* NULL_IF= ('NULL') */
+       |    NULL_IF= ()
        |  )
        |MAX_FILE_SIZE = 10000000
      """.stripMargin.trim

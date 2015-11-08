@@ -109,7 +109,7 @@ private[snowflakedb] class SnowflakeWriter(
        |    /* COMPRESSION=none */
        |    FIELD_DELIMITER='|'
        |    /* ESCAPE='\\\\' */
-       |    NULL_IF=('null')
+       |    NULL_IF=()
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'
        |  )
@@ -240,8 +240,8 @@ private[snowflakedb] class SnowflakeWriter(
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
 
-        override def next: String = {
-          nonEmptyPartitions += TaskContext.get.partitionId()
+        override def next(): String = {
+          nonEmptyPartitions += TaskContext.get().partitionId()
 
           if (iter.nonEmpty) {
             val row = iter.next()

@@ -143,6 +143,18 @@ object SparkSnowflakeTutorial {
     df1.registerTempTable("mytab")
 
     /*
+     * Create a new table sfclone (overwriting any existing sfclone table)
+     * from spark "mytab" table.
+     */
+    step("Creating Snowflake table sfclone")
+    sqlContext.sql("SELECT * FROM mytab")
+      .write.format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("dbtable", "sfclone")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    /*
      * Create a new table sftab (overwriting any existing sftab table)
      * from spark "mytab" table,
      * filtering records via query and renaming a column

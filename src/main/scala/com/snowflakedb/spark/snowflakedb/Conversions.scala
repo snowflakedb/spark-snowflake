@@ -31,8 +31,9 @@ private[snowflakedb] object Conversions {
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
     // Snowflake needs to use either of these formats, _TZ for TIMESTAMP_TZ
-    private val PATTERN_BASE = "yyyy-MM-dd HH:mm:ss.SSS"
-    private val PATTERN_TZ= "yyyy-MM-dd HH:mm:ss.SSS Z"
+    // Note, Snowflake exports with quotes, we get rid of them in the format
+    private val PATTERN_BASE = "\"yyyy-MM-dd HH:mm:ss.SSS\""
+    private val PATTERN_TZ= "\"yyyy-MM-dd HH:mm:ss.SSS Z\""
 
     private val formatBase= new SimpleDateFormat(PATTERN_BASE)
     private val formatTz = new SimpleDateFormat(PATTERN_TZ)
@@ -63,7 +64,8 @@ private[snowflakedb] object Conversions {
   }
 
   // We use standard ISO format for dates both ways
-  private val snowflakeDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+  // Note, Snowflake exports with quotes, we get rid of them in the format
+  private val snowflakeDateFormat = new SimpleDateFormat("\"yyyy-MM-dd\"")
 
   /**
    * Parse a string exported from a Snowflake TIMESTAMP column
@@ -80,11 +82,11 @@ private[snowflakedb] object Conversions {
   }
 
   def formatDate(d: Date): String = {
-    '"' + snowflakeDateFormat.format(d) + '"'
+    snowflakeDateFormat.format(d)
   }
 
   def formatTimestamp(t: Timestamp): String = {
-    '"' + snowflakeTimestampFormat.format(t) + '"'
+    snowflakeTimestampFormat.format(t)
   }
 
   // All strings are converted into double-quoted strings, with
@@ -124,8 +126,8 @@ private[snowflakedb] object Conversions {
   private def convertRow(schema: StructType, fields: Array[String]): Row = {
     val converted = fields.zip(schema).map {
       case (data, field) =>
-        // We know Snowflake always exports NULLs as \N
-        if (data == null || data == "\\N") null
+        // Snowflake always exports NULLs as empty, unquoted strings
+        if (data == "") null
         else field.dataType match {
           case ByteType => data.toByte
           case BooleanType => parseBoolean(data)
@@ -136,7 +138,9 @@ private[snowflakedb] object Conversions {
           case IntegerType => data.toInt
           case LongType => data.toLong
           case ShortType => data.toShort
-          case StringType => data
+          case StringType =>
+              // Snowflake reader preserves string external quotes always
+              data.substring(1, data.length - 1);
           case TimestampType => parseTimestamp(data)
           case _ => data
         }
