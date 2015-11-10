@@ -30,42 +30,37 @@ private[snowflakedb] object Conversions {
 
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
-    // Snowflake needs to use either of these formats, _TZ for TIMESTAMP_TZ
+    // Snowflake always serializes with timezone
     // Note, Snowflake exports with quotes, we get rid of them in the format
-    private val PATTERN_BASE = "\"yyyy-MM-dd HH:mm:ss.SSS\""
     private val PATTERN_TZ= "\"yyyy-MM-dd HH:mm:ss.SSS Z\""
 
-    private val formatBase= new SimpleDateFormat(PATTERN_BASE)
-    private val formatTz = new SimpleDateFormat(PATTERN_TZ)
+    // Thread local SimpleDateFormat for parsing/formatting
+    private var formatTz = new ThreadLocal[SimpleDateFormat] {
+      override protected def initialValue: SimpleDateFormat =
+          new SimpleDateFormat(PATTERN_TZ)
+    }
 
     override def format(
         date: Date,
         toAppendTo: StringBuffer,
         fieldPosition: FieldPosition): StringBuffer = {
       // Always export w/ timezone
-      formatTz.format(date, toAppendTo, fieldPosition)
+      formatTz.get().format(date, toAppendTo, fieldPosition)
     }
 
     override def parse(source: String, pos: ParsePosition): Date = {
       val idx = pos.getIndex
       val errIdx = pos.getErrorIndex
-      // First try with a simpler format
-      var res = formatBase.parse(source, pos)
-      if (res == null) {
-        // Restore pos to parse from the same place
-        pos.setIndex(idx)
-        pos.setErrorIndex(errIdx)
-        // Try again, using the format with a timezone
-
-        res = formatTz.parse(source, pos)
-      }
+      var res = formatTz.get().parse(source, pos)
       res
     }
   }
 
-  // We use standard ISO format for dates both ways
-  // Note, Snowflake exports with quotes, we get rid of them in the format
-  private val snowflakeDateFormat = new SimpleDateFormat("\"yyyy-MM-dd\"")
+  // Thread local SimpleDateFormat for parsing/formatting
+  private var snowflakeDateFormat = new ThreadLocal[SimpleDateFormat] {
+    override protected def initialValue: SimpleDateFormat =
+        new SimpleDateFormat("\"yyyy-MM-dd\"")
+  }
 
   /**
    * Parse a string exported from a Snowflake TIMESTAMP column
@@ -78,11 +73,11 @@ private[snowflakedb] object Conversions {
    * Parse a string exported from a Snowflake DATE column
    */
   private def parseDate(s: String): java.sql.Date = {
-    new java.sql.Date(snowflakeDateFormat.parse(s).getTime)
+    new java.sql.Date(snowflakeDateFormat.get().parse(s).getTime)
   }
 
   def formatDate(d: Date): String = {
-    snowflakeDateFormat.format(d)
+    snowflakeDateFormat.get().format(d)
   }
 
   def formatTimestamp(t: Timestamp): String = {
@@ -110,14 +105,20 @@ private[snowflakedb] object Conversions {
     else throw new IllegalArgumentException(s"Expected 't' or 'f' but got '$s'")
   }
 
-  private[this] val snowflakeDecimalFormat: DecimalFormat = new DecimalFormat()
-  snowflakeDecimalFormat.setParseBigDecimal(true)
+  // Thread local DecimalFormat for parsing
+  private var snowflakeDecimalFormat = new ThreadLocal[DecimalFormat ] {
+    override protected def initialValue: DecimalFormat = {
+      var df = new DecimalFormat()
+      df.setParseBigDecimal(true)
+      df
+    }
+  }
 
   /**
-   * Parse a decimal using Snowflake's UNLOAD decimal syntax
+   * Parse a decimal using Snowflake's UNLOAD decimal syntax.
    */
   def parseDecimal(s: String): java.math.BigDecimal = {
-    snowflakeDecimalFormat.parse(s).asInstanceOf[java.math.BigDecimal]
+    snowflakeDecimalFormat.get().parse(s).asInstanceOf[java.math.BigDecimal]
   }
   /**
    * Construct a Row from the given array of strings, retrieved from Snowflake's UNLOAD.

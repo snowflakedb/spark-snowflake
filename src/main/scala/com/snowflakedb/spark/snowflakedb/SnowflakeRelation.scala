@@ -160,7 +160,7 @@ private[snowflakedb] case class SnowflakeRelation(
        |    COMPRESSION=none
        |    FIELD_DELIMITER='|'
        |    /*ESCAPE='\\\\'*/
-       |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'
+       |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    NULL_IF= ()
        |  )

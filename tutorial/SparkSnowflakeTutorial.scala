@@ -83,15 +83,15 @@ object SparkSnowflakeTutorial {
     exampleOptions += ("awsSecretKey" -> awsSecretKey)
 
     // Initialize Spark
-    val sc = new SparkContext(new SparkConf().setAppName("SparkSQL").setMaster("local"))
+    val sc = new SparkContext(new SparkConf().setAppName("SparkSQL").setMaster("local[8]"))
     val sqlContext = new SQLContext(sc)
 
     /** Read configuration from a file */
     var sfOptions = Utils.readMapFromFile(sc, "snowflake.conf.private")
 
     /** Setup our S3 access credentials */
-    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", sfOptions.getOrElse("awsAccessKey",null))
-    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", sfOptions.getOrElse("awsSecretKey",null))
+    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", sfOptions.getOrElse("awsAccessKey", null))
+    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", sfOptions.getOrElse("awsSecretKey", null))
 
     import sqlContext.implicits._
 
@@ -100,11 +100,32 @@ object SparkSnowflakeTutorial {
     val df1 = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
-      .option("dbtable", "testdtn")
+      .option("dbtable", "alldt")
       .load()
     df1.printSchema()
     df1.show()
 
+    /*
+     * Register our df1 table as temporary table 'alldt_spark'
+     * so that it can be queried via sqlContext.sql
+     */
+    step("Registering alldt_spark")
+    df1.registerTempTable("alldt_spark")
+
+    /*
+     * Create a new table sfclone (overwriting any existing sfclone table)
+     * from spark "mytab" table.
+     */
+    step("Creating Snowflake table alldt_clone")
+    sqlContext.sql("SELECT * FROM alldt_spark")
+      .write.format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("dbtable", "alldt_clone")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    if (false) // disable for now for speed
+    {
     // df2: Load from a query
     step("Creating df2")
     val df2 = sqlContext.read
@@ -136,31 +157,12 @@ object SparkSnowflakeTutorial {
     df3.filter(df3("F") > 10.0f).show()
 
     /*
-     * Register our df1 table as temporary table 'mytab'
-     * so that it can be queried via sqlContext.sql
-     */
-    step("Registering mytab")
-    df1.registerTempTable("mytab")
-
-    /*
-     * Create a new table sfclone (overwriting any existing sfclone table)
-     * from spark "mytab" table.
-     */
-    step("Creating Snowflake table sfclone")
-    sqlContext.sql("SELECT * FROM mytab")
-      .write.format("com.snowflakedb.spark.snowflakedb")
-      .options(sfOptions)
-      .option("dbtable", "sfclone")
-      .mode(SaveMode.Overwrite)
-      .save()
-
-    /*
-     * Create a new table sftab (overwriting any existing sftab table)
-     * from spark "mytab" table,
-     * filtering records via query and renaming a column
-     */
-    step("Creating Snowflake table sftab")
-    sqlContext.sql("SELECT * FROM mytab WHERE I != 7 OR I IS NULL").withColumnRenamed("I", "II")
+    * Create a new table sftab (overwriting any existing sftab table)
+    * from spark "alldt_spark" table,
+    * filtering records via query and renaming a column
+    */
+    step("Creating Snowflake table alldt_clone_positive")
+    sqlContext.sql("SELECT * FROM alldt_spark WHERE INT > 0").withColumnRenamed("INT", "INTE")
       .write.format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("dbtable", "sftab")
@@ -169,16 +171,17 @@ object SparkSnowflakeTutorial {
 
     /*
      * Append to "sftab" with a different query
-     * from spark "mytab" table.
+     * from spark "alldt_spark" table.
      * Note - we don't rename the columns, but since the schemas match, it works
      */
     step("Appending to Snowflake table sftab")
-    sqlContext.sql("SELECT * FROM mytab WHERE I >= 7")
+    sqlContext.sql("SELECT * FROM alldt_spark WHERE INT <= 0")
       .write.format("com.snowflakedb.spark.snowflakedb")
       .options(sfOptions)
       .option("dbtable", "sftab")
       .mode(SaveMode.Append)
       .save()
+    }
 
     /*** ------------------------------------ FINITO
     //Load from a query
