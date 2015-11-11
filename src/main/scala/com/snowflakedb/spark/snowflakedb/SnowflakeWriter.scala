@@ -119,8 +119,7 @@ private[snowflakedb] class SnowflakeWriter(
       table: TableName,
       action: (String) => Unit) {
     val randomSuffix = Math.abs(Random.nextInt()).toString
-    val tempTable =
-      table.copy(unescapedTableName = s"${table.unescapedTableName}_staging_$randomSuffix")
+    val tempTable = new TableName(s"${table.name}_staging_$randomSuffix")
     log.info(s"Loading new data for Snowflake table '$table' using temporary table '$tempTable'")
 
     try {

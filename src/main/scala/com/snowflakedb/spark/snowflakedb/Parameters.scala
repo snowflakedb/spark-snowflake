@@ -46,7 +46,13 @@ private[snowflakedb] object Parameters {
     }
     // Snowflake-todo Add more parameter checking
     if (!userParameters.contains("sfurl")) {
-      throw new IllegalArgumentException("A snowflake URL must be provided with 'sfurl' parameter, e.g. 'host:port'")
+      throw new IllegalArgumentException("A snowflake URL must be provided with 'sfurl' parameter, e.g. 'accountname.snowflakecomputing.com:443'")
+    }
+    if (!userParameters.contains("sfuser")) {
+      throw new IllegalArgumentException("A snowflake user must be provided with 'sfuser' parameter, e.g. 'user1'")
+    }
+    if (!userParameters.contains("sfpassword")) {
+      throw new IllegalArgumentException("A snowflake passsword must be provided with 'sfpassword' parameter, e.g. 'password'")
     }
     if (!userParameters.contains("dbtable") && !userParameters.contains("query")) {
       throw new IllegalArgumentException(
@@ -89,7 +95,7 @@ private[snowflakedb] object Parameters {
       if (dbtable.startsWith("(") && dbtable.endsWith(")")) {
         None
       } else {
-        Some(TableName.parseFromEscaped(dbtable))
+        Some(TableName(dbtable))
       }
     }
 

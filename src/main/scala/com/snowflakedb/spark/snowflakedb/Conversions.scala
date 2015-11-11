@@ -87,7 +87,7 @@ private[snowflakedb] object Conversions {
   // All strings are converted into double-quoted strings, with
   // quote inside converted to double quotes
   def formatString(s: String): String = {
-    '"' + s.replace("\"", "\"\"") + '"'
+    "\"" + s.replace("\"", "\"\"") + "\""
   }
 
   def formatAny(v: Any): String = {

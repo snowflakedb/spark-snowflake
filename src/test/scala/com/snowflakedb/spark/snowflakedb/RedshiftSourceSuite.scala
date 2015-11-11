@@ -139,7 +139,7 @@ class RedshiftSourceSuite
       "ESCAPE").r
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema))
+      Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Assert that we've loaded and converted all data in the test file
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
@@ -231,7 +231,7 @@ class RedshiftSourceSuite
     // scalastyle:on
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema))
+      Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Construct the source with a custom schema
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
@@ -280,7 +280,7 @@ class RedshiftSourceSuite
 
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema))
+      Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val relation = SnowflakeRelation(
       mockRedshift.jdbcWrapper,
@@ -303,7 +303,7 @@ class RedshiftSourceSuite
   test("Cannot write table with column names that become ambiguous under case insensitivity") {
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema))
+      Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val schema = StructType(Seq(StructField("a", IntegerType), StructField("A", IntegerType)))
     val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
@@ -322,7 +322,7 @@ class RedshiftSourceSuite
 
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped("test_table").toString -> TestUtils.testSchema),
+      Map(new TableName("test_table").toString -> TestUtils.testSchema),
       jdbcQueriesThatShouldFail = Seq("COPY \"PUBLIC\".\"test_table_staging_.*\"".r))
 
     val expectedCommands = Seq(
@@ -350,7 +350,7 @@ class RedshiftSourceSuite
 
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped(defaultParams("dbtable")).toString -> null))
+      Map(new TableName(defaultParams("dbtable")).toString -> null))
 
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     val savedDf =
@@ -388,7 +388,7 @@ class RedshiftSourceSuite
   test("Respect SaveMode.ErrorIfExists when table exists") {
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped(defaultParams("dbtable")).toString -> null))
+      Map(new TableName(defaultParams("dbtable")).toString -> null))
     val errIfExistsSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     intercept[Exception] {
       errIfExistsSource.createRelation(
@@ -401,7 +401,7 @@ class RedshiftSourceSuite
   test("Do nothing when table exists if SaveMode = Ignore") {
     val mockRedshift = new MockRedshift(
       defaultParams("url"),
-      Map(TableName.parseFromEscaped(defaultParams("dbtable")).toString -> null))
+      Map(new TableName(defaultParams("dbtable")).toString -> null))
     val ignoreSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     ignoreSource.createRelation(testSqlContext, SaveMode.Ignore, defaultParams, expectedDataDF)
     mockRedshift.verifyThatConnectionsWereClosed()

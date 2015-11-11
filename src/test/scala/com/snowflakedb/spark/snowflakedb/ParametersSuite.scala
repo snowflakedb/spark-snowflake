@@ -23,18 +23,24 @@ import org.scalatest.{FunSuite, Matchers}
  */
 class ParametersSuite extends FunSuite with Matchers {
 
+  val minParams = Map(
+    "tempdir" -> "s3://foo/bar",
+    "dbtable" -> "test_table",
+    "sfurl" -> "account.snowflakecomputing.com:443",
+    "sfuser" -> "username",
+    "sfpassword" -> "password"
+  )
+  
   test("Minimal valid parameter map is accepted") {
-    val params = Map(
-      "tempdir" -> "s3://foo/bar",
-      "dbtable" -> "test_schema.test_table",
-      "url" -> "jdbc:redshift://foo/bar")
 
-    val mergedParams = Parameters.mergeParameters(params)
+    val mergedParams = Parameters.mergeParameters(minParams)
 
-    mergedParams.rootTempDir should startWith (params("tempdir"))
-    mergedParams.createPerQueryTempDir() should startWith (params("tempdir"))
-    mergedParams.sfURL shouldBe params("sfurl")
-    mergedParams.table shouldBe Some(TableName("test_schema", "test_table"))
+    mergedParams.rootTempDir should startWith (minParams("tempdir"))
+    mergedParams.createPerQueryTempDir() should startWith (minParams("tempdir"))
+    mergedParams.sfURL shouldBe minParams("sfurl")
+    mergedParams.sfUser shouldBe minParams("sfuser")
+    mergedParams.sfPassword shouldBe minParams("sfpassword")
+    mergedParams.table shouldBe Some(TableName(minParams("dbtable")))
 
     // Check that the defaults have been added
     Parameters.DEFAULT_PARAMETERS foreach {
@@ -43,12 +49,7 @@ class ParametersSuite extends FunSuite with Matchers {
   }
 
   test("createPerQueryTempDir() returns distinct temp paths") {
-    val params = Map(
-      "tempdir" -> "s3://foo/bar",
-      "dbtable" -> "test_table",
-      "url" -> "jdbc:redshift://foo/bar")
-
-    val mergedParams = Parameters.mergeParameters(params)
+    val mergedParams = Parameters.mergeParameters(minParams)
 
     mergedParams.createPerQueryTempDir() should not equal mergedParams.createPerQueryTempDir()
   }
@@ -60,29 +61,30 @@ class ParametersSuite extends FunSuite with Matchers {
       }
     }
 
-    checkMerge(Map("dbtable" -> "test_table", "url" -> "jdbc:redshift://foo/bar"))
-    checkMerge(Map("tempdir" -> "s3://foo/bar", "url" -> "jdbc:redshift://foo/bar"))
-    checkMerge(Map("dbtable" -> "test_table", "tempdir" -> "s3://foo/bar"))
+    // Check that removing any of the parameters causes a failure
+    for ((k, v) <- minParams) {
+      val params = collection.mutable.Map() ++= minParams
+      params.remove(k)
+      checkMerge(params.toMap)
+    }
   }
 
   test("Must specify either 'dbtable' or 'query' parameter, but not both") {
     intercept[IllegalArgumentException] {
-      Parameters.mergeParameters(Map(
-        "tempdir" -> "s3://foo/bar",
-        "url" -> "jdbc:redshift://foo/bar"))
+      val params = collection.mutable.Map() ++= minParams
+      params.remove("dbtable")
+      Parameters.mergeParameters(params.toMap)
     }.getMessage should (include ("dbtable") and include ("query"))
 
     intercept[IllegalArgumentException] {
-      Parameters.mergeParameters(Map(
-        "tempdir" -> "s3://foo/bar",
-        "dbtable" -> "test_table",
-        "query" -> "select * from test_table",
-        "url" -> "jdbc:redshift://foo/bar"))
+      val params = collection.mutable.Map() ++= minParams
+      params += "query" -> "select * from test_table"
+      Parameters.mergeParameters(params.toMap)
     }.getMessage should (include ("dbtable") and include ("query") and include("both"))
 
-    Parameters.mergeParameters(Map(
-      "tempdir" -> "s3://foo/bar",
-      "query" -> "select * from test_table",
-      "url" -> "jdbc:redshift://foo/bar"))
+    val params = collection.mutable.Map() ++= minParams
+    params.remove("dbtable")
+    params += "query" -> "select * from test_table"
+    Parameters.mergeParameters(params.toMap)
   }
 }
