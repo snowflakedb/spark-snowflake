@@ -41,7 +41,7 @@ object SparkSnowflakeBuild extends Build {
     .settings(
       name := "spark-snowflakedb",
       organization := "com.snowflake",
-      scalaVersion := "2.10.5",
+      scalaVersion := "2.11.7",
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := "1.4.1",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
@@ -99,11 +99,6 @@ object SparkSnowflakeBuild extends Build {
         "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()
-      ),
-      // Let's add spark-csv and see if we can export using it for export to Snowflake
-      // When trying to use spark-csv_2.11 there were problems
-      libraryDependencies ++= Seq(
-        "com.databricks" % "spark-csv_2.10" % "1.2.0"
       ),
       // Although spark-avro declares its avro-mapred dependency as `provided`, its version of the
       // dependency can still end up on the classpath during tests, which breaks the tests for
