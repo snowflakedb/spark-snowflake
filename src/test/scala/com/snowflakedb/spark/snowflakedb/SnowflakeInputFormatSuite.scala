@@ -28,9 +28,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext}
 
-class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
+class SnowflakeInputFormatSuite extends FunSuite with BeforeAndAfterAll {
 
-  import RedshiftInputFormatSuite._
+  import SnowflakeInputFormatSuite._
 
   private var sc: SparkContext = _
 
@@ -52,12 +52,11 @@ class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   private def escape(records: Set[Seq[String]], delimiter: Char): String = {
-    require(delimiter != '\\' && delimiter != '\n')
     records.map { r =>
       r.map { f =>
-        f.replace("\\", "\\\\")
-          .replace("\n", "\\\n")
-          .replace(delimiter, "\\" + delimiter)
+        var res = f.replace("\"", "\"\"")
+        res = "\"" + res + "\""
+        res
       }.mkString(delimiter)
     }.mkString("", "\n", "\n")
   }
@@ -92,68 +91,20 @@ class RedshiftInputFormatSuite extends FunSuite with BeforeAndAfterAll {
       // assert(rdd.partitions.size > records.size) // so there exist at least one empty partition
 
       val actual = rdd.values.map(_.toSeq).collect()
-      assert(actual.size === records.size)
-      assert(actual.toSet === records)
-    }
-  }
 
-  test("customized delimiter") {
-    withTempDir { dir =>
-      val escaped = escape(records, TAB)
-      writeToFile(escaped, new File(dir, "part-00000"))
+      // We need to get dir of the quotes that the SnowflakeInputFormat preserves
+      var unquoted = actual.map { r =>
+        r.map { f =>
+          f.substring(1, f.length - 1)
+        }
+      }
 
-      val conf = new Configuration
-      conf.setLong(KEY_BLOCK_SIZE, 4)
-      conf.set(KEY_DELIMITER, TAB)
-
-      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[SnowflakeInputFormat],
-        classOf[java.lang.Long], classOf[Array[String]], conf)
-
-      // TODO: Check this assertion - fails on Travis only, no idea what, or what it's for
-      // assert(rdd.partitions.size > records.size) // so there exist at least one empty partitions
-
-      val actual = rdd.values.map(_.toSeq).collect()
-      assert(actual.size === records.size)
-      assert(actual.toSet === records)
-    }
-  }
-
-  test("schema parser") {
-    withTempDir { dir =>
-      val testRecords = Set(
-        Seq("a\n", "TX", 1, 1.0, 1000L, 200000000000L),
-        Seq("b", "CA", 2, 2.0, 2000L, 1231412314L))
-      val escaped = escape(testRecords.map(_.map(_.toString)), DEFAULT_DELIMITER)
-      writeToFile(escaped, new File(dir, "part-00000"))
-
-      val conf = new Configuration
-      conf.setLong(KEY_BLOCK_SIZE, 4)
-
-      val sqlContext = new SQLContext(sc)
-
-      val srdd = sqlContext.snowflakeFile(
-        dir.toString,
-        "name varchar(10) state text id integer score float big_score numeric(4, 0) " +
-          "some_long bigint")
-      val expectedSchema = StructType(Seq(
-        StructField("name", StringType, nullable = true),
-        StructField("state", StringType, nullable = true),
-        StructField("id", IntegerType, nullable = true),
-        StructField("score", DoubleType, nullable = true),
-        StructField("big_score", LongType, nullable = true),
-        StructField("some_long", LongType, nullable = true)))
-      assert(srdd.schema === expectedSchema)
-      val parsed = srdd.map {
-        case Row(name: String, state: String, id: Int, score: Double,
-                 bigScore: Long, someLong: Long) =>
-          Seq(name, state, id, score, bigScore, someLong)
-      }.collect().toSet
-
-      assert(parsed === testRecords)
+      assert(unquoted.size === records.size)
+      assert(unquoted.toSet === records)
     }
   }
 }
 
-object RedshiftInputFormatSuite {
+object SnowflakeInputFormatSuite {
   implicit def charToString(c: Char): String = c.toString
 }

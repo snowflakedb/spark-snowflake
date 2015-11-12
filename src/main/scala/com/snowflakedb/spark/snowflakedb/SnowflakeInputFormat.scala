@@ -107,14 +107,24 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     }
     val fs = file.getFileSystem(conf)
     val size = fs.getFileStatus(file).getLen
-    start = findNext(fs, file, size, split.getStart)
-    end = findNext(fs, file, size, split.getStart + split.getLength)
+    // Note, for Snowflake, we do not support splitting the file.
+    // This is because it is in general not possible to find the record boundary
+    // With 100% precision.
+    // This is because we use quoted strings, and we never know if we are in
+    // the middle of a quoted string. We can scan e.g. 16MB ahead, but it's
+    // pointless.
+    // This is not a problem, as we only generate small files anyway.
+    if (split.getStart > 0) {
+      // Never read anything
+      start = size
+      end = size
+    } else {
+      // Only the first split reads, and reads everything.
+      start = 0
+      end = size
+    }
     cur = start
     val in = fs.open(file)
-    if (cur > 0L) {
-      in.seek(cur - 1L)
-      in.read()
-    }
     reader = new BufferedInputStream(in, defaultBufferSize)
   }
 
@@ -146,66 +156,6 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     if (reader != null) {
       reader.close()
     }
-  }
-
-  /**
-   * Finds the start of the next record.
-   * Because we don't know whether the first char is escaped or not, we need to first find a
-   * position that is not escaped.
-   *
-   * Snowflake-todo: Make it work for Snowflake format, or disable it
-   *
-   * @param fs file system
-   * @param file file path
-   * @param size file size
-   * @param offset start offset
-   * @return the start position of the next record
-   */
-  private def findNext(fs: FileSystem, file: Path, size: Long, offset: Long): Long = {
-    if (offset == 0L) {
-      return 0L
-    } else if (offset >= size) {
-      return size
-    }
-    val in = fs.open(file)
-    var pos = offset
-    in.seek(pos)
-    val bis = new BufferedInputStream(in, defaultBufferSize)
-    // Find the first unescaped char.
-    var escaped = true
-    var thisEof = false
-    while (escaped && !thisEof) {
-      val v = bis.read()
-      if (v < 0) {
-        thisEof = true
-      } else {
-        pos += 1
-        if (v != escapeChar) {
-          escaped = false
-        }
-      }
-    }
-    // Find the next unescaped line feed.
-    var endOfRecord = false
-    while ((escaped || !endOfRecord) && !thisEof) {
-      val v = bis.read()
-      if (v < 0) {
-        thisEof = true
-      } else {
-        pos += 1
-        if (v == escapeChar) {
-          escaped = true
-        } else {
-          if (!escaped) {
-            endOfRecord = v == lineFeed
-          } else {
-            escaped = false
-          }
-        }
-      }
-    }
-    in.close()
-    pos
   }
 
   private def nextChar() : Byte = {
