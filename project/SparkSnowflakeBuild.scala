@@ -70,12 +70,12 @@ object SparkSnowflakeBuild extends Build {
         "com.amazonaws" % "aws-java-sdk-sts" % "1.10.22" % "test" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         // We require spark-avro, but avro-mapred must be provided to match Hadoop version.
         // In most cases, avro-mapred will be provided as part of the Spark assembly JAR.
-        "com.databricks" %% "spark-avro" % "2.0.1",
-        if (testHadoopVersion.value.startsWith("1")) {
-          "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop1" exclude("org.mortbay.jetty", "servlet-api")
-        } else {
-          "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
-        },
+        // "com.databricks" %% "spark-avro" % "2.0.1",
+        // if (testHadoopVersion.value.startsWith("1")) {
+        //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop1" exclude("org.mortbay.jetty", "servlet-api")
+        // } else {
+        //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
+        // },
         // A Snowflake-compatible JDBC driver must be present on the classpath for spark-snowflake to work.
         // @Snowflake-todo - add JAR to some publicly available repo
         // "com.amazon.redshift" % "jdbc4" % "1.1.7.1007" % "test" from "https://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC4-1.1.7.1007.jar",
@@ -103,15 +103,15 @@ object SparkSnowflakeBuild extends Build {
       // Although spark-avro declares its avro-mapred dependency as `provided`, its version of the
       // dependency can still end up on the classpath during tests, which breaks the tests for
       // Hadoop 1.x. To work around this, we filter out the incompatible JARs here:
-      (fullClasspath in Test) := (if (testHadoopVersion.value.startsWith("1")) {
-        (fullClasspath in Test).value.filterNot {
-          x => x.data.getName.contains("hadoop2") && x.data.getName.contains("avro")
-        }
-      } else {
-        (fullClasspath in Test).value.filterNot {
-          x => x.data.getName.contains("hadoop1") && x.data.getName.contains("avro")
-        }
-      }),
+      // (fullClasspath in Test) := (if (testHadoopVersion.value.startsWith("1")) {
+      //   (fullClasspath in Test).value.filterNot {
+      //     x => x.data.getName.contains("hadoop2") && x.data.getName.contains("avro")
+      //   }
+      // } else {
+      //   (fullClasspath in Test).value.filterNot {
+      //     x => x.data.getName.contains("hadoop1") && x.data.getName.contains("avro")
+      //   }
+      // }),
       ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := {
         if (scalaBinaryVersion.value == "2.10") false
         else true
