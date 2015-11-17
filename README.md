@@ -180,20 +180,20 @@ val records = sc.newAPIHadoopFile(
 
 There are three ways of configuring AWS credentials for use by this library:
 
-1. **Set keys in Hadoop conf (best option for most users):** You can specify AWS keys via [Hadoop configuration properties](https://github.com/apache/hadoop/blob/trunk/hadoop-tools/hadoop-aws/src/site/markdown/tools/hadoop-aws/index.md). For example, if your `tempdir` configuration points to a `s3n://` filesystem then you can set the `fs.s3n.awsAccessKeyId` and `fs.s3n.awsSecretAccessKey` properties in a Hadoop XML configuration file or call `sc.hadoopConfig.set()` to mutate Spark's global Hadoop configuration.
+1. **Set keys in Hadoop conf (best option for most users):** You can specify AWS keys via [Hadoop configuration properties](https://github.com/apache/hadoop/blob/trunk/hadoop-tools/hadoop-aws/src/site/markdown/tools/hadoop-aws/index.md). For example, if your `tempdir` configuration points to a `s3n://` filesystem then you can set the `fs.s3n.awsAccessKeyId` and `fs.s3n.awsSecretAccessKey` properties in a Hadoop XML configuration file or call `sc.hadoopConfiguration.set()` to mutate Spark's global Hadoop configuration.
 
  For example, if you are using the `s3n` filesystem then add
 
  ```scala
- sc.hadoopConfig.set("fs.s3n.awsAccessKeyId", "YOUR_KEY_ID")
- sc.hadoopConfig.set("fs.s3n.awsSecretAccessKey", "YOUR_SECRET_ACCESS_KEY")
+ sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", "YOUR_KEY_ID")
+ sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", "YOUR_SECRET_ACCESS_KEY")
  ```
 
  and for the `s3a` filesystem add
 
  ```scala
- sc.hadoopConfig.set("fs.s3a.access.key", "YOUR_KEY_ID")
- sc.hadoopConfig.set("fs.s3a.secret.key", "YOUR_SECRET_ACCESS_KEY")
+ sc.hadoopConfiguration.set("fs.s3a.access.key", "YOUR_KEY_ID")
+ sc.hadoopConfiguration.set("fs.s3a.secret.key", "YOUR_SECRET_ACCESS_KEY")
  ```
 2. **Encode keys in `tempdir` URI**: For example, the URI `s3n://ACCESSKEY:SECRETKEY@bucket/path/to/temp/dir` encodes the key pair (`ACCESSKEY`, `SECRETKEY`). Due to [Hadoop limitations](https://issues.apache.org/jira/browse/HADOOP-3733), this approach will not work for secret keys which contain forward slash (`/`) characters.
 3. **IAM instance profiles:** If you are running on EC2 and authenticate to S3 using IAM and [instance profiles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html), then you must must configure the `temporary_aws_access_key_id`, `temporary_aws_access_key_id`, and `temporary_aws_session_token` configuration properties to point to temporary keys created via the AWS [Security Token Service](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html). These temporary keys will then be passed to Redshift via `LOAD` and `UNLOAD` commands.
@@ -232,8 +232,8 @@ The parameter map or <tt>OPTIONS</tt> provided in Spark SQL supports the followi
 <p>A JDBC URL, of the format, <tt>jdbc:subprotocol://host:port/database?user=username&password=password</tt></p>
 
 <ul>
- <li><tt>subprotocol</tt> can be <tt>postgresql</tt> or <tt>redshift</tt>, depending on which JDBC driver 
-    you have loaded. Note however that one Redshift-compatible driver must be on the classpath and match 
+ <li><tt>subprotocol</tt> can be <tt>postgresql</tt> or <tt>redshift</tt>, depending on which JDBC driver
+    you have loaded. Note however that one Redshift-compatible driver must be on the classpath and match
     this URL.</li>
  <li><tt>host</tt> and <tt>port</tt> should point to the Redshift master node, so security groups and/or VPC will
 need to be configured to allow access from your driver application.
