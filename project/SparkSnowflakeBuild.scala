@@ -40,8 +40,8 @@ object SparkSnowflakeBuild extends Build {
     .settings(Defaults.itSettings: _*)
     .settings(
       name := "spark-snowflakedb",
-      organization := "com.snowflake",
-      scalaVersion := "2.11.7",
+      organization := "com.snowflakedb",
+      scalaVersion := "2.11.7", // 2.11.7 is useful for code coverage
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := "1.4.1",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
@@ -82,6 +82,9 @@ object SparkSnowflakeBuild extends Build {
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",
         "org.mockito" % "mockito-core" % "1.10.19" % "test"
+      ),
+      libraryDependencies ++= Seq(
+        "com.databricks" % "spark-csv_2.10" % "1.2.0"
       ),
       libraryDependencies ++= (if (testHadoopVersion.value.startsWith("1")) {
         Seq(
@@ -139,9 +142,9 @@ object SparkSnowflakeBuild extends Build {
         </scm>
         <developers>
           <developer>
-            <id>eruure</id>
+            <id>MarcinZukowski</id>
             <name>Marcin Zukowski</name>
-            <url>https://github.com/eruure</url>
+            <url>https://github.com/MarcinZukowski</url>
           </developer>
           <developer>
             <id>meng</id>

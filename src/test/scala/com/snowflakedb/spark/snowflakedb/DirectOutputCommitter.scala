@@ -18,7 +18,7 @@ package com.snowflakedb.spark.snowflakedb
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 
 class DirectOutputCommitter extends OutputCommitter {

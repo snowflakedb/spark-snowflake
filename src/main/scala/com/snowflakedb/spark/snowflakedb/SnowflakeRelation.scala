@@ -101,10 +101,14 @@ private[snowflakedb] case class SnowflakeRelation(
       // Unload data from Snowflake into a temporary directory in S3:
       val tempDir = params.createPerQueryTempDir()
       val unloadSql = buildUnloadStmt(requiredColumns, filters, tempDir)
-      log.info(unloadSql)
       val conn = jdbcWrapper.getConnector(params)
       try {
+        log.info(SnowflakeRelation.prologueSql)
+        conn.prepareStatement(SnowflakeRelation.prologueSql).execute()
+        log.info(unloadSql)
         conn.prepareStatement(unloadSql).execute()
+        log.info(SnowflakeRelation.epilogueSql)
+        conn.prepareStatement(SnowflakeRelation.epilogueSql).execute()
       } finally {
         conn.close()
       }
@@ -160,16 +164,39 @@ private[snowflakedb] case class SnowflakeRelation(
        |    COMPRESSION=none
        |    FIELD_DELIMITER='|'
        |    /*ESCAPE='\\\\'*/
-       |    TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'
+       |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    NULL_IF= ()
        |  )
        |MAX_FILE_SIZE = 10000000
-     """.stripMargin.trim
+       |""".stripMargin.trim
   }
 
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
     val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
     new StructType(columns.map(name => fieldMap(name)))
   }
+}
+
+object SnowflakeRelation {
+  // Note, we are changing session parameters to have the exact
+  // date/timestamp formats we want.
+  // Since we want to distinguish TIMESTAMP_NTZ from others, we can't use
+  // the TIMESTAMP_FORMAT option of COPY.
+  def prologueSql : String =
+    """
+      |alter session set
+      |  date_output_format = 'YYYY-MM-DD',
+      |  timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
+      |  timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM',
+      |  timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM';
+    """.stripMargin.trim
+  def epilogueSql : String =
+    """
+      |alter session unset
+      |  date_output_format,
+      |  timestamp_ntz_output_format,
+      |  timestamp_ltz_output_format,
+      |  timestamp_tz_output_format;
+    """.stripMargin.trim
 }

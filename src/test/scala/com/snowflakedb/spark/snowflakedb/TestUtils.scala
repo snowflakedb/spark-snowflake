@@ -50,14 +50,16 @@ object TestUtils {
    * Expected parsed output corresponding to snowflake_unload_data.txt
    */
   val expectedData: Seq[Row] = Seq(
-    Row(1.toByte, TestUtils.toDate(2015, 6, 1), 1234567890.123,
+    Row(1.toByte, TestUtils.toDate(2015, 6, 1), BigDecimal(1234567890123.45),
       1234152.12312498,
       1.0f, 42, 1239012341823719L, 23.toShort, "Unicode's樂趣",
-      TestUtils.toTimestamp(2015, 6, 1, 0, 0, 0, 1)),
-    Row(1.toByte, TestUtils.toDate(1960, 0, 2), 0.0, 0.0f, 0,
-      0L, 0.toShort, "\"", TestUtils.toTimestamp(2015, 6, 2, 12, 34, 56, 789)),
-    Row(2.toByte, TestUtils.toDate(2999, 11, 31), -1, -2.0, -3.0f, -4, -5, -6,
-      -7.toShort, "\\'\"|", TestUtils.toTimestamp(1950, 11, 31, 17, 0, 0, 1)),
+      // Note: because we're not in UTC, have to adapt the time
+      // TestUtils.toTimestamp(2015, 6, 1, 0, 0, 0, 1)),
+      TestUtils.toTimestamp(2015, 5, 30, 17, 0, 0, 1)),
+    Row(2.toByte, TestUtils.toDate(1960, 0, 2), 1, 2.0, 3.0f, 4,
+      5L, 6.toShort, "\"", TestUtils.toTimestamp(2015, 6, 2, 12, 34, 56, 789)),
+    Row(3.toByte, TestUtils.toDate(2999, 11, 31), -1, -2.0, -3.0f, -4, -5, -6.toShort,
+      "\\'\"|", TestUtils.toTimestamp(1950, 11, 31, 17, 0, 0, 1)),
     Row(List.fill(10)(null): _*))
   // scalastyle:on
 
@@ -71,6 +73,14 @@ object TestUtils {
       case d: Date => Conversions.formatDate(d)
       case other => other
     })
+  }
+  /**
+   * The same as `expectedData`, but formatted as single-line strings, in the
+   * same format as what we export to CSV.
+   */
+  val expectedDataAsSingleStrings: Seq[Row] = {
+    val conversionFunctions = DefaultSnowflakeWriter.genConversionFunctions(testSchema)
+    expectedData.map { row => Row.fromSeq(Seq(DefaultSnowflakeWriter.formatRow(conversionFunctions, row))) }
   }
 
   /**

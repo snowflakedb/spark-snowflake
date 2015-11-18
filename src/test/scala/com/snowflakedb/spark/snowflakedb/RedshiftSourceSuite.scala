@@ -19,6 +19,8 @@ package com.snowflakedb.spark.snowflakedb
 import java.io.File
 import java.net.URI
 
+import scala.util.matching.Regex
+
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration.Rule
@@ -44,7 +46,7 @@ private class TestContext extends SparkContext("local", "RedshiftSourceSuite") {
   /**
    * A text file containing fake unloaded Redshift data of all supported types
    */
-  val testData = new File("src/test/resources/redshift_unload_data.txt").toURI.toString
+  val testData = new File("src/test/resources/snowflake_unload_data.txt").toURI.toString
 
   override def newAPIHadoopFile[K, V, F <: InputFormat[K, V]](
       path: String,
@@ -83,9 +85,12 @@ class RedshiftSourceSuite
 
   // Parameters common to most tests. Some parameters are overridden in specific tests.
   private def defaultParams: Map[String, String] = Map(
-    "url" -> "jdbc:redshift://foo/bar",
     "tempdir" -> s3TempDir,
-    "dbtable" -> "test_table")
+    "dbtable" -> "test_table",
+    "sfurl" -> "account.snowflakecomputing.com:443",
+    "sfuser" -> "username",
+    "sfpassword" -> "password"
+  )
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -94,6 +99,8 @@ class RedshiftSourceSuite
     // We need to use a DirectOutputCommitter to work around an issue which occurs with renames
     // while using the mocked S3 filesystem.
     sc.hadoopConfiguration.set("spark.sql.sources.outputCommitterClass",
+      classOf[DirectOutputCommitter].getName)
+    sc.hadoopConfiguration.set("mapred.output.committer.class",
       classOf[DirectOutputCommitter].getName)
     sc.hadoopConfiguration.set("fs.s3.awsAccessKeyId", "test1")
     sc.hadoopConfiguration.set("fs.s3.awsSecretAccessKey", "test2")
@@ -128,17 +135,46 @@ class RedshiftSourceSuite
     super.afterAll()
   }
 
-  test("DefaultSource can load Redshift UNLOAD output to a DataFrame") {
-    val expectedQuery = (
-      "UNLOAD \\('SELECT \"testbyte\", \"testbool\", \"testdate\", \"testdouble\"," +
-      " \"testfloat\", \"testint\", \"testlong\", \"testshort\", \"teststring\", " +
-      "\"testtimestamp\" " +
-      "FROM \"PUBLIC\".\"test_table\" '\\) " +
-      "TO '.*' " +
-      "WITH CREDENTIALS 'aws_access_key_id=test1;aws_secret_access_key=test2' " +
-      "ESCAPE").r
+  // Extract a particular value from expected data
+  def expectedValue(row: Int, column: Int) : Any = {
+    TestUtils.expectedData(row).get(column)
+  }
+
+  /**
+   * Prepare a regexp matching an unload for a given select query
+   */
+  def unloadQueryPattern(select: String) : Regex = {
+    // Construct a full COPY INTO query from a given select
+    val baseStr = s"""
+      |COPY INTO 's3://test-bucket/temp-dir/.*/'
+      |FROM ($select)
+      |CREDENTIALS = (
+      |    AWS_KEY_ID='test1'
+      |    AWS_SECRET_KEY='test2'
+      |)
+      |FILE_FORMAT = (
+      |    TYPE=CSV
+      |    COMPRESSION=none
+      |    FIELD_DELIMITER='|'
+      |    .*
+      |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+      |    NULL_IF= ()
+      |  )
+      |MAX_FILE_SIZE = 10000000
+      |"""
+    // Escape parens and backslash, make RegExp
+    baseStr.stripMargin.trim.
+      replace("\\", "\\\\").
+      replace("(", "\\(").replace(")", "\\)").r
+  }
+
+  test(
+    "DefaultSource can load Redshift UNLOAD output to a DataFrame") {
+    val expectedQuery = unloadQueryPattern(
+      """SELECT "testbyte", "testdate", "testdec152", "testdouble", "testfloat", "testint", "testlong", "testshort", "teststring", "testtimestamp" FROM test_table """
+    )
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Assert that we've loaded and converted all data in the test file
@@ -147,90 +183,74 @@ class RedshiftSourceSuite
     val df = testSqlContext.baseRelationToDataFrame(relation)
     checkAnswer(df, TestUtils.expectedData)
     mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq(expectedQuery))
+    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
   test("Can load output of Redshift queries") {
     // scalastyle:off
-    val expectedJDBCQuery =
-      """
-        |UNLOAD \('SELECT "testbyte", "testbool" FROM
-        |  \(select testbyte, testbool
-        |    from test_table
-        |    where teststring = \\'Unicode\\'\\'s樂趣\\'\) '\)
-      """.stripMargin.lines.map(_.trim).mkString(" ").trim.r
+    val expectedQuery = unloadQueryPattern(
+      """SELECT "testbyte", "testdate" FROM (select testbyte, testdate from test_table where teststring = \'Unicode\'\'s樂趣\') """
+    )
     val query =
-      """select testbyte, testbool from test_table where teststring = 'Unicode''s樂趣'"""
+      """select testbyte, testdate from test_table where teststring = 'Unicode''s樂趣'"""
     // scalastyle:on
     val querySchema =
-      StructType(Seq(StructField("testbyte", ByteType), StructField("testbool", BooleanType)))
+      StructType(Seq(StructField("testbyte", ByteType), StructField("testdate", DateType)))
 
     // Test with dbtable parameter that wraps the query in parens:
     {
       val params = defaultParams + ("dbtable" -> s"($query)")
       val mockRedshift =
-        new MockRedshift(defaultParams("url"), Map(params("dbtable") -> querySchema))
+        new MockRedshift(defaultParams, Map(params("dbtable") -> querySchema))
       val relation = new DefaultSource(
         mockRedshift.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
       testSqlContext.baseRelationToDataFrame(relation).collect()
       mockRedshift.verifyThatConnectionsWereClosed()
-      mockRedshift.verifyThatExpectedQueriesWereIssued(Seq(expectedJDBCQuery))
+      mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
     }
 
     // Test with query parameter
     {
       val params = defaultParams - "dbtable" + ("query" -> query)
-      val mockRedshift = new MockRedshift(defaultParams("url"), Map(s"($query)" -> querySchema))
+      val mockRedshift = new MockRedshift(defaultParams, Map(s"($query)" -> querySchema))
       val relation = new DefaultSource(
         mockRedshift.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
       testSqlContext.baseRelationToDataFrame(relation).collect()
       mockRedshift.verifyThatConnectionsWereClosed()
-      mockRedshift.verifyThatExpectedQueriesWereIssued(Seq(expectedJDBCQuery))
+      mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
     }
   }
 
   test("DefaultSource supports simple column filtering") {
-    val expectedQuery = (
-      "UNLOAD \\('SELECT \"testbyte\", \"testbool\" FROM \"PUBLIC\".\"test_table\" '\\) " +
-      "TO '.*' " +
-      "WITH CREDENTIALS 'aws_access_key_id=test1;aws_secret_access_key=test2' " +
-      "ESCAPE").r
+    val expectedQuery = unloadQueryPattern(
+      """SELECT "testbyte", "testdate" FROM test_table """
+    )
     val mockRedshift =
-      new MockRedshift(defaultParams("url"), Map("test_table" -> TestUtils.testSchema))
+      new MockRedshift(defaultParams, Map("test_table" -> TestUtils.testSchema))
     // Construct the source with a custom schema
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     val relation = source.createRelation(testSqlContext, defaultParams, TestUtils.testSchema)
 
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
-      .buildScan(Array("testbyte", "testbool"), Array.empty[Filter])
+      .buildScan(Array("testbyte", "testdate"), Array.empty[Filter])
     val prunedExpectedValues = Array(
-      Row(1.toByte, true),
-      Row(1.toByte, false),
-      Row(0.toByte, null),
-      Row(0.toByte, false),
-      Row(null, null))
+      Row(expectedValue(0, 0), expectedValue(0, 1)),
+      Row(expectedValue(1, 0), expectedValue(1, 1)),
+      Row(expectedValue(2, 0), expectedValue(2, 1)),
+      Row(expectedValue(3, 0), expectedValue(3, 1)))
     assert(rdd.collect() === prunedExpectedValues)
     mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq(expectedQuery))
+    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
   test("DefaultSource supports user schema, pruned and filtered scans") {
     // scalastyle:off
-    val expectedQuery = (
-      "UNLOAD \\('SELECT \"testbyte\", \"testbool\" " +
-        "FROM \"PUBLIC\".\"test_table\" " +
-        "WHERE \"testbool\" = true " +
-        "AND \"teststring\" = \\\\'Unicode\\\\'\\\\'s樂趣\\\\' " +
-        "AND \"testdouble\" > 1000.0 " +
-        "AND \"testdouble\" < 1.7976931348623157E308 " +
-        "AND \"testfloat\" >= 1.0 " +
-        "AND \"testint\" <= 43'\\) " +
-      "TO '.*' " +
-      "WITH CREDENTIALS 'aws_access_key_id=test1;aws_secret_access_key=test2' " +
-      "ESCAPE").r
+    val expectedQuery = unloadQueryPattern(
+      """SELECT "testbyte", "testdate" FROM test_table WHERE "teststring" = 'Unicode''s樂趣' AND "testdouble" > 1000.0 AND "testdouble" < 1.7976931348623157E308 AND "testfloat" >= 1.0 AND "testint" <= 43"""
+    )
     // scalastyle:on
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Construct the source with a custom schema
@@ -239,7 +259,6 @@ class RedshiftSourceSuite
 
     // Define a simple filter to only include a subset of rows
     val filters: Array[Filter] = Array(
-      EqualTo("testbool", true),
       // scalastyle:off
       EqualTo("teststring", "Unicode's樂趣"),
       // scalastyle:on
@@ -248,38 +267,49 @@ class RedshiftSourceSuite
       GreaterThanOrEqual("testfloat", 1.0f),
       LessThanOrEqual("testint", 43))
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
-      .buildScan(Array("testbyte", "testbool"), filters)
+      .buildScan(Array("testbyte", "testdate"), filters)
 
     // Technically this assertion should check that the RDD only returns a single row, but
     // since we've mocked out Redshift our WHERE clause won't have had any effect.
-    assert(rdd.collect().contains(Row(1, true)))
+    assert(rdd.collect().contains(Row(expectedValue(0,0), expectedValue(0,1))))
     mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq(expectedQuery))
+    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
-  test("DefaultSource serializes data as Avro, then sends Redshift COPY command") {
+  // Helper function:
+  // Make sure we wrote the data out ready for Snowflake load, in the expected formats.
+  // The data should have been written to a random subdirectory of `tempdir`. Since we clear
+  // `tempdir` between every unit test, there should only be one directory here.
+  def verifyFileContent(expectedAnswer: Seq[Row]) : Unit = {
+    assert(s3FileSystem.listStatus(new Path(s3TempDir)).length === 1)
+    val dirWithFiles = s3FileSystem.listStatus(new Path(s3TempDir)).head.getPath.toUri.toString
+    // Read the file as single strings
+    val written = testSqlContext.read.format("com.databricks.spark.csv")
+        .options(Map(
+          "header" -> "false",
+          "inferSchema" -> "false",
+          "delimiter" -> "~",  // Read as 1 record - we don't have ~ in data
+          "quote" -> "\""))
+        .schema(StructType(Seq(StructField("recordstring", StringType))))
+        .load(dirWithFiles)
+    checkAnswer(written, TestUtils.expectedDataAsSingleStrings)
+  }
+
+  test("DefaultSource serializes data as CSV, then sends Snowflake COPY command") {
     val params = defaultParams ++ Map(
       "postactions" -> "GRANT SELECT ON %s TO jeremy",
-      "diststyle" -> "KEY",
-      "distkey" -> "testint")
+      "sfcompress" -> "off")
 
     val expectedCommands = Seq(
-      "DROP TABLE IF EXISTS \"PUBLIC\"\\.\"test_table_staging_.*\"".r,
-      ("CREATE TABLE IF NOT EXISTS \"PUBLIC\"\\.\"test_table_staging.*" +
-        " DISTSTYLE KEY DISTKEY \\(testint\\).*").r,
-      "COPY \"PUBLIC\"\\.\"test_table_staging_.*\"".r,
-      "GRANT SELECT ON \"PUBLIC\"\\.\"test_table_staging.+\" TO jeremy".r,
-      """
-        | BEGIN;
-        | ALTER TABLE "PUBLIC"\."test_table" RENAME TO "test_table_backup_.*";
-        | ALTER TABLE "PUBLIC"\."test_table_staging_.*" RENAME TO "test_table";
-        | DROP TABLE "PUBLIC"\."test_table_backup_.*";
-        | END;
-      """.stripMargin.trim.r,
-      "DROP TABLE IF EXISTS \"PUBLIC\"\\.\"test_table_staging_.*\"".r)
+      "DROP TABLE IF EXISTS test_table_staging_.*".r,
+      "CREATE TABLE IF NOT EXISTS test_table_staging.*()".r,
+      "COPY INTO test_table_staging_.*".r,
+      "GRANT SELECT ON test_table_staging_.* TO jeremy".r,
+      "ALTER TABLE test_table SWAP WITH test_table_staging_.*".r,
+      "DROP TABLE IF EXISTS test_table_staging_.*".r)
 
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val relation = SnowflakeRelation(
@@ -289,20 +319,17 @@ class RedshiftSourceSuite
       userSchema = None)(testSqlContext)
     relation.asInstanceOf[InsertableRelation].insert(expectedDataDF, overwrite = true)
 
-    // Make sure we wrote the data out ready for Redshift load, in the expected formats.
-    // The data should have been written to a random subdirectory of `tempdir`. Since we clear
-    // `tempdir` between every unit test, there should only be one directory here.
-    assert(s3FileSystem.listStatus(new Path(s3TempDir)).length === 1)
-    val dirWithAvroFiles = s3FileSystem.listStatus(new Path(s3TempDir)).head.getPath.toUri.toString
-    val written = testSqlContext.read.format("com.databricks.spark.avro").load(dirWithAvroFiles)
-    checkAnswer(written, TestUtils.expectedDataWithConvertedTimesAndDates)
+    verifyFileContent(TestUtils.expectedDataAsSingleStrings)
+
     mockRedshift.verifyThatConnectionsWereClosed()
     mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
 
-  test("Cannot write table with column names that become ambiguous under case insensitivity") {
+  // Snowflake-todo: Snowflake supports ambiguous column names, but should we
+  // actually prohibit these
+  ignore("Cannot write table with column names that become ambiguous under case insensitivity") {
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val schema = StructType(Seq(StructField("a", IntegerType), StructField("A", IntegerType)))
@@ -321,16 +348,15 @@ class RedshiftSourceSuite
     val params = defaultParams ++ Map("usestagingtable" -> "true")
 
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema),
-      jdbcQueriesThatShouldFail = Seq("COPY \"PUBLIC\".\"test_table_staging_.*\"".r))
+      jdbcQueriesThatShouldFail = Seq("COPY INTO test_table_staging_.*".r))
 
     val expectedCommands = Seq(
-      "DROP TABLE IF EXISTS \"PUBLIC\".\"test_table_staging_.*\"".r,
-      "CREATE TABLE IF NOT EXISTS \"PUBLIC\".\"test_table_staging_.*\"".r,
-      "COPY \"PUBLIC\".\"test_table_staging_.*\"".r,
-      ".*FROM stl_load_errors.*".r,
-      "DROP TABLE IF EXISTS \"PUBLIC\".\"test_table_staging_.*\"".r
+      "DROP TABLE IF EXISTS test_table_staging_.*".r,
+      "CREATE TABLE IF NOT EXISTS test_table_staging_.*".r,
+      "COPY INTO test_table_staging_.*".r,
+      "DROP TABLE IF EXISTS test_table_staging_.*".r
     )
 
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
@@ -345,11 +371,11 @@ class RedshiftSourceSuite
 
   test("Append SaveMode doesn't destroy existing data") {
     val expectedCommands =
-      Seq("CREATE TABLE IF NOT EXISTS \"PUBLIC\".\"test_table\" .*".r,
-          "COPY \"PUBLIC\".\"test_table\" .*".r)
+      Seq("CREATE TABLE IF NOT EXISTS test_table .*".r,
+          "COPY INTO test_table.*".r)
 
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
 
     val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
@@ -357,13 +383,9 @@ class RedshiftSourceSuite
       source.createRelation(testSqlContext, SaveMode.Append, defaultParams, expectedDataDF)
 
     // This test is "appending" to an empty table, so we expect all our test data to be
-    // the only content in the returned data frame.
-    // The data should have been written to a random subdirectory of `tempdir`. Since we clear
-    // `tempdir` between every unit test, there should only be one directory here.
-    assert(s3FileSystem.listStatus(new Path(s3TempDir)).length === 1)
-    val dirWithAvroFiles = s3FileSystem.listStatus(new Path(s3TempDir)).head.getPath.toUri.toString
-    val written = testSqlContext.read.format("com.databricks.spark.avro").load(dirWithAvroFiles)
-    checkAnswer(written, TestUtils.expectedDataWithConvertedTimesAndDates)
+    // the only content.
+    verifyFileContent(TestUtils.expectedDataAsSingleStrings)
+
     mockRedshift.verifyThatConnectionsWereClosed()
     mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
@@ -380,14 +402,14 @@ class RedshiftSourceSuite
     val createTableCommand =
       DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
     val expectedCreateTableCommand =
-      """CREATE TABLE IF NOT EXISTS "PUBLIC"."test_table" ("long_str" VARCHAR(512),""" +
-        """ "short_str" VARCHAR(10), "default_str" TEXT)"""
+      """CREATE TABLE IF NOT EXISTS test_table ("long_str" VARCHAR(512),""" +
+        """ "short_str" VARCHAR(10), "default_str" STRING)"""
     assert(createTableCommand === expectedCreateTableCommand)
   }
 
   test("Respect SaveMode.ErrorIfExists when table exists") {
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
     val errIfExistsSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     intercept[Exception] {
@@ -400,7 +422,7 @@ class RedshiftSourceSuite
 
   test("Do nothing when table exists if SaveMode = Ignore") {
     val mockRedshift = new MockRedshift(
-      defaultParams("url"),
+      defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
     val ignoreSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
     ignoreSource.createRelation(testSqlContext, SaveMode.Ignore, defaultParams, expectedDataDF)
@@ -409,11 +431,7 @@ class RedshiftSourceSuite
   }
 
   test("Cannot save when 'query' parameter is specified instead of 'dbtable'") {
-    val invalidParams = Map(
-      "url" -> "jdbc:redshift://foo/bar",
-      "tempdir" -> s3TempDir,
-      "query" -> "select * from test_table")
-
+    val invalidParams = defaultParams - "dbtable" + ("query" -> "select 1")
     val e1 = intercept[IllegalArgumentException] {
       expectedDataDF.saveAsSnowflakeTable(invalidParams)
     }

@@ -18,6 +18,8 @@ package com.snowflakedb.spark.snowflakedb
 
 import java.sql.{SQLException, PreparedStatement, Connection}
 
+import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
+
 import scala.collection.mutable
 import scala.util.matching.Regex
 
@@ -33,9 +35,11 @@ import org.scalatest.Assertions._
  * Helper class for mocking Redshift / JDBC in unit tests.
  */
 class MockRedshift(
-    jdbcUrl: String,
+    params: Map[String, String],
     existingTablesAndSchemas: Map[String, StructType],
     jdbcQueriesThatShouldFail: Seq[Regex] = Seq.empty) {
+
+  val mergedParams = MergedParameters(params)
 
   private[this] val queriesIssued: mutable.Buffer[String] = mutable.Buffer.empty
   def getQueriesIssuedAgainstRedshift: Seq[String] = queriesIssued.toSeq
@@ -63,7 +67,7 @@ class MockRedshift(
     conn
   }
 
-  when(jdbcWrapper.getConnector(any[Option[String]](), same(jdbcUrl))).thenAnswer(
+  when(jdbcWrapper.getConnector(any[MergedParameters])).thenAnswer(
     new Answer[Connection] {
       override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
     })
@@ -99,11 +103,19 @@ class MockRedshift(
     }
     if (expectedQueries.length > queriesIssued.length) {
       val missingQueries = expectedQueries.drop(queriesIssued.length)
-      fail(s"Missing ${missingQueries.length} expected JDBC queries:" +
+      fail(s"Missing ${missingQueries.length} (out of ${expectedQueries.length}) expected JDBC queries:" +
         s"\n${missingQueries.mkString("\n")}")
     } else if (queriesIssued.length > expectedQueries.length) {
       val extraQueries = queriesIssued.drop(expectedQueries.length)
       fail(s"Got ${extraQueries.length} unexpected JDBC queries:\n${extraQueries.mkString("\n")}")
     }
   }
+
+  def verifyThatExpectedQueriesWereIssuedForUnload(expectedQueries: Seq[Regex]): Unit = {
+    val queriesWithPrologueAndEpilogue= Seq(SnowflakeRelation.prologueSql.r) ++
+      expectedQueries ++
+      Seq(SnowflakeRelation.epilogueSql.r)
+    verifyThatExpectedQueriesWereIssued(queriesWithPrologueAndEpilogue)
+  }
+
 }

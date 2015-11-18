@@ -30,14 +30,20 @@ private[snowflakedb] object Conversions {
 
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
-    // Snowflake always serializes with timezone
     // Note, Snowflake exports with quotes, we get rid of them in the format
-    private val PATTERN_TZ= "\"yyyy-MM-dd HH:mm:ss.SSS Z\""
+    // For TZ and LTZ, Snowflake serializes with timezone
+    private val PATTERN_TZLTZ= "\"yyyy-MM-dd HH:mm:ss.SSS XX\""
+    // For NTZ, Snowflake serializes w/o timezone
+    private val PATTERN_NTZ= "\"yyyy-MM-dd HH:mm:ss.SSS\""
 
     // Thread local SimpleDateFormat for parsing/formatting
-    private var formatTz = new ThreadLocal[SimpleDateFormat] {
+    private var formatTzLtz = new ThreadLocal[SimpleDateFormat] {
       override protected def initialValue: SimpleDateFormat =
-          new SimpleDateFormat(PATTERN_TZ)
+        new SimpleDateFormat(PATTERN_TZLTZ)
+    }
+    private var formatNtz = new ThreadLocal[SimpleDateFormat] {
+      override protected def initialValue: SimpleDateFormat =
+        new SimpleDateFormat(PATTERN_NTZ)
     }
 
     override def format(
@@ -45,13 +51,21 @@ private[snowflakedb] object Conversions {
         toAppendTo: StringBuffer,
         fieldPosition: FieldPosition): StringBuffer = {
       // Always export w/ timezone
-      formatTz.get().format(date, toAppendTo, fieldPosition)
+      formatTzLtz.get().format(date, toAppendTo, fieldPosition)
     }
 
     override def parse(source: String, pos: ParsePosition): Date = {
       val idx = pos.getIndex
       val errIdx = pos.getErrorIndex
-      var res = formatTz.get().parse(source, pos)
+      // First try with the NTZ format, as that's our default TIMESTAMP type
+      var res = formatNtz.get().parse(source, pos)
+      if (res == null) {
+        // Restore pos to parse from the same place
+        pos.setIndex(idx)
+        pos.setErrorIndex(errIdx)
+        // Try again, using the format with a timezone
+        res = formatTzLtz.get().parse(source, pos)
+      }
       res
     }
   }

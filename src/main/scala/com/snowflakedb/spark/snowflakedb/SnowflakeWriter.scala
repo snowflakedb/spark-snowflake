@@ -190,6 +190,40 @@ private[snowflakedb] class SnowflakeWriter(
     }
   }
 
+  // Prepare a set of conversion functions, based on the schema
+  def genConversionFunctions(schema: StructType): Array[Any => Any] = schema.fields.map { field =>
+    field.dataType match {
+      case DateType => (v: Any) => v match {
+        case null => ""
+        case t: Timestamp => Conversions.formatTimestamp(t)
+        case d: Date => Conversions.formatDate(d)
+      }
+      case TimestampType => (v: Any) => {
+        if (v == null) ""
+        else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+      }
+      case StringType => (v: Any) => {
+        if (v == null) ""
+        else Conversions.formatString(v.asInstanceOf[String])
+      }
+      case _ => (v: Any) => Conversions.formatAny(v)
+    }
+  }
+
+  // Format a row using provided conversion functions
+  def formatRow(conversionFunctions: Array[Any => Any], row: Row) : String = {
+    // Build a simple pipe-delimited string
+    var str = new mutable.StringBuilder
+    var i = 0
+    while (i < conversionFunctions.length) {
+      if (i > 0)
+        str.append('|')
+      str.append(conversionFunctions(i)(row(i)))
+      i += 1
+    }
+    str.toString()
+  }
+
   /**
    * Serialize temporary data to S3, ready for Snowflake COPY
    *
@@ -203,30 +237,12 @@ private[snowflakedb] class SnowflakeWriter(
       params: MergedParameters,
       tempDir: String): Option[String] = {
 
-    // Prepare the set of conversion functions, based on the data type
-    val conversionFunctions: Array[Any => Any] = data.schema.fields.map { field =>
-      field.dataType match {
-        case DateType => (v: Any) => v match {
-          case null => ""
-          case t: Timestamp => Conversions.formatTimestamp(t)
-          case d: Date => Conversions.formatDate(d)
-        }
-        case TimestampType => (v: Any) => {
-          if (v == null) ""
-          else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
-        }
-        case StringType => (v: Any) => {
-          if (v == null) ""
-          else Conversions.formatString(v.asInstanceOf[String])
-        }
-        case _ => (v: Any) => Conversions.formatAny(v)
-      }
-    }
+    // Prepare the set of conversion functions
+    val conversionFunctions = genConversionFunctions(data.schema)
 
     // Use Spark accumulators to determine which partitions were non-empty.
     val nonEmptyPartitions =
       sqlContext.sparkContext.accumulableCollection(mutable.HashSet.empty[Int])
-
 
     // Create RDD that will be saved as strings
     val strRDD = data.rdd.mapPartitionsWithIndex { case (index, iter) =>
@@ -238,6 +254,7 @@ private[snowflakedb] class SnowflakeWriter(
 
           if (iter.nonEmpty) {
             val row = iter.next()
+            // Snowflake-todo: unify it with formatRow(), it's the same code
             // Build a simple pipe-delimited string
             var str = new mutable.StringBuilder
             var i = 0

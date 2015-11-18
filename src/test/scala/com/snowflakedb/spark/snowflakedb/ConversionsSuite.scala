@@ -39,29 +39,33 @@ class ConversionsSuite extends FunSuite {
     val timestampString = "2014-03-01 00:00:01.123 -0800"
     val expectedTimestampMillis = TestUtils.toMillis(2014, 2, 1, 0, 0, 1, 123)
 
+    val timestamp2String = "2014-03-01 00:00:01.123"
+    val expectedTimestamp2Millis = TestUtils.toMillis(2014, 2, 1, 0, 0, 1, 123)
+
     val dateString = "2015-07-01"
     val expectedDateMillis = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
 
     def quote(str: String) = "\"" + str + "\""
 
-    val convertedRow = convertRow(
+    var convertedRow = convertRow(
       Array("1", quote(dateString), "123.45", doubleMin, "1.0", "42",
-        longMax, "23", quote(unicodeString), quote(timestampString)))
+        longMax, "23", quote(unicodeString),
+        quote(timestampString)))
 
-    val expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
+    var expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
       new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
       new Timestamp(expectedTimestampMillis))
 
-    assert(convertedRow.get(0) == expectedRow.get(0))
-    assert(convertedRow.get(1) == expectedRow.get(1))
-    assert(convertedRow.get(2) == expectedRow.get(2))
-    assert(convertedRow.get(3) == expectedRow.get(3))
-    assert(convertedRow.get(4) == expectedRow.get(4))
-    assert(convertedRow.get(5) == expectedRow.get(5))
-    assert(convertedRow.get(6) == expectedRow.get(6))
-    assert(convertedRow.get(7) == expectedRow.get(7))
-    assert(convertedRow.get(8) == expectedRow.get(8))
-    assert(convertedRow.get(9) == expectedRow.get(9))
+    assert(convertedRow == expectedRow)
+
+    convertedRow = convertRow(
+      Array("1", quote(dateString), "123.45", doubleMin, "1.0", "42",
+        longMax, "23", quote(unicodeString),
+        quote(timestamp2String)))
+
+    expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
+      new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
+      new Timestamp(expectedTimestamp2Millis))
 
     assert(convertedRow == expectedRow)
   }
