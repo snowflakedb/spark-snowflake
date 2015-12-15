@@ -47,10 +47,10 @@ object SparkSnowflakeTutorial {
 
   /*
    * For Windows Users only
-   * 1. Download contents from link 
+   * 1. Download contents from link
    *      https://github.com/srccodes/hadoop-common-2.2.0-bin/archive/master.zip
-   * 2. Unzip the file in step 1 into your %HADOOP_HOME%/bin. 
-   * 3. pass System parameter -Dhadoop.home.dir=%HADOOP_HOME/bin  where %HADOOP_HOME 
+   * 2. Unzip the file in step 1 into your %HADOOP_HOME%/bin.
+   * 3. pass System parameter -Dhadoop.home.dir=%HADOOP_HOME/bin  where %HADOOP_HOME
    *    must be an absolute not relative path
    */
 
@@ -124,8 +124,6 @@ object SparkSnowflakeTutorial {
       .mode(SaveMode.Overwrite)
       .save()
 
-    if (false) // disable for now for speed
-    {
     // df2: Load from a query
     step("Creating df2")
     val df2 = sqlContext.read
@@ -156,11 +154,35 @@ object SparkSnowflakeTutorial {
     step("Testing filter pushdown: float VS float")
     df3.filter(df3("F") > 10.0f).show()
 
-    /*
-    * Create a new table sftab (overwriting any existing sftab table)
-    * from spark "alldt_spark" table,
-    * filtering records via query and renaming a column
-    */
+
+    step("Testing projection pushdown from a frame: S, T")
+    df3.select($"S", $"T").show()
+    step("Testing projection pushdown from a query: S, F")
+    sqlContext.read
+      .format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("dbtable", "testdtf")
+      .load()
+      .select($"S", $"F").show()
+    step("Testing projection pushdown: first select S, F, then filter F > 10.0f")
+    df3.select($"S", $"F").filter($"F" > 10.0f).show()
+    step("Testing projection pushdown: first filter F > 10.0f, then select S, T")
+    df3.filter($"F" > 10.0f).select($"S", $"T").show()
+
+    step("df4: Testing a query with a predicate on a string")
+    val df4 = sqlContext.read
+      .format("com.snowflakedb.spark.snowflakedb")
+      .options(sfOptions)
+      .option("query", "select * from testdtf where S <> 'o''ne'")
+      .load()
+    df4.printSchema()
+    df4.show()
+
+      /*
+      * Create a new table sftab (overwriting any existing sftab table)
+      * from spark "alldt_spark" table,
+      * filtering records via query and renaming a column
+      */
     step("Creating Snowflake table alldt_clone_positive")
     sqlContext.sql("SELECT * FROM alldt_spark WHERE INT > 0").withColumnRenamed("INT", "INTE")
       .write.format("com.snowflakedb.spark.snowflakedb")
@@ -181,13 +203,12 @@ object SparkSnowflakeTutorial {
       .option("dbtable", "sftab")
       .mode(SaveMode.Append)
       .save()
-    }
 
     /*** ------------------------------------ FINITO
     //Load from a query
-    val salesQuery = """SELECT salesid, listid, sellerid, buyerid, 
-                               eventid, dateid, qtysold, pricepaid, commission 
-                        FROM sales 
+    val salesQuery = """SELECT salesid, listid, sellerid, buyerid,
+                               eventid, dateid, qtysold, pricepaid, commission
+                        FROM sales
                         ORDER BY saletime DESC LIMIT 10000"""
     val salesDF = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
@@ -206,8 +227,8 @@ object SparkSnowflakeTutorial {
       .load()
 
     /*
-     * Register 'event' table as temporary table 'myevent' 
-     * so that it can be queried via sqlContext.sql  
+     * Register 'event' table as temporary table 'myevent'
+     * so that it can be queried via sqlContext.sql
      */
     eventsDF.registerTempTable("myevent")
 
@@ -251,7 +272,7 @@ object SparkSnowflakeTutorial {
     salesAGGDF.registerTempTable("salesagg")
 
     /*
-     * Join two DataFrame instances. Each could be sourced from any 
+     * Join two DataFrame instances. Each could be sourced from any
      * compatible Data Source
      */
     val salesAGGDF2 = salesAGGDF.join(eventsDF, salesAGGDF("id") === eventsDF("eventid"))

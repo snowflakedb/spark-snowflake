@@ -141,12 +141,8 @@ private[snowflakedb] case class SnowflakeRelation(
     val awsAccessKey = creds.getAWSAccessKeyId
     val awsSecretKey = creds.getAWSSecretKey
     val query = {
-      // Since the query passed to UNLOAD will be enclosed in single quotes, we need to escape
-      // any single quotes that appear in the query itself
-      val tableNameOrSubquery: String = {
-        val unescaped = params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
-        unescaped.replace("'", "\\'")
-      }
+      val tableNameOrSubquery =
+            params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
       s"SELECT $columnList FROM $tableNameOrSubquery $whereClause"
     }
     val fixedUrl = Utils.fixS3Url(tempDir)
