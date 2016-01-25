@@ -189,6 +189,9 @@ private[snowflakedb] class JDBCWrapper {
     if (params.sfWarehouse.isDefined) {
       jdbcProperties.put("warehouse", params.sfWarehouse.get)
     }
+    if (params.sfRole.isDefined) {
+      jdbcProperties.put("role", params.sfRole.get)
+    }
 
     DriverManager.getConnection(jdbcURL, jdbcProperties)
   }

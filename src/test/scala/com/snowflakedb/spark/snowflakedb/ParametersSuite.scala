@@ -87,4 +87,11 @@ class ParametersSuite extends FunSuite with Matchers {
     params += "query" -> "select * from test_table"
     Parameters.mergeParameters(params.toMap)
   }
+
+  test("See if we can specify role") {
+    val params = collection.mutable.Map() ++= minParams
+    params += "sfrole" -> "admin"
+    val mergedParams = Parameters.mergeParameters(params.toMap)
+    mergedParams.sfRole shouldBe Some("admin")
+  }
 }

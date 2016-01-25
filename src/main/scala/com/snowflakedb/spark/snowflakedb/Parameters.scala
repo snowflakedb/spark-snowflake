@@ -152,6 +152,10 @@ private[snowflakedb] object Parameters {
      */
     def sfCompress: String = parameters.getOrElse("sfcompress", "on")
     /**
+     * Snowflake role - optional
+     */
+    def sfRole: Option[String] = parameters.get("sfrole")
+    /**
      * The JDBC driver class name. This is used to make sure the driver is registered before
      * connecting over JDBC.
      */
