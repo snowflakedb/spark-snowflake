@@ -211,7 +211,7 @@ private[snowflakedb] class JDBCWrapper {
         case FloatType => "FLOAT"
         case ShortType => "INTEGER"
         case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
-//        case BooleanType => "BOOLEAN"
+        case BooleanType => "BOOLEAN"
         case StringType =>
           if (field.metadata.contains("maxlength")) {
             s"VARCHAR(${field.metadata.getLong("maxlength")})"

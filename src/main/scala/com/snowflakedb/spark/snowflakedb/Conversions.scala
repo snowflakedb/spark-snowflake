@@ -109,14 +109,10 @@ private[snowflakedb] object Conversions {
     else v.toString
   }
 
-  /**
-   * Snowflake-todo: We don't handle BOOLEAN yet
-   * Parse a boolean using Redshift's UNLOAD bool syntax
-   */
   private def parseBoolean(s: String): Boolean = {
-    if (s == "t") true
-    else if (s == "f") false
-    else throw new IllegalArgumentException(s"Expected 't' or 'f' but got '$s'")
+    if (s == "true") true
+    else if (s == "false") false
+    else throw new IllegalArgumentException(s"Expected 'true' or 'false' but got '$s'")
   }
 
   // Thread local DecimalFormat for parsing
