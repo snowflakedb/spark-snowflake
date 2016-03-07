@@ -39,9 +39,8 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
         assert(DefaultJDBCWrapper.tableExists(conn, tableName))
         val loadedDf = sqlContext.read
           .format("com.snowflakedb.spark.snowflakedb")
-          .option("url", jdbcUrl)
+          .options(connectorOptions)
           .option("dbtable", tableName)
-          .option("tempdir", tempDir)
           .load()
         checkAnswer(loadedDf, expectedRows)
         checkAnswer(loadedDf.selectExpr("x + 0"), expectedRows)

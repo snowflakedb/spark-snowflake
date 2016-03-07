@@ -86,18 +86,21 @@ private[snowflakedb] class SnowflakeWriter(
   private def copySql(
       sqlContext: SQLContext,
       params: MergedParameters,
-      creds: AWSCredentials,
-      filesToCopyPrefix: String): String = {
-    val awsAccessKey = creds.getAWSAccessKeyId
-    val awsSecretKey = creds.getAWSSecretKey
-    val fixedUrl = Utils.fixS3Url(filesToCopyPrefix)
+      filesToCopy: (String, String)): String = {
+    val credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(
+        sqlContext, params)
+    var fixedUrl = filesToCopy._1
+    var fromString : String = null
+    if (fixedUrl.startsWith("file://")) {
+      fromString = s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
+    } else {
+      fixedUrl = Utils.fixS3Url(fixedUrl)
+      fromString = s"FROM '$fixedUrl${filesToCopy._2}'"
+    }
     s"""
        |COPY INTO ${params.table.get}
-       |FROM '$fixedUrl'
-       |CREDENTIALS = (
-       |    AWS_KEY_ID='$awsAccessKey'
-       |    AWS_SECRET_KEY='$awsSecretKey'
-       |)
+       |$fromString
+       |$credsString
        |FILE_FORMAT = (
        |    TYPE=CSV
        |    /* COMPRESSION=none */
@@ -147,8 +150,7 @@ private[snowflakedb] class SnowflakeWriter(
       data: DataFrame,
       saveMode: SaveMode,
       params: MergedParameters,
-      creds: AWSCredentials,
-      filesToCopyPrefix: Option[String]): Unit = {
+      filesToCopy: Option[(String, String)]): Unit = {
 
     // Overwrites must drop the table, in case there has been a schema update
     if (saveMode == SaveMode.Overwrite) {
@@ -165,10 +167,10 @@ private[snowflakedb] class SnowflakeWriter(
     createTable.execute()
 
     // Perform the load if there were files loaded
-    if (filesToCopyPrefix.isDefined) {
+    if (filesToCopy.isDefined) {
       // Load the temporary data into the new file
       val copyStatement = copySql(data.sqlContext, params,
-                                  creds, filesToCopyPrefix.get)
+                                  filesToCopy.get)
       log.info(copyStatement)
       val copyData = conn.prepareStatement(copyStatement)
       try {
@@ -227,15 +229,16 @@ private[snowflakedb] class SnowflakeWriter(
   /**
    * Serialize temporary data to S3, ready for Snowflake COPY
    *
-   * @return the URL of the file prefix in S3 that should be loaded
-   *         (usually "$tempDir/part"),if at least one record was written,
+   * @return the pair (URL, prefix) of the files that should be loaded,
+   *         usually (tempDir, "part"),
+   *         if at least one record was written,
    *         and None otherwise.
    */
   private def unloadData(
       sqlContext: SQLContext,
       data: DataFrame,
       params: MergedParameters,
-      tempDir: String): Option[String] = {
+      tempDir: String): Option[(String, String)] = {
 
     // Prepare the set of conversion functions
     val conversionFunctions = genConversionFunctions(data.schema)
@@ -291,7 +294,7 @@ private[snowflakedb] class SnowflakeWriter(
         .toSeq
         .headOption.getOrElse(throw new Exception("No part files were written!"))
       // Note - temp dir already has "/", no need to add it
-      Some(tempDir + "part")
+      Some(tempDir, "part")
     }
   }
 
@@ -308,26 +311,24 @@ private[snowflakedb] class SnowflakeWriter(
         "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
     }
 
-    val creds: AWSCredentials = params.temporaryAWSCredentials.getOrElse(
-      AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration))
-
     Utils.assertThatFileSystemIsNotS3BlockFileSystem(
       new URI(params.rootTempDir), sqlContext.sparkContext.hadoopConfiguration)
 
+    val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
     Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
 
     val conn = jdbcWrapper.getConnector(params)
 
     try {
       val tempDir = params.createPerQueryTempDir()
-      val filesToCopyPrefix = unloadData(sqlContext, data, params, tempDir)
+      val filesToCopy = unloadData(sqlContext, data, params, tempDir)
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         withStagingTable(conn, params.table.get, stagingTable => {
           val updatedParams = MergedParameters(params.parameters.updated("dbtable", stagingTable))
-          doSnowflakeLoad(conn, data, saveMode, updatedParams, creds, filesToCopyPrefix)
+          doSnowflakeLoad(conn, data, saveMode, updatedParams, filesToCopy)
         })
       } else {
-        doSnowflakeLoad(conn, data, saveMode, params, creds, filesToCopyPrefix)
+        doSnowflakeLoad(conn, data, saveMode, params, filesToCopy)
       }
     } finally {
       conn.close()

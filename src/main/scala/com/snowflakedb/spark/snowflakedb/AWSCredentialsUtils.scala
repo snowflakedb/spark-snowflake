@@ -19,23 +19,41 @@ package com.snowflakedb.spark.snowflakedb
 import java.net.URI
 
 import com.amazonaws.auth.{BasicAWSCredentials, AWSCredentials, AWSSessionCredentials, InstanceProfileCredentialsProvider}
+import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SQLContext
 
 private[snowflakedb] object AWSCredentialsUtils {
 
   /**
    * Generates a credentials string for use in Redshift LOAD and UNLOAD statements.
-   *
-   * Snowflake-todo: Remove or actually use it (the latter makes some sense)
    */
-  def getSnowflakeCredentialsString(awsCredentials: AWSCredentials): String = {
-    awsCredentials match {
-      case creds: AWSSessionCredentials =>
-        s"aws_access_key_id=${creds.getAWSAccessKeyId};" +
-          s"aws_secret_access_key=${creds.getAWSSecretKey};token=${creds.getSessionToken}"
-      case creds =>
-        s"aws_access_key_id=${creds.getAWSAccessKeyId};" +
-          s"aws_secret_access_key=${creds.getAWSSecretKey}"
+  def getSnowflakeCredentialsString(sqlContext: SQLContext,
+                                    params: MergedParameters): String = {
+    if (params.rootTempDir.startsWith("file://")) {
+      "-- file URL, no creds needed"
+    } else {
+      val creds = getCreds(sqlContext, params)
+      // Snowflake-todo: token support
+      val awsAccessKey = creds.getAWSAccessKeyId
+      val awsSecretKey = creds.getAWSSecretKey
+      s"""
+         |CREDENTIALS = (
+         |    AWS_KEY_ID='$awsAccessKey'
+         |    AWS_SECRET_KEY='$awsSecretKey'
+         |)
+         |""".stripMargin.trim
+    }
+  }
+
+  def getCreds(sqlContext: SQLContext,
+               params : MergedParameters) : AWSCredentials = {
+    if (params.rootTempDir.startsWith("file://")) {
+      null
+    } else {
+      params.temporaryAWSCredentials.getOrElse(
+        AWSCredentialsUtils.load(params.rootTempDir,
+          sqlContext.sparkContext.hadoopConfiguration))
     }
   }
 
@@ -73,6 +91,9 @@ private[snowflakedb] object AWSCredentialsUtils {
           // Finally, fall back on the instance profile provider
          new InstanceProfileCredentialsProvider().getCredentials
         }
+      case "file" =>
+        // Do nothing
+        null
       case other =>
         throw new IllegalArgumentException(s"Unrecognized scheme $other; expected s3, s3n, or s3a")
     }

@@ -134,12 +134,7 @@ private[snowflakedb] case class SnowflakeRelation(
     // Always quote column names:
     val columnList = requiredColumns.map(col => s""""$col"""").mkString(", ")
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
-    val creds = params.temporaryAWSCredentials.getOrElse(
-      AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration))
-    // val credsString: String = AWSCredentialsUtils.getSnowflakeCredentialsString(creds)
-    // Snowflake-todo: token support
-    val awsAccessKey = creds.getAWSAccessKeyId
-    val awsSecretKey = creds.getAWSSecretKey
+    var credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params);
     val query = {
       val tableNameOrSubquery =
             params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
@@ -151,10 +146,7 @@ private[snowflakedb] case class SnowflakeRelation(
     s"""
        |COPY INTO '$fixedUrl'
        |FROM ($query)
-       |CREDENTIALS = (
-       |    AWS_KEY_ID='$awsAccessKey'
-       |    AWS_SECRET_KEY='$awsSecretKey'
-       |)
+       |$credsString
        |FILE_FORMAT = (
        |    TYPE=CSV
        |    COMPRESSION=none

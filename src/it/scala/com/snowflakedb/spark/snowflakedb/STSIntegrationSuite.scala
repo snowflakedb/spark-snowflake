@@ -54,9 +54,8 @@ class STSIntegrationSuite extends IntegrationSuiteBase {
     try {
       df.write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .option("temporary_aws_access_key_id", STS_ACCESS_KEY_ID)
         .option("temporary_aws_secret_access_key", STS_SECRET_ACCESS_KEY)
         .option("temporary_aws_session_token", STS_SESSION_TOKEN)
@@ -66,9 +65,8 @@ class STSIntegrationSuite extends IntegrationSuiteBase {
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
       val loadedDf = sqlContext.read
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .option("temporary_aws_access_key_id", STS_ACCESS_KEY_ID)
         .option("temporary_aws_secret_access_key", STS_SECRET_ACCESS_KEY)
         .option("temporary_aws_session_token", STS_SESSION_TOKEN)

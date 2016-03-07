@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory
 /**
  * Various arbitrary helper functions
  */
-private[snowflakedb] object Utils {
+object Utils {
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -90,6 +90,11 @@ private[snowflakedb] object Utils {
   def checkThatBucketHasObjectLifecycleConfiguration(
       tempDir: String,
       s3Client: AmazonS3Client): Unit = {
+    if (tempDir.startsWith("file://")) {
+      // Do nothing for file:
+      return
+    }
+
     try {
       val s3URI = new AmazonS3URI(Utils.fixS3Url(tempDir))
       val bucket = s3URI.getBucket

@@ -104,8 +104,7 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
          | )
          | using com.snowflakedb.spark.snowflakedb
          | options(
-         |   url \"$jdbcUrl\",
-         |   tempdir \"$tempDir\",
+         |   $connectorOptions
          |   dbtable \"$test_table\"
          | )
        """.stripMargin
@@ -127,8 +126,7 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
          | )
          | using com.snowflakedb.spark.snowflakedb
          | options(
-         |   url \"$jdbcUrl\",
-         |   tempdir \"$tempDir\",
+         |   $connectorOptions
          |   dbtable \"$test_table2\"
          | )
        """.stripMargin
@@ -150,8 +148,7 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
          | )
          | using com.snowflakedb.spark.snowflakedb
          | options(
-         |   url \"$jdbcUrl\",
-         |   tempdir \"$tempDir\",
+         |   $connectorOptions
          |   dbtable \"$test_table3\"
          | )
        """.stripMargin
@@ -174,11 +171,10 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
   test("count() on DataFrame created from a Redshift query") {
     val loadedDf = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       // scalastyle:off
       .option("query", s"select * from $test_table where teststring = 'Unicode''s樂趣'")
       // scalastyle:on
-      .option("tempdir", tempDir)
       .load()
     checkAnswer(
       loadedDf.selectExpr("count(*)"),
@@ -201,9 +197,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
     // scalastyle:on
     val loadedDf = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       .option("dbtable", query)
-      .option("tempdir", tempDir)
       .load()
     checkAnswer(loadedDf, Seq(Row(1, true)))
   }
@@ -223,9 +218,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
     // scalastyle:on
     val loadedDf = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       .option("query", query)
-      .option("tempdir", tempDir)
       .load()
     checkAnswer(loadedDf, Seq(Row(1, true)))
   }
@@ -233,9 +227,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
   test("Can load output of Redshift aggregation queries") {
     val loadedDf = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       .option("query", s"select testbool, count(*) from $test_table group by testbool")
-      .option("tempdir", tempDir)
       .load()
     checkAnswer(loadedDf, Seq(Row(true, 1), Row(false, 2), Row(null, 2)))
   }
@@ -275,16 +268,15 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
       sqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
         .write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(SaveMode.ErrorIfExists)
         .save()
 
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
       val loadedDf = sqlContext.read
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
         .option("tempdir", tempDir)
         .load()
@@ -348,26 +340,23 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
         StructField("x", StringType, metadata = metadata) :: Nil)
       sqlContext.createDataFrame(sc.parallelize(Seq(Row("a" * 512))), schema).write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(SaveMode.ErrorIfExists)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
       val loadedDf = sqlContext.read
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .load()
       checkAnswer(loadedDf, Seq(Row("a" * 512)))
       // This append should fail due to the string being longer than the maxlength
       intercept[SQLException] {
         sqlContext.createDataFrame(sc.parallelize(Seq(Row("a" * 513))), schema).write
           .format("com.snowflakedb.spark.snowflakedb")
-          .option("url", jdbcUrl)
+          .options(connectorOptions)
           .option("dbtable", tableName)
-          .option("tempdir", tempDir)
           .mode(SaveMode.Append)
           .save()
       }
@@ -385,9 +374,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
       val e = intercept[SQLException] {
         df.write
           .format("com.snowflakedb.spark.snowflakedb")
-          .option("url", jdbcUrl)
+          .options(connectorOptions)
           .option("dbtable", tableName)
-          .option("tempdir", tempDir)
           .mode(SaveMode.ErrorIfExists)
           .save()
       }
@@ -406,18 +394,16 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
       // Ensure that the table exists:
       df.write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(SaveMode.ErrorIfExists)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, s"PUBLIC.$tableName"))
       // Try overwriting that table while using the schema-qualified table name:
       df.write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", s"PUBLIC.$tableName")
-        .option("tempdir", tempDir)
         .mode(SaveMode.Overwrite)
         .save()
     } finally {
@@ -442,9 +428,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
         StructType(StructField("a", IntegerType) :: Nil))
         .write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(SaveMode.ErrorIfExists)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
@@ -452,18 +437,16 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
       sqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
         .write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(SaveMode.Overwrite)
         .save()
 
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
       val loadedDf = sqlContext.read
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .load()
       checkAnswer(loadedDf, TestUtils.expectedData)
     } finally {
@@ -481,9 +464,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
 
     sqlContext.createDataFrame(sc.parallelize(extraData), TestUtils.testSchema).write
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       .option("dbtable", test_table3)
-      .option("tempdir", tempDir)
       .mode(SaveMode.Append)
       .saveAsTable(test_table3)
 
@@ -501,9 +483,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
     intercept[AnalysisException] {
       df.write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", test_table)
-        .option("tempdir", tempDir)
         .mode(SaveMode.ErrorIfExists)
         .saveAsTable(test_table)
     }
@@ -514,9 +495,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
     val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
     df.write
       .format("com.snowflakedb.spark.snowflakedb")
-      .option("url", jdbcUrl)
+      .options(connectorOptions)
       .option("dbtable", test_table)
-      .option("tempdir", tempDir)
       .mode(SaveMode.Ignore)
       .saveAsTable(test_table)
 

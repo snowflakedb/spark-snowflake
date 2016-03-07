@@ -19,6 +19,8 @@ package com.snowflakedb.spark.snowflakedb
 import java.net.URI
 import java.sql.Connection
 
+import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
+
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -45,23 +47,29 @@ trait IntegrationSuiteBase
     }
   }
 
-  // The following configurations must be set in order to run these tests. In Travis, these
+  // The following configurations must be set in order to run these tests.
+  // In Travis, these
   // environment variables are set using Travis's encrypted environment variables feature:
   // http://docs.travis-ci.com/user/environment-variables/#Encrypted-Variables
 
-  // JDBC URL listed in the AWS console (should not contain username and password).
-  protected val AWS_REDSHIFT_JDBC_URL: String = loadConfigFromEnv("AWS_REDSHIFT_JDBC_URL")
-  protected val AWS_REDSHIFT_USER: String = loadConfigFromEnv("AWS_REDSHIFT_USER")
-  protected val AWS_REDSHIFT_PASSWORD: String = loadConfigFromEnv("AWS_REDSHIFT_PASSWORD")
-  protected val AWS_ACCESS_KEY_ID: String = loadConfigFromEnv("TEST_AWS_ACCESS_KEY_ID")
-  protected val AWS_SECRET_ACCESS_KEY: String = loadConfigFromEnv("TEST_AWS_SECRET_ACCESS_KEY")
+  // AWS access variables
+  protected val AWS_ACCESS_KEY_ID: String = loadConfigFromEnv("AWS_ACCESS_KEY_ID")
+  protected val AWS_SECRET_ACCESS_KEY: String = loadConfigFromEnv("AWS_SECRET_ACCESS_KEY")
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
   private val AWS_S3_SCRATCH_SPACE: String = loadConfigFromEnv("AWS_S3_SCRATCH_SPACE")
   require(AWS_S3_SCRATCH_SPACE.contains("s3n"), "must use s3n:// URL")
 
-  protected val jdbcUrl: String = {
-    s"$AWS_REDSHIFT_JDBC_URL?user=$AWS_REDSHIFT_USER&password=$AWS_REDSHIFT_PASSWORD"
-  }
+  protected var connectorOptions = Map(
+    "sfURL" -> loadConfigFromEnv("SNOWFLAKE_URL"),
+    "sfDatabase" -> loadConfigFromEnv("SNOWFLAKE_DATABASE"),
+    "sfSchema" -> loadConfigFromEnv("SNOWFLAKE_SCHEMA"),
+    "sfWarehouse" -> loadConfigFromEnv("SNOWFLAKE_WAREHOUSE"),
+    "sfUser" -> loadConfigFromEnv("SNOWFLAKE_USER"),
+    "sfPassword" -> loadConfigFromEnv("SNOWFLAKE_PASSWORD"),
+    "sfAccount" -> loadConfigFromEnv("SNOWFLAKE_ACCOUNT"),
+    "sfSsl" -> loadConfigFromEnv("SNOWFLAKE_SSL"),
+    "sfCompress" -> loadConfigFromEnv("SNOWFLAKE_COMPRESS")
+  )
 
   /**
    * Random suffix appended appended to table and directory names in order to avoid collisions
@@ -87,7 +95,7 @@ trait IntegrationSuiteBase
     sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
-    conn = DefaultJDBCWrapper.getConnector(None, jdbcUrl)
+    conn = DefaultJDBCWrapper.getConnector(MergedParameters(connectorOptions))
   }
 
   override def afterAll(): Unit = {
@@ -120,7 +128,7 @@ trait IntegrationSuiteBase
   }
 
   /**
-   * Save the given DataFrame to Redshift, then load the results back into a DataFrame and check
+   * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check
    * that the returned DataFrame matches the one that we saved.
    *
    * @param tableName the table name to use
@@ -138,17 +146,15 @@ trait IntegrationSuiteBase
     try {
       df.write
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .mode(saveMode)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
       val loadedDf = sqlContext.read
         .format("com.snowflakedb.spark.snowflakedb")
-        .option("url", jdbcUrl)
+        .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .load()
       assert(loadedDf.schema === expectedSchemaAfterLoad.getOrElse(df.schema))
       checkAnswer(loadedDf, df.collect())
