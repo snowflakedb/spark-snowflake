@@ -17,8 +17,10 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.net.URI
+import java.sql.Connection
 import java.util.UUID
 
+import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 import org.apache.spark.SparkContext
 
 import scala.collection.JavaConverters._
@@ -153,5 +155,12 @@ object Utils {
       map += (key -> value)
     }
     map.toMap
+  }
+
+  def getJDBCConnection(params: Map[String, String]): Connection = {
+    var wrapper = new JDBCWrapper()
+    val lcParams= params.map { case(key, value) => (key.toLowerCase, value)}
+    var mergedParams = MergedParameters(lcParams)
+    wrapper.getConnector(mergedParams)
   }
 }
