@@ -41,7 +41,7 @@ object SparkSnowflakeBuild extends Build {
     .settings(
       name := "spark-snowflakedb",
       organization := "com.snowflakedb",
-      scalaVersion := "2.10.5", // 2.11.7 is useful for code coverage
+      scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.10.5"),
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := "1.4.1",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
