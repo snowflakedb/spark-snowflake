@@ -156,7 +156,7 @@ private[snowflakedb] case class SnowflakeRelation(
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    NULL_IF= ()
        |  )
-       |MAX_FILE_SIZE = 10000000
+       |MAX_FILE_SIZE = ${params.s3maxfilesize}
        |""".stripMargin.trim
   }
 

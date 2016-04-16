@@ -24,13 +24,13 @@ import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
  */
 private[snowflakedb] object Parameters {
 
+  val PARAM_S3_MAX_FILE_SIZE = "s3maxfilesize"
+  val DEFAULT_S3_MAX_FILE_SIZE = (10*1000*1000).toString
+  val MIN_S3_MAX_FILE_SIZE = 1000000
+
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
-    // * sortkeyspec has no default, but is optional
-    // * distkey has no default, but is optional unless using diststyle KEY
-    // * jdbcdriver has no default, but is optional
-
     "overwrite" -> "false",
     "diststyle" -> "EVEN",
     "usestagingtable" -> "true",
@@ -62,6 +62,25 @@ private[snowflakedb] object Parameters {
     if (userParameters.contains("dbtable") && userParameters.contains("query")) {
       throw new IllegalArgumentException(
         "You cannot specify both the 'dbtable' and 'query' parameters at the same time.")
+    }
+    val s3maxfilesizeStr = userParameters.get(PARAM_S3_MAX_FILE_SIZE)
+    if (s3maxfilesizeStr.isDefined) {
+      def toInt(s: String): Option[Int] = {
+        try {
+          Some(s.toInt)
+        } catch {
+          case e: Exception => None
+        }
+      }
+      val s3maxfilesize = toInt(s3maxfilesizeStr.get)
+      if(s3maxfilesize.isEmpty) {
+        throw new IllegalArgumentException(
+          s"Cannot parse $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} as a number")
+      }
+      if (s3maxfilesize.get < MIN_S3_MAX_FILE_SIZE) {
+        throw new IllegalArgumentException(
+          s"Specified $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} too small")
+      }
     }
 
     MergedParameters(DEFAULT_PARAMETERS ++ userParameters)
@@ -160,6 +179,12 @@ private[snowflakedb] object Parameters {
      * connecting over JDBC.
      */
     def jdbcDriver: Option[String] = parameters.get("jdbcdriver")
+
+    /**
+     * Max file size used to move data out from Snowflake
+     */
+    def s3maxfilesize: String = parameters.getOrElse(PARAM_S3_MAX_FILE_SIZE,
+                                                     DEFAULT_S3_MAX_FILE_SIZE)
 
     /**
      * -----------------------------------------Various other options
