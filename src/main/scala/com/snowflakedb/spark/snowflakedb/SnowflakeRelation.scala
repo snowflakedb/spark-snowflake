@@ -102,26 +102,49 @@ private[snowflakedb] case class SnowflakeRelation(
       val tempDir = params.createPerQueryTempDir()
       val unloadSql = buildUnloadStmt(requiredColumns, filters, tempDir)
       val conn = jdbcWrapper.getConnector(params)
+      var numRows = 0
       try {
+        // Prologue
         log.info(SnowflakeRelation.prologueSql)
         conn.prepareStatement(SnowflakeRelation.prologueSql).execute()
         log.info(unloadSql)
-        conn.prepareStatement(unloadSql).execute()
+
+        // Run the unload query
+        val res = conn.prepareStatement(unloadSql).executeQuery()
+        // Verify it's the expected format
+        val sch = res.getMetaData
+        assert(sch.getColumnCount == 3)
+        assert(sch.getColumnName(1) == "rows_unloaded")
+        assert(sch.getColumnTypeName(1) == "NUMBER")
+        // First record must be in
+        val first = res.next()
+        assert(first)
+        numRows = res.getInt(1)
+        // There can be no more records
+        val second = res.next()
+        assert(!second)
+
+        // Epilogue
         log.info(SnowflakeRelation.epilogueSql)
         conn.prepareStatement(SnowflakeRelation.epilogueSql).execute()
       } finally {
         conn.close()
       }
-      // Create a DataFrame to read the unloaded data:
-      val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-        tempDir,
-        classOf[SnowflakeInputFormat],
-        classOf[java.lang.Long],
-        classOf[Array[String]])
       val prunedSchema = pruneSchema(schema, requiredColumns)
-      rdd.values.mapPartitions { iter =>
-        val converter: Array[String] => Row = Conversions.createRowConverter(prunedSchema)
-        iter.map(converter)
+      if (numRows == 0) {
+		    // For no records, create an empty RDD
+        sqlContext.sparkContext.emptyRDD[Row]
+      } else {
+        // Create a DataFrame to read the unloaded data:
+        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
+          tempDir,
+          classOf[SnowflakeInputFormat],
+          classOf[java.lang.Long],
+          classOf[Array[String]])
+        rdd.values.mapPartitions { iter =>
+          val converter: Array[String] => Row = Conversions.createRowConverter(prunedSchema)
+          iter.map(converter)
+        }
       }
     }
   }
@@ -134,7 +157,7 @@ private[snowflakedb] case class SnowflakeRelation(
     // Always quote column names:
     val columnList = requiredColumns.map(col => s""""$col"""").mkString(", ")
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
-    var credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params);
+    var credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
     val query = {
       val tableNameOrSubquery =
             params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
