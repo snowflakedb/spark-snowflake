@@ -28,6 +28,13 @@ private[snowflakedb] object Parameters {
   val DEFAULT_S3_MAX_FILE_SIZE = (10*1000*1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
+  val PARAM_SF_TIMEZONE = "sftimezone"
+  val TZ_SPARK1 = ""
+  val TZ_SPARK2 = "spark"
+  val TZ_SF1 = "snowflake"
+  val TZ_SF2 = "sf_current"
+  val TZ_SF_DEFAULT = "sf_default"
+
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
@@ -175,6 +182,10 @@ private[snowflakedb] object Parameters {
      */
     def sfRole: Option[String] = parameters.get("sfrole")
     /**
+     * Snowflake timezone- optional
+     */
+    def sfTimezone: Option[String] = parameters.get(PARAM_SF_TIMEZONE)
+    /**
      * The JDBC driver class name. This is used to make sure the driver is registered before
      * connecting over JDBC.
      */
@@ -185,6 +196,21 @@ private[snowflakedb] object Parameters {
      */
     def s3maxfilesize: String = parameters.getOrElse(PARAM_S3_MAX_FILE_SIZE,
                                                      DEFAULT_S3_MAX_FILE_SIZE)
+
+    def isTimezoneSpark : Boolean = {
+      val tz = sfTimezone.getOrElse(TZ_SPARK1)
+      (tz.equalsIgnoreCase(TZ_SPARK1)
+        || tz.equalsIgnoreCase(TZ_SPARK2))
+    }
+    def isTimezoneSnowflake : Boolean = {
+      val tz = sfTimezone.getOrElse("")
+      (tz.equalsIgnoreCase(TZ_SF1)
+        || tz.equalsIgnoreCase(TZ_SF2))
+    }
+    def isTimezoneSnowflakeDefault : Boolean = {
+      val tz = sfTimezone.getOrElse("")
+      tz.equalsIgnoreCase(TZ_SF_DEFAULT)
+    }
 
     /**
      * -----------------------------------------Various other options
