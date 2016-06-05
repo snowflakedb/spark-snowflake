@@ -22,7 +22,7 @@ import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
  * All user-specifiable parameters for spark-snowflake, along with their validation rules and
  * defaults.
  */
-private[snowflakedb] object Parameters {
+object Parameters {
 
   val PARAM_S3_MAX_FILE_SIZE = "s3maxfilesize"
   val DEFAULT_S3_MAX_FILE_SIZE = (10*1000*1000).toString
@@ -34,6 +34,10 @@ private[snowflakedb] object Parameters {
   val TZ_SF1 = "snowflake"
   val TZ_SF2 = "sf_current"
   val TZ_SF_DEFAULT = "sf_default"
+
+  val PARAM_TEMP_KEY_ID = "temporary_aws_access_key_id"
+  val PARAM_TEMP_KEY_SECRET  = "temporary_aws_secret_access_key"
+  val PARAM_TEMP_SESSION_TOKEN = "temporary_aws_session_token"
 
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
@@ -70,6 +74,20 @@ private[snowflakedb] object Parameters {
       throw new IllegalArgumentException(
         "You cannot specify both the 'dbtable' and 'query' parameters at the same time.")
     }
+
+    // Check temp keys
+    var tempParams = 0
+    if (userParameters.contains(PARAM_TEMP_KEY_ID)) tempParams += 1
+    if (userParameters.contains(PARAM_TEMP_KEY_SECRET)) tempParams += 1
+    if (userParameters.contains(PARAM_TEMP_SESSION_TOKEN)) tempParams += 1
+    if (tempParams != 0 && tempParams != 3) {
+      throw new IllegalArgumentException(
+        s"""If you specify one of
+           |${PARAM_TEMP_KEY_ID}, ${PARAM_TEMP_KEY_SECRET} and
+           |${PARAM_TEMP_SESSION_TOKEN},
+           |you must specify all 3 of them.""".stripMargin.replace("\n", " "))
+    }
+
     val s3maxfilesizeStr = userParameters.get(PARAM_S3_MAX_FILE_SIZE)
     if (s3maxfilesizeStr.isDefined) {
       def toInt(s: String): Option[Int] = {
@@ -261,9 +279,9 @@ private[snowflakedb] object Parameters {
      */
     def temporaryAWSCredentials: Option[AWSCredentials] = {
       for (
-        accessKey <- parameters.get("temporary_aws_access_key_id");
-        secretAccessKey <- parameters.get("temporary_aws_secret_access_key");
-        sessionToken <- parameters.get("temporary_aws_session_token")
+        accessKey <- parameters.get(PARAM_TEMP_KEY_ID);
+        secretAccessKey <- parameters.get(PARAM_TEMP_KEY_SECRET);
+        sessionToken <- parameters.get(PARAM_TEMP_SESSION_TOKEN)
       ) yield new BasicSessionCredentials(accessKey, secretAccessKey, sessionToken)
     }
   }

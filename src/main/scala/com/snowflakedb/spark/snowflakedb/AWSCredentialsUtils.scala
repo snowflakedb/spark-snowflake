@@ -34,13 +34,18 @@ private[snowflakedb] object AWSCredentialsUtils {
       "-- file URL, no creds needed"
     } else {
       val creds = getCreds(sqlContext, params)
-      // Snowflake-todo: token support
       val awsAccessKey = creds.getAWSAccessKeyId
       val awsSecretKey = creds.getAWSSecretKey
+      var tokenString = creds match {
+        case sessionCreds: AWSSessionCredentials =>
+          s"AWS_TOKEN='${sessionCreds.getSessionToken}'"
+        case otherCreds => ""
+      }
       s"""
          |CREDENTIALS = (
          |    AWS_KEY_ID='$awsAccessKey'
          |    AWS_SECRET_KEY='$awsSecretKey'
+         |    $tokenString
          |)
          |""".stripMargin.trim
     }
