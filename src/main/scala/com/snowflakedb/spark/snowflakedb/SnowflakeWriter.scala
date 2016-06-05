@@ -65,7 +65,7 @@ private[snowflakedb] class SnowflakeWriter(
   // Execute a given string, logging it
   def sql(conn : Connection, query : String): Boolean = {
     log.info(query)
-    conn.prepareStatement(query).execute()
+    jdbcWrapper.executeInterruptibly(conn, query)
   }
 
   /**
@@ -156,15 +156,13 @@ private[snowflakedb] class SnowflakeWriter(
     if (saveMode == SaveMode.Overwrite) {
       val deleteStatement = s"DROP TABLE IF EXISTS ${params.table.get}"
       log.info(deleteStatement)
-      val deleteExisting = conn.prepareStatement(deleteStatement)
-      deleteExisting.execute()
+      jdbcWrapper.executeInterruptibly(conn, deleteStatement)
     }
 
     // If the table doesn't exist, we need to create it first, using JDBC to infer column types
     val createStatement = createTableSql(data, params)
     log.info(createStatement)
-    val createTable = conn.prepareStatement(createStatement)
-    createTable.execute()
+    jdbcWrapper.executeInterruptibly(conn, createStatement)
 
     // Perform the load if there were files loaded
     if (filesToCopy.isDefined) {
@@ -172,9 +170,8 @@ private[snowflakedb] class SnowflakeWriter(
       val copyStatement = copySql(data.sqlContext, params,
                                   filesToCopy.get)
       log.info(copyStatement)
-      val copyData = conn.prepareStatement(copyStatement)
       try {
-        copyData.execute()
+        jdbcWrapper.executeInterruptibly(conn, copyStatement)
       } catch {
         case e: SQLException =>
           // snowflake-todo: try to provide more error information,
@@ -188,7 +185,7 @@ private[snowflakedb] class SnowflakeWriter(
     params.postActions.foreach { action =>
       val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
       log.info("Executing postAction: " + actionSql)
-      conn.prepareStatement(actionSql).execute()
+      jdbcWrapper.executeInterruptibly(conn, actionSql)
     }
   }
 

@@ -85,7 +85,7 @@ private[snowflakedb] case class SnowflakeRelation(
       log.info(countQuery)
       val conn = jdbcWrapper.getConnector(params)
       try {
-        val results = conn.prepareStatement(countQuery).executeQuery()
+        val results = jdbcWrapper.executeQueryInterruptibly(conn, countQuery)
         if (results.next()) {
           val numRows = results.getLong(1)
           val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
@@ -106,11 +106,12 @@ private[snowflakedb] case class SnowflakeRelation(
       try {
         // Prologue
         log.info(prologueSql)
-        conn.prepareStatement(prologueSql).execute()
+        jdbcWrapper.executeInterruptibly(conn, prologueSql)
         log.info(unloadSql)
 
         // Run the unload query
-        val res = conn.prepareStatement(unloadSql).executeQuery()
+        val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadSql)
+
         // Verify it's the expected format
         val sch = res.getMetaData
         assert(sch.getColumnCount == 3)
@@ -126,7 +127,7 @@ private[snowflakedb] case class SnowflakeRelation(
 
         // Epilogue
         log.info(epilogueSql)
-        conn.prepareStatement(epilogueSql).execute()
+        jdbcWrapper.executeInterruptibly(conn, epilogueSql)
       } finally {
         conn.close()
       }

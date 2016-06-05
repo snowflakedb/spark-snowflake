@@ -18,16 +18,20 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.net.URI
-import java.sql.{Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
+import java.sql.{ResultSet, PreparedStatement, Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ThreadFactory, Executors}
 
-import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
-
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.util.Try
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
+
+import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
 /**
  * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -36,6 +40,20 @@ import org.slf4j.LoggerFactory
 private[snowflakedb] class JDBCWrapper {
 
   private val log = LoggerFactory.getLogger(getClass)
+
+  private val ec: ExecutionContext = {
+    log.debug("Creating a new ExecutionContext")
+    val threadFactory = new ThreadFactory {
+      private[this] val count = new AtomicInteger()
+      override def newThread(r: Runnable) = {
+        val thread = new Thread(r)
+        thread.setName(s"spark-snowflake-JDBCWrapper-${count.incrementAndGet}")
+        thread.setDaemon(true)
+        thread
+      }
+    }
+    ExecutionContext.fromExecutorService(Executors.newCachedThreadPool(threadFactory))
+  }
 
   /**
    * Given a JDBC subprotocol, returns the appropriate driver class so that it can be registered
@@ -107,13 +125,12 @@ private[snowflakedb] class JDBCWrapper {
    * @param conn A JDBC connection to the database.
    * @param table The table name of the desired table.  This may also be a
    *   SQL query wrapped in parentheses.
-   *
    * @return A StructType giving the table's Catalyst schema.
    * @throws SQLException if the table specification is garbage.
    * @throws SQLException if the table contains an unsupported type.
    */
   def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM $table WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount
@@ -236,7 +253,68 @@ private[snowflakedb] class JDBCWrapper {
   def tableExists(conn: Connection, table: String): Boolean = {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems, considering "table" could also include the database name.
-    Try(conn.prepareStatement(s"SELECT 1 FROM $table LIMIT 1").executeQuery().next()).isSuccess
+    Try {
+      executeQueryInterruptibly(conn, s"SELECT 1 FROM $table LIMIT 1").next()
+    }.isSuccess
+  }
+
+  /**
+    * Execute the given SQL statement while supporting interruption.
+    * If InterruptedException is caught, then the statement will be cancelled if it is running.
+    *
+    * @return <code>true</code> if the first result is a <code>ResultSet</code>
+    *         object; <code>false</code> if the first result is an update
+    *         count or there is no result
+    */
+  def executeInterruptibly(statement: PreparedStatement): Boolean = {
+    executeInterruptibly(statement, _.execute())
+  }
+
+  /**
+    * A version of <code>executeInterruptibly</code> accepting a string
+    */
+  def executeInterruptibly(conn: Connection, sql: String): Boolean = {
+    executeInterruptibly(conn.prepareStatement(sql))
+  }
+
+  /**
+    * Execute the given SQL statement while supporting interruption.
+    * If InterruptedException is caught, then the statement will be cancelled if it is running.
+    *
+    * @return a <code>ResultSet</code> object that contains the data produced by the
+    *         query; never <code>null</code>
+    */
+  def executeQueryInterruptibly(statement: PreparedStatement): ResultSet = {
+    executeInterruptibly(statement, _.executeQuery())
+  }
+
+  /**
+    * A version of <code>executeQueryInterruptibly</code> accepting a string
+    */
+  def executeQueryInterruptibly(conn: Connection, sql: String): ResultSet = {
+    executeQueryInterruptibly(conn.prepareStatement(sql))
+  }
+
+  private def executeInterruptibly[T](
+                                       statement: PreparedStatement,
+                                       op: PreparedStatement => T): T = {
+    try {
+      log.debug(s"Running statement $statement")
+      val future = Future[T](op(statement))(ec)
+      Await.result(future, Duration.Inf)
+    } catch {
+      case e: InterruptedException =>
+        try {
+          log.info(s"Cancelling statement $statement")
+          statement.cancel()
+          log.info("Cancelling succeeded")
+          throw e
+        } catch {
+          case s: SQLException =>
+            log.error("Exception occurred while cancelling query", s)
+            throw e
+        }
+    }
   }
 
   /**
