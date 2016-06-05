@@ -41,6 +41,8 @@ private[snowflakedb] class JDBCWrapper {
 
   private val log = LoggerFactory.getLogger(getClass)
 
+  private val SPARK_SNOWFLAKEDB_VERSION = getClass.getPackage.getImplementationVersion
+
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
     val threadFactory = new ThreadFactory {
@@ -210,7 +212,11 @@ private[snowflakedb] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
 
-    DriverManager.getConnection(jdbcURL, jdbcProperties)
+    var conn = DriverManager.getConnection(jdbcURL, jdbcProperties)
+    conn.setClientInfo("spark-version", SPARK_VERSION)
+    conn.setClientInfo("spark-snowflakedb-version", SPARK_SNOWFLAKEDB_VERSION)
+    log.debug(conn.getClientInfo.toString)
+    conn
   }
 
 
