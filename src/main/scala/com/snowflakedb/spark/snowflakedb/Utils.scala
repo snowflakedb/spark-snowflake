@@ -163,4 +163,64 @@ object Utils {
     var mergedParams = MergedParameters(lcParams)
     wrapper.getConnector(mergedParams)
   }
+
+  // Stores the last generated Select query
+  private var lastSelect : String = null;
+
+  private[snowflakedb] def setLastSelect(select: String): Unit = {
+    lastSelect = select
+  }
+
+  def getLastSelect() : String = {
+    lastSelect
+  }
+
+  // Issues a set of configuration changes at the beginning of the session.
+  // Note, we are changing session parameters to have the exact
+  // date/timestamp formats we want.
+  // Since we want to distinguish TIMESTAMP_NTZ from others, we can't use
+  // the TIMESTAMP_FORMAT option of COPY.
+  private [snowflakedb] def genPrologueSql(params: MergedParameters) : String = {
+    // Determine the timezone we want to use
+    var tz = params.sfTimezone
+    var timezoneSetString = ""
+    if (params.isTimezoneSpark) {
+      // Use the Spark-level one
+      val tzStr = java.util.TimeZone.getDefault.getID
+      timezoneSetString = s"timezone = '$tzStr',"
+    } else if (params.isTimezoneSnowflake) {
+      // Do nothing
+    } else if (params.isTimezoneSnowflakeDefault) {
+      // Set it to the Snowflake default
+      timezoneSetString = "timezone = default,"
+    } else {
+      // Otherwise, use the specified value
+      timezoneSetString = s"timezone = '${tz.get}',"
+    }
+    log.debug(s"sfTimezone: '$tz'   timezoneSetString '$timezoneSetString'")
+    s"""
+       |alter session set
+       |  $timezoneSetString
+       |  date_output_format = 'YYYY-MM-DD',
+       |  timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
+       |  timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM',
+       |  timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM';
+    """.stripMargin.trim
+  }
+  // Issue a set of changes reverting genPrologueSql
+  private [snowflakedb] def genEpilogueSql(params: MergedParameters) : String = {
+    var timezoneUnsetString = ""
+    // For all cases except for "snowflake", we unset the timezone
+    if (!(params.isTimezoneSnowflake))
+      timezoneUnsetString = "timezone,"
+    s"""
+       |alter session unset
+       |  $timezoneUnsetString
+       |  date_output_format,
+       |  timestamp_ntz_output_format,
+       |  timestamp_ltz_output_format,
+       |  timestamp_tz_output_format;
+     """.stripMargin.trim
+  }
+
 }

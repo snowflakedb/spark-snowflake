@@ -316,6 +316,11 @@ private[snowflakedb] class SnowflakeWriter(
 
     val conn = jdbcWrapper.getConnector(params)
 
+    // Prologue
+    val prologueSql = Utils.genPrologueSql(params)
+    log.info(prologueSql)
+    jdbcWrapper.executeInterruptibly(conn, prologueSql)
+
     try {
       val tempDir = params.createPerQueryTempDir()
       val filesToCopy = unloadData(sqlContext, data, params, tempDir)
