@@ -18,19 +18,17 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.net.URI
-import java.sql.{ResultSet, PreparedStatement, Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{ThreadFactory, Executors}
+import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
-
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
-
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
 /**
@@ -212,10 +210,31 @@ private[snowflakedb] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
 
+    // Set into on the system level
+    // Very simple escaping
+    def esc(s: String) : String = {
+      s.replace("\"", "").replace("\\", "")
+    }
+    val sparkAppName = SparkContext.getOrCreate().getConf.get("spark.app.name", "")
+    val scalaVersion = scala.tools.nsc.Properties.versionString
+    val javaVersion = System.getProperty("java.version", "UNKNOWN")
+    val snowflakeClientInfo = s""" {
+        | "spark.version" : "${esc(SPARK_VERSION)}",
+        | "spark.snowflakedb.version" : "${esc(SPARK_SNOWFLAKEDB_VERSION)}",
+        | "spark.app.name" : "${esc(sparkAppName)}",
+        | "scala.version" : "${esc(scalaVersion)}",
+        | "java.version" : "${esc(javaVersion)}"
+        |}""".stripMargin
+    log.error(snowflakeClientInfo)
+    System.setProperty("snowflake.client.info", snowflakeClientInfo);
+
     var conn = DriverManager.getConnection(jdbcURL, jdbcProperties)
+
+    // Set info on the connection level
     conn.setClientInfo("spark-version", SPARK_VERSION)
     conn.setClientInfo("spark-snowflakedb-version", SPARK_SNOWFLAKEDB_VERSION)
     log.debug(conn.getClientInfo.toString)
+
     conn
   }
 
