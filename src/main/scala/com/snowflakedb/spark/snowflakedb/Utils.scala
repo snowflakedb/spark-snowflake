@@ -223,4 +223,30 @@ object Utils {
      """.stripMargin.trim
   }
 
+  private [snowflakedb] def executePreActions(jdbcWrapper: JDBCWrapper,
+                                             conn: Connection,
+                                             params: MergedParameters) : Unit = {
+    // Execute preActions
+    params.preActions.foreach { action =>
+      if (action != null && !action.trim.isEmpty()) {
+        val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
+        log.info("Executing preAction: " + actionSql)
+        jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
+      }
+    }
+  }
+
+  private [snowflakedb] def executePostActions(jdbcWrapper: JDBCWrapper,
+                                              conn: Connection,
+                                              params: MergedParameters) : Unit = {
+    // Execute preActions
+    params.postActions.foreach { action =>
+      if (action != null && !action.trim.isEmpty()) {
+        val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
+        log.info("Executing postAction: " + actionSql)
+        jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
+      }
+    }
+  }
+
 }

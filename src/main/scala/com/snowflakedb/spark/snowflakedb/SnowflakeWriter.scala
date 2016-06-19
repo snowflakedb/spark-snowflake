@@ -164,6 +164,9 @@ private[snowflakedb] class SnowflakeWriter(
     log.info(createStatement)
     jdbcWrapper.executeInterruptibly(conn, createStatement)
 
+    // Execute preActions
+    Utils.executePreActions(jdbcWrapper, conn, params)
+
     // Perform the load if there were files loaded
     if (filesToCopy.isDefined) {
       // Load the temporary data into the new file
@@ -181,12 +184,7 @@ private[snowflakedb] class SnowflakeWriter(
       }
     }
 
-    // Execute postActions
-    params.postActions.foreach { action =>
-      val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
-      log.info("Executing postAction: " + actionSql)
-      jdbcWrapper.executeInterruptibly(conn, actionSql)
-    }
+    Utils.executePostActions(jdbcWrapper, conn, params)
   }
 
   // Prepare a set of conversion functions, based on the schema

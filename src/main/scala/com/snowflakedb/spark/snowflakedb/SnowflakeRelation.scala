@@ -110,6 +110,8 @@ private[snowflakedb] case class SnowflakeRelation(
         log.info(prologueSql)
         jdbcWrapper.executeInterruptibly(conn, prologueSql)
 
+        Utils.executePreActions(jdbcWrapper, conn, params)
+
         // Run the unload query
         log.info(unloadSql)
         val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadSql)
@@ -126,6 +128,8 @@ private[snowflakedb] case class SnowflakeRelation(
         // There can be no more records
         val second = res.next()
         assert(!second)
+
+        Utils.executePostActions(jdbcWrapper, conn, params)
 
         // Epilogue - disabled for now, as we close the connection
 //        log.info(epilogueSql)
