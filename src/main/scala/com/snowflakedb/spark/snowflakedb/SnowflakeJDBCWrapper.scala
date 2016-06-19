@@ -225,8 +225,8 @@ private[snowflakedb] class JDBCWrapper {
         | "scala.version" : "${esc(scalaVersion)}",
         | "java.version" : "${esc(javaVersion)}"
         |}""".stripMargin
-    log.error(snowflakeClientInfo)
-    System.setProperty("snowflake.client.info", snowflakeClientInfo);
+    log.debug(snowflakeClientInfo)
+    System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
     var conn = DriverManager.getConnection(jdbcURL, jdbcProperties)
 
