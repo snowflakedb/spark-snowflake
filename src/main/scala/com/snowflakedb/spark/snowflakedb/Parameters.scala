@@ -39,6 +39,12 @@ object Parameters {
   val PARAM_TEMP_KEY_SECRET  = "temporary_aws_secret_access_key"
   val PARAM_TEMP_SESSION_TOKEN = "temporary_aws_session_token"
 
+  val PARAM_CHECK_BUCKET_CONFIGURATION = "check_bucket_configuration"
+
+  // List of values that mean "yes" when considered to be Boolean
+  val BOOLEAN_VALUES_TRUE  = Set( "on", "yes",  "true", "1",  "enabled")
+  val BOOLEAN_VALUES_FALSE = Set("off",  "no", "false", "0", "disabled")
+
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
@@ -208,6 +214,10 @@ object Parameters {
      * connecting over JDBC.
      */
     def jdbcDriver: Option[String] = parameters.get("jdbcdriver")
+
+    /// Returns true if bucket lifecycle configuration should be checked
+    def checkBucketConfiguration: Boolean = BOOLEAN_VALUES_TRUE contains
+      parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "on").toLowerCase()
 
     /**
      * Max file size used to move data out from Snowflake
