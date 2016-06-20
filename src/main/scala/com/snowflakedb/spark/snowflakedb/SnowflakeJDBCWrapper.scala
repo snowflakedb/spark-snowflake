@@ -193,6 +193,7 @@ private[snowflakedb] class JDBCWrapper {
     val jdbcURL = s"""jdbc:snowflake://$sfURL"""
 
     val jdbcProperties = new Properties()
+
     // Obligatory properties
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema)  // Has a default
@@ -210,7 +211,13 @@ private[snowflakedb] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
 
-    // Set into on the system level
+    // Add extra properties from sfOptions
+    val extraOptions = params.sfExtraOptions
+    for ((k: String, v: Object) <- extraOptions) {
+      jdbcProperties.put(k, v)
+    }
+
+    // Set info on the system level
     // Very simple escaping
     def esc(s: String) : String = {
       s.replace("\"", "").replace("\\", "")

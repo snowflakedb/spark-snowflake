@@ -41,6 +41,9 @@ object Parameters {
 
   val PARAM_CHECK_BUCKET_CONFIGURATION = "check_bucket_configuration"
 
+  val PARAM_PREACTIONS = "preactions"
+  val PARAM_POSTACTIONS = "postactions"
+
   // List of values that mean "yes" when considered to be Boolean
   val BOOLEAN_VALUES_TRUE  = Set( "on", "yes",  "true", "1",  "enabled")
   val BOOLEAN_VALUES_FALSE = Set("off",  "no", "false", "0", "disabled")
@@ -51,8 +54,31 @@ object Parameters {
     "overwrite" -> "false",
     "diststyle" -> "EVEN",
     "usestagingtable" -> "true",
-    "preactions" -> "",
-    "postactions" -> ""
+    PARAM_PREACTIONS -> "",
+    PARAM_POSTACTIONS -> ""
+  )
+
+  private val KNOWN_PARAMETERS = Set(
+    PARAM_S3_MAX_FILE_SIZE,
+    PARAM_CHECK_BUCKET_CONFIGURATION,
+    PARAM_SF_TIMEZONE,
+    PARAM_TEMP_KEY_ID,
+    PARAM_TEMP_KEY_SECRET,
+    PARAM_TEMP_SESSION_TOKEN,
+    PARAM_PREACTIONS,
+    PARAM_POSTACTIONS,
+    "sfurl",
+    "sfuser",
+    "sfpassword",
+    "sfurl",
+    "sfdatabase",
+    "sfschema",
+    "sfrole",
+    "sfcompress",
+    "sfssl",
+    "tempdir",
+    "dbtable",
+    "query"
   )
 
   /**
@@ -122,6 +148,29 @@ object Parameters {
    * Adds validators and accessors to string map
    */
   case class MergedParameters(parameters: Map[String, String]) {
+
+    // Simple conversion from string to an object of type 
+    // String, Boolean or Integer, depending on the value
+    private def stringToObject(s: String) : Object = {
+      try {
+        return new Integer(s)
+      } catch {
+        case t: Throwable => {}
+      }
+      if (s.equalsIgnoreCase("true"))
+        return new java.lang.Boolean(true)
+      if (s.equalsIgnoreCase("false"))
+        return new java.lang.Boolean(false)
+      return s
+    }
+
+    private lazy val extraParams : Map[String, Object] = {
+      // Find all entries that are in parameters and are not known
+      val unknownParamNames = parameters.keySet -- KNOWN_PARAMETERS
+      var res = Map[String, Object]()
+      unknownParamNames.map(v => res += ( v -> stringToObject(parameters(v))))
+      res
+    }
 
     /**
      * A root directory to be used for intermediate data exchange, expected to be on S3, or
@@ -215,6 +264,12 @@ object Parameters {
      * connecting over JDBC.
      */
     def jdbcDriver: Option[String] = parameters.get("jdbcdriver")
+
+    /**
+     * Returns a map of options that are not known to the connector,
+     * and are passed verbosely to the JDBC driver
+     */
+    def sfExtraOptions: Map[String, Object] = extraParams
 
     /// Returns true if bucket lifecycle configuration should be checked
     def checkBucketConfiguration: Boolean = BOOLEAN_VALUES_TRUE contains

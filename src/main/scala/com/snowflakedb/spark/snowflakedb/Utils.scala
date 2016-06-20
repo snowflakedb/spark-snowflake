@@ -17,7 +17,7 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.net.URI
-import java.sql.Connection
+import java.sql.{Connection, ResultSet, Statement}
 import java.util.UUID
 
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
@@ -27,11 +27,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.io._
-
-import com.amazonaws.services.s3.{AmazonS3URI, AmazonS3Client}
+import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.slf4j.LoggerFactory
 
 /**
@@ -247,6 +246,31 @@ object Utils {
         jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
       }
     }
+  }
+
+  def runQuery(params: Map[String, String], query: String): ResultSet= {
+    val conn = getJDBCConnection(params)
+    conn.createStatement().executeQuery(query)
+  }
+
+  def printQuery(params: Map[String, String], query: String) = {
+    System.out.println(s"Running: $query")
+    val res = runQuery(params, query)
+    val columnCount = res.getMetaData.getColumnCount
+    var rowCnt = 0
+    while (res.next()) {
+      rowCnt += 1
+      val s = StringBuilder.newBuilder
+      s.append("| ")
+      for (i <- 1 to columnCount) {
+        if (i > 1)
+          s.append(" | ")
+        s.append(res.getString(i))
+      }
+      s.append(" |")
+      System.out.println(s)
+    }
+    System.out.println(s"TOTAL: $rowCnt rows")
   }
 
 }
