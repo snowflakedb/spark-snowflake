@@ -211,11 +211,16 @@ private[snowflakedb] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
 
+    // Always set CLIENT_SESSION_KEEP_ALIVE.
+    // Note, can be overridden with options
+    jdbcProperties.put("client_session_keep_alive", new java.lang.Boolean(true))
+
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
     for ((k: String, v: Object) <- extraOptions) {
-      jdbcProperties.put(k, v)
+      jdbcProperties.put(k.toLowerCase, v)
     }
+
 
     // Set info on the system level
     // Very simple escaping
