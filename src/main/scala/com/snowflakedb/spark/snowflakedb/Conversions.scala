@@ -17,7 +17,7 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.sql.Timestamp
-import java.text.{DecimalFormat, DateFormat, FieldPosition, ParsePosition, SimpleDateFormat}
+import java.text.{DateFormat, DecimalFormat, FieldPosition, ParsePosition, SimpleDateFormat}
 import java.util.Date
 
 import org.apache.spark.sql.types._
@@ -28,13 +28,14 @@ import org.apache.spark.sql.Row
  */
 private[snowflakedb] object Conversions {
 
-  private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
+  // For TZ and LTZ, Snowflake serializes with timezone
+  private val PATTERN_TZLTZ= "yyyy-MM-dd HH:mm:ss.SSS XX"
+  // For NTZ, Snowflake serializes w/o timezone
+  private val PATTERN_NTZ= "yyyy-MM-dd HH:mm:ss.SSS"
+  // For DATE, simple format
+  private val PATTERN_DATE = "yyyy-MM-dd"
 
-    // Note, Snowflake exports with quotes, we get rid of them in the format
-    // For TZ and LTZ, Snowflake serializes with timezone
-    private val PATTERN_TZLTZ= "\"yyyy-MM-dd HH:mm:ss.SSS XX\""
-    // For NTZ, Snowflake serializes w/o timezone
-    private val PATTERN_NTZ= "\"yyyy-MM-dd HH:mm:ss.SSS\""
+  private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
     // Thread local SimpleDateFormat for parsing/formatting
     private var formatTzLtz = new ThreadLocal[SimpleDateFormat] {
@@ -73,7 +74,7 @@ private[snowflakedb] object Conversions {
   // Thread local SimpleDateFormat for parsing/formatting
   private var snowflakeDateFormat = new ThreadLocal[SimpleDateFormat] {
     override protected def initialValue: SimpleDateFormat =
-        new SimpleDateFormat("\"yyyy-MM-dd\"")
+        new SimpleDateFormat(PATTERN_DATE)
   }
 
   /**
@@ -137,8 +138,7 @@ private[snowflakedb] object Conversions {
   private def convertRow(schema: StructType, fields: Array[String]): Row = {
     val converted = fields.zip(schema).map {
       case (data, field) =>
-        // Snowflake always exports NULLs as empty, unquoted strings
-        if (data == "") null
+        if (data == null) null
         else field.dataType match {
           case ByteType => data.toByte
           case BooleanType => parseBoolean(data)
@@ -149,9 +149,7 @@ private[snowflakedb] object Conversions {
           case IntegerType => data.toInt
           case LongType => data.toLong
           case ShortType => data.toShort
-          case StringType =>
-              // Snowflake reader preserves string external quotes always
-              data.substring(1, data.length - 1);
+          case StringType => data
           case TimestampType => parseTimestamp(data)
           case _ => data
         }

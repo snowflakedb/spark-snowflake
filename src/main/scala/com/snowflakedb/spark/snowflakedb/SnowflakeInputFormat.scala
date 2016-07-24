@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
  *
  * Note, Snowflake exports fields where
  * - strings/dates are "-quoted, with a " inside represented as ""
+ * - variants are not quoted, with \ escape
  * - numbers are not quoted
  * - nulls are empty, unquoted strings
  */
@@ -109,7 +110,7 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
     val size = fs.getFileStatus(file).getLen
     // Note, for Snowflake, we do not support splitting the file.
     // This is because it is in general not possible to find the record boundary
-    // With 100% precision.
+    // with 100% precision.
     // This is because we use quoted strings, and we never know if we are in
     // the middle of a quoted string. We can scan e.g. 16MB ahead, but it's
     // pointless.
@@ -173,9 +174,10 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
   /** Read the next record.
     * Note - special return format:
     * - input non-quoted fields are returned as they are
-    * - input quoted fields are returned *with* quotes
+    * - input quoted fields are returned *without* quotes
     * --- if there was a double quote inside, it's converted to a single quote
-    * This is to distinguish NULLs (empty) from empty string (two quotes)*/
+    * - input empty fields are returned as NULLs
+    */
   private def nextValue(): Array[String] = {
     val fields = ArrayBuffer.empty[String]
     var escaped = false
@@ -188,33 +190,41 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
       if (!eof) {
         if (c == quoteChar) {
           // Quoted string - the only escape is doubling quoteChar
-          // Note: we store beginning-end quotes
-          var escaped = false
-          chars.append(c)
+          // Note: we remove beginning-end quotes
           while (!endOfField && !endOfRecord && !eof) {
             c = nextChar()
             if (!eof) {
               if (!escaped) {
                 if (c == quoteChar)
                   escaped = true
-                chars.append(c)
+                else
+                  chars.append(c)
               } else {
+                // Previous character was "
                 if (c == delimiter) {
                   endOfField = true
                 } else if (c == lineFeed) {
                   endOfRecord = true
                 } else if (c == quoteChar) {
-                  // Don't produce this quote
+                  // It was a double-" , produce this quote
+                  chars.append(c)
                   escaped = false
                 }
               }
             }
           }
         } else {
-          // Normal string
+          // Unquoted string, using escape
           // Note, 'c' is initialized above already
           while (!endOfField && !endOfRecord && !eof) {
-            if (c == delimiter) {
+            if (escaped) {
+              chars.append(c)
+              escaped = false
+              c = nextChar()
+            } else if (c == escapeChar) {
+              escaped = true
+              c = nextChar()
+            } else if (c == delimiter) {
               endOfField = true
             } else if (c == lineFeed) {
               endOfRecord = true
@@ -227,7 +237,11 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
         }
       }
       // TODO: charset?
-      fields.append(new String(chars.toArray, Charset.forName("UTF-8")))
+      var fieldValue: String = null
+      if (chars.nonEmpty) {
+        fieldValue = new String(chars.toArray, Charset.forName("UTF-8"))
+      }
+      fields.append(fieldValue)
     }
     if (escaped) {
       throw new IllegalStateException(s"Found hanging escape char.")
