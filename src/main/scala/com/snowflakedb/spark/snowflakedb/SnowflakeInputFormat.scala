@@ -188,6 +188,7 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
       // Read the first char
       var c = nextChar()
       if (!eof) {
+        assert(!escaped, "escaped set when entering the new value")
         if (c == quoteChar) {
           // Quoted string - the only escape is doubling quoteChar
           // Note: we remove beginning-end quotes
@@ -201,6 +202,7 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
                   chars.append(c)
               } else {
                 // Previous character was "
+                escaped = false
                 if (c == delimiter) {
                   endOfField = true
                 } else if (c == lineFeed) {
@@ -208,7 +210,6 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
                 } else if (c == quoteChar) {
                   // It was a double-" , produce this quote
                   chars.append(c)
-                  escaped = false
                 }
               }
             }
