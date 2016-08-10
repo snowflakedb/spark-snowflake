@@ -48,9 +48,9 @@ class ConversionsSuite extends FunSuite {
     def quote(str: String) = "\"" + str + "\""
 
     var convertedRow = convertRow(
-      Array("1", quote(dateString), "123.45", doubleMin, "1.0", "42",
-        longMax, "23", quote(unicodeString),
-        quote(timestampString)))
+      Array("1", dateString, "123.45", doubleMin, "1.0", "42",
+        longMax, "23", unicodeString,
+        timestampString))
 
     var expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
       new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
@@ -59,9 +59,9 @@ class ConversionsSuite extends FunSuite {
     assert(convertedRow == expectedRow)
 
     convertedRow = convertRow(
-      Array("1", quote(dateString), "123.45", doubleMin, "1.0", "42",
-        longMax, "23", quote(unicodeString),
-        quote(timestamp2String)))
+      Array("1", dateString, "123.45", doubleMin, "1.0", "42",
+        longMax, "23", unicodeString,
+        timestamp2String))
 
     expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
       new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
@@ -72,15 +72,15 @@ class ConversionsSuite extends FunSuite {
 
   test("Row conversion handles null values") {
     val convertRow = Conversions.createRowConverter(TestUtils.testSchema)
-    val emptyRow = List.fill(TestUtils.testSchema.length)("").toArray[String]
+    val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
   }
 
   test("Dates are correctly converted") {
     val convertRow = Conversions.createRowConverter(StructType(Seq(StructField("a", DateType))))
-    assert(convertRow(Array("\"2015-07-09\"")) === Row(TestUtils.toDate(2015, 6, 9)))
-    assert(convertRow(Array("")) === Row(null))
+    assert(convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9)))
+    assert(convertRow(Array(null)) === Row(null))
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
     }

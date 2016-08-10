@@ -51,6 +51,7 @@ class SnowflakeInputFormatSuite extends FunSuite with BeforeAndAfterAll {
     out.close()
   }
 
+  /** Escape the strings according to Snowflake format rules */
   private def escape(records: Set[Seq[String]], delimiter: Char): String = {
     records.map { r =>
       r.map { f =>
@@ -68,7 +69,9 @@ class SnowflakeInputFormatSuite extends FunSuite with BeforeAndAfterAll {
   private val records = Set(
     Seq("a\n", DEFAULT_DELIMITER + "b\\"),
     Seq("c", TAB + "d"),
-    Seq("\ne", "\\\\f"))
+    Seq("\ne", "\\\\f"),
+    Seq("g\"", "\"h\"")
+  )
 
   private def withTempDir(func: File => Unit): Unit = {
     val dir = Files.createTempDir()
@@ -87,20 +90,10 @@ class SnowflakeInputFormatSuite extends FunSuite with BeforeAndAfterAll {
       val rdd = sc.newAPIHadoopFile(dir.toString, classOf[SnowflakeInputFormat],
         classOf[java.lang.Long], classOf[Array[String]], conf)
 
-      // TODO: Check this assertion - fails on Travis only, no idea what, or what it's for
-      // assert(rdd.partitions.size > records.size) // so there exist at least one empty partition
-
       val actual = rdd.values.map(_.toSeq).collect()
 
-      // We need to get dir of the quotes that the SnowflakeInputFormat preserves
-      var unquoted = actual.map { r =>
-        r.map { f =>
-          f.substring(1, f.length - 1)
-        }
-      }
-
-      assert(unquoted.size === records.size)
-      assert(unquoted.toSet === records)
+      assert(actual.length === records.size)
+      assert(actual.toSet === records)
     }
   }
 }

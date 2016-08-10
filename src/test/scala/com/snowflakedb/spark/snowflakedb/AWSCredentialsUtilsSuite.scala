@@ -17,21 +17,24 @@
 package com.snowflakedb.spark.snowflakedb
 
 import com.amazonaws.AmazonClientException
-import com.amazonaws.auth.{BasicSessionCredentials, BasicAWSCredentials}
+import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.FunSuite
 
 class AWSCredentialsUtilsSuite extends FunSuite {
+
   test("credentialsString with regular keys") {
     val creds = new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
-    assert(AWSCredentialsUtils.getSnowflakeCredentialsString(creds) ===
-      "aws_access_key_id=ACCESSKEYID;aws_secret_access_key=SECRET/KEY/WITH/SLASHES")
+    val result = AWSCredentialsUtils.getSnowflakeCredentialsString(creds).replaceAll("\\s+", " ")
+    assert( result ===
+      "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY/WITH/SLASHES' )")
   }
 
   test("credentialsString with STS temporary keys") {
     val creds = new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
-    assert(AWSCredentialsUtils.getSnowflakeCredentialsString(creds) ===
-      "aws_access_key_id=ACCESSKEYID;aws_secret_access_key=SECRET/KEY;token=SESSION/Token")
+    val result = AWSCredentialsUtils.getSnowflakeCredentialsString(creds).replaceAll("\\s+", " ")
+    assert(result ===
+      "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY' AWS_TOKEN='SESSION/Token' )")
   }
 
   test("AWSCredentials.load() credentials precedence for s3:// URIs") {

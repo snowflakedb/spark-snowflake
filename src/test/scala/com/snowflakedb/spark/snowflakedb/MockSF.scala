@@ -16,7 +16,8 @@
 
 package com.snowflakedb.spark.snowflakedb
 
-import java.sql.{SQLException, PreparedStatement, Connection}
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
+import javax.sql.rowset.RowSetMetaDataImpl
 
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
@@ -32,9 +33,9 @@ import org.scalatest.Assertions._
 
 
 /**
- * Helper class for mocking Redshift / JDBC in unit tests.
+ * Helper class for mocking Snowflake / JDBC in unit tests.
  */
-class MockRedshift(
+class MockSF(
     params: Map[String, String],
     existingTablesAndSchemas: Map[String, StructType],
     jdbcQueriesThatShouldFail: Seq[Regex] = Seq.empty) {
@@ -42,11 +43,48 @@ class MockRedshift(
   val mergedParams = MergedParameters(params)
 
   private[this] val queriesIssued: mutable.Buffer[String] = mutable.Buffer.empty
-  def getQueriesIssuedAgainstRedshift: Seq[String] = queriesIssued.toSeq
+  def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued.toSeq
 
   private[this] val jdbcConnections: mutable.Buffer[Connection] = mutable.Buffer.empty
 
-  val jdbcWrapper: JDBCWrapper = mock(classOf[JDBCWrapper], RETURNS_SMART_NULLS)
+  val jdbcWrapper: JDBCWrapper = spy(new JDBCWrapper)
+
+  private def createMockStatement(query: String) : PreparedStatement = {
+    val mockStatement= mock(classOf[PreparedStatement], RETURNS_SMART_NULLS)
+    if (jdbcQueriesThatShouldFail.forall(_.findFirstMatchIn(query).isEmpty)) {
+      when(mockStatement.execute()).thenReturn(true)
+
+      // Prepare mockResult depending on the query
+      var mockResult = mock(classOf[ResultSet], RETURNS_SMART_NULLS)
+      if (query.startsWith("COPY INTO '")) {
+        // It's a SF->S3 query, SnowflakeRelation checks the schema
+        when(mockResult.getMetaData()).thenReturn({
+          var md = new RowSetMetaDataImpl
+          md.setColumnCount(3)
+          md.setColumnName(1, "rows_unloaded")
+          md.setColumnTypeName(1, "NUMBER")
+          md
+        })
+        when(mockResult.getInt(anyInt())).thenReturn(4)
+        // Return exactly 1 record
+        when(mockResult.next()).thenAnswer(new Answer[Boolean] {
+          private var count : Int = 0
+          override def answer(invocation: InvocationOnMock): Boolean= {
+            count += 1
+            if (count == 1)
+              true
+            else
+              false
+          }
+        })
+      }
+      when(mockStatement.executeQuery()).thenReturn(mockResult)
+    } else {
+      when(mockStatement.execute()).thenThrow(new SQLException(s"Error executing $query"))
+      when(mockStatement.executeQuery()).thenThrow(new SQLException(s"Error executing $query"))
+    }
+    mockStatement
+  }
 
   private def createMockConnection(): Connection = {
     val conn = mock(classOf[Connection], RETURNS_SMART_NULLS)
@@ -55,34 +93,28 @@ class MockRedshift(
       override def answer(invocation: InvocationOnMock): PreparedStatement = {
         val query = invocation.getArguments()(0).asInstanceOf[String]
         queriesIssued.append(query)
-        val mockStatement = mock(classOf[PreparedStatement], RETURNS_SMART_NULLS)
-        if (jdbcQueriesThatShouldFail.forall(_.findFirstMatchIn(query).isEmpty)) {
-          when(mockStatement.execute()).thenReturn(true)
-        } else {
-          when(mockStatement.execute()).thenThrow(new SQLException(s"Error executing $query"))
-        }
-        mockStatement
+        createMockStatement(query)
       }
     })
     conn
   }
 
-  when(jdbcWrapper.getConnector(any[MergedParameters])).thenAnswer(
-    new Answer[Connection] {
-      override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
-    })
+  doAnswer(new Answer[Connection] {
+    override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
+  }).when(jdbcWrapper).getConnector(any[MergedParameters])
 
-  when(jdbcWrapper.tableExists(any[Connection], anyString())).thenAnswer(new Answer[Boolean] {
+  doAnswer(new Answer[Boolean] {
     override def answer(invocation: InvocationOnMock): Boolean = {
       existingTablesAndSchemas.contains(invocation.getArguments()(1).asInstanceOf[String])
     }
-  })
+  }).when(jdbcWrapper).tableExists(any[Connection], anyString())
 
-  when(jdbcWrapper.resolveTable(any[Connection], anyString())).thenAnswer(new Answer[StructType] {
+  doAnswer(new Answer[StructType] {
     override def answer(invocation: InvocationOnMock): StructType = {
       existingTablesAndSchemas(invocation.getArguments()(1).asInstanceOf[String])
     }
-  })
+  }).when(jdbcWrapper).resolveTable(any[Connection], anyString())
+
 
   def verifyThatConnectionsWereClosed(): Unit = {
     jdbcConnections.foreach { conn =>
@@ -96,8 +128,11 @@ class MockRedshift(
         fail(
           s"""
              |Actual and expected JDBC queries did not match:
-             |Expected: $expected
-             |Actual: $actual
+             |=== Expected:
+             |$expected
+             |=== Actual:
+             |$actual
+             |=== END
            """.stripMargin)
       }
     }
@@ -112,9 +147,8 @@ class MockRedshift(
   }
 
   def verifyThatExpectedQueriesWereIssuedForUnload(expectedQueries: Seq[Regex]): Unit = {
-    val queriesWithPrologueAndEpilogue= Seq(SnowflakeRelation.prologueSql.r) ++
-      expectedQueries ++
-      Seq(SnowflakeRelation.epilogueSql.r)
+    val queriesWithPrologueAndEpilogue= Seq(Utils.genPrologueSql(mergedParams).r) ++
+      expectedQueries
     verifyThatExpectedQueriesWereIssued(queriesWithPrologueAndEpilogue)
   }
 

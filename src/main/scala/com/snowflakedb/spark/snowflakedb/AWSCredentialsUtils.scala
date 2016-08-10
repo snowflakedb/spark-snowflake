@@ -24,9 +24,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.SQLContext
 
 private[snowflakedb] object AWSCredentialsUtils {
-
   /**
-   * Generates a credentials string for use in Redshift LOAD and UNLOAD statements.
+   * Generates a credentials string for use in Snowflake COPY in-out statements.
    */
   def getSnowflakeCredentialsString(sqlContext: SQLContext,
                                     params: MergedParameters): String = {
@@ -34,21 +33,25 @@ private[snowflakedb] object AWSCredentialsUtils {
       "-- file URL, no creds needed"
     } else {
       val creds = getCreds(sqlContext, params)
-      val awsAccessKey = creds.getAWSAccessKeyId
-      val awsSecretKey = creds.getAWSSecretKey
-      var tokenString = creds match {
-        case sessionCreds: AWSSessionCredentials =>
-          s"AWS_TOKEN='${sessionCreds.getSessionToken}'"
-        case otherCreds => ""
-      }
-      s"""
-         |CREDENTIALS = (
-         |    AWS_KEY_ID='$awsAccessKey'
-         |    AWS_SECRET_KEY='$awsSecretKey'
-         |    $tokenString
-         |)
-         |""".stripMargin.trim
+      getSnowflakeCredentialsString(creds)
     }
+  }
+
+  def getSnowflakeCredentialsString(creds : AWSCredentials): String = {
+    val awsAccessKey = creds.getAWSAccessKeyId
+    val awsSecretKey = creds.getAWSSecretKey
+    var tokenString = creds match {
+      case sessionCreds: AWSSessionCredentials =>
+        s"AWS_TOKEN='${sessionCreds.getSessionToken}'"
+      case otherCreds => ""
+    }
+    s"""
+       |CREDENTIALS = (
+       |    AWS_KEY_ID='$awsAccessKey'
+       |    AWS_SECRET_KEY='$awsSecretKey'
+       |    $tokenString
+       |)
+       |""".stripMargin.trim
   }
 
   def getCreds(sqlContext: SQLContext,

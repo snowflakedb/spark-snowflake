@@ -138,6 +138,7 @@ private[snowflakedb] object Conversions {
   private def convertRow(schema: StructType, fields: Array[String]): Row = {
     val converted = fields.zip(schema).map {
       case (data, field) =>
+        // Input values that are null produce nulls
         if (data == null) null
         else field.dataType match {
           case ByteType => data.toByte

@@ -41,99 +41,10 @@ import org.apache.spark.sql.types._
 
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
-private class TestContext extends SparkContext("local", "RedshiftSourceSuite") {
-
-  /**
-   * A text file containing fake unloaded Redshift data of all supported types
-   */
-  val testData = new File("src/test/resources/snowflake_unload_data.txt").toURI.toString
-
-  override def newAPIHadoopFile[K, V, F <: InputFormat[K, V]](
-      path: String,
-      fClass: Class[F],
-      kClass: Class[K],
-      vClass: Class[V],
-      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
-    super.newAPIHadoopFile[K, V, F](testData, fClass, kClass, vClass, conf)
-  }
-}
-
 /**
  * Tests main DataFrame loading and writing functionality
  */
-class RedshiftSourceSuite
-  extends QueryTest
-  with Matchers
-  with BeforeAndAfterAll
-  with BeforeAndAfterEach {
-
-  /**
-   * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
-   * no matter what temp directory was generated and requested.
-   */
-  private var sc: SparkContext = _
-
-  private var testSqlContext: SQLContext = _
-
-  private var expectedDataDF: DataFrame = _
-
-  private var mockS3Client: AmazonS3Client = _
-
-  private var s3FileSystem: FileSystem = _
-
-  private val s3TempDir: String = "s3n://test-bucket/temp-dir/"
-
-  // Parameters common to most tests. Some parameters are overridden in specific tests.
-  private def defaultParams: Map[String, String] = Map(
-    "tempdir" -> s3TempDir,
-    "dbtable" -> "test_table",
-    "sfurl" -> "account.snowflakecomputing.com:443",
-    "sfuser" -> "username",
-    "sfpassword" -> "password"
-  )
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sc = new TestContext
-    sc.hadoopConfiguration.set("fs.s3n.impl", classOf[S3NInMemoryFileSystem].getName)
-    // We need to use a DirectOutputCommitter to work around an issue which occurs with renames
-    // while using the mocked S3 filesystem.
-    sc.hadoopConfiguration.set("spark.sql.sources.outputCommitterClass",
-      classOf[DirectOutputCommitter].getName)
-    sc.hadoopConfiguration.set("mapred.output.committer.class",
-      classOf[DirectOutputCommitter].getName)
-    sc.hadoopConfiguration.set("fs.s3.awsAccessKeyId", "test1")
-    sc.hadoopConfiguration.set("fs.s3.awsSecretAccessKey", "test2")
-    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", "test1")
-    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", "test2")
-    // Configure a mock S3 client so that we don't hit errors when trying to access AWS in tests.
-    mockS3Client = Mockito.mock(classOf[AmazonS3Client], Mockito.RETURNS_SMART_NULLS)
-    when(mockS3Client.getBucketLifecycleConfiguration(anyString())).thenReturn(
-      new BucketLifecycleConfiguration().withRules(
-        new Rule().withPrefix("").withStatus(BucketLifecycleConfiguration.ENABLED)
-      ))
-  }
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    s3FileSystem = FileSystem.get(new URI(s3TempDir), sc.hadoopConfiguration)
-    testSqlContext = new SQLContext(sc)
-    expectedDataDF =
-      testSqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
-  }
-
-  override def afterEach(): Unit = {
-    super.afterEach()
-    testSqlContext = null
-    expectedDataDF = null
-    mockS3Client = null
-    FileSystem.closeAll()
-  }
-
-  override def afterAll(): Unit = {
-    sc.stop()
-    super.afterAll()
-  }
+class SnowflakeSourceSuite extends BaseTest {
 
   // Extract a particular value from expected data
   def expectedValue(row: Int, column: Int) : Any = {
@@ -151,42 +62,48 @@ class RedshiftSourceSuite
       |CREDENTIALS = (
       |    AWS_KEY_ID='test1'
       |    AWS_SECRET_KEY='test2'
-      |)
+      |.*)
       |FILE_FORMAT = (
       |    TYPE=CSV
       |    COMPRESSION=none
       |    FIELD_DELIMITER='|'
-      |    .*
-      |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+      |.*
+      |    FIELD_OPTIONALLY_ENCLOSED_BY.*
       |    NULL_IF= ()
       |  )
-      |MAX_FILE_SIZE = 10000000
+      |MAX_FILE_SIZE = .*
       |"""
-    // Escape parens and backslash, make RegExp
-    baseStr.stripMargin.trim.
-      replace("\\", "\\\\").
-      replace("(", "\\(").replace(")", "\\)").r
+
+    // Escape parens and backslash, also match multi-line
+    var escapedStr = "(?s)" +
+      baseStr.stripMargin.trim
+      .replace("\\", "\\\\")
+      .replace("(", "\\(")
+      .replace(")", "\\)")
+
+    // Return as regexp
+    escapedStr.r
   }
 
   test(
-    "DefaultSource can load Redshift UNLOAD output to a DataFrame") {
+    "DefaultSource can load Snowflake UNLOAD output to a DataFrame") {
     val expectedQuery = unloadQueryPattern(
       """SELECT "testbyte", "testdate", "testdec152", "testdouble", "testfloat", "testint", "testlong", "testshort", "teststring", "testtimestamp" FROM test_table """
     )
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Assert that we've loaded and converted all data in the test file
-    val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     val relation = source.createRelation(testSqlContext, defaultParams)
     val df = testSqlContext.baseRelationToDataFrame(relation)
     checkAnswer(df, TestUtils.expectedData)
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
-  test("Can load output of Redshift queries") {
+  test("Can load output of Snowflake queries") {
     // scalastyle:off
     val expectedQuery = unloadQueryPattern(
       """SELECT "testbyte", "testdate" FROM (select testbyte, testdate from test_table where teststring = \'Unicode\'\'s樂趣\') """
@@ -200,24 +117,24 @@ class RedshiftSourceSuite
     // Test with dbtable parameter that wraps the query in parens:
     {
       val params = defaultParams + ("dbtable" -> s"($query)")
-      val mockRedshift =
-        new MockRedshift(defaultParams, Map(params("dbtable") -> querySchema))
+      val mockSF =
+        new MockSF(defaultParams, Map(params("dbtable") -> querySchema))
       val relation = new DefaultSource(
-        mockRedshift.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
+        mockSF.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
       testSqlContext.baseRelationToDataFrame(relation).collect()
-      mockRedshift.verifyThatConnectionsWereClosed()
-      mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
+      mockSF.verifyThatConnectionsWereClosed()
+      mockSF.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
     }
 
     // Test with query parameter
     {
       val params = defaultParams - "dbtable" + ("query" -> query)
-      val mockRedshift = new MockRedshift(defaultParams, Map(s"($query)" -> querySchema))
+      val mockSF = new MockSF(defaultParams, Map(s"($query)" -> querySchema))
       val relation = new DefaultSource(
-        mockRedshift.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
+        mockSF.jdbcWrapper, _ => mockS3Client).createRelation(testSqlContext, params)
       testSqlContext.baseRelationToDataFrame(relation).collect()
-      mockRedshift.verifyThatConnectionsWereClosed()
-      mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
+      mockSF.verifyThatConnectionsWereClosed()
+      mockSF.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
     }
   }
 
@@ -225,10 +142,10 @@ class RedshiftSourceSuite
     val expectedQuery = unloadQueryPattern(
       """SELECT "testbyte", "testdate" FROM test_table """
     )
-    val mockRedshift =
-      new MockRedshift(defaultParams, Map("test_table" -> TestUtils.testSchema))
+    val mockSF =
+      new MockSF(defaultParams, Map("test_table" -> TestUtils.testSchema))
     // Construct the source with a custom schema
-    val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     val relation = source.createRelation(testSqlContext, defaultParams, TestUtils.testSchema)
 
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
@@ -239,8 +156,8 @@ class RedshiftSourceSuite
       Row(expectedValue(2, 0), expectedValue(2, 1)),
       Row(expectedValue(3, 0), expectedValue(3, 1)))
     assert(rdd.collect() === prunedExpectedValues)
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
   test("DefaultSource supports user schema, pruned and filtered scans") {
@@ -249,12 +166,12 @@ class RedshiftSourceSuite
       """SELECT "testbyte", "testdate" FROM test_table WHERE "teststring" = 'Unicode''s樂趣' AND "testdouble" > 1000.0 AND "testdouble" < 1.7976931348623157E308 AND "testfloat" >= 1.0 AND "testint" <= 43"""
     )
     // scalastyle:on
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     // Construct the source with a custom schema
-    val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     val relation = source.createRelation(testSqlContext, defaultParams, TestUtils.testSchema)
 
     // Define a simple filter to only include a subset of rows
@@ -270,10 +187,10 @@ class RedshiftSourceSuite
       .buildScan(Array("testbyte", "testdate"), filters)
 
     // Technically this assertion should check that the RDD only returns a single row, but
-    // since we've mocked out Redshift our WHERE clause won't have had any effect.
+    // since we've mocked out Snowflake our WHERE clause won't have had any effect.
     assert(rdd.collect().contains(Row(expectedValue(0,0), expectedValue(0,1))))
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssuedForUnload(Seq(expectedQuery))
   }
 
   // Helper function:
@@ -301,6 +218,7 @@ class RedshiftSourceSuite
       "sfcompress" -> "off")
 
     val expectedCommands = Seq(
+      "alter session .*".r,
       "DROP TABLE IF EXISTS test_table_staging_.*".r,
       "CREATE TABLE IF NOT EXISTS test_table_staging.*()".r,
       "COPY INTO test_table_staging_.*".r,
@@ -308,12 +226,12 @@ class RedshiftSourceSuite
       "ALTER TABLE test_table SWAP WITH test_table_staging_.*".r,
       "DROP TABLE IF EXISTS test_table_staging_.*".r)
 
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val relation = SnowflakeRelation(
-      mockRedshift.jdbcWrapper,
+      mockSF.jdbcWrapper,
       _ => mockS3Client,
       Parameters.mergeParameters(params),
       userSchema = None)(testSqlContext)
@@ -321,64 +239,66 @@ class RedshiftSourceSuite
 
     verifyFileContent(TestUtils.expectedDataAsSingleStrings)
 
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
 
   // Snowflake-todo: Snowflake supports ambiguous column names, but should we
   // actually prohibit these
   ignore("Cannot write table with column names that become ambiguous under case insensitivity") {
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema))
 
     val schema = StructType(Seq(StructField("a", IntegerType), StructField("A", IntegerType)))
     val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
-    val writer = new SnowflakeWriter(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val writer = new SnowflakeWriter(mockSF.jdbcWrapper, _ => mockS3Client)
 
     intercept[IllegalArgumentException] {
       writer.saveToSnowflake(
         testSqlContext, df, SaveMode.Append, Parameters.mergeParameters(defaultParams))
     }
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq.empty)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(Seq.empty)
   }
 
   test("Failed copies are handled gracefully when using a staging table") {
     val params = defaultParams ++ Map("usestagingtable" -> "true")
 
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName("test_table").toString -> TestUtils.testSchema),
       jdbcQueriesThatShouldFail = Seq("COPY INTO test_table_staging_.*".r))
 
     val expectedCommands = Seq(
+      "alter session .*".r,
       "DROP TABLE IF EXISTS test_table_staging_.*".r,
       "CREATE TABLE IF NOT EXISTS test_table_staging_.*".r,
       "COPY INTO test_table_staging_.*".r,
       "DROP TABLE IF EXISTS test_table_staging_.*".r
     )
 
-    val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     intercept[Exception] {
       source.createRelation(testSqlContext, SaveMode.Overwrite, params, expectedDataDF)
-      mockRedshift.verifyThatConnectionsWereClosed()
-      mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
+      mockSF.verifyThatConnectionsWereClosed()
+      mockSF.verifyThatExpectedQueriesWereIssued(expectedCommands)
     }
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
 
   test("Append SaveMode doesn't destroy existing data") {
     val expectedCommands =
-      Seq("CREATE TABLE IF NOT EXISTS test_table .*".r,
+      Seq("alter session .*".r,
+          "CREATE TABLE IF NOT EXISTS test_table .*".r,
           "COPY INTO test_table.*".r)
 
-    val mockRedshift = new MockRedshift(
+    val mockSFdshift = new MockSF(
       defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
 
-    val source = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSFdshift.jdbcWrapper, _ => mockS3Client)
     val savedDf =
       source.createRelation(testSqlContext, SaveMode.Append, defaultParams, expectedDataDF)
 
@@ -386,8 +306,8 @@ class RedshiftSourceSuite
     // the only content.
     verifyFileContent(TestUtils.expectedDataAsSingleStrings)
 
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
+    mockSFdshift.verifyThatConnectionsWereClosed()
+    mockSFdshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
 
   test("configuring maxlength on string columns") {
@@ -408,26 +328,26 @@ class RedshiftSourceSuite
   }
 
   test("Respect SaveMode.ErrorIfExists when table exists") {
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
-    val errIfExistsSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val errIfExistsSource = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     intercept[Exception] {
       errIfExistsSource.createRelation(
         testSqlContext, SaveMode.ErrorIfExists, defaultParams, expectedDataDF)
     }
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq.empty)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(Seq.empty)
   }
 
   test("Do nothing when table exists if SaveMode = Ignore") {
-    val mockRedshift = new MockRedshift(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
-    val ignoreSource = new DefaultSource(mockRedshift.jdbcWrapper, _ => mockS3Client)
+    val ignoreSource = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     ignoreSource.createRelation(testSqlContext, SaveMode.Ignore, defaultParams, expectedDataDF)
-    mockRedshift.verifyThatConnectionsWereClosed()
-    mockRedshift.verifyThatExpectedQueriesWereIssued(Seq.empty)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(Seq.empty)
   }
 
   test("Cannot save when 'query' parameter is specified instead of 'dbtable'") {

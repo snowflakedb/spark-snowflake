@@ -17,13 +17,13 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.sql.{Date, Timestamp}
-import java.util.Calendar
+import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 /**
- * Helpers for Redshift tests that require common mocking
+ * Helpers for Snowflake tests that require common mocking
  */
 object TestUtils {
 
@@ -53,9 +53,7 @@ object TestUtils {
     Row(1.toByte, TestUtils.toDate(2015, 6, 1), BigDecimal(1234567890123.45),
       1234152.12312498,
       1.0f, 42, 1239012341823719L, 23.toShort, "Unicode's樂趣",
-      // Note: because we're not in UTC, have to adapt the time
-      // TestUtils.toTimestamp(2015, 6, 1, 0, 0, 0, 1)),
-      TestUtils.toTimestamp(2015, 5, 30, 17, 0, 0, 1)),
+      TestUtils.toTimestamp(2015, 6, 1, 0, 0, 0, 1)),
     Row(2.toByte, TestUtils.toDate(1960, 0, 2), 1, 2.0, 3.0f, 4,
       5L, 6.toShort, "\"", TestUtils.toTimestamp(2015, 6, 2, 12, 34, 56, 789)),
     Row(3.toByte, TestUtils.toDate(2999, 11, 31), -1, -2.0, -3.0f, -4, -5, -6.toShort,
