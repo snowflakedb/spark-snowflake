@@ -108,7 +108,7 @@ class BaseTest extends FunSuite
     super.afterEach()
     testSqlContext = null
     expectedDataDF = null
-    mockS3Client = null
+    s3FileSystem = null
     FileSystem.closeAll()
   }
 

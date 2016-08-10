@@ -294,11 +294,11 @@ class SnowflakeSourceSuite extends BaseTest {
           "CREATE TABLE IF NOT EXISTS test_table .*".r,
           "COPY INTO test_table.*".r)
 
-    val mockSFdshift = new MockSF(
+    val mockSF = new MockSF(
       defaultParams,
       Map(new TableName(defaultParams("dbtable")).toString -> null))
 
-    val source = new DefaultSource(mockSFdshift.jdbcWrapper, _ => mockS3Client)
+    val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
     val savedDf =
       source.createRelation(testSqlContext, SaveMode.Append, defaultParams, expectedDataDF)
 
@@ -306,8 +306,8 @@ class SnowflakeSourceSuite extends BaseTest {
     // the only content.
     verifyFileContent(TestUtils.expectedDataAsSingleStrings)
 
-    mockSFdshift.verifyThatConnectionsWereClosed()
-    mockSFdshift.verifyThatExpectedQueriesWereIssued(expectedCommands)
+    mockSF.verifyThatConnectionsWereClosed()
+    mockSF.verifyThatExpectedQueriesWereIssued(expectedCommands)
   }
 
   test("configuring maxlength on string columns") {
