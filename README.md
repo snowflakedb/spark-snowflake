@@ -32,5 +32,19 @@ Once these requirements are met, run e.g.
     
     IT_SNOWFLAKE_CONF=$PWD/snowflake.conf build/sbt it:test
   
+#### Running code coverage tests
 
+It's best to use Scala 2.11, as some earlier versions have a bug disallowing
+line highlighting.
 
+Example use:
+
+    build/sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 clean coverage test
+    firefox $PWD/target/scala-2.11/scoverage-report/index.html
+
+And with integration tests:
+
+    export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf
+    build/sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 clean coverage test \
+      "it:test-only com.snowflakedb.spark.snowflakedb.DecimalIntegrationSuite"
+    firefox $PWD/target/scala-2.11/scoverage-report/index.html
