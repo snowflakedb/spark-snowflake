@@ -1,4 +1,5 @@
 /*
+ * Copyright 2015-2016 Snowflake Computing
  * Copyright 2015 Databricks
  * Copyright 2015 TouchType Ltd. (Added JDBC-based Data Source API implementation)
  *
