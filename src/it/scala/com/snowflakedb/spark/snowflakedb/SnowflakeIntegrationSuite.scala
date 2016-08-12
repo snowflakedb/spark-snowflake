@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 /**
  * End-to-end tests which run against a real Redshift cluster.
  */
-class RedshiftIntegrationSuite extends IntegrationSuiteBase {
+class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
@@ -42,31 +42,32 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
       conn.createStatement().executeUpdate(
         s"""
            |create table $tableName (
-           |testbyte int2,
-           |testbool boolean,
-           |testdate date,
-           |testdouble float8,
-           |testfloat float4,
-           |testint int4,
-           |testlong int8,
-           |testshort int2,
-           |teststring varchar(256),
-           |testtimestamp timestamp
-           |)
+           |   testbyte int,
+           |   testdate date,
+           |   testdec152 decimal(15,2),
+           |   testdouble double,
+           |   testfloat float,
+           |   testint int,
+           |   testlong bigint,
+           |   testshort smallint,
+           |   teststring string,
+           |   testtimestamp timestamp
+           )
       """.stripMargin
       )
       // scalastyle:off
       conn.createStatement().executeUpdate(
         s"""
            |insert into $tableName values
-           |(null, null, null, null, null, null, null, null, null, null),
-           |(0, null, '2015-07-03', 0.0, -1.0, 4141214, 1239012341823719, null, 'f', '2015-07-03 00:00:00.000'),
-           |(0, false, null, -1234152.12312498, 100000.0, null, 1239012341823719, 24, '___|_123', null),
-           |(1, false, '2015-07-02', 0.0, 0.0, 42, 1239012341823719, -13, 'asdf', '2015-07-02 00:00:00.000'),
-           |(1, true, '2015-07-01', 1234152.12312498, 1.0, 42, 1239012341823719, 23, 'Unicode''s樂趣', '2015-07-01 00:00:00.001')
+           |(1, '2015-07-01', 1234567890123.45, 1234152.12312498, 1.0, 42,
+           |  1239012341823719, 23, 'Unicode''s樂趣"', '2015-07-01 00:00:00.001'),
+           |(2, '1960-01-02', 1, 2, 3, 4, 5, 6, '"', '2015-07-02 12:34:56.789'),
+           |(3, '2999-12-31', -1, -2, -3, -4, -5, -6, '''"|', '1950-12-31 17:00:00.001'),
+           |(null, null, null, null, null, null, null, null, null, null)
          """.stripMargin
       )
       // scalastyle:on
+
       conn.commit()
     }
 
@@ -88,12 +89,12 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    sqlContext.sql(
+    val sql =
       s"""
          | create temporary table test_table(
-         |   testbyte tinyint,
-         |   testbool boolean,
-         |   testdate date,
+         |   testbyte int,
+         |   testdate boolea,
+         |   testdec152 decimal,
          |   testdouble double,
          |   testfloat float,
          |   testint int,
@@ -108,7 +109,8 @@ class RedshiftIntegrationSuite extends IntegrationSuiteBase {
          |   dbtable \"$test_table\"
          | )
        """.stripMargin
-    ).collect()
+    System.out.println(sql)
+    sqlContext.sql(sql).collect()
 
     sqlContext.sql(
       s"""

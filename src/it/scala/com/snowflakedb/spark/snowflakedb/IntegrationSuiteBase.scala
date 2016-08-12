@@ -41,35 +41,31 @@ trait IntegrationSuiteBase
   with BeforeAndAfterAll
   with BeforeAndAfterEach {
 
-  protected def loadConfigFromEnv(envVarName: String): String = {
-    Option(System.getenv(envVarName)).getOrElse {
-      fail(s"Must set $envVarName environment variable")
-    }
+  private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
+
+  protected def loadConfig(): Map[String, String] = {
+    val fname = System.getenv(CONFIG_FILE_VARIABLE)
+    if (fname == null)
+      fail(s"Must set $CONFIG_FILE_VARIABLE environment variable")
+    Utils.readMapFromFile(sc, fname)
   }
 
-  // The following configurations must be set in order to run these tests.
-  // In Travis, these
-  // environment variables are set using Travis's encrypted environment variables feature:
-  // http://docs.travis-ci.com/user/environment-variables/#Encrypted-Variables
+  protected var connectorOptions : Map[String, String] = _
+
+  protected var params : MergedParameters = _
+
+  protected def getConfigValue(name : String): String = {
+    connectorOptions.getOrElse(name.toLowerCase, {
+      fail("Config file needs to contain $name value")
+    })
+  }
 
   // AWS access variables
-  protected val AWS_ACCESS_KEY_ID: String = loadConfigFromEnv("AWS_ACCESS_KEY_ID")
-  protected val AWS_SECRET_ACCESS_KEY: String = loadConfigFromEnv("AWS_SECRET_ACCESS_KEY")
+  protected var AWS_ACCESS_KEY_ID: String = _
+  protected var AWS_SECRET_ACCESS_KEY: String = _
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
-  private val AWS_S3_SCRATCH_SPACE: String = loadConfigFromEnv("AWS_S3_SCRATCH_SPACE")
-  require(AWS_S3_SCRATCH_SPACE.contains("s3n"), "must use s3n:// URL")
+  private var AWS_S3_SCRATCH_SPACE: String = _
 
-  protected var connectorOptions = Map(
-    "sfURL" -> loadConfigFromEnv("SNOWFLAKE_URL"),
-    "sfDatabase" -> loadConfigFromEnv("SNOWFLAKE_DATABASE"),
-    "sfSchema" -> loadConfigFromEnv("SNOWFLAKE_SCHEMA"),
-    "sfWarehouse" -> loadConfigFromEnv("SNOWFLAKE_WAREHOUSE"),
-    "sfUser" -> loadConfigFromEnv("SNOWFLAKE_USER"),
-    "sfPassword" -> loadConfigFromEnv("SNOWFLAKE_PASSWORD"),
-    "sfAccount" -> loadConfigFromEnv("SNOWFLAKE_ACCOUNT"),
-    "sfSsl" -> loadConfigFromEnv("SNOWFLAKE_SSL"),
-    "sfCompress" -> loadConfigFromEnv("SNOWFLAKE_COMPRESS")
-  )
 
   /**
    * Random suffix appended appended to table and directory names in order to avoid collisions
@@ -77,7 +73,7 @@ trait IntegrationSuiteBase
    */
   protected val randomSuffix: String = Math.abs(Random.nextLong()).toString
 
-  protected val tempDir: String = AWS_S3_SCRATCH_SPACE + randomSuffix + "/"
+  protected var tempDir: String = _
 
   /**
    * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
@@ -89,13 +85,24 @@ trait IntegrationSuiteBase
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = new SparkContext("local", "RedshiftSourceSuite")
+    sc = new SparkContext("local", "SnowflakeSourceSuite")
+
+    // Initialize variables
+    connectorOptions = loadConfig()
+    params = Parameters.mergeParameters(connectorOptions)
+    AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey")
+    AWS_SECRET_ACCESS_KEY = getConfigValue("awsAccessKey")
+    AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir")
+    require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE.startsWith("file://"),
+      "must use s3n:// or file:// URL")
+    tempDir = params.rootTempDir + randomSuffix + "/"
+
     // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
     sc.hadoopConfiguration.setBoolean("fs.s3.impl.disable.cache", true)
     sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
-    conn = DefaultJDBCWrapper.getConnector(MergedParameters(connectorOptions))
+    conn = DefaultJDBCWrapper.getConnector(params)
   }
 
   override def afterAll(): Unit = {

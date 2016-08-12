@@ -76,9 +76,11 @@ object SparkSnowflakeBuild extends Build {
         // } else {
         //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
         // },
-        // A Snowflake-compatible JDBC driver must be present on the classpath for spark-snowflake to work.
+
+        // A Snowflake JDBC driver must be present on the classpath for spark-snowflakedb to work.
         // @Snowflake-todo - add JAR to some publicly available repo
-        // "com.amazon.redshift" % "jdbc4" % "1.1.7.1007" % "test" from "https://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC4-1.1.7.1007.jar",
+        "com.snowflake" % "snowflake_jdbc" % "2.7.83" % "test" from "file:///tmp/snowflake_jdbc.jar",
+
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",
         "org.mockito" % "mockito-core" % "1.10.19" % "test"

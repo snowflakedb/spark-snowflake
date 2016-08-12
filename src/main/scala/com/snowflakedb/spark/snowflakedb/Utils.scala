@@ -149,7 +149,7 @@ object Utils {
     var map = new mutable.HashMap[String,String]
     for (line <- src.getLines()) {
       val tokens = line.split("=")
-      val key = tokens(0).trim
+      val key = tokens(0).trim.toLowerCase
       val value = tokens(1).trim
       map += (key -> value)
     }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  */
 class STSIntegrationSuite extends IntegrationSuiteBase {
 
-  private val STS_ROLE_ARN: String = loadConfigFromEnv("STS_ROLE_ARN")
+  private val STS_ROLE_ARN: String = getConfigValue("STS_ROLE_ARN")
   private var STS_ACCESS_KEY_ID: String = _
   private var STS_SECRET_ACCESS_KEY: String = _
   private var STS_SESSION_TOKEN: String = _
@@ -47,6 +47,8 @@ class STSIntegrationSuite extends IntegrationSuiteBase {
     STS_SESSION_TOKEN = creds.getSessionToken
   }
 
+  // TODO: Re-enable once we have STS_ROLE_ARN set up for testing
+  if (false)
   test("roundtrip save and load") {
     val tableName = s"roundtrip_save_and_load$randomSuffix"
     val df = sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),

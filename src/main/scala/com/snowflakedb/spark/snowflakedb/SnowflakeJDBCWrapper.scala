@@ -39,7 +39,7 @@ private[snowflakedb] class JDBCWrapper {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private val SPARK_SNOWFLAKEDB_VERSION = getClass.getPackage.getImplementationVersion
+  private val SPARK_SNOWFLAKEDB_VERSION = Option(getClass.getPackage.getImplementationVersion).getOrElse("<UNKNOWN>")
 
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
@@ -179,14 +179,13 @@ private[snowflakedb] class JDBCWrapper {
     // Derive class name
     val driverClassName = params.jdbcDriver.
       getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
-    // Load class
     try {
       val driverClass = Utils.classForName(driverClassName)
       registerDriver(driverClass.getCanonicalName)
     } catch {
       case e: ClassNotFoundException =>
         throw new ClassNotFoundException(
-          "Could not load a Snowflake JDBC driver", e)
+          s"Could not load a Snowflake JDBC driver class < $driverClassName > ", e)
     }
 
     val sfURL = params.sfURL
@@ -220,7 +219,6 @@ private[snowflakedb] class JDBCWrapper {
     for ((k: String, v: Object) <- extraOptions) {
       jdbcProperties.put(k.toLowerCase, v)
     }
-
 
     // Set info on the system level
     // Very simple escaping

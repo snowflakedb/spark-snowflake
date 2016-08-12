@@ -19,8 +19,9 @@ package com.snowflakedb.spark.snowflakedb
 import org.apache.spark.sql.Row
 
 /**
- * Integration tests for decimal support. For a reference on Redshift's DECIMAL type, see
- * http://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html
+ * Integration tests for decimal support.
+ * For a reference on Snowflake's DECIMAL type, see
+ * https://docs.snowflake.net/manuals/sql-reference/data-types.html
  */
 class DecimalIntegrationSuite extends IntegrationSuiteBase {
 
@@ -52,26 +53,29 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
   }
 
   testReadingDecimals(19, 0, Seq(
-    // Max and min values of DECIMAL(19, 0) column according to Redshift docs:
-    "9223372036854775807", // 2^63 - 1
+     "9223372036854775807", // 2^63 - 1
     "-9223372036854775807",
+     "9999999999999999999",
+    "-9999999999999999999",
     "0",
     "12345678910",
     null
   ))
 
   testReadingDecimals(19, 4, Seq(
-    "922337203685477.5807",
+     "922337203685477.5807",
     "-922337203685477.5807",
+     "999999999999999.9999",
+    "-999999999999999.9999",
     "0",
     "1234567.8910",
     null
   ))
 
   testReadingDecimals(38, 4, Seq(
-    "922337203685477.5808",
-    "9999999999999999999999999999999999.0000",
-    "-9999999999999999999999999999999999.0000",
+     "922337203685477.5808",
+     "9999999999999999999999999999999999.9999",
+    "-9999999999999999999999999999999999.9999",
     "0",
     "1234567.8910",
     null
