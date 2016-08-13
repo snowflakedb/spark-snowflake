@@ -22,16 +22,16 @@ import scala.util.parsing.combinator._
 import org.apache.spark.sql.types._
 
 /**
- * A simple parser for Redshift table schemas.
+ * A simple parser for Snowflake table schemas.
  *
  * Note: the only method which uses this class has been deprecated, so this class should be
- * removed in `spark-redshift` 0.6. We will not accept patches to extend this parser.
+ * removed in `spark-snowflakedb` 0.6. We will not accept patches to extend this parser.
  *
  * Snowflake-todo: See if we can remove it
  */
 @deprecated("Do not use SchemaParser directly", "0.5.0")
 private[snowflakedb] object SchemaParser extends JavaTokenParsers {
-  // redshift data types: http://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html
+  // snowflake data types: https://docs.snowflake.net/manuals/sql-reference/data-types.html
   private val SMALLINT: Parser[DataType] = ("smallint" | "int2") ^^^ ShortType
   private val INTEGER: Parser[DataType] = ("integer" | "int" | "int4") ^^^ IntegerType
   private val BIGINT: Parser[DataType] = ("bigint" | "int8") ^^^ LongType

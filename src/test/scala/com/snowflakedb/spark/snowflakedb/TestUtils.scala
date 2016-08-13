@@ -55,9 +55,9 @@ object TestUtils {
       1234152.12312498,
       1.0f, 42, 1239012341823719L, 23.toShort, "Unicode's樂趣",
       TestUtils.toTimestamp(2015, 6, 1, 0, 0, 0, 1)),
-    Row(2.toByte, TestUtils.toDate(1960, 0, 2), 1, 2.0, 3.0f, 4,
+    Row(2.toByte, TestUtils.toDate(1960, 0, 2), BigDecimal(1).setScale(2), 2.0, 3.0f, 4,
       5L, 6.toShort, "\"", TestUtils.toTimestamp(2015, 6, 2, 12, 34, 56, 789)),
-    Row(3.toByte, TestUtils.toDate(2999, 11, 31), -1, -2.0, -3.0f, -4, -5, -6.toShort,
+    Row(3.toByte, TestUtils.toDate(2999, 11, 31), BigDecimal(-1).setScale(2), -2.0, -3.0f, -4, -5, -6.toShort,
       "\\'\"|", TestUtils.toTimestamp(1950, 11, 31, 17, 0, 0, 1)),
     Row(List.fill(10)(null): _*))
   // scalastyle:on

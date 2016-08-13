@@ -29,13 +29,18 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  */
 class STSIntegrationSuite extends IntegrationSuiteBase {
 
-  private val STS_ROLE_ARN: String = getConfigValue("STS_ROLE_ARN")
+  private var STS_ROLE_ARN: String = _
   private var STS_ACCESS_KEY_ID: String = _
   private var STS_SECRET_ACCESS_KEY: String = _
   private var STS_SESSION_TOKEN: String = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+  }
+
+  // TODO: Re-enable once we have STS_ROLE_ARN set up for testing
+  ignore("roundtrip save and load") {
+    STS_ROLE_ARN = getConfigValue("STS_ROLE_ARN")
     val awsCredentials = new BasicAWSCredentials(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
     val stsClient = new AWSSecurityTokenServiceClient(awsCredentials)
     val assumeRoleRequest = new AssumeRoleRequest()
@@ -46,11 +51,7 @@ class STSIntegrationSuite extends IntegrationSuiteBase {
     STS_ACCESS_KEY_ID = creds.getAccessKeyId
     STS_SECRET_ACCESS_KEY = creds.getSecretAccessKey
     STS_SESSION_TOKEN = creds.getSessionToken
-  }
 
-  // TODO: Re-enable once we have STS_ROLE_ARN set up for testing
-  if (false)
-  test("roundtrip save and load") {
     val tableName = s"roundtrip_save_and_load$randomSuffix"
     val df = sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
       StructType(StructField("a", IntegerType) :: Nil))

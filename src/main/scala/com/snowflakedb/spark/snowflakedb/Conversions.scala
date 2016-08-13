@@ -30,7 +30,9 @@ import org.apache.spark.sql.Row
 private[snowflakedb] object Conversions {
 
   // For TZ and LTZ, Snowflake serializes with timezone
-  private val PATTERN_TZLTZ= "yyyy-MM-dd HH:mm:ss.SSS XX"
+  // Note - we use a pattern with timezone in the beginning, to make sure
+  // parsing with PATTERN_NTZ fails for PATTERN_TZLTZ strings.
+  private val PATTERN_TZLTZ= "XX yyyy-MM-dd HH:mm:ss.SSS"
   // For NTZ, Snowflake serializes w/o timezone
   private val PATTERN_NTZ= "yyyy-MM-dd HH:mm:ss.SSS"
   // For DATE, simple format
@@ -66,9 +68,11 @@ private[snowflakedb] object Conversions {
         pos.setIndex(idx)
         pos.setErrorIndex(errIdx)
         // Try again, using the format with a timezone
-        res = formatTzLtz.get().parse(source, pos)
+        formatTzLtz.get().parse(source, pos)
+      } else {
+        res
       }
-      res
+
     }
   }
 

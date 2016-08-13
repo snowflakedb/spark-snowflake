@@ -34,7 +34,7 @@ import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, Matchers}
 
 
 /**
- * Base class for writing integration tests which run against a real Redshift cluster.
+ * Base class for writing integration tests which run against a real Snowflake cluster.
  */
 trait IntegrationSuiteBase
   extends QueryTest
@@ -51,7 +51,12 @@ trait IntegrationSuiteBase
     Utils.readMapFromFile(sc, fname)
   }
 
-  protected var connectorOptions : Map[String, String] = _
+  protected var connectorOptions: Map[String, String] = _
+
+  protected var connectorOptionsNoTable: Map[String, String] = _
+
+  // Options encoded as a Spark-sql string
+  protected var connectorOptionsString : String = _
 
   protected var params : MergedParameters = _
 
@@ -66,7 +71,6 @@ trait IntegrationSuiteBase
   protected var AWS_SECRET_ACCESS_KEY: String = _
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
   private var AWS_S3_SCRATCH_SPACE: String = _
-
 
   /**
    * Random suffix appended appended to table and directory names in order to avoid collisions
@@ -84,13 +88,31 @@ trait IntegrationSuiteBase
   protected var sqlContext: SQLContext = _
   protected var conn: Connection = _
 
+  def runSql(query: String): Unit = {
+    System.out.println("RUNNING" + query)
+    sqlContext.sql(query).collect()
+  }
+
+  def jdbcUpdate(query: String): Unit = {
+    System.out.println("RUNNING" + query)
+    conn.createStatement.executeUpdate(query)
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
+
+    // Always run in UTC
+    System.setProperty("user.timezone", "GMT")
+
     sc = new SparkContext("local", "SnowflakeSourceSuite")
 
     // Initialize variables
     connectorOptions = loadConfig()
+    connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
     params = Parameters.mergeParameters(connectorOptions)
+    // Create a single string with the Spark SQL options
+    connectorOptionsString = connectorOptions.map{ case (key,value) => s"""$key "$value"""" }.mkString(" , ")
+
     AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey")
     AWS_SECRET_ACCESS_KEY = getConfigValue("awsAccessKey")
     AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir")
@@ -104,6 +126,9 @@ trait IntegrationSuiteBase
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
     conn = DefaultJDBCWrapper.getConnector(params)
+
+    // Force UTC also on the JDBC connection
+    jdbcUpdate("alter session set timezone='UTC'")
   }
 
   override def afterAll(): Unit = {
@@ -133,6 +158,10 @@ trait IntegrationSuiteBase
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     sqlContext = new TestHiveContext(sc)
+
+    // Use fewer partitions to make tests faster
+    sqlContext.setConf("spark.sql.shuffle.partitions", "8")
+
   }
 
   /**
@@ -142,9 +171,9 @@ trait IntegrationSuiteBase
    * @param tableName the table name to use
    * @param df the DataFrame to save
    * @param expectedSchemaAfterLoad if specified, the expected schema after loading the data back
-   *                                from Redshift. This should be used in cases where you expect
+   *                                from Snowflake. This should be used in cases where you expect
    *                                the schema to differ due to reasons like case-sensitivity.
-   * @param saveMode the [[SaveMode]] to use when writing data back to Redshift
+   * @param saveMode the [[SaveMode]] to use when writing data back to Snowflake
    */
   def testRoundtripSaveAndLoad(
       tableName: String,

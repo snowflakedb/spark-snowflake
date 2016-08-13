@@ -152,7 +152,8 @@ object Utils {
       val tokens = line.split("=")
       val key = tokens(0).trim.toLowerCase
       val value = tokens(1).trim
-      map += (key -> value)
+      if (! key.startsWith("#"))
+        map += (key -> value)
     }
     map.toMap
   }
@@ -203,8 +204,9 @@ object Utils {
        |  $timezoneSetString
        |  date_output_format = 'YYYY-MM-DD',
        |  timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
-       |  timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM',
-       |  timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM';
+       |  timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
+       |  timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
+       |  quoted_identifiers_ignore_case = true;
     """.stripMargin.trim
   }
   // Issue a set of changes reverting genPrologueSql
@@ -219,7 +221,8 @@ object Utils {
        |  date_output_format,
        |  timestamp_ntz_output_format,
        |  timestamp_ltz_output_format,
-       |  timestamp_tz_output_format;
+       |  timestamp_tz_output_format,
+       |  quoted_identifiers_ignore_case;
      """.stripMargin.trim
   }
 

@@ -57,51 +57,6 @@ private[snowflakedb] class JDBCWrapper {
     ExecutionContext.fromExecutorService(Executors.newCachedThreadPool(threadFactory))
   }
 
-  /**
-   * Given a JDBC subprotocol, returns the appropriate driver class so that it can be registered
-   * with Spark. If the user has explicitly specified a driver class in their configuration then
-   * that class will be used. Otherwise, we will attempt to load the correct driver class based on
-   * the JDBC subprotocol.
-   *
-   * Snowflake-todo Probably not needed
-   *
-   * @param jdbcSubprotocol 'redshift' or 'postgres' or 'snowflake'
-   * @param userProvidedDriverClass an optional user-provided explicit driver class name
-   * @return the driver class
-   */
-  private def getDriverClass(
-      jdbcSubprotocol: String,
-      userProvidedDriverClass: Option[String]): Class[Driver] = {
-    userProvidedDriverClass.map(Utils.classForName).getOrElse {
-      jdbcSubprotocol match {
-        case "snowflake" =>
-          try {
-            Utils.classForName("com.snowflake.client.jdbc.SnowflakeDriver")
-          } catch {
-              case e: ClassNotFoundException =>
-                throw new ClassNotFoundException(
-                  "Could not load a Snowflake JDBC driver", e)
-          }
-        case "redshift" =>
-          try {
-            Utils.classForName("com.amazon.redshift.jdbc41.Driver")
-          } catch {
-            case _: ClassNotFoundException =>
-              try {
-                Utils.classForName("com.amazon.redshift.jdbc4.Driver")
-              } catch {
-                case e: ClassNotFoundException =>
-                  throw new ClassNotFoundException(
-                    "Could not load an Amazon Redshift JDBC driver; see the README for " +
-                      "instructions on downloading and configuring the official Amazon driver.", e)
-              }
-          }
-        case "postgres" => Utils.classForName("org.postgresql.Driver")
-        case other => throw new IllegalArgumentException(s"Unsupported JDBC protocol: '$other'")
-      }
-    }.asInstanceOf[Class[Driver]]
-  }
-
   private def registerDriver(driverClass: String): Unit = {
     // DriverRegistry.register() is one of the few pieces of private Spark functionality which
     // we need to rely on. This class was relocated in Spark 1.5.0, so we need to use reflection
@@ -156,23 +111,6 @@ private[snowflakedb] class JDBCWrapper {
     }
   }
 
-  /**
-   * Given a driver string and a JDBC url, load the specified driver and return a DB connection.
-   *
-   * Snowflake-todo Probably not needed
-   *
-   * @param userProvidedDriverClass the class name of the JDBC driver for the given url. If this
-   *                                is None then `spark-redshift` will attempt to automatically
-   *                                discover the appropriate driver class.
-   * @param url the JDBC url to connect to.
-   */
-  def getConnector(userProvidedDriverClass: Option[String], url: String): Connection = {
-    val subprotocol = new URI(url.stripPrefix("jdbc:")).getScheme
-    val driverClass: Class[Driver] = getDriverClass(subprotocol, userProvidedDriverClass)
-    println(driverClass)
-    registerDriver(driverClass.getCanonicalName)
-    DriverManager.getConnection(url, new Properties())
-  }
 
   /**
    *  Get a connection based on the provided parameters

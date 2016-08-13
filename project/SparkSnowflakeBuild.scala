@@ -44,7 +44,7 @@ object SparkSnowflakeBuild extends Build {
       organization := "com.snowflakedb",
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.10.5"),
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
-      sparkVersion := "1.4.1",
+      sparkVersion := sys.props.get("spark.version").getOrElse("1.4.1"),
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
       testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.2.0"),
       spName := "snowflakedb/spark-snowflakedb",
@@ -106,18 +106,6 @@ object SparkSnowflakeBuild extends Build {
         "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()
       ),
-      // Although spark-avro declares its avro-mapred dependency as `provided`, its version of the
-      // dependency can still end up on the classpath during tests, which breaks the tests for
-      // Hadoop 1.x. To work around this, we filter out the incompatible JARs here:
-      // (fullClasspath in Test) := (if (testHadoopVersion.value.startsWith("1")) {
-      //   (fullClasspath in Test).value.filterNot {
-      //     x => x.data.getName.contains("hadoop2") && x.data.getName.contains("avro")
-      //   }
-      // } else {
-      //   (fullClasspath in Test).value.filterNot {
-      //     x => x.data.getName.contains("hadoop1") && x.data.getName.contains("avro")
-      //   }
-      // }),
       ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := {
         if (scalaBinaryVersion.value == "2.10") false
         else true
@@ -148,21 +136,6 @@ object SparkSnowflakeBuild extends Build {
             <id>MarcinZukowski</id>
             <name>Marcin Zukowski</name>
             <url>https://github.com/MarcinZukowski</url>
-          </developer>
-          <developer>
-            <id>meng</id>
-            <name>Xiangrui Meng</name>
-            <url>https://github.com/mengxr</url>
-          </developer>
-          <developer>
-            <id>JoshRosen</id>
-            <name>Josh Rosen</name>
-            <url>https://github.com/JoshRosen</url>
-          </developer>
-          <developer>
-            <id>marmbrus</id>
-            <name>Michael Armbrust</name>
-            <url>https://github.com/marmbrus</url>
           </developer>
         </developers>,
 
