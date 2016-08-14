@@ -251,6 +251,20 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("ZD-3234") {
+    val loadedDf = sqlContext.read
+      .format("com.snowflakedb.spark.snowflakedb")
+      .options(connectorOptionsNoTable)
+      // scalastyle:off
+      .option("query", s"select * from $test_table where contains(teststring, ';') or contains(teststring, 'Unicode');")
+      // scalastyle:on
+      .load()
+    checkAnswer(
+      loadedDf.selectExpr("count(*)"),
+      Seq(Row(1))
+    )
+  }
+
   // TODO Enable more tests
   ignore("roundtrip save and load with uppercase column names") {
     testRoundtripSaveAndLoad(

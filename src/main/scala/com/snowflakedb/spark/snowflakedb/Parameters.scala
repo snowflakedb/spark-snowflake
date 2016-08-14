@@ -203,11 +203,20 @@ object Parameters {
     /**
      * The Snowflake query to be used as the target when loading data.
      */
-    def query: Option[String] = parameters.get("query").orElse {
-      parameters.get("dbtable")
-        .map(_.trim)
-        .filter(t => t.startsWith("(") && t.endsWith(")"))
-        .map(t => t.drop(1).dropRight(1))
+    def query: Option[String] = {
+      var res = parameters.get("query")
+      if (res.isDefined) {
+        // Remove trailing semicolon if present
+        var str : String = res.get.trim
+        if (str.charAt(str.length - 1) == ';')
+          str = str.substring(0, str.length - 1)
+        Some(str)
+      } else {
+        parameters.get("dbtable")
+          .map(_.trim)
+          .filter(t => t.startsWith("(") && t.endsWith(")"))
+          .map(t => t.drop(1).dropRight(1))
+      }
     }
 
     /**
