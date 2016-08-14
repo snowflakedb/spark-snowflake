@@ -129,6 +129,11 @@ trait IntegrationSuiteBase
 
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")
+
+    sqlContext = new TestHiveContext(sc)
+
+    // Use fewer partitions to make tests faster
+    sqlContext.setConf("spark.sql.shuffle.partitions", "6")
   }
 
   override def afterAll(): Unit = {
@@ -157,11 +162,6 @@ trait IntegrationSuiteBase
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    sqlContext = new TestHiveContext(sc)
-
-    // Use fewer partitions to make tests faster
-    sqlContext.setConf("spark.sql.shuffle.partitions", "8")
-
   }
 
   /**

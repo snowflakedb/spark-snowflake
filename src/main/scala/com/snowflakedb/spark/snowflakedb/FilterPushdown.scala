@@ -84,7 +84,9 @@ private[snowflakedb] object FilterPushdown {
     // Builds a simple comparison string
     def buildComparison(attr: String, internalValue: Any, comparisonOp: String): Option[String] = {
       val dataType = getTypeForAttribute(schema, attr)
-      val sqlEscapedValue= buildValueWithType(dataType.get, internalValue)
+      if (dataType.isEmpty)
+        return None
+      val sqlEscapedValue = buildValueWithType(dataType.get, internalValue)
       Some(s""""$attr" $comparisonOp $sqlEscapedValue""")
     }
 
@@ -109,7 +111,7 @@ private[snowflakedb] object FilterPushdown {
             .map(v => buildValueWithType(dataType, v))
             .mkString(", ")
         Some(s"""("$attr" IN ($valueStrings))""")
-      case IsNull(attr) => Some(s"""(IS NULL "$attr" IS NULL)""")
+      case IsNull(attr) => Some(s"""("$attr" IS NULL)""")
       case IsNotNull(attr) => Some(s"""("$attr" IS NOT NULL)""")
       case And(left, right) =>
         buildBinaryFilter(left, right, "AND")
@@ -122,11 +124,11 @@ private[snowflakedb] object FilterPushdown {
         else
           Some(s"""(NOT (${childStr.get}))""")
       case StringStartsWith(attr, value) =>
-        Some(s"""STARTSWITH("$attr", ${buildValue(value)} )""")
+        Some(s"""STARTSWITH("$attr", ${buildValue(value)})""")
       case StringEndsWith(attr, value) =>
-        Some(s"""ENDSWITH("$attr", ${buildValue(value)} )""")
+        Some(s"""ENDSWITH("$attr", ${buildValue(value)})""")
       case StringContains(attr, value) =>
-        Some(s"""CONTAINS("$attr", ${buildValue(value)} )""")
+        Some(s"""CONTAINS("$attr", ${buildValue(value)})""")
       case _ => None
     }
   }

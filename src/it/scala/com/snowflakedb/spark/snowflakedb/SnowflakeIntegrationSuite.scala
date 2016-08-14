@@ -29,14 +29,12 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
-  private val test_table3: String = s"test_table3_$randomSuffix"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     conn.prepareStatement("drop table if exists test_table").executeUpdate()
     conn.prepareStatement("drop table if exists test_table2").executeUpdate()
-    conn.prepareStatement("drop table if exists test_table3").executeUpdate()
     conn.commit()
 
     def createTable(tableName: String): Unit = {
@@ -62,8 +60,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
            |insert into $tableName values
            |(1, '2015-07-01', 1234567890123.45, 1234152.12312498, 1.0, 42,
            |  1239012341823719, 23, 'Unicode''s樂趣', '2015-07-01 00:00:00.001'),
-           |(2, '1960-01-02', 1, 2, 3, 4, 5, 6, '"', '2015-07-02 12:34:56.789'),
-           |(3, '2999-12-31', -1, -2, -3, -4, -5, -6, '\\\\''"|', '1950-12-31 17:00:00.001'),
+           |(2, '1960-01-02', 1.01, 2, 3, 4, 5, 6, '"', '2015-07-02 12:34:56.789'),
+           |(3, '2999-12-31', -1.01, -2, -3, -4, -5, -6, '\\\\''"|', '1950-12-31 17:00:00.001'),
            |(null, null, null, null, null, null, null, null, null, null)
          """.stripMargin
       )
@@ -74,14 +72,12 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
     createTable(test_table)
     createTable(test_table2)
-    createTable(test_table3)
   }
 
   override def afterAll(): Unit = {
     try {
       conn.prepareStatement(s"drop table if exists $test_table").executeUpdate()
       conn.prepareStatement(s"drop table if exists $test_table2").executeUpdate()
-      conn.prepareStatement(s"drop table if exists $test_table3").executeUpdate()
       conn.commit()
     } finally {
       super.afterAll()
@@ -96,7 +92,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
          | create temporary table test_table(
          |   testbyte int,
          |   testdate date,
-         |   testdec152 decimal,
+         |   testdec152 decimal(15,2),
          |   testdouble double,
          |   testfloat float,
          |   testint int,
@@ -131,28 +127,6 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
          | options(
          |   $connectorOptionsString
          |   , dbtable \"$test_table2\"
-         | )
-       """.stripMargin
-    )
-
-    runSql(
-      s"""
-         | create temporary table test_table3(
-         |   testbyte int,
-         |   testdate date,
-         |   testdec152 decimal,
-         |   testdouble double,
-         |   testfloat float,
-         |   testint int,
-         |   testlong bigint,
-         |   testshort smallint,
-         |   teststring string,
-         |   testtimestamp timestamp
-         | )
-         | using com.snowflakedb.spark.snowflakedb
-         | options(
-         |   $connectorOptionsString
-         |   , dbtable \"$test_table3\"
          | )
        """.stripMargin
     )
@@ -456,12 +430,12 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     sqlContext.createDataFrame(sc.parallelize(extraData), TestUtils.testSchema).write
       .format("com.snowflakedb.spark.snowflakedb")
       .options(connectorOptions)
-      .option("dbtable", test_table3)
+      .option("dbtable", test_table2)
       .mode(SaveMode.Append)
-      .saveAsTable(test_table3)
+      .saveAsTable(test_table2)
 
     checkAnswer(
-      sqlContext.sql("select * from test_table3"),
+      sqlContext.sql("select * from test_table2"),
       TestUtils.expectedData ++ extraData)
   }
 
