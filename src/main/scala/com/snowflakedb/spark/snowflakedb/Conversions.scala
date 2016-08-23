@@ -32,10 +32,15 @@ private[snowflakedb] object Conversions {
   // For TZ and LTZ, Snowflake serializes with timezone
   // Note - we use a pattern with timezone in the beginning, to make sure
   // parsing with PATTERN_NTZ fails for PATTERN_TZLTZ strings.
-  private val PATTERN_TZLTZ = "XX yyyy-MM-dd HH:mm:ss.SSS"
+  // Note - for JDK 1.6, we use Z ipo XX for SimpleDateFormat
+  private val PATTERN_TZLTZ =
+      if (System.getProperty("java.version").startsWith("1.6."))
+          "Z yyyy-MM-dd HH:mm:ss.SSS" else "XX yyyy-MM-dd HH:mm:ss.SSS"
+
   // For NTZ, Snowflake serializes w/o timezone
   private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss.SSS"
-  // For DATE, simple format
+
+  // For DATE, simple ISO format
   private val PATTERN_DATE = "yyyy-MM-dd"
 
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
