@@ -197,10 +197,11 @@ private[snowflakedb] class SnowflakeRecordReader extends RecordReader[JavaLong, 
             c = nextChar()
             if (!eof) {
               if (!escaped) {
-                if (c == quoteChar)
+                if (c == quoteChar) {
                   escaped = true
-                else
+                } else {
                   chars.append(c)
+                }
               } else {
                 // Previous character was "
                 escaped = false

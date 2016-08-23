@@ -37,7 +37,7 @@ object Parameters {
   val TZ_SF_DEFAULT = "sf_default"
 
   val PARAM_TEMP_KEY_ID = "temporary_aws_access_key_id"
-  val PARAM_TEMP_KEY_SECRET  = "temporary_aws_secret_access_key"
+  val PARAM_TEMP_KEY_SECRET = "temporary_aws_secret_access_key"
   val PARAM_TEMP_SESSION_TOKEN = "temporary_aws_session_token"
 
   val PARAM_CHECK_BUCKET_CONFIGURATION = "check_bucket_configuration"
@@ -150,7 +150,7 @@ object Parameters {
    */
   case class MergedParameters(parameters: Map[String, String]) {
 
-    // Simple conversion from string to an object of type 
+    // Simple conversion from string to an object of type
     // String, Boolean or Integer, depending on the value
     private def stringToObject(s: String) : Object = {
       try {
@@ -158,10 +158,12 @@ object Parameters {
       } catch {
         case t: Throwable => {}
       }
-      if (s.equalsIgnoreCase("true"))
+      if (s.equalsIgnoreCase("true")) {
         return new java.lang.Boolean(true)
-      if (s.equalsIgnoreCase("false"))
+      }
+      if (s.equalsIgnoreCase("false")) {
         return new java.lang.Boolean(false)
+      }
       return s
     }
 
@@ -174,9 +176,10 @@ object Parameters {
     }
 
     /**
-     * A root directory to be used for intermediate data exchange, expected to be on S3, or
-     * somewhere that can be written to and read from by Snowflake. Make sure that AWS credentials
-     * are available for S3.
+     * A root directory to be used for intermediate data exchange,
+     * expected to be on S3, or somewhere that can be written to
+     * and read from by Snowflake.
+     * Make sure that AWS credentials are available for S3.
      */
     def rootTempDir: String = parameters("tempdir")
 
@@ -281,7 +284,7 @@ object Parameters {
      */
     def sfExtraOptions: Map[String, Object] = extraParams
 
-    /// Returns true if bucket lifecycle configuration should be checked
+    /** Returns true if bucket lifecycle configuration should be checked */
     def checkBucketConfiguration: Boolean = BOOLEAN_VALUES_TRUE contains
       parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "on").toLowerCase()
 

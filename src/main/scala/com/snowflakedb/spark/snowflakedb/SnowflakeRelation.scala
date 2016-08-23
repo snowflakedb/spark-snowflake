@@ -76,8 +76,10 @@ private[snowflakedb] case class SnowflakeRelation(
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val creds =
       AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
-    if (params.checkBucketConfiguration)
-      Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
+    if (params.checkBucketConfiguration) {
+      Utils.checkThatBucketHasObjectLifecycleConfiguration(
+          params.rootTempDir, s3ClientFactory(creds))
+    }
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Snowflake
       // rather than unloading data.
@@ -140,7 +142,7 @@ private[snowflakedb] case class SnowflakeRelation(
       }
       val prunedSchema = pruneSchema(schema, requiredColumns)
       if (numRows == 0) {
-		    // For no records, create an empty RDD
+        // For no records, create an empty RDD
         sqlContext.sparkContext.emptyRDD[Row]
       } else {
         // Create a DataFrame to read the unloaded data:

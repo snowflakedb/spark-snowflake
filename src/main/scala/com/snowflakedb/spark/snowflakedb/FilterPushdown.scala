@@ -76,7 +76,7 @@ private[snowflakedb] object FilterPushdown {
       value match {
         case _: String => s"'${value.toString.replace("'", "''").replace("\\", "\\\\")}'"
         case _: Date => s"'${value.asInstanceOf[Date]}'::DATE"
-        case _: Timestamp=> s"'${value.asInstanceOf[Timestamp]}'::TIMESTAMP(3)"
+        case _: Timestamp => s"'${value.asInstanceOf[Timestamp]}'::TIMESTAMP(3)"
         case _ => value.toString
       }
     }
@@ -84,8 +84,9 @@ private[snowflakedb] object FilterPushdown {
     // Builds a simple comparison string
     def buildComparison(attr: String, internalValue: Any, comparisonOp: String): Option[String] = {
       val dataType = getTypeForAttribute(schema, attr)
-      if (dataType.isEmpty)
+      if (dataType.isEmpty) {
         return None
+      }
       val sqlEscapedValue = buildValueWithType(dataType.get, internalValue)
       Some(s""""$attr" $comparisonOp $sqlEscapedValue""")
     }
@@ -93,10 +94,11 @@ private[snowflakedb] object FilterPushdown {
     def buildBinaryFilter(left: Filter, right: Filter, op: String) : Option[String] = {
       val leftStr = buildFilterExpression(schema, left)
       val rightStr = buildFilterExpression(schema, right)
-      if (leftStr.isEmpty || rightStr.isEmpty)
+      if (leftStr.isEmpty || rightStr.isEmpty) {
         None
-      else
+      } else {
         Some(s"""((${leftStr.get}) $op (${rightStr.get}))""")
+      }
     }
 
     filter match {
@@ -119,10 +121,11 @@ private[snowflakedb] object FilterPushdown {
         buildBinaryFilter(left, right, "OR")
       case Not(child) =>
         val childStr = buildFilterExpression(schema, child)
-        if (childStr.isEmpty)
+        if (childStr.isEmpty) {
           None
-        else
+        } else {
           Some(s"""(NOT (${childStr.get}))""")
+        }
       case StringStartsWith(attr, value) =>
         Some(s"""STARTSWITH("$attr", ${buildValue(value)})""")
       case StringEndsWith(attr, value) =>

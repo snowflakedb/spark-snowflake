@@ -35,8 +35,8 @@ env:
 script:
   - sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test
 #  - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test 2> /dev/null; fi
-  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
-  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
+#  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
+#  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
 #  - sbt ++$TRAVIS_SCALA_VERSION  "it:scalastyle"
 after_success:
   - bash <(curl -s https://codecov.io/bash)

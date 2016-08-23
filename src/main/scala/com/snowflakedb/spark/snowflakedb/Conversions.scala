@@ -32,9 +32,9 @@ private[snowflakedb] object Conversions {
   // For TZ and LTZ, Snowflake serializes with timezone
   // Note - we use a pattern with timezone in the beginning, to make sure
   // parsing with PATTERN_NTZ fails for PATTERN_TZLTZ strings.
-  private val PATTERN_TZLTZ= "XX yyyy-MM-dd HH:mm:ss.SSS"
+  private val PATTERN_TZLTZ = "XX yyyy-MM-dd HH:mm:ss.SSS"
   // For NTZ, Snowflake serializes w/o timezone
-  private val PATTERN_NTZ= "yyyy-MM-dd HH:mm:ss.SSS"
+  private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss.SSS"
   // For DATE, simple format
   private val PATTERN_DATE = "yyyy-MM-dd"
 

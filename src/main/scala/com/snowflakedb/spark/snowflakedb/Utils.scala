@@ -147,7 +147,7 @@ object Utils {
     val is = fs.open(Path.getPathWithoutSchemeAndAuthority(new Path(file)))
     var src = scala.io.Source.fromInputStream(is)
 
-    var map = new mutable.HashMap[String,String]
+    var map = new mutable.HashMap[String, String]
     for (line <- src.getLines()) {
       val tokens = line.split("=")
       val key = tokens(0).trim.toLowerCase
@@ -160,7 +160,7 @@ object Utils {
 
   def getJDBCConnection(params: Map[String, String]): Connection = {
     var wrapper = new JDBCWrapper()
-    val lcParams= params.map { case(key, value) => (key.toLowerCase, value)}
+    val lcParams = params.map { case(key, value) => (key.toLowerCase, value)}
     var mergedParams = MergedParameters(lcParams)
     wrapper.getConnector(mergedParams)
   }
@@ -252,12 +252,14 @@ object Utils {
     }
   }
 
-  def runQuery(params: Map[String, String], query: String): ResultSet= {
+  def runQuery(params: Map[String, String], query: String): ResultSet = {
     val conn = getJDBCConnection(params)
     conn.createStatement().executeQuery(query)
   }
 
-  def printQuery(params: Map[String, String], query: String) = {
+  // Helper function for testing
+  def printQuery(params: Map[String, String], query: String) : Unit = {
+    // scalastyle:off println
     System.out.println(s"Running: $query")
     val res = runQuery(params, query)
     val columnCount = res.getMetaData.getColumnCount
@@ -275,6 +277,7 @@ object Utils {
       System.out.println(s)
     }
     System.out.println(s"TOTAL: $rowCnt rows")
+    // scalastyle:on println
   }
 
 }
