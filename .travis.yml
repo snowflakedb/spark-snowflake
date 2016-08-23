@@ -27,8 +27,9 @@ matrix:
     - jdk: openjdk7
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
-env:
-  global:
+
+#env:
+#  global:
     # SOME_KEY_NAME
     # - secure: "encodedkey"
 
@@ -38,5 +39,6 @@ script:
 #  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
 #  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
 #  - sbt ++$TRAVIS_SCALA_VERSION  "it:scalastyle"
+
 after_success:
   - bash <(curl -s https://codecov.io/bash)
