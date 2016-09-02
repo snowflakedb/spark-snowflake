@@ -45,7 +45,7 @@ To see the results:
 
 ### Setting up Travis credentials
 
-* Follow initial as described in the [Travis manual](https://docs.travis-ci.com/user/encryption-keys).
+* Follow initial setup as described in the [Travis manual](https://docs.travis-ci.com/user/encrypting-files/).
 * Encrypt your config file
      
       travis encrypt-file snowflake.travis.conf
@@ -61,7 +61,7 @@ Travis uses the `dev/run-tests-travis.sh` script to run its test.
 
 To test its behavior locally, run e.g. this:
 
-    export HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
-    INTEGRATION_TESTS=false ./dev/run-tests-travis.sh
+    export PATH=$PATH:$PWD/build/ HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
+    ./dev/run-tests-travis.sh
     INTEGRATION_TESTS=true ./dev/run-tests-travis.sh
     
