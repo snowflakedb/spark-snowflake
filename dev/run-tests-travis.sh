@@ -3,9 +3,9 @@
 set -x -e
 
 # Only run unit tests if INTEGRATION_TESTS is not true
-if [ "$INTEGRATION_TESTS" != "true" ] ; then
+#if [ "$INTEGRATION_TESTS" != "true" ] ; then
   build/sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test
-fi
+#fi
 
 # Only run it if INTEGRATION_TESTS is true
 if [ "$INTEGRATION_TESTS" == "true" ]; then
