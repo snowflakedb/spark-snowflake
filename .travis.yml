@@ -36,8 +36,8 @@ matrix:
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" INTEGRATION_TESTS="true"
 
-env:
-  global:
+#env:
+#  global:
     # IT_SNOWFLAKE_CONF_BASE64
     # - secure: "something"
 
@@ -48,4 +48,4 @@ after_success:
   - bash <(curl -s https://codecov.io/bash)
 
 before_install:
-- openssl aes-256-cbc -K $encrypted_d012194b3dc9_key -iv $encrypted_d012194b3dc9_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
+  - openssl aes-256-cbc -K $encrypted_d012194b3dc9_key -iv $encrypted_d012194b3dc9_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
