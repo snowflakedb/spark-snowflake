@@ -4,10 +4,6 @@ cache:
   directories:
     - $HOME/.ivy2
 
-env:
-- INTEGRATION_TESTS=true
-- INTEGRATION_TESTS=false  
-
 # There's no nicer way to specify this matrix; see
 # https://github.com/travis-ci/travis-ci/issues/1519.
 # Spark 1.5.0 only supports Java 7+.
@@ -32,6 +28,12 @@ matrix:
     - jdk: openjdk7
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
+    - jdk: openjdk7
+      scala: 2.11.7
+      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" 
+    - jdk: openjdk7
+      scala: 2.11.7
+      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" INTEGRATION_TESTS="true"
 
 env:
   global:
