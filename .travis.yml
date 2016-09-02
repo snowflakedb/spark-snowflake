@@ -31,9 +31,9 @@ matrix:
     - jdk: openjdk7
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" 
-    - jdk: openjdk7
-      scala: 2.11.7
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" INTEGRATION_TESTS="true"
+    #- jdk: openjdk7
+    #  scala: 2.11.7
+    #  env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" INTEGRATION_TESTS="true"
 
 env:
   global:
