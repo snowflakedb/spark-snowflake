@@ -18,19 +18,20 @@ matrix:
     #- jdk: openjdk7
     #  scala: 2.10.5
     #  env: HADOOP_VERSION="1.0.4" SPARK_VERSION="1.5.0"
-    - jdk: openjdk7
-      scala: 2.10.5
-      env: HADOOP_VERSION="1.2.1" SPARK_VERSION="1.5.0"
-    - jdk: openjdk7
-      scala: 2.10.5
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
-    # Scala 2.11 tests:
-    - jdk: openjdk7
-      scala: 2.11.7
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
-    - jdk: openjdk7
-      scala: 2.11.7
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" 
+    
+    #- jdk: openjdk7
+    #  scala: 2.10.5
+    #  env: HADOOP_VERSION="1.2.1" SPARK_VERSION="1.5.0"
+    #- jdk: openjdk7
+    #  scala: 2.10.5
+    #  env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
+    ## Scala 2.11 tests:
+    #- jdk: openjdk7
+    #  scala: 2.11.7
+    #  env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
+    #- jdk: openjdk7
+    #  scala: 2.11.7
+    #  env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" 
     - jdk: openjdk7
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" INTEGRATION_TESTS="true"
@@ -38,11 +39,12 @@ matrix:
 env:
   global:
     # IT_SNOWFLAKE_CONF_CONTENT
-    - secure: "ESr9V6TliipHvY7w/Z4S9Yl27AcdcBbTagX52V3vxsORtFgR3UNkKfMI4rt2iYBHAeMI6m1EZdPrS0LNOyCTO0SUpakKEa7dn3+wb22mXq5/iqHbKJiO4SFGMoXTThl2/Ez6pipPJQmBe2wa+4yTPj18+KlRGFWz29KU53NiLkdD7yXdNCRf9nRz3F9wY8lB+/dp+zBJu5cV7ap5CeIcvLPqN71NRm4AwJNZ03/G6dB2pjHLbeXqmzdYsYimF+kyEK8X1NW+Tj7r1Qj1j2mr5pQAGRI9UF9appiiNlyS7nqMnTqCjh43DEuqYLPtCrgNYe8ItBN5iUoKWjtRh7nVvTkmiZBnkq1r7usM1qAWqHiJayAVaLqU5NqsR56EpFJREeRCqFolhOz3NOtAMOT8HN8MoGB9Cg10gKos1iF3n+9AAmfBPHpsI3Qlxs9dtUAB56AoBfvsu3EwURwwDID3PzgLHNreTMlm9ygrPcpnlRiHqaSZsFLq9rEKaw2ueaxJ7p7iIMXUdGMwJFTJcEO6ZH0woQpgzVyFT2V8DDKgctCyWLkZtMpwsblSBkebjuCWw7wKJ2IgbVqQ0NHnphQwVvy/DHrvQIeSb4fRvSDXeIOr6InRCiDNY4PFntNMSPKq0iihEIMjrBtRl1K5LB9yX0VktnjGGQQHd3X/lebwsWQ="
+    - secure: "KhZp9SNZNMIt3eDiBaHGyH5tlkAYZSYZ0w/xysfBRqREKHccgyESX17IydtFggArDFymZAlUCxwAncsF53fHFB4TmoLARtOAO9eJVQyX7n2qMsNTrKy0bzMsVzRjRNXQM/9R1f247mood2OeF9A3gdkbPqxaqKrv2NZFbj6yFGJ2/md412EvYGv0+r640khJ52yWX7YZryliK8bIbGCQ2mT0YsheALEVzhFFpkPlWvWGatdmX5VF+Grr0QhmzsAhW6jvQezxLrwjvISe4S8XVEzckoOSFoF7zAfY1IZpqmyzkpU+FxB/oncLW16KPxBuMBgg+rQLqPdNaF9z72RviNRea7thtbE/stJqgP9bo+pjKkIS1wDUc05KGy9iP8Ljfw3x2IZA6jvQMpdCSq0FhBhp/u+Bzh6KxnlkK88bVFX38pVwcgvUHB0f/xPOurMq63dFatEyOG2E4buptR+d+UC01p1cOtQehuj+NGzW4ocJ0t+HIWZm5kIjKHJBxeOPvGM17CUeHxZ+ubGro5HXX+niXYZqTXGFBqmHM3Pa2wx87OQEMzPHmx7pb4AFuGV58G/L+dW7IXPIM7dWfEcPB7KMrBEiNqrES8k/A0AAdXu86zEeKeFuxIB7iQ9UB7DxOiPlQHJ0a2+hBh0n8xiNbrpnEgcNvGkl9GwC8q/dYgM="
 
 script:
-  - if [ "$INTEGRATION_TESTS" != "true" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" -a "$INTEGRATION_TESTS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test ; fi
+#  - if [ "$INTEGRATION_TESTS" != "true" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
+#  - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" -a "$INTEGRATION_TESTS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test ; fi
+   - echo $IT_SNOWFLAKE_CONF_CONTENT; echo -e $IT_SNOWFLAKE_CONF_CONTENT
 #  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
 #  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
 #  - sbt ++$TRAVIS_SCALA_VERSION  "it:scalastyle"
