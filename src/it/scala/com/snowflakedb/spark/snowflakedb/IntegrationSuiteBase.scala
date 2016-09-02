@@ -53,6 +53,7 @@ trait IntegrationSuiteBase
   protected def loadConfig(): Map[String, String] = {
     var content = System.getenv(CONFIG_CONTENT_VARIABLE)
     if (content != null) {
+      log.warn(s"CONTENTS OF $CONFIG_CONTENT_VARIABLE:--\n$content\n--")
       Utils.readMapFromString(content)
     } else {
       val fname = System.getenv(CONFIG_FILE_VARIABLE)
