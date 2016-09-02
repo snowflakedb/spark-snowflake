@@ -3,6 +3,11 @@ sudo: false
 cache:
   directories:
     - $HOME/.ivy2
+
+env:
+- INTEGRATION_TESTS=true
+- INTEGRATION_TESTS=false  
+
 # There's no nicer way to specify this matrix; see
 # https://github.com/travis-ci/travis-ci/issues/1519.
 # Spark 1.5.0 only supports Java 7+.
@@ -27,9 +32,6 @@ matrix:
     - jdk: openjdk7
       scala: 2.11.7
       env: HADOOP_VERSION="2.2.0" SPARK_VERSION="1.5.0"
-  env:
-  - INTEGRATION_TESTS=true
-  - INTEGRATION_TESTS=false  
 
 env:
   global:
@@ -37,7 +39,7 @@ env:
     - secure: "D/BtPl579hJtYoqrcMOfUu2ErAqi8f7D7ir0ndgZTqAGoUb2N4/w2GNx2hKRxqfADTs8r4UxAUVvTPom+cAcycz7E/KvC05w4Fz2PSOMFq2P1HHJJTN+zqoZantVtu6wyQCATBvWftv5Rj51OjN6MgOVyhfmWmYrgXNwmQb8+DDcZbdgu1uNH1+Y1AhftC7lulFVlc3RXovkmd7sqW226FI+y/zXZbJqoZ+s59DTWLqQEaLZg0yFG3XTFokSHBFvn7XzkLP9JHKWVCPnsxzb+PTKWmLJH7ZC1JxHEF9pgviyjtL/TRS++79dpSvqkeNs04OgswXarKDO2N1Q8/Zm7VITDE9GxoUGROFhk5AXHwlk265YZ5J99JUNxtJNKvFrOVbGM4hhH116ABbkkeZDXusafsIMrdmxU9g+cDh+mSBv0PucBvpapOA6B/CsQXbHU9lEFwR1lxcSvZRF4FnoHAAUSsnUv8cz2exd8g81mJXW9MFOIZwllwZyP/5lcWgppuXDOMc4HLDkPInYJaLbE8411fhF95GTJqvcV9lj/Txu44Q4RM+TM1zIJQNpGNC/dV/i31RzH0JfJkuekWpQIQogM6DvG8XVOVhXpSvskGVDChHcVF2RmTUbHD+Ck2NDrg46TcYCXeBgT3ZxMzV1YGpFna07iqq6cncDxE83CGc="
 
 script:
-  - if [ "$INTEGRATION_TESTS" == "false" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
+  - if [ "$INTEGRATION_TESTS" != "true" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
   - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" -a "$INTEGRATION_TESTS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test 2> /dev/null; fi
 #  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
 #  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
