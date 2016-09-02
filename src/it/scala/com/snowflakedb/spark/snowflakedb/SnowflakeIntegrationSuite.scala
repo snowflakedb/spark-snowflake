@@ -454,7 +454,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   ignore("Respect SaveMode.ErrorIfExists when table exists") {
-    val rdd = sc.parallelize(TestUtils.expectedData.toSeq)
+    val rdd = sc.parallelize(TestUtils.expectedData)
     val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
     df.registerTempTable(test_table) // to ensure that the table already exists
 

@@ -23,14 +23,14 @@ import java.sql.Connection
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
 
 import scala.util.Random
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.slf4j.LoggerFactory
 
 
 /**
@@ -42,13 +42,24 @@ trait IntegrationSuiteBase
   with BeforeAndAfterAll
   with BeforeAndAfterEach {
 
+  private val log = LoggerFactory.getLogger(getClass)
+
+  /** We read our config _content_ from this env variable.
+    * Has priority over CONFIG_FILE_VARIABLE */
+  private final val CONFIG_CONTENT_VARIABLE = "IT_SNOWFLAKE_CONF_CONTENT"
+  /** If CONFIG_CONTENT_VARIABLE is not set, we read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
 
   protected def loadConfig(): Map[String, String] = {
-    val fname = System.getenv(CONFIG_FILE_VARIABLE)
-    if (fname == null)
-      fail(s"Must set $CONFIG_FILE_VARIABLE environment variable")
-    Utils.readMapFromFile(sc, fname)
+    var content = System.getenv(CONFIG_CONTENT_VARIABLE)
+    if (content != null) {
+      Utils.readMapFromString(content)
+    } else {
+      val fname = System.getenv(CONFIG_FILE_VARIABLE)
+      if (fname == null)
+        fail(s"Must set $CONFIG_FILE_VARIABLE or $CONFIG_CONTENT_VARIABLE environment variable")
+      Utils.readMapFromFile(sc, fname)
+    }
   }
 
   protected var connectorOptions: Map[String, String] = _
@@ -89,12 +100,12 @@ trait IntegrationSuiteBase
   protected var conn: Connection = _
 
   def runSql(query: String): Unit = {
-    System.out.println("RUNNING" + query)
+    log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
     sqlContext.sql(query).collect()
   }
 
   def jdbcUpdate(query: String): Unit = {
-    System.out.println("RUNNING" + query)
+    log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
     conn.createStatement.executeUpdate(query)
   }
 
@@ -111,10 +122,10 @@ trait IntegrationSuiteBase
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
-    connectorOptionsString = connectorOptions.map{ case (key,value) => s"""$key "$value"""" }.mkString(" , ")
+    connectorOptionsString = connectorOptions.map{ case (key, value) => s"""$key "$value"""" }.mkString(" , ")
 
     AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey")
-    AWS_SECRET_ACCESS_KEY = getConfigValue("awsAccessKey")
+    AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey")
     AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir")
     require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE.startsWith("file://"),
       "must use s3n:// or file:// URL")

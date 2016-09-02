@@ -65,7 +65,7 @@ private[snowflakedb] class SnowflakeWriter(
 
   // Execute a given string, logging it
   def sql(conn : Connection, query : String): Boolean = {
-    log.info(query)
+    log.debug(query)
     jdbcWrapper.executeInterruptibly(conn, query)
   }
 
@@ -156,13 +156,13 @@ private[snowflakedb] class SnowflakeWriter(
     // Overwrites must drop the table, in case there has been a schema update
     if (saveMode == SaveMode.Overwrite) {
       val deleteStatement = s"DROP TABLE IF EXISTS ${params.table.get}"
-      log.info(deleteStatement)
+      log.debug(deleteStatement)
       jdbcWrapper.executeInterruptibly(conn, deleteStatement)
     }
 
     // If the table doesn't exist, we need to create it first, using JDBC to infer column types
     val createStatement = createTableSql(data, params)
-    log.info(createStatement)
+    log.debug(createStatement)
     jdbcWrapper.executeInterruptibly(conn, createStatement)
 
     // Execute preActions
@@ -173,7 +173,7 @@ private[snowflakedb] class SnowflakeWriter(
       // Load the temporary data into the new file
       val copyStatement = copySql(data.sqlContext, params,
                                   filesToCopy.get)
-      log.info(copyStatement)
+      log.debug(Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
       } catch {
@@ -311,13 +311,15 @@ private[snowflakedb] class SnowflakeWriter(
       new URI(params.rootTempDir), sqlContext.sparkContext.hadoopConfiguration)
 
     val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
-    Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
+    if (params.checkBucketConfiguration)
+      Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir,
+          s3ClientFactory(creds))
 
     val conn = jdbcWrapper.getConnector(params)
 
     // Prologue
     val prologueSql = Utils.genPrologueSql(params)
-    log.info(prologueSql)
+    log.debug(prologueSql)
     jdbcWrapper.executeInterruptibly(conn, prologueSql)
 
     try {

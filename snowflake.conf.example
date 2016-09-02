@@ -9,3 +9,4 @@ sfPassword=SOME_PASSWORD
 awsAccessKey=SOME_ACCESS_KEY
 awsSecretKey=SOME_SECRET_KEY
 sfCompress=on
+check_bucket_configuration=off

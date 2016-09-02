@@ -12,14 +12,17 @@ NOTE: Integration tests are currently only partially supported.
 
 Notes about integration tests
 * Snowflake JDBC driver needs to be located in the /tmp/snowflake_jdbc.jar directory.
-* An environment variable `IT_SNOWFLAKE_CONF` needs to be defined,
-  pointing to the location of the Snowflake configuration file.
+* Config needs to be set, with either:
+  * variable `IT_SNOWFLAKE_CONF_CONTENT` defined,
+    containing the configuration (useful for e.g. Travis integration)  
+  * variable `IT_SNOWFLAKE_CONF` defined,
+    pointing to the location of the Snowflake configuration file.
 * An example configuration file is provided in `snowflake.conf.example`.
 * We run with Spark at least 1.6.2 as we test some features not available before
 
 Once these requirements are met, run e.g.
     
-    export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf 
+    export IT_SNOWFLAKE_CONF_CONTENT=`cat $PWD/snowflake.conf` 
     build/sbt -Dspark.version=1.6.2 it:test
   
 ### Running code coverage tests

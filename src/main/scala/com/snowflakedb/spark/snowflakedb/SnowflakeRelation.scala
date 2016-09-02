@@ -86,7 +86,7 @@ private[snowflakedb] case class SnowflakeRelation(
       val whereClause = FilterPushdown.buildWhereClause(schema, filters)
       val tableNameOrSubquery = params.query.map(q => s"($q)").orElse(params.table).get
       val countQuery = s"SELECT count(*) FROM $tableNameOrSubquery $whereClause"
-      log.info(countQuery)
+      log.debug(Utils.sanitizeQueryText(countQuery))
       val conn = jdbcWrapper.getConnector(params)
       try {
         val results = jdbcWrapper.executeQueryInterruptibly(conn, countQuery)
@@ -110,13 +110,13 @@ private[snowflakedb] case class SnowflakeRelation(
       try {
         // Prologue
         val prologueSql = Utils.genPrologueSql(params)
-        log.info(prologueSql)
+        log.debug(Utils.sanitizeQueryText(prologueSql))
         jdbcWrapper.executeInterruptibly(conn, prologueSql)
 
         Utils.executePreActions(jdbcWrapper, conn, params)
 
         // Run the unload query
-        log.info(unloadSql)
+        log.debug(Utils.sanitizeQueryText(unloadSql))
         val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadSql)
 
         // Verify it's the expected format
@@ -135,7 +135,7 @@ private[snowflakedb] case class SnowflakeRelation(
         Utils.executePostActions(jdbcWrapper, conn, params)
 
         // Epilogue - disabled for now, as we close the connection
-//        log.info(epilogueSql)
+//        log.debug(epilogueSql)
 //        jdbcWrapper.executeInterruptibly(conn, epilogueSql)
       } finally {
         conn.close()

@@ -18,7 +18,7 @@
 package com.snowflakedb.spark.snowflakedb
 
 import java.net.URI
-import java.sql.{Connection, ResultSet, Statement}
+import java.sql.{Connection, ResultSet}
 import java.util.UUID
 
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
@@ -145,8 +145,22 @@ object Utils {
   def readMapFromFile(sc: SparkContext, file: String): Map[String, String] = {
     val fs = FileSystem.get(URI.create(file), sc.hadoopConfiguration)
     val is = fs.open(Path.getPathWithoutSchemeAndAuthority(new Path(file)))
-    var src = scala.io.Source.fromInputStream(is)
+    val src = scala.io.Source.fromInputStream(is)
 
+    mapFromSource(src)
+
+  }
+
+  /**
+   * Same as readMapFromFile, but accepts the file content as an argument
+   */
+  def readMapFromString(string: String): Map[String, String] = {
+    val src = scala.io.Source.fromString(string)
+
+    mapFromSource(src)
+  }
+
+  private def mapFromSource(src: Source): Map[String, String] = {
     var map = new mutable.HashMap[String, String]
     for (line <- src.getLines()) {
       val tokens = line.split("=")
@@ -161,18 +175,18 @@ object Utils {
   def getJDBCConnection(params: Map[String, String]): Connection = {
     var wrapper = new JDBCWrapper()
     val lcParams = params.map { case(key, value) => (key.toLowerCase, value)}
-    var mergedParams = MergedParameters(lcParams)
+    val mergedParams = MergedParameters(lcParams)
     wrapper.getConnector(mergedParams)
   }
 
   // Stores the last generated Select query
-  private var lastSelect : String = null;
+  private var lastSelect : String = _
 
   private[snowflakedb] def setLastSelect(select: String): Unit = {
     lastSelect = select
   }
 
-  def getLastSelect() : String = {
+  def getLastSelect : String = {
     lastSelect
   }
 
@@ -213,7 +227,7 @@ object Utils {
   private [snowflakedb] def genEpilogueSql(params: MergedParameters) : String = {
     var timezoneUnsetString = ""
     // For all cases except for "snowflake", we unset the timezone
-    if (!(params.isTimezoneSnowflake))
+    if (!params.isTimezoneSnowflake)
       timezoneUnsetString = "timezone,"
     s"""
        |alter session unset
@@ -231,7 +245,7 @@ object Utils {
                                              params: MergedParameters) : Unit = {
     // Execute preActions
     params.preActions.foreach { action =>
-      if (action != null && !action.trim.isEmpty()) {
+      if (action != null && !action.trim.isEmpty) {
         val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
         log.info("Executing preAction: " + actionSql)
         jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
@@ -244,7 +258,7 @@ object Utils {
                                               params: MergedParameters) : Unit = {
     // Execute preActions
     params.postActions.foreach { action =>
-      if (action != null && !action.trim.isEmpty()) {
+      if (action != null && !action.trim.isEmpty) {
         val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
         log.info("Executing postAction: " + actionSql)
         jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
@@ -280,4 +294,10 @@ object Utils {
     // scalastyle:on println
   }
 
+  /** Removes (hopefully :)) sensitive content from a query string */
+  def sanitizeQueryText(q: String) : String = {
+    "<SANITIZED> " + q
+        .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY)='[^']+'", "$1='❄☃❄☺❄☃❄'")
+        .replaceAll("(sfaccount|sfurl|sfuser|sfpassword|sfwarehouse|sfdatabase|sfschema|sfrole|awsaccesskey|awssecretkey) \"[^\"]+\"", "$1 \"❄☃❄☺❄☃❄\"")
+  }
 }
