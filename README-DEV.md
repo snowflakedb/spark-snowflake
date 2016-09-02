@@ -1,5 +1,7 @@
 # `Developer notes for spark-snowflakedb`
 
+## Testing
+
 ### Running unit tests
 
 Simply run
@@ -52,3 +54,14 @@ To see the results:
 
       before_install:
       - openssl aes-256-cbc -K $encrypted_XX_key -iv $encrypted_XXX_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
+
+### Running dev/run-tests-travis.sh manually
+
+Travis uses the `dev/run-tests-travis.sh` script to run its test.
+
+To test its behavior locally, run e.g. this:
+
+    export HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
+    INTEGRATION_TESTS=false ./dev/run-tests-travis.sh
+    INTEGRATION_TESTS=true ./dev/run-tests-travis.sh
+    
