@@ -45,6 +45,7 @@ script:
 #  - if [ "$INTEGRATION_TESTS" != "true" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
 #  - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" -a "$INTEGRATION_TESTS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test ; fi
    - echo $IT_SNOWFLAKE_CONF_CONTENT; echo -e $IT_SNOWFLAKE_CONF_CONTENT
+   - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" ]; then echo $IT_SNOWFLAKE_CONF_CONTENT; echo -e $IT_SNOWFLAKE_CONF_CONTENT; echo Hello; fi
 #  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
 #  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
 #  - sbt ++$TRAVIS_SCALA_VERSION  "it:scalastyle"
