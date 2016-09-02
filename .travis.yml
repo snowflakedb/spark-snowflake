@@ -42,8 +42,8 @@ env:
     - secure: "VVWpdN1BQ3kj+HkX7cST1d/KKiZt3VsElZrB/xkqC+jrDXjpREjj4aV7hLw8lUx9HcCLhSgNzK8yamV7prJ3Zl40BIRNvlCVq8n39qLrU3c09JEYsV0qjUZHUCzmVRc5C6Z+XXPuMDX1G37GQQ1DHL5LaNam0ae+q2/drVkEZA96abfzXanJy3AvvQQ6ED9AMmRERdkn9Lhny7upb40kzDrXNliPfaQ67hOrK7C864wYBW1tBk1indlGlDquHOtck9AhRc0wWsa7cUoY5SBvvnWPI20/rj9kPXa43RZl+A2mbe8bfxmpMg9Yj95p/26JcxdMqcIJZsdKraADI6UIZlSh/C3Hqs9uUuhDsmiw1DCYpX8OIvAY8rJQAxsg9/8ayA00X4J7z+KUcdKnwATrCuLwBqrOBO9Tr+oIflUzTtEBLjZvmlrifrYP0OSRKjZHKjdf9ZHbiBmdjBMj+q7Q9JmnyqY3QpXJ2YVStIhnGcCooi1rp9H7q26T7CS/3aSf4itJ4IjKeXN5dMqPO/7Iqi9DT7xE03rCKt4Cdd6JnTlrJ/eimG+qWjHx6qpZ8Y3gxp5OprZX+6rExEdx5m9CJ6fwHiftE8D0sbItIhNnrCyEy1dtQ+k8umThasXdy7IQvCJ+Pkqvo0AEYWJwxOYAldfz4W7eek7MvwJniQzEpic="
 
 script:
-   - echo $IT_SNOWFLAKE_CONF_BASE64
-   - echo $IT_SNOWFLAKE_CONF_BASE64 | base64 -d
+  - echo $IT_SNOWFLAKE_CONF_BASE64
+  - echo $IT_SNOWFLAKE_CONF_BASE64 | base64 -d
 #  - if [ "$INTEGRATION_TESTS" != "true" ] ; then sbt -Dhadoop.testVersion=$HADOOP_VERSION -Dspark.testVersion=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test ; fi
   - if [ "$TRAVIS_SECURE_ENV_VARS" == "true" -a "$INTEGRATION_TESTS" == "true" ]; then sbt -Dhadoop.version=$HADOOP_VERSION -Dspark.version=$SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage it:test ; fi
 #  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
