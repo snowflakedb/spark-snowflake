@@ -12,17 +12,14 @@ NOTE: Integration tests are currently only partially supported.
 
 Notes about integration tests
 * Snowflake JDBC driver needs to be located in the /tmp/snowflake_jdbc.jar directory.
-* Config needs to be set, with either:
-  * variable `IT_SNOWFLAKE_CONF_CONTENT` defined,
-    containing the configuration (useful for e.g. Travis integration)  
-  * variable `IT_SNOWFLAKE_CONF` defined,
+* Config needs to be set with variable `IT_SNOWFLAKE_CONF` defined and
     pointing to the location of the Snowflake configuration file.
 * An example configuration file is provided in `snowflake.conf.example`.
 * We run with Spark at least 1.6.2 as we test some features not available before
 
 Once these requirements are met, run e.g.
     
-    export IT_SNOWFLAKE_CONF_CONTENT=`cat $PWD/snowflake.conf` 
+    export IT_SNOWFLAKE_CONF_CONTENT=`cat $PWD/snowflake.conf | base64 -w 0` 
     build/sbt -Dspark.version=1.6.2 it:test
   
 ### Running code coverage tests
@@ -44,3 +41,14 @@ To see the results:
 
     firefox $PWD/target/scala-2.11/scoverage-report/index.html
 
+### Setting up Travis credentials
+
+* Follow initial as described in the [Travis manual](https://docs.travis-ci.com/user/encryption-keys).
+* Encrypt your config file
+     
+      travis encrypt-file snowflake.travis.conf
+      
+* Add the output line to .travis.yml e.g.
+
+      before_install:
+      - openssl aes-256-cbc -K $encrypted_XX_key -iv $encrypted_XXX_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d

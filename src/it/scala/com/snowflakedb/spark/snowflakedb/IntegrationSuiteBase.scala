@@ -44,23 +44,14 @@ trait IntegrationSuiteBase
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  /** We read our config _content_ from this env variable.
-    * Has priority over CONFIG_FILE_VARIABLE */
-  private final val CONFIG_CONTENT_VARIABLE = "IT_SNOWFLAKE_CONF_CONTENT"
-  /** If CONFIG_CONTENT_VARIABLE is not set, we read config from this file */
+  /** We read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
 
   protected def loadConfig(): Map[String, String] = {
-    var content = System.getenv(CONFIG_CONTENT_VARIABLE)
-    if (content != null) {
-      log.warn(s"CONTENTS OF $CONFIG_CONTENT_VARIABLE:--\n$content\n--")
-      Utils.readMapFromString(content)
-    } else {
-      val fname = System.getenv(CONFIG_FILE_VARIABLE)
-      if (fname == null)
-        fail(s"Must set $CONFIG_FILE_VARIABLE or $CONFIG_CONTENT_VARIABLE environment variable")
-      Utils.readMapFromFile(sc, fname)
-    }
+    val fname = System.getenv(CONFIG_FILE_VARIABLE)
+    if (fname == null)
+      fail(s"Must set $CONFIG_FILE_VARIABLE environment variable")
+    Utils.readMapFromFile(sc, fname)
   }
 
   protected var connectorOptions: Map[String, String] = _
