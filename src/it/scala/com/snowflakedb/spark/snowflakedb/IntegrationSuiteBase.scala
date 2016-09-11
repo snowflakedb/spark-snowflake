@@ -55,10 +55,9 @@ trait IntegrationSuiteBase
   }
 
   protected var connectorOptions: Map[String, String] = _
-
   protected var connectorOptionsNoTable: Map[String, String] = _
 
-  // Options encoded as a Spark-sql string
+  // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString : String = _
 
   protected var params : MergedParameters = _
@@ -114,7 +113,7 @@ trait IntegrationSuiteBase
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
-    connectorOptionsString = connectorOptions.map{ case (key, value) => s"""$key "$value"""" }.mkString(" , ")
+    connectorOptionsString = connectorOptionsNoTable.map{ case (key, value) => s"""$key "$value"""" }.mkString(" , ")
 
     AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey")
     AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey")
@@ -133,7 +132,7 @@ trait IntegrationSuiteBase
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")
 
-    sqlContext = new TestHiveContext(sc)
+    sqlContext = new TestHiveContext(sc, loadTestTables = false)
 
     // Use fewer partitions to make tests faster
     sqlContext.setConf("spark.sql.shuffle.partitions", "6")

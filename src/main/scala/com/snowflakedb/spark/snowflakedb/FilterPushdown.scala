@@ -50,19 +50,10 @@ private[snowflakedb] object FilterPushdown {
    * Attempt to convert the given filter into a SQL expression. Returns None if the expression
    * could not be converted.
    */
-  private def buildFilterExpression(schema: StructType, filter: Filter): Option[String] = {
+  def buildFilterExpression(schema: StructType, filter: Filter): Option[String] = {
 
     // Builds an escaped value, based on the expected datatype
-    def buildValueWithType(dataType: DataType, internalValue: Any): String = {
-      val value: Any = {
-        // Workaround for SPARK-10195: prior to Spark 1.5.0, the Data Sources API exposed internal
-        // types, so we must perform conversions if running on older versions:
-        if (SPARK_VERSION < "1.5.0") {
-          CatalystTypeConverters.convertToScala(internalValue, dataType)
-        } else {
-          internalValue
-        }
-      }
+    def buildValueWithType(dataType: DataType, value: Any): String = {
       dataType match {
         case StringType => s"'${value.toString.replace("'", "''").replace("\\", "\\\\")}'"
         case DateType => s"'${value.asInstanceOf[Date]}'::DATE"
@@ -82,12 +73,12 @@ private[snowflakedb] object FilterPushdown {
     }
 
     // Builds a simple comparison string
-    def buildComparison(attr: String, internalValue: Any, comparisonOp: String): Option[String] = {
+    def buildComparison(attr: String, value: Any, comparisonOp: String): Option[String] = {
       val dataType = getTypeForAttribute(schema, attr)
       if (dataType.isEmpty) {
         return None
       }
-      val sqlEscapedValue = buildValueWithType(dataType.get, internalValue)
+      val sqlEscapedValue = buildValueWithType(dataType.get, value)
       Some(s""""$attr" $comparisonOp $sqlEscapedValue""")
     }
 

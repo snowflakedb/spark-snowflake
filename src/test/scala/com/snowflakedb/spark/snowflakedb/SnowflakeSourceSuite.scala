@@ -300,8 +300,7 @@ class SnowflakeSourceSuite extends BaseTest {
       Map(new TableName(defaultParams("dbtable")).toString -> null))
 
     val source = new DefaultSource(mockSF.jdbcWrapper, _ => mockS3Client)
-    val savedDf =
-      source.createRelation(testSqlContext, SaveMode.Append, defaultParams, expectedDataDF)
+    source.createRelation(testSqlContext, SaveMode.Append, defaultParams, expectedDataDF)
 
     // This test is "appending" to an empty table, so we expect all our test data to be
     // the only content.

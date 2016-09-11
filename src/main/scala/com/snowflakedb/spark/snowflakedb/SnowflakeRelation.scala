@@ -73,6 +73,10 @@ private[snowflakedb] case class SnowflakeRelation(
     writer.saveToSnowflake(sqlContext, data, saveMode, params)
   }
 
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    filters.filterNot(filter => FilterPushdown.buildFilterExpression(schema, filter).isDefined)
+  }
+
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val creds =
       AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)

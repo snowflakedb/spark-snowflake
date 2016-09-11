@@ -17,12 +17,12 @@ Notes about integration tests
 * Config needs to be set with variable `IT_SNOWFLAKE_CONF` defined and
     pointing to the location of the Snowflake configuration file.
 * An example configuration file is provided in `snowflake.conf.example`.
-* We run with Spark at least 1.6.2 as we test some features not available before
+* We run with Spark at least 2.0.0
 
 Once these requirements are met, run e.g.
     
     export IT_SNOWFLAKE_CONF_CONTENT=`cat $PWD/snowflake.conf | base64 -w 0` 
-    build/sbt -Dspark.version=1.6.2 it:test
+    build/sbt -Dspark.version=2.0.0 it:test
   
 ### Running code coverage tests
 
@@ -36,7 +36,7 @@ Example use:
 And with integration tests:
 
     export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf
-    build/sbt -Dspark.version=1.6.2 -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 \
+    build/sbt -Dspark.version=2.0.0 -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 \
       clean coverage test it:test
 
 To see the results:      
@@ -61,7 +61,7 @@ Travis uses the `dev/run-tests-travis.sh` script to run its test.
 
 To test its behavior locally, run e.g. this:
 
-    export PATH=$PATH:$PWD/build/ HADOOP_VERSION="2.2.0" SPARK_VERSION="1.6.2" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
+    export PATH=$PATH:$PWD/build/ HADOOP_VERSION="2.2.0" SPARK_VERSION="2.0.0" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
     ./dev/run-tests-travis.sh
     INTEGRATION_TESTS=true ./dev/run-tests-travis.sh
     

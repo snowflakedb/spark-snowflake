@@ -15,5 +15,6 @@ For developer notes, see [README-DEV](README-DEV.md)
 
 This project was originally forked from the 
 **[spark-redshift](https://github.com/databricks/spark-redshift)** project.
+We also occasionally port relevant patches from it.
 We would like to acknowledge and thank the developers of that project, 
 in particular [Josh Rosen](https://github.com/JoshRosen).

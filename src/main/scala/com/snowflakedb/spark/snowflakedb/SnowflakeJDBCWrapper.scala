@@ -19,7 +19,6 @@
 
 package com.snowflakedb.spark.snowflakedb
 
-import java.net.URI
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
@@ -29,6 +28,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
 import org.apache.spark.{SPARK_VERSION, SparkContext}
+import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 import com.snowflakedb.spark.snowflakedb.Parameters.MergedParameters
@@ -55,24 +55,6 @@ private[snowflakedb] class JDBCWrapper {
       }
     }
     ExecutionContext.fromExecutorService(Executors.newCachedThreadPool(threadFactory))
-  }
-
-  private def registerDriver(driverClass: String): Unit = {
-    // DriverRegistry.register() is one of the few pieces of private Spark functionality which
-    // we need to rely on. This class was relocated in Spark 1.5.0, so we need to use reflection
-    // in order to support both Spark 1.4.x and 1.5.x.
-    if (SPARK_VERSION.startsWith("1.4")) {
-      val className = "org.apache.spark.sql.jdbc.package$DriverRegistry$"
-      val driverRegistryClass = Utils.classForName(className)
-      val registerMethod = driverRegistryClass.getDeclaredMethod("register", classOf[String])
-      val companionObject = driverRegistryClass.getDeclaredField("MODULE$").get(null)
-      registerMethod.invoke(companionObject, driverClass)
-    } else { // Spark 1.5.0+
-      val className = "org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry"
-      val driverRegistryClass = Utils.classForName(className)
-      val registerMethod = driverRegistryClass.getDeclaredMethod("register", classOf[String])
-      registerMethod.invoke(null, driverClass)
-    }
   }
 
   /**
@@ -121,7 +103,7 @@ private[snowflakedb] class JDBCWrapper {
       getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
     try {
       val driverClass = Utils.classForName(driverClassName)
-      registerDriver(driverClass.getCanonicalName)
+      DriverRegistry.register(driverClass.getCanonicalName)
     } catch {
       case e: ClassNotFoundException =>
         throw new ClassNotFoundException(
