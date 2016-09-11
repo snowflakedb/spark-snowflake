@@ -354,7 +354,7 @@ class SnowflakeSourceSuite extends BaseTest {
   test("Cannot save when 'query' parameter is specified instead of 'dbtable'") {
     val invalidParams = defaultParams - "dbtable" + ("query" -> "select 1")
     val e1 = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsSnowflakeTable(invalidParams)
+      expectedDataDF.write.format("com.snowflakedb.spark.snowflakedb").options(invalidParams).save();
     }
     assert(e1.getMessage.contains("dbtable"))
   }
@@ -363,12 +363,13 @@ class SnowflakeSourceSuite extends BaseTest {
     val invalidParams = Map("dbtable" -> "foo") // missing tempdir and url
 
     val e1 = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsSnowflakeTable(invalidParams)
+      expectedDataDF.write.format("com.snowflakedb.spark.snowflakedb").options(invalidParams).save();
     }
     assert(e1.getMessage.contains("tempdir"))
 
     val e2 = intercept[IllegalArgumentException] {
-      testSqlContext.snowflakeTable(invalidParams)
+      expectedDataDF.write.format("com.snowflakedb.spark.snowflakedb").options(invalidParams).save();
+
     }
     assert(e2.getMessage.contains("tempdir"))
   }
@@ -380,7 +381,12 @@ class SnowflakeSourceSuite extends BaseTest {
   test("Saves throw error message if S3 Block FileSystem would be used") {
     val params = defaultParams + ("tempdir" -> defaultParams("tempdir").replace("s3n", "s3"))
     val e = intercept[IllegalArgumentException] {
-      expectedDataDF.saveAsSnowflakeTable(params)
+      expectedDataDF
+        .write
+        .format("com.snowflakedb.spark.snowflakedb")
+        .mode(SaveMode.Append)
+        .options(params)
+        .save()
     }
     assert(e.getMessage.contains("Block FileSystem"))
   }
