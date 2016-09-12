@@ -1,5 +1,14 @@
 # `Developer notes for spark-snowflakedb`
 
+## Building
+
+To build your own .jar, simply issue (adapt your Scala version if needd)
+
+    $ build/sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 package
+     
+This will create spark-snowflakedb*.jar that you can use with Spark.
+
+
 ## Testing
 
 ### Running unit tests
