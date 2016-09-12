@@ -64,7 +64,7 @@ To see the results:
       before_install:
       - openssl aes-256-cbc -K $encrypted_XX_key -iv $encrypted_XXX_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
 
-### Running dev/run-tests-travis.sh manually
+### Running `dev/run-tests-travis.sh` manually
 
 Travis uses the `dev/run-tests-travis.sh` script to run its test.
 
