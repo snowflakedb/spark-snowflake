@@ -30,7 +30,7 @@ Notes about integration tests
 
 Once these requirements are met, run e.g.
     
-    export IT_SNOWFLAKE_CONF_CONTENT=`cat $PWD/snowflake.conf | base64 -w 0` 
+    export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf 
     build/sbt -Dspark.version=2.0.0 it:test
   
 ### Running code coverage tests

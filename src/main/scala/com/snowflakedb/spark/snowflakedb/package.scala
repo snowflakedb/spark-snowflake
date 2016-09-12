@@ -18,10 +18,9 @@
 
 package com.snowflakedb.spark
 
-import com.amazonaws.services.s3.AmazonS3Client
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 package object snowflakedb {
 
@@ -46,52 +45,14 @@ package object snowflakedb {
     }
 
     /**
-     * Reads a table unload from Snowflake with its schema in format "name0 type0 name1 type1 ...".
-     * Snowflake-todo: Check if it's needed
+     * Reads a table unload from Snowflake with its schema
      */
     @deprecated("Use data sources API or perform string -> data type casts yourself", "0.5.0")
-    def snowflakeFile(path: String, schema: String): DataFrame = {
-      val structType = SchemaParser.parseSchema(schema)
-      val casts = structType.fields.map { field =>
+    def snowflakeFile(path: String, schema: StructType): DataFrame = {
+      val casts = schema.fields.map { field =>
         col(field.name).cast(field.dataType).as(field.name)
       }
-      snowflakeFile(path, structType.fieldNames).select(casts: _*)
-    }
-
-    /**
-     * Read a Snowlfake table into a DataFrame, using S3 for data transfer and JDBC
-     * to control Snowflake and resolve the schema
-     * Snowflake-todo: Check if it's needed
-     */
-    @deprecated("Use sqlContext.read()", "0.5.0")
-    def snowflakeTable(parameters: Map[String, String]): DataFrame = {
-      val params = Parameters.mergeParameters(parameters)
-      sqlContext.baseRelationToDataFrame(
-        SnowflakeRelation(
-          DefaultJDBCWrapper, creds => new AmazonS3Client(creds), params, None)(sqlContext))
-    }
-  }
-
-  /**
-   * Add write functionality to DataFrame
-   */
-  @deprecated("Use DataFrame.write()", "0.5.0")
-  implicit class SnowflakeDataFrame(dataFrame: DataFrame) {
-
-    /**
-     * Load the DataFrame into a Snowflake database table. By default, this will append to the
-     * specified table. If the `overwrite` parameter is set to `true` then this will drop the
-     * existing table and re-create it with the contents of this DataFrame.
-     */
-    @deprecated("Use DataFrame.write()", "0.5.0")
-    def saveAsSnowflakeTable(parameters: Map[String, String]): Unit = {
-      val params = Parameters.mergeParameters(parameters)
-      val saveMode = if (params.overwrite) {
-        SaveMode.Overwrite
-      } else {
-        SaveMode.Append
-      }
-      DefaultSnowflakeWriter.saveToSnowflake(dataFrame.sqlContext, dataFrame, saveMode, params)
+      snowflakeFile(path, schema.fieldNames).select(casts: _*)
     }
   }
 }

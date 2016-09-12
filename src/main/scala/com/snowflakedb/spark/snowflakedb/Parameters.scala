@@ -52,7 +52,6 @@ object Parameters {
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
-    "overwrite" -> "false",
     "diststyle" -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS -> "",
@@ -312,17 +311,6 @@ object Parameters {
     /**
      * -----------------------------------------Various other options
      */
-
-    /**
-     * If true, when writing, replace any existing data. When false, append to the table instead.
-     * Note that the table schema will need to be compatible with whatever you have in the DataFrame
-     * you're writing. spark-snowflake makes no attempt to enforce that - you'll just see Snowflake
-     * errors if they don't match.
-     *
-     * Defaults to false.
-     */
-    @deprecated("Use SaveMode instead", "0.5.0")
-    def overwrite: Boolean = parameters("overwrite").toBoolean
 
     /**
      * When true, data is always loaded into a new temporary table when performing an overwrite.

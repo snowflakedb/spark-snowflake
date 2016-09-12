@@ -26,8 +26,6 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
 
 class SnowflakeInputFormatSuite extends FunSuite with BeforeAndAfterAll {
 
