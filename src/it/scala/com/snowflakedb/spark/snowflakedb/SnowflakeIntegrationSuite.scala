@@ -251,7 +251,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
-  test("ZD-3234") {
+  test("ZD-3234 - query with a semicolon at the end") {
     val loadedDf = sqlContext.read
       .format("com.snowflakedb.spark.snowflakedb")
       .options(connectorOptionsNoTable)
@@ -263,6 +263,34 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       loadedDf.selectExpr("count(*)"),
       Seq(Row(1))
     )
+  }
+
+  test("Ability to query a UDF") {
+    try {
+      Utils.runQuery(connectorOptionsNoTable, s"""
+          |CREATE OR REPLACE FUNCTION testudf(a number, b number)
+          |RETURNS number
+          |AS 'a * b'
+        """.stripMargin)
+
+      val loadedDf = sqlContext.read
+        .format("com.snowflakedb.spark.snowflakedb")
+        .options(connectorOptionsNoTable)
+        // scalastyle:off
+        .option("query", s"select testudf(3,4) as twelve")
+        // scalastyle:on
+        .load()
+
+      checkAnswer(
+        loadedDf.selectExpr("twelve"),
+        Seq(Row(12))
+      )
+    }
+    finally {
+      // Clean up the UDF
+      Utils.runQuery(connectorOptionsNoTable,
+        "DROP FUNCTION IF EXISTS testudf(number, number)")
+    }
   }
 
   // TODO Enable more tests
