@@ -13,7 +13,6 @@ Simply run
 NOTE: Integration tests are currently only partially supported.
 
 Notes about integration tests
-* Snowflake JDBC driver needs to be located in the /tmp/snowflake_jdbc.jar directory.
 * Config needs to be set with variable `IT_SNOWFLAKE_CONF` defined and
     pointing to the location of the Snowflake configuration file.
 * An example configuration file is provided in `snowflake.conf.example`.

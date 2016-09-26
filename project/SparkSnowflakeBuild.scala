@@ -79,9 +79,8 @@ object SparkSnowflakeBuild extends Build {
         // },
 
 
-        // A Snowflake JDBC driver must be present on the classpath for spark-snowflakedb to work.
-        // @Snowflake-todo - add JAR to an official publicly available repo
-        "com.snowflake" % "snowflake_jdbc_for_spark_testing" % "2.7.83" % "test" from "https://s3-us-west-1.amazonaws.com/marcin-pub/snowflake_jdbc.jar",
+        // Snowflake driver is a dependency for testing
+        "net.snowflake" % "snowflake-jdbc" % "2.8.0" % "test",
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",
