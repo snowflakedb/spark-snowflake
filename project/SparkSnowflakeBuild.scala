@@ -33,21 +33,21 @@ object SparkSnowflakeBuild extends Build {
   // the integration tests configuration; see http://stackoverflow.com/a/20635808.
   lazy val IntegrationTest = config("it") extend Test
 
-  lazy val root = Project("spark-snowflakedb", file("."))
+  lazy val root = Project("spark-snowflake", file("."))
     .configs(IntegrationTest)
     .settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*)
     .settings(Project.inConfig(IntegrationTest)(rawScalastyleSettings()): _*)
     .settings(Defaults.coreDefaultSettings: _*)
     .settings(Defaults.itSettings: _*)
     .settings(
-      name := "spark-snowflakedb",
-      organization := "com.snowflakedb",
+      name := "spark-snowflake",
+      organization := "net.snowflake",
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.10.5"),
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := sys.props.get("spark.version").getOrElse("2.0.0"),
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
       testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.2.0"),
-      spName := "snowflakedb/spark-snowflakedb",
+      spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
       spIgnoreProvided := true,
       licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
