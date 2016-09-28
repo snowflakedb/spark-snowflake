@@ -126,10 +126,10 @@ object SparkSnowflakeBuild extends Build {
       releasePublishArtifactsAction := PgpKeys.publishSigned.value,
 
       pomExtra :=
-        <url>https://github.com/snowflakedb/spark-snowflakedb</url>
+        <url>https://github.com/snowflakedb/spark-snowflake</url>
         <scm>
-          <url>git@github.com:snowflakedb/spark-snowflakedb.git</url>
-          <connection>scm:git:git@github.com:snowflakedb/spark-snowflakedb.git</connection>
+          <url>git@github.com:snowflakedb/spark-snowflake.git</url>
+          <connection>scm:git:git@github.com:snowflakedb/spark-snowflake.git</connection>
         </scm>
         <developers>
           <developer>
