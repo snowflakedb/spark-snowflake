@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package com.snowflakedb.spark.snowflakedb.tutorial
+package net.snowflake.spark.snowflake.tutorial
 
-import com.snowflakedb.spark.snowflakedb.Utils
+import net.snowflake.spark.snowflake.Utils
 import org.apache.spark.{SparkConf,SparkContext}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.SQLContext
