@@ -2,8 +2,8 @@
 
 ## Snowflake Data Source for Apache Spark.
 
-[![Build Status](https://travis-ci.org/snowflakedb/spark-snowflakedb.svg?branch=master)](https://travis-ci.org/snowflakedb/spark-snowflakedb)
-[![codecov](https://codecov.io/gh/snowflakedb/spark-snowflakedb/branch/master/graph/badge.svg)](https://codecov.io/gh/snowflakedb/spark-snowflakedb)
+[![Build Status](https://travis-ci.org/snowflakedb/spark-snowflake.svg?branch=master)](https://travis-ci.org/snowflakedb/spark-snowflake)
+[![codecov](https://codecov.io/gh/snowflakedb/spark-snowflake/branch/master/graph/badge.svg)](https://codecov.io/gh/snowflakedb/spark-snowflake)
 [![License](http://img.shields.io/:license-Apache%202-brightgreen.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 For a manual and more information, see 
