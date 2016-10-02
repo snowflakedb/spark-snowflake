@@ -176,16 +176,18 @@ private[snowflakedb] case class SnowflakeRelation(
     val fixedUrl = Utils.fixS3Url(tempDir)
 
     // Save the last SELECT so it can be inspected
-    Utils.setLastSelect(query);
+    Utils.setLastSelect(query)
 
-    // Snowflake-todo Compression support
+    // Determine the compression type
+    val compressionString = if (params.sfCompress) "gzip" else "none"
+
     s"""
        |COPY INTO '$fixedUrl'
        |FROM ($query)
        |$credsString
        |FILE_FORMAT = (
        |    TYPE=CSV
-       |    COMPRESSION=none
+       |    COMPRESSION='$compressionString'
        |    FIELD_DELIMITER='|'
        |    /*ESCAPE='\\\\'*/
        |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/

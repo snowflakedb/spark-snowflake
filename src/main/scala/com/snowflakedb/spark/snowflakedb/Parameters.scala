@@ -46,8 +46,18 @@ object Parameters {
   val PARAM_POSTACTIONS = "postactions"
 
   // List of values that mean "yes" when considered to be Boolean
+  // scalastyle:off
   val BOOLEAN_VALUES_TRUE  = Set( "on", "yes",  "true", "1",  "enabled")
   val BOOLEAN_VALUES_FALSE = Set("off",  "no", "false", "0", "disabled")
+  // scalastyle: on
+
+  /**
+    * Helper method to check if a given string represents some form
+    * of "true" value, see BOOLEAN_VALUES_TRUE
+    */
+  def isTrue(string: String): Boolean = {
+    BOOLEAN_VALUES_TRUE contains string.toLowerCase
+  }
 
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
@@ -262,7 +272,7 @@ object Parameters {
     /**
      * Snowflake use compression on/off - "on" by default
      */
-    def sfCompress: String = parameters.getOrElse("sfcompress", "on")
+    def sfCompress: Boolean = isTrue(parameters.getOrElse("sfcompress", "on"))
     /**
      * Snowflake role - optional
      */
@@ -284,8 +294,8 @@ object Parameters {
     def sfExtraOptions: Map[String, Object] = extraParams
 
     /** Returns true if bucket lifecycle configuration should be checked */
-    def checkBucketConfiguration: Boolean = BOOLEAN_VALUES_TRUE contains
-      parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "on").toLowerCase()
+    def checkBucketConfiguration: Boolean = isTrue(
+        parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "on"))
 
     /**
      * Max file size used to move data out from Snowflake

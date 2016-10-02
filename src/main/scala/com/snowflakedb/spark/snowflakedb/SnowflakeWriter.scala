@@ -271,10 +271,11 @@ private[snowflakedb] class SnowflakeWriter(
       }
     }
     // Save, possibly with compression. Always use Gzip for now
-    if (params.sfCompress.equals("on"))
+    if (params.sfCompress) {
       strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])
-    else
+    } else {
       strRDD.saveAsTextFile(tempDir)
+    }
 
     if (nonEmptyPartitions.value.isEmpty) {
       None
@@ -311,9 +312,10 @@ private[snowflakedb] class SnowflakeWriter(
       new URI(params.rootTempDir), sqlContext.sparkContext.hadoopConfiguration)
 
     val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
-    if (params.checkBucketConfiguration)
+    if (params.checkBucketConfiguration) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir,
           s3ClientFactory(creds))
+    }
 
     val conn = jdbcWrapper.getConnector(params)
 
