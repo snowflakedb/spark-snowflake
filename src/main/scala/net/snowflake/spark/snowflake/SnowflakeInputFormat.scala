@@ -24,7 +24,7 @@ import java.nio.charset.Charset
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
@@ -67,13 +67,19 @@ object SnowflakeInputFormat {
 
 private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Array[String]] {
 
+  /** Source stream we're reading from */
+  private var inputStream: FSDataInputStream = _
+  /** Effective stream, including compression */
   private var reader: BufferedInputStream = _
 
   private var key: JavaLong = _
   private var value: Array[String] = _
 
+  /** Start index when reading. 0 if we're reading, size if we skip this file */
   private var start: Long = _
-  private var end: Long = _
+  /** The size of the underlying file */
+  private var size: Long = _
+  /** Position in the reader - note, not in the input stream */
   private var cur: Long = _
 
   private var eof: Boolean = false
@@ -84,7 +90,8 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
   @inline private[this] final val lineFeed: Byte = '\n'
   @inline private[this] final val carriageReturn: Byte = '\r'
 
-  @inline private[this] final val defaultBufferSize = 1024 * 1024
+  @inline private[this] final val inputBufferSize = 1024 * 1024
+  @inline private[this] final val codecBufferSize = 64 * 1024
 
   private[this] val chars = ArrayBuffer.empty[Byte]
 
@@ -99,11 +106,10 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     require(delimiter != carriageReturn, "The delimiter cannot be the carriage return.")
     val compressionCodecs = new CompressionCodecFactory(conf)
     val codec = compressionCodecs.getCodec(file)
-    if (codec != null) {
-      throw new IOException(s"Do not support compressed files but found $file with codec $codec.")
-    }
     val fs = file.getFileSystem(conf)
-    val size = fs.getFileStatus(file).getLen
+
+    size = fs.getFileStatus(file).getLen
+
     // Note, for Snowflake, we do not support splitting the file.
     // This is because it is in general not possible to find the record boundary
     // with 100% precision.
@@ -113,31 +119,40 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     // This is not a problem, as we only generate small files anyway.
     if (split.getStart > 0) {
       // Never read anything
+      eof = true
       start = size
-      end = size
     } else {
-      // Only the first split reads, and reads everything.
+      // Only the 0-split reads, and reads everything.
       start = 0
-      end = size
+      cur = 0
+      inputStream = fs.open(file)
+      reader = new BufferedInputStream(inputStream, inputBufferSize)
+      if (codec != null) {
+        reader = new BufferedInputStream(codec.createInputStream(reader), codecBufferSize)
+      }
     }
-    cur = start
-    val in = fs.open(file)
-    reader = new BufferedInputStream(in, defaultBufferSize)
+
   }
 
   override def getProgress: Float = {
-    if (start >= end) {
+    if (eof) {
       1.0f
     } else {
-      math.min((cur - start).toFloat / (end - start), 1.0f)
+      math.min(inputStream.getPos.toFloat / size, 1.0f)
     }
   }
 
   override def nextKeyValue(): Boolean = {
-    if (cur < end && !eof) {
+    if (size >= 0 && !eof) {
       key = cur
       value = nextValue()
-      true
+      if (eof) {
+        key = null
+        value = null
+        false
+      } else {
+        true
+      }
     } else {
       key = null
       value = null
