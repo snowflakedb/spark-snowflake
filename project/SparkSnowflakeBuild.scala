@@ -86,9 +86,6 @@ object SparkSnowflakeBuild extends Build {
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",
         "org.mockito" % "mockito-core" % "1.10.19" % "test"
       ),
-      libraryDependencies ++= Seq(
-        "com.databricks" % "spark-csv_2.10" % "1.2.0"
-      ),
       libraryDependencies ++= (if (testHadoopVersion.value.startsWith("1")) {
         Seq(
           "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" force(),
@@ -136,6 +133,11 @@ object SparkSnowflakeBuild extends Build {
             <id>MarcinZukowski</id>
             <name>Marcin Zukowski</name>
             <url>https://github.com/MarcinZukowski</url>
+          </developer>
+          <developer>
+            <id>etduwx</id>
+            <name>Edward Ma</name>
+            <url>https://github.com/etduwx</url>
           </developer>
         </developers>,
 

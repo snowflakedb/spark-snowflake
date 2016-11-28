@@ -19,14 +19,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.util.Try
+import scala.util.{Random, Try}
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
@@ -34,9 +34,9 @@ import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
 /**
- * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
- * minor modifications for Snowflake-specific features and limitations.
- */
+  * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
+  * minor modifications for Snowflake-specific features and limitations.
+  */
 private[snowflake] class JDBCWrapper {
 
   private val log = LoggerFactory.getLogger(getClass)
@@ -58,18 +58,20 @@ private[snowflake] class JDBCWrapper {
   }
 
   /**
-   * Takes a (schema, table) specification and returns the table's Catalyst
-   * schema.
-   *
-   * @param conn A JDBC connection to the database.
-   * @param table The table name of the desired table.  This may also be a
-   *   SQL query wrapped in parentheses.
-   * @return A StructType giving the table's Catalyst schema.
-   * @throws SQLException if the table specification is garbage.
-   * @throws SQLException if the table contains an unsupported type.
-   */
+    * Takes a (schema, table) specification and returns the table's Catalyst
+    * schema.
+    *
+    * @param conn A JDBC connection to the database.
+    * @param table The table name of the desired table.  This may also be a
+    *   SQL query wrapped in parentheses.
+    * @return A StructType giving the table's Catalyst schema.
+    * @throws SQLException if the table specification is garbage.
+    * @throws SQLException if the table contains an unsupported type.
+    */
   def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM $table WHERE 1=0")
+    Math.abs(Random.nextLong()).toString
+    val randStr = Math.abs(Random.nextLong()).toString
+    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as temp_$randStr WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount
@@ -84,7 +86,14 @@ private[snowflake] class JDBCWrapper {
         val isSigned = rsmd.isSigned(i + 1)
         val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
         val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
-        fields(i) = StructField(columnName, columnType, nullable)
+        fields(i) = StructField(
+                                // Add quotes around column names if Snowflake would usually require them.
+                                if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
+                                  columnName
+                                else
+                                  s""""$columnName"""",
+                                columnType,
+                                nullable)
         i = i + 1
       }
       new StructType(fields)
@@ -93,21 +102,18 @@ private[snowflake] class JDBCWrapper {
     }
   }
 
-
   /**
-   *  Get a connection based on the provided parameters
-   */
+    *  Get a connection based on the provided parameters
+    */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
-    val driverClassName = params.jdbcDriver.
-      getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
+    val driverClassName = params.jdbcDriver.getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
     try {
       val driverClass = Utils.classForName(driverClassName)
       DriverRegistry.register(driverClass.getCanonicalName)
     } catch {
       case e: ClassNotFoundException =>
-        throw new ClassNotFoundException(
-          s"Could not load a Snowflake JDBC driver class < $driverClassName > ", e)
+        throw new ClassNotFoundException(s"Could not load a Snowflake JDBC driver class < $driverClassName > ", e)
     }
 
     val sfURL = params.sfURL
@@ -117,10 +123,10 @@ private[snowflake] class JDBCWrapper {
 
     // Obligatory properties
     jdbcProperties.put("db", params.sfDatabase)
-    jdbcProperties.put("schema", params.sfSchema)  // Has a default
+    jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
     jdbcProperties.put("password", params.sfPassword)
-    jdbcProperties.put("ssl", params.sfSSL)  // Has a default
+    jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
     if (params.sfAccount.isDefined) {
       jdbcProperties.put("account", params.sfAccount.get)
@@ -144,7 +150,7 @@ private[snowflake] class JDBCWrapper {
 
     // Set info on the system level
     // Very simple escaping
-    def esc(s: String) : String = {
+    def esc(s: String): String = {
       s.replace("\"", "").replace("\\", "")
     }
     val sparkAppName = SparkContext.getOrCreate().getConf.get("spark.app.name", "")
@@ -170,43 +176,45 @@ private[snowflake] class JDBCWrapper {
     conn
   }
 
-
   /**
-   * Compute the SQL schema string for the given Spark SQL Schema.
-   */
+    * Compute the SQL schema string for the given Spark SQL Schema.
+    */
   def schemaString(schema: StructType): String = {
     val sb = new StringBuilder()
-    schema.fields.foreach { field => {
-      val name = field.name
-      val typ: String = field.dataType match {
-        case IntegerType => "INTEGER"
-        case LongType => "INTEGER"
-        case DoubleType => "DOUBLE"
-        case FloatType => "FLOAT"
-        case ShortType => "INTEGER"
-        case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
-        case BooleanType => "BOOLEAN"
-        case StringType =>
-          if (field.metadata.contains("maxlength")) {
-            s"VARCHAR(${field.metadata.getLong("maxlength")})"
-          } else {
-            "STRING"
-          }
+    schema.fields.foreach { field =>
+      {
+        val name = field.name
+        val typ: String = field.dataType match {
+          case IntegerType => "INTEGER"
+          case LongType => "INTEGER"
+          case DoubleType => "DOUBLE"
+          case FloatType => "FLOAT"
+          case ShortType => "INTEGER"
+          case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
+          case BooleanType => "BOOLEAN"
+          case StringType =>
+            if (field.metadata.contains("maxlength")) {
+              s"VARCHAR(${field.metadata.getLong("maxlength")})"
+            } else {
+              "STRING"
+            }
 //        case BinaryType => "BLOB"
-        case TimestampType => "TIMESTAMP"
-        case DateType => "DATE"
-        case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
-        case _ => throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
+          case TimestampType => "TIMESTAMP"
+          case DateType => "DATE"
+          case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
+          case _ =>
+            throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
+        }
+        val nullable = if (field.nullable) "" else "NOT NULL"
+        sb.append(s""", ${name.replace("\"", "\\\"")} $typ $nullable""".trim)
       }
-      val nullable = if (field.nullable) "" else "NOT NULL"
-      sb.append(s""", "${name.replace("\"", "\\\"")}" $typ $nullable""".trim)
-    }}
+    }
     if (sb.length < 2) "" else sb.substring(2)
   }
 
   /**
-   * Returns true if the table already exists in the JDBC database.
-   */
+    * Returns true if the table already exists in the JDBC database.
+    */
   def tableExists(conn: Connection, table: String): Boolean = {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems, considering "table" could also include the database name.
@@ -252,9 +260,7 @@ private[snowflake] class JDBCWrapper {
     executeQueryInterruptibly(conn.prepareStatement(sql))
   }
 
-  private def executeInterruptibly[T](
-                                       statement: PreparedStatement,
-                                       op: PreparedStatement => T): T = {
+  private def executeInterruptibly[T](statement: PreparedStatement, op: PreparedStatement => T): T = {
     try {
       log.debug(s"Running statement $statement")
       val future = Future[T](op(statement))(ec)
@@ -275,62 +281,62 @@ private[snowflake] class JDBCWrapper {
   }
 
   /**
-   * Maps a JDBC type to a Catalyst type.
-   *
-   * @param sqlType - A field of java.sql.Types
-   * @return The Catalyst type corresponding to sqlType.
-   */
-  private def getCatalystType(
-      sqlType: Int,
-      precision: Int,
-      scale: Int,
-      signed: Boolean): DataType = {
+    * Maps a JDBC type to a Catalyst type.
+    *
+    * @param sqlType - A field of java.sql.Types
+    * @return The Catalyst type corresponding to sqlType.
+    */
+  private def getCatalystType(sqlType: Int, precision: Int, scale: Int, signed: Boolean): DataType = {
     // TODO: cleanup types which are irrelevant for Snowflake.
     // Snowflake-todo: Add support for some types like ARRAY.
     // Snowflake-todo: Verify all types.
     val answer = sqlType match {
       // scalastyle:off
-      case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType(20,0) }
+      case java.sql.Types.ARRAY => null
+      case java.sql.Types.BIGINT => if (signed) { LongType } else { DecimalType(20, 0) }
 //      case java.sql.Types.BINARY        => BinaryType
 //      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
 //      case java.sql.Types.BLOB          => BinaryType
-      case java.sql.Types.BOOLEAN       => BooleanType
-      case java.sql.Types.CHAR          => StringType
-      case java.sql.Types.CLOB          => StringType
-      case java.sql.Types.DATALINK      => null
-      case java.sql.Types.DATE          => DateType
-      case java.sql.Types.DECIMAL
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.DECIMAL       => DecimalType(38, 18) // Spark 1.5.0 default
-      case java.sql.Types.DISTINCT      => null
-      case java.sql.Types.DOUBLE        => DoubleType
-      case java.sql.Types.FLOAT         => FloatType
-      case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
-      case java.sql.Types.JAVA_OBJECT   => null
-      case java.sql.Types.LONGNVARCHAR  => StringType
+      case java.sql.Types.BOOLEAN => BooleanType
+      case java.sql.Types.CHAR => StringType
+      case java.sql.Types.CLOB => StringType
+      case java.sql.Types.DATALINK => null
+      case java.sql.Types.DATE => DateType
+      case java.sql.Types.DECIMAL if precision != 0 || scale != 0 => {
+        if (precision > DecimalType.MAX_PRECISION) {
+          DecimalType(DecimalType.MAX_PRECISION, scale + (precision - DecimalType.MAX_SCALE))
+        } else {
+          DecimalType(precision, scale)
+        }
+      }
+      case java.sql.Types.DECIMAL => DecimalType(38, 18) // Spark 1.5.0 default
+      case java.sql.Types.DISTINCT => null
+      case java.sql.Types.DOUBLE => DoubleType
+      case java.sql.Types.FLOAT => FloatType
+      case java.sql.Types.INTEGER => if (signed) { IntegerType } else { LongType }
+      case java.sql.Types.JAVA_OBJECT => null
+      case java.sql.Types.LONGNVARCHAR => StringType
 //      case java.sql.Types.LONGVARBINARY => BinaryType
-      case java.sql.Types.LONGVARCHAR   => StringType
-      case java.sql.Types.NCHAR         => StringType
-      case java.sql.Types.NCLOB         => StringType
-      case java.sql.Types.NULL          => null
-      case java.sql.Types.NUMERIC
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.NUMERIC       => DecimalType(38, 18) // Spark 1.5.0 default
-      case java.sql.Types.NVARCHAR      => StringType
-      case java.sql.Types.OTHER         => null
-      case java.sql.Types.REAL          => DoubleType
-      case java.sql.Types.REF           => StringType
-      case java.sql.Types.ROWID         => LongType
-      case java.sql.Types.SMALLINT      => IntegerType
-      case java.sql.Types.SQLXML        => StringType // Snowflake-todo: ?
-      case java.sql.Types.STRUCT        => StringType // Snowflake-todo: ?
+      case java.sql.Types.LONGVARCHAR => StringType
+      case java.sql.Types.NCHAR => StringType
+      case java.sql.Types.NCLOB => StringType
+      case java.sql.Types.NULL => null
+      case java.sql.Types.NUMERIC if precision != 0 || scale != 0 => DecimalType(precision, scale)
+      case java.sql.Types.NUMERIC => DecimalType(38, 18) // Spark 1.5.0 default
+      case java.sql.Types.NVARCHAR => StringType
+      case java.sql.Types.OTHER => null
+      case java.sql.Types.REAL => DoubleType
+      case java.sql.Types.REF => StringType
+      case java.sql.Types.ROWID => LongType
+      case java.sql.Types.SMALLINT => IntegerType
+      case java.sql.Types.SQLXML => StringType // Snowflake-todo: ?
+      case java.sql.Types.STRUCT => StringType // Snowflake-todo: ?
 //      case java.sql.Types.TIME          => TimestampType
-      case java.sql.Types.TIMESTAMP     => TimestampType
-      case java.sql.Types.TINYINT       => IntegerType
+      case java.sql.Types.TIMESTAMP => TimestampType
+      case java.sql.Types.TINYINT => IntegerType
 //      case java.sql.Types.VARBINARY     => BinaryType
-      case java.sql.Types.VARCHAR       => StringType
-      case _                            => null
+      case java.sql.Types.VARCHAR => StringType
+      case _ => null
       // scalastyle:on
     }
 
