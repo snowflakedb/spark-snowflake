@@ -27,7 +27,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -91,6 +91,8 @@ trait IntegrationSuiteBase
   protected var sqlContext: SQLContext = _
   protected var conn: Connection = _
 
+  protected var sparkSession: SparkSession = _
+
   def runSql(query: String): Unit = {
     log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
     sqlContext.sql(query).collect()
@@ -137,6 +139,8 @@ trait IntegrationSuiteBase
 
     // Use fewer partitions to make tests faster
     sqlContext.setConf("spark.sql.shuffle.partitions", "6")
+
+    sparkSession = sqlContext.sparkSession
   }
 
   override def afterAll(): Unit = {

@@ -22,7 +22,11 @@ import java.text._
 import java.util.Date
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
+import scala.reflect.ClassTag
 
 /**
  * Data type conversions for Snowflake unloaded data
@@ -145,7 +149,7 @@ private[snowflake] object Conversions {
    * Construct a Row from the given array of strings, retrieved from Snowflake's UNLOAD.
    * The schema will be used for type mappings.
    */
-  private def convertRow(schema: StructType, fields: Array[String]): Row = {
+  private def convertRow[T: ClassTag](schema: StructType, fields: Array[String]): T = {
     val converted = fields.zip(schema).map {
       case (data, field) =>
         // Input values that are null produce nulls
@@ -160,20 +164,25 @@ private[snowflake] object Conversions {
           case IntegerType => data.toInt
           case LongType => data.toLong
           case ShortType => data.toShort
-          case StringType => data
+          case StringType => UTF8String.fromString(data)
           case TimestampType => parseTimestamp(data)
           case _ => data
         }
     }
 
-    Row.fromSeq(converted)
+    val row = implicitly[ClassTag[Row]]
+
+    implicitly[ClassTag[T]] match {
+      case `row` => Row.fromSeq(converted).asInstanceOf[T]
+      case  _ => InternalRow.fromSeq(converted).asInstanceOf[T]
+    }
   }
 
   /**
    * Return a function that will convert arrays of strings conforming to
    * the given schema to Row instances
    */
-  def createRowConverter(schema: StructType): (Array[String]) => Row = {
-    convertRow(schema, _: Array[String])
+  def createRowConverter[T: ClassTag](schema: StructType): (Array[String]) => T = {
+    convertRow[T](schema, _: Array[String])
   }
 }
