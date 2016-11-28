@@ -17,11 +17,15 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.{Row, SQLContext, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericMutableRow, SpecificMutableRow, UnsafeRow}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.SQLImplicits
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
 class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_$randomSuffix"
+  val join_table = test_table + "j"
 
   // Values used for comparison
   private val row1 = Row(null, "Hello")
@@ -29,23 +33,60 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
   private val row3 = Row(3, "Spark")
   private val row4 = Row(4, null)
 
+  // Join Table
+  private val row1b = Row(null, 1)
+  private val row2b = Row(2, 2)
+  private val row3b = Row(3, 2)
+  private val row4b = Row(4, 3)
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+
+   /* val p = Row.fromSeq(Seq("asdfasdfka;lsdfja;ldjsfwaefhaewfhaeiuwfheiuwhfaiowfhaeowfaspdofjapowefjpejwpaejw"))
+    val s = sc.parallelize(List(p))
+    val aStruct = new StructType(Array(StructField("role",StringType,nullable = true)))
+
+    val f = sqlContext.createDataFrame(s,aStruct)
+
+    f.show
+*/
+
     jdbcUpdate(s"create or replace table $test_table(i int, s string)")
+    jdbcUpdate(s"create or replace table $join_table(o int, p int)")
     jdbcUpdate(s"insert into $test_table values(null, 'Hello'), (2, 'Snowflake'), (3, 'Spark'), (4, null)")
+    jdbcUpdate(s"insert into $join_table values(null, 1), (2, 2), (3, 2), (4, 3)")
 
     SnowflakeConnectorUtils.enablePushdownSession(sparkSession);
-  }
 
-  // Dummy test
-  test("Dummy") {
-    val df = sparkSession.read
+     val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", s"$test_table").load()
 
-    assert(df.count == 4)
+     val df2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$join_table").load()
+
+      df1.createOrReplaceTempView("df1")
+      df2.createOrReplaceTempView("df2")
+
+      //assert(df1.count == 4)
+      //assert(df2.count == 4)
+  }
+
+  // Dummy test
+  test("Basic join") {
+
+    val joinedResult = sparkSession.sql("""
+  SELECT first.s,
+         second.p
+  FROM df1 first
+  JOIN df2 second
+  ON first.i = second.p""")
+
+    joinedResult.show()
   }
 
   override def beforeEach(): Unit = {
@@ -54,6 +95,6 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    SnowflakeConnectorUtils.enablePushdownSession(sqlContext.sparkSession);
+    SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession);
   }
 }

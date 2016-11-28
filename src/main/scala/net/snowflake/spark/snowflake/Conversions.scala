@@ -23,6 +23,7 @@ import java.util.Date
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow, UnsafeProjection}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -160,7 +161,7 @@ private[snowflake] object Conversions {
           case DateType => parseDate(data)
           case DoubleType => data.toDouble
           case FloatType => data.toFloat
-          case dt: DecimalType => parseDecimal(data)
+          case dt: DecimalType => Decimal(parseDecimal(data))
           case IntegerType => data.toInt
           case LongType => data.toLong
           case ShortType => data.toShort
@@ -174,7 +175,11 @@ private[snowflake] object Conversions {
 
     implicitly[ClassTag[T]] match {
       case `row` => Row.fromSeq(converted).asInstanceOf[T]
-      case  _ => InternalRow.fromSeq(converted).asInstanceOf[T]
+      case  _ => {
+        val row = InternalRow.fromSeq(converted)
+        val unsafeProj = UnsafeProjection.create(schema)
+        unsafeProj(row).copy().asInstanceOf[T]
+      }
     }
   }
 

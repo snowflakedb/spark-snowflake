@@ -12,6 +12,7 @@ import org.apache.spark.sql.execution.SparkPlan
 case class SnowflakePlan(output: Seq[Attribute],
                          rdd: RDD[InternalRow]) extends SparkPlan
 {
+
   override def children: Seq[SparkPlan] = Nil
 
   protected override def doExecute(): RDD[InternalRow] = {

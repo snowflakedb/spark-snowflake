@@ -45,6 +45,8 @@ private[snowflake] case class SnowflakeRelation(
   with PrunedFilteredScan
   with InsertableRelation {
 
+  override val needConversion: Boolean = false
+
   private val log = LoggerFactory.getLogger(getClass)
 
   private lazy val creds = AWSCredentialsUtils.load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
