@@ -59,13 +59,13 @@ abstract class AbstractQuery {
 
 case class BaseQuery(alias: QueryAlias, relation: SnowflakeRelation, output: Seq[Attribute]) extends AbstractQuery {
 
-  val prefix = "SELECT * FROM "
+  //val prefix = "SELECT * FROM "
 
   val cluster = relation.params.sfURL + "/" + relation.params.sfWarehouse + "/" + relation.params.sfDatabase
 
   val tableOrQuery = relation.params.query.getOrElse(relation.params.table.get)
 
-  val query: SQLBuilder = SQLBuilder.fromStatic(prefix + s" $tableOrQuery")
+  val query: SQLBuilder = SQLBuilder.fromStatic(tableOrQuery.toString)
 
   override def collapse: SQLBuilder =
   SQLBuilder.withAlias(alias, b => b.appendBuilder(query))
