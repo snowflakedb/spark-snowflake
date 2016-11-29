@@ -7,25 +7,25 @@ import com.google.common.primitives.UnsignedLongs
 import org.apache.spark.sql.types._
 
 object TypeConversions {
-  val MEMSQL_DECIMAL_MAX_PRECISION = 65
-  val MEMSQL_DECIMAL_MAX_SCALE = 30
+  val DECIMAL_MAX_PRECISION = 65
+  val DECIMAL_MAX_SCALE = 30
 
   def decimalTypeToMySQLType(decimal: DecimalType): String = {
-    val precision = Math.min(MEMSQL_DECIMAL_MAX_PRECISION, decimal.precision)
-    val scale = Math.min(MEMSQL_DECIMAL_MAX_SCALE, decimal.scale)
+    val precision = Math.min(DECIMAL_MAX_PRECISION, decimal.precision)
+    val scale = Math.min(DECIMAL_MAX_SCALE, decimal.scale)
     s"DECIMAL($precision, $scale)"
   }
 
   /**
-    * Find the appropriate MemSQL type from a SparkSQL type.
+    * Find the appropriate Snowflake type from a SparkSQL type.
     *
     * Most types share the same name but there are a few special cases because
     * the types don't align perfectly.
     *
     * @param dataType A SparkSQL Type
-    * @return Corresponding MemSQL type
+    * @return Corresponding Snowflake type
     */
-  def DataFrameTypeToMemSQLTypeString(dataType: DataType): String = {
+  def DataFrameTypeToSnowflakeTypeString(dataType: DataType): String = {
     dataType match {
       case ShortType => "SMALLINT"
       case LongType => "BIGINT"
@@ -39,11 +39,11 @@ object TypeConversions {
 
   /**
     * Attempts a best effort conversion from a SparkType
-    * to a MemSQLType to be used in a Cast.
+    * to a Snowflake type to be used in a Cast.
     *
     * @note Will raise a match error for unsupported casts
     */
-  def DataFrameTypeToMemSQLCastType(t: DataType): Option[String] = t match {
+  def DataFrameTypeToSnowflakeCastType(t: DataType): Option[String] = t match {
     case StringType => Some("CHAR")
     case BinaryType => Some("BINARY")
     case DateType => Some("DATE")

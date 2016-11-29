@@ -221,16 +221,15 @@ class SQLBuilder(fields: Seq[NamedExpression]=Nil) {
         case TimestampType | DateType => block {
           raw("UNIX_TIMESTAMP")
           block { addExpression(child) }
-          // JDBC Timestamp is in millisecond precision, but MemSQL is second
           raw(" * 1000")
         }
-        case _ => TypeConversions.DataFrameTypeToMemSQLCastType(t) match {
+        case _ => TypeConversions.DataFrameTypeToSnowflakeCastType(t) match {
           case None => addExpression(child)
-          case Some(memsqlType) => {
+          case Some(t) => {
             raw("CAST").block {
               addExpression(child)
                 .raw(" AS ")
-                .raw(memsqlType)
+                .raw(t)
             }
           }
         }
@@ -334,9 +333,7 @@ class SQLBuilder(fields: Seq[NamedExpression]=Nil) {
             case CountDistinct(children) => raw("COUNT(DISTINCT ").addExpressions(children, ", ").raw(")")
             case SumDistinct(child) => raw("SUM(DISTINCT ").addExpression(child).raw(")")
 
-            // NOTE: MemSQL does not allow the user to configure relativeSD,
-            // so we only can pushdown if the user asks for up to the maximum
-            // precision that we offer.
+
             case ApproxCountDistinct(child, relativeSD) if relativeSD >= 0.01 =>
               raw("APPROX_COUNT_DISTINCT").block { addExpression(child) }
       */

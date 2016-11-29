@@ -46,7 +46,7 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"insert into $test_table values(null, 'Hello'), (2, 'Snowflake'), (3, 'Spark'), (4, null)")
     jdbcUpdate(s"insert into $join_table values(null, 1), (2, 2), (3, 2), (4, 3)")
 
-    //SnowflakeConnectorUtils.enablePushdownSession(sparkSession);
+    SnowflakeConnectorUtils.enablePushdownSession(sparkSession);
 
      val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
