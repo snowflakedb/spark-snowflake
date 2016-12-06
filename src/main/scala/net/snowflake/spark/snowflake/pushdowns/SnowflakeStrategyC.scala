@@ -8,18 +8,28 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 import org.apache.spark.sql.{SparkSession, Strategy}
 
-class SnowflakeStrategy extends Strategy{
+class SnowflakeStrategy(session: SparkSession) extends Strategy{
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = {
 
+    val fieldIdIter = Iterator.from(1).map(n => s"f_$n")
+
+    // remove empty projects and subqueries
     val cleanedPlan = plan.transform({
       case Project(Nil, child) => child
       case SubqueryAlias(_, child) => child
     })
 
     try {
-      SnowflakePlan.buildQueryRDD(cleanedPlan).getOrElse(Nil)
+      val alias = QueryAlias("query")
+
+      buildQueryTree(fieldIdIter, alias, cleanedPlan) match {
+        case Some(queryTree) => Seq(SnowflakePlan.buildRDDFromQuery(session, queryTree))
+        case _ => Nil
+      }
     } catch {
+      // In the case that we fail to handle the plan we will raise MatchError.
+      // Return Nil to let another strategy handle this tree.
       case e: MatchError => {
         logDebug(s"Failed to match plan: $e")
         Nil

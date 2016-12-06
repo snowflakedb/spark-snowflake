@@ -4,6 +4,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -12,7 +13,6 @@ import org.apache.spark.sql.execution.SparkPlan
 case class SnowflakePlan(output: Seq[Attribute],
                          rdd: RDD[InternalRow]) extends SparkPlan
 {
-
   override def children: Seq[SparkPlan] = Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -21,7 +21,8 @@ case class SnowflakePlan(output: Seq[Attribute],
 }
 
 object SnowflakePlan {
-  def buildRDDFromQuery(sparkSession: SparkSession, tree: AbstractQuery): SnowflakePlan = {
+
+  def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] = {
 
     val treeOutput = tree.qualifiedOutput
     val query = new SQLBuilder()
@@ -35,12 +36,11 @@ object SnowflakePlan {
 
     val baseQueries = tree.findAll { case q: BaseQuery => q }.orNull
 
-    if (baseQueries == null) {
-      throw new Exception("Query tree does not terminate with a valid BaseQuery instance.")
-    }
-
-    val rdd = baseQueries.head.relation.buildScanFromSQL[InternalRow](sql)
-
-    SnowflakePlan(treeOutput.map(_.toAttribute), rdd)
+   SnowflakeQuery.fromPlan(plan).map {
+     builder => {
+       SnowflakePlan(builder.source.output,
+         builder.source.buildScanFromSql[InternalRow](query))
+     }
+   }
   }
 }
