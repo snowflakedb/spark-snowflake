@@ -8,11 +8,16 @@ import org.apache.spark.sql.SparkSession
   */
 
 object SnowflakeConnectorUtils {
+
+  var currentPushdownSparkSession: Option[SparkSession] = None
+
   def enablePushdownSession(session: SparkSession): Unit = {
-    session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy(session))
+    currentPushdownSparkSession = Some(session)
+    session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
   }
 
   def disablePushdownSession(session: SparkSession): Unit = {
+    currentPushdownSparkSession = None
     session.experimental.extraStrategies = session.experimental.extraStrategies
       .filterNot(strategy => strategy.isInstanceOf[SnowflakeStrategy])
   }
