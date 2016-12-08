@@ -79,6 +79,10 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
   // Dummy test
   test("Basic aggregation") {
 
+    val userSchema = new StructType().add("name1", "integer").add("age", "integer")
+    val a = sparkSession.readStream.schema(userSchema).
+      csv("file:///home/ema/asdf.csv").writeStream.format("console").start()
+
     val sumDF = sparkSession.sql("""
   SELECT sum(o) as sum, p
   FROM df2

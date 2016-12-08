@@ -23,23 +23,10 @@ case class SnowflakePlan(output: Seq[Attribute],
 object SnowflakePlan {
 
   def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] = {
-
-    val treeOutput = tree.qualifiedOutput
-    val query = new SQLBuilder()
-      .raw("SELECT ")
-      .addExpressions(treeOutput, ", ")
-      .raw(" FROM ")
-      .appendBuilder(tree.collapse)
-
-    val sql = query.sql.toString()
-    val sqlParams = query.params
-
-    val baseQueries = tree.findAll { case q: BaseQuery => q }.orNull
-
    SnowflakeQuery.fromPlan(plan).map {
      builder => {
-       SnowflakePlan(builder.source.output,
-         builder.source.buildScanFromSql[InternalRow](query))
+       Seq(SnowflakePlan(builder.source.output,
+         builder.source.relation.buildScanFromSQL[InternalRow](builder.treeRoot.getQuery)))
      }
    }
   }

@@ -125,7 +125,7 @@ case class PartialQuery(alias: QueryAlias,
   }
 }
 
-case class JoinQuery(alias: QueryAlias,
+case class aJoinQuery(alias: QueryAlias,
                      output: Seq[Attribute],
                      projection: SQLBuilder,
                      condition: Option[SQLBuilder],

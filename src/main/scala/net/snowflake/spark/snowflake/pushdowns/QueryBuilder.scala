@@ -67,61 +67,31 @@ class QueryBuilder(plan: LogicalPlan) {
       case None => None
     }
 
-    // Advance alias label
-    subqueryAlias.next
-
     plan match {
       case Filter(condition, _) =>
-        PartialQuery(
-          alias = alias,
-          output = subTree.output,
-          inner = subTree,
-          suffix = Some(SQLBuilder
-            .withFields(subTree.qualifiedOutput)
-            .raw(" WHERE ").addExpression(condition)
-          )
-        )
+        Some(FilterQuery(
+          condition,
+          subQuery,
+          subqueryAlias.next
+          ))
 
-      case Project(fields, child) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-          expressions = renameExpressions(fieldIdIter, fields)
-        } yield PartialQuery(
-          alias = alias,
-          output = expressions.map(_.toAttribute),
-          prefix = SQLBuilder
-            .withFields(subTree.qualifiedOutput)
-            .maybeAddExpressions(expressions, ", "),
-          inner = subTree
-        )
+      case Project(fields, _) =>
+        Some(ProjectQuery(fields,
+          columnAlias,
+          subQuery,
+          subqueryAlias.next))
 
       // NOTE: The Catalyst optimizer will sometimes produce an aggregate with empty fields.
       // (Try "select count(*) from (select count(*) from foo) bar".) Spark seems to treat
       // it as a single empty tuple; we're not sure whether this is defined behavior, so we
       // let Spark handle that case to avoid any inconsistency.
-      case Aggregate(groups, fields, child) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-          expressions = renameExpressions(fieldIdIter, fields)
-        } yield {
-          PartialQuery(
-            alias = alias,
-            output = expressions.map(_.toAttribute),
-            prefix = {
-              val sb = SQLBuilder.withFields(subTree.qualifiedOutput)
-              if (expressions.isEmpty) {
-                Some(sb.raw("COUNT(*)"))
-              }
-              else {
-                Some(sb.addExpressions(expressions, ", "))
-              }
-            },
-            inner = subTree,
-            suffix = SQLBuilder
-              .withFields(subTree.qualifiedOutput)
-              .raw(" GROUP BY ").maybeAddExpressions(groups, ", ")
-          )
-        }
+      case Aggregate(groups, fields, _) =>
+          Some(AggregateQuery(
+            fields,
+            groups,
+            columnAlias,
+            subQuery,
+            subqueryAlias.next))
 
       case Limit(limitExpr, child) =>
         for {
@@ -145,30 +115,16 @@ class QueryBuilder(plan: LogicalPlan) {
           subTree <- buildQueryTree(fieldIdIter, alias.child, child)
         } yield buildSortLimit(Literal(Long.MaxValue), orderExpr, alias, subTree)
 
-      case Join(left, right, Inner, condition) => {
-        val (leftAlias, rightAlias) = alias.fork
-        for {
-          leftSubTree <- buildQueryTree(fieldIdIter, leftAlias.child, left)
-          rightSubTree <- buildQueryTree(fieldIdIter, rightAlias.child, right)
-          if leftSubTree.sharesCluster(rightSubTree)
-          qualifiedOutput = leftSubTree.qualifiedOutput ++ rightSubTree.qualifiedOutput
-          renamedQualifiedOutput = renameExpressions(fieldIdIter, qualifiedOutput)
-        } yield {
-          JoinQuery(
-            alias = alias,
-            output = renamedQualifiedOutput.map(_.toAttribute),
-            projection = SQLBuilder
-              .withFields(qualifiedOutput)
-              .addExpressions(renamedQualifiedOutput, ", "),
-            condition = condition.map { c =>
-              SQLBuilder
-                .withFields(qualifiedOutput)
-                .addExpression(c)
-            },
-            left = leftSubTree,
-            right = rightSubTree
+      case Join(_,_, Inner, condition) => {
+          if (!subQuery.sharesCluster(optQuery.get)) None
+          else
+            JoinQuery(
+            columnAlias,
+            subQuery,
+            optQuery.get,
+            condition,
+            subQueryAlias.next
           )
-        }
       }
 
       case l@UnpackLogicalRelation(r: SnowflakeRelation) => Some(BaseQuery(alias, r, l.output))
@@ -190,27 +146,6 @@ class QueryBuilder(plan: LogicalPlan) {
         sb.raw(" LIMIT ").addExpression(limitExpr)
       })
     )
-
-  /**
-    * Assign field names to each expression for a given alias
-    */
-  def renameExpressions(fieldIdIter: Iterator[String], expressions: Seq[NamedExpression]): Seq[NamedExpression] =
-  expressions.map {
-    // We need to special case Alias, since this is not valid SQL:
-    // select (foo as bar) as baz from ...
-    case a@Alias(child: Expression, name: String) => {
-      val metadata = MetadataUtils.preserveOriginalName(a)
-      Alias(child, fieldIdIter.next)(a.exprId, None, Some(metadata))
-    }
-    case expr: NamedExpression => {
-      val metadata = MetadataUtils.preserveOriginalName(expr)
-      Alias(expr, fieldIdIter.next)(expr.exprId, None, Some(metadata))
-    }
-  }
-
-  private def exprToNames(exprs: Seq[Expression]) : Seq[String] = {
-    exprs.map { e => e.toString }
-  }
 }
 
 object MetadataUtils {
@@ -235,5 +170,4 @@ object MetadataUtils {
       None
     }
   }
-
 }
