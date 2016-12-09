@@ -8,7 +8,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
   * Created by ema on 11/30/16.
   */
 
-object SnowflakeQuery {
+private[snowflake] object SnowflakeQuery {
+
+  protected final val identifier = "\""
 
   def fromPlan(plan: LogicalPlan): Option[QueryBuilder] = {
     new QueryBuilder(plan).tryBuild
@@ -28,10 +30,9 @@ object SnowflakeQuery {
         Alias(expr, columnAliases.next)(expr.exprId, None, Some(metadata))
       }
     }
-
 }
 
-abstract class SnowflakeQuery {
+private[snowflake] abstract sealed class SnowflakeQuery {
 
   val output: Seq[Attribute]
   val alias: String
@@ -66,22 +67,36 @@ abstract class SnowflakeQuery {
         child.find(query)
     })
 
+
+  protected final def wrap(name: String): String = {
+    SnowflakeQuery.identifier + name + SnowflakeQuery.identifier
+  }
+
+  protected final def block(text: String): String = {
+    "(" + text + ")"
+  }
+
+  // Aliased block
+  protected final def block(text: String, alias: String): String = {
+    "(" + text + ") AS " + wrap(alias)
+  }
+
   def attr(a: Attribute): String = {
     NamedExpression
     fields.find(e => e.exprId == a.exprId) match {
       case Some(resolved) =>
-        "\"" + resolved.qualifier + "." + resolved.name + "\""
+        wrap(resolved.qualifier + "." + resolved.name)
       case None =>
-        "\"" + a.qualifier + "." + a.name + "\""
+        wrap(a.qualifier + "." + a.name)
     }
   }
 
   def expressionToString(expression: Expression): String = {
     expression match {
       case a: Attribute => attr(a)
-    /*  case l: Literal => raw(l.toString()).param(l)
+      case l: Literal => l.toString
       case Alias(child: Expression, name: String) =>
-        block { addExpression(child) }.raw(" AS ").identifier(name)
+         block(expressionToString(child), name)
 
       case Cast(child, t) => t match {
         case TimestampType | DateType => block {
@@ -189,7 +204,7 @@ case class AggregateQuery(projectionColumns: Seq[NamedExpression],
 case class JoinQuery(columnAliases: Iterator[String],
                      left: SnowflakeQuery,
                      right: SnowflakeQuery,
-                     conditions: Seq[Expression],
+                     conditions: Option[Expression],
                      alias: String) extends SnowflakeQuery {
 
   override val child = null
@@ -223,8 +238,13 @@ case class JoinQuery(columnAliases: Iterator[String],
     s"SELECT $selectedColumns FROM ($source) $suffix AS $alias"
   }
 
-  override val suffix = " ON " +
-    conditions.map(cond => expressionToString(cond)).mkString(",")
+  override val suffix = {
+    val str = conditions match {
+      case Some(e) => " ON "
+      case None => ""
+    }
+      str + conditions.map(cond => expressionToString(cond)).mkString(",")
+  }
 }
 
 class DummyQuery extends SnowflakeQuery {

@@ -22,9 +22,9 @@ class QueryBuilder(plan: LogicalPlan) {
 
   var treeRoot: SnowflakeQuery = new DummyQuery
 
-  def tryBuild() : Option[QueryBuilder] = Try(build).toOption
+  def tryBuild(): Option[QueryBuilder] = Try(build).toOption
 
-  private def build() : QueryBuilder = {
+  private def build(): QueryBuilder = {
     treeRoot = generateQueries(plan).get
     this
   }
@@ -33,17 +33,17 @@ class QueryBuilder(plan: LogicalPlan) {
   // We use the source node's relation object's buildScan() to issue
   // the full query to Snowflake and dump to S3.
   def getBase(): SourceQuery = {
-      treeRoot.find {
-        case q: SourceQuery => q
-      }.getOrElse(
-        throw new SnowflakePushdownException("Uh Oh!")
-      )
+    treeRoot.find {
+      case q: SourceQuery => q
+    }.getOrElse(
+      throw new SnowflakePushdownException("Uh Oh!")
+    )
   }
 
   private def generateQueries(plan: LogicalPlan): Option[SnowflakeQuery] = {
 
     // Fetch all children (may contain two if a join)
-    val childPlans : Seq[LogicalPlan] = plan.children
+    val childPlans: Seq[LogicalPlan] = plan.children
 
     // Must be a base query
     if (childPlans == Nil) {
@@ -73,7 +73,7 @@ class QueryBuilder(plan: LogicalPlan) {
           condition,
           subQuery,
           subqueryAlias.next
-          ))
+        ))
 
       case Project(fields, _) =>
         Some(ProjectQuery(fields,
@@ -86,13 +86,14 @@ class QueryBuilder(plan: LogicalPlan) {
       // it as a single empty tuple; we're not sure whether this is defined behavior, so we
       // let Spark handle that case to avoid any inconsistency.
       case Aggregate(groups, fields, _) =>
-          Some(AggregateQuery(
-            fields,
-            groups,
-            columnAlias,
-            subQuery,
-            subqueryAlias.next))
+        Some(AggregateQuery(
+          fields,
+          groups,
+          columnAlias,
+          subQuery,
+          subqueryAlias.next))
 
+      /*
       case Limit(limitExpr, child) =>
         for {
           subTree <- buildQueryTree(fieldIdIter, alias.child, child)
@@ -113,26 +114,25 @@ class QueryBuilder(plan: LogicalPlan) {
       case Sort(orderExpr, /* global= */ true, child) =>
         for {
           subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-        } yield buildSortLimit(Literal(Long.MaxValue), orderExpr, alias, subTree)
+        } yield buildSortLimit(Literal(Long.MaxValue), orderExpr, alias, subTree) */
 
-      case Join(_,_, Inner, condition) => {
-          if (!subQuery.sharesCluster(optQuery.get)) None
-          else
-            JoinQuery(
+      case Join(_, _, Inner, condition) => {
+        if (!subQuery.sharesCluster(optQuery.get)) None
+        else
+          Some(JoinQuery(
             columnAlias,
             subQuery,
             optQuery.get,
             condition,
-            subQueryAlias.next
-          )
+            subqueryAlias.next
+          ))
       }
-
-      case l@UnpackLogicalRelation(r: SnowflakeRelation) => Some(BaseQuery(alias, r, l.output))
 
       case _ => None
     }
 
   }
+
   def buildSortLimit(limitExpr: Expression, orderExpr: Seq[Expression], alias: QueryAlias, subTree: AbstractQuery): AbstractQuery =
     PartialQuery(
       alias = alias,
@@ -148,26 +148,3 @@ class QueryBuilder(plan: LogicalPlan) {
     )
 }
 
-object MetadataUtils {
-  val METADATA_ORIGINAL_NAME = "originalColumnName"
-
-  def preserveOriginalName(expr: NamedExpression): Metadata = {
-    val meta = expr.metadata
-    if (!meta.contains(METADATA_ORIGINAL_NAME)) {
-      new MetadataBuilder()
-        .withMetadata(meta)
-        .putString(METADATA_ORIGINAL_NAME, expr.name)
-        .build
-    } else {
-      meta
-    }
-  }
-
-  def getOriginalName(expr: NamedExpression): Option[String] = {
-    if (expr.metadata.contains(METADATA_ORIGINAL_NAME)) {
-      Some(expr.metadata.getString(METADATA_ORIGINAL_NAME))
-    } else {
-      None
-    }
-  }
-}
