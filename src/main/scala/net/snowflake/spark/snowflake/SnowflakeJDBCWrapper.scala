@@ -199,7 +199,7 @@ private[snowflake] class JDBCWrapper {
         case _ => throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
       }
       val nullable = if (field.nullable) "" else "NOT NULL"
-      sb.append(s""", "${name.replace("\"", "\\\"")}" $typ $nullable""".trim)
+      sb.append(s""", ${name.replace("\"", "\\\"")} $typ $nullable""".trim)
     }}
     if (sb.length < 2) "" else sb.substring(2)
   }

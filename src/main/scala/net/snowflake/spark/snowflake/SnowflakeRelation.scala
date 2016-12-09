@@ -168,8 +168,8 @@ private[snowflake] case class SnowflakeRelation(
       filters: Array[Filter],
       tempDir: String): String = {
     assert(!requiredColumns.isEmpty)
-    // Always quote column names:
-    val columnList = requiredColumns.map(col => s""""$col"""").mkString(", ")
+    // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted:
+    val columnList = requiredColumns.map(col => "\"" + col.toUpperCase + "\"").mkString(", ")
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
     var credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
     val query = {
