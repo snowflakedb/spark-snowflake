@@ -31,6 +31,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
+  private val test_table3: String = s"test_table3_$randomSuffix"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -74,12 +75,34 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
     createTable(test_table)
     createTable(test_table2)
+
+    jdbcUpdate(
+      s"""
+         |create table $test_table3 (
+         |   "testint1" int,
+         |   testint2 int,
+         |   "teststring" string
+         )
+      """.stripMargin
+    )
+
+    jdbcUpdate(
+      s"""
+         |insert into $test_table3 values
+         |(1, 42, 'Unicode'),
+         |(2, 3, 'Mario'),
+         |(3, 42, 'Luigi')
+         """.stripMargin
+    )
+
+    conn.commit()
   }
 
   override def afterAll(): Unit = {
     try {
       conn.prepareStatement(s"drop table if exists $test_table").executeUpdate()
       conn.prepareStatement(s"drop table if exists $test_table2").executeUpdate()
+      conn.prepareStatement(s"drop table if exists $test_table3").executeUpdate()
       conn.commit()
     } finally {
       super.afterAll()
@@ -132,6 +155,17 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
          | )
        """.stripMargin
     )
+  }
+
+  test("Quoted column names work") {
+    val df = sqlContext.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$test_table3")
+      .load()
+
+    checkAnswer(df.select("\"testint1\"","\"teststring\"","testint2"),
+      Seq(Row(1,"Unicode",42), Row(2,"Mario",3), Row(3,"Luigi",42)))
   }
 
   test("DefaultSource can load Snowflake COPY unload output to a DataFrame") {

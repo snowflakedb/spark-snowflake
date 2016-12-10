@@ -84,7 +84,14 @@ private[snowflake] class JDBCWrapper {
         val isSigned = rsmd.isSigned(i + 1)
         val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
         val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
-        fields(i) = StructField(columnName, columnType, nullable)
+        fields(i) =
+          StructField(
+            if(columnName == columnName.toUpperCase) // Add quotes around column names if not all uppercase
+              columnName
+            else
+              s""""$columnName"""",
+            columnType,
+            nullable)
         i = i + 1
       }
       new StructType(fields)

@@ -168,8 +168,10 @@ private[snowflake] case class SnowflakeRelation(
       filters: Array[Filter],
       tempDir: String): String = {
     assert(!requiredColumns.isEmpty)
-    // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted:
-    val columnList = requiredColumns.map(col => "\"" + col.toUpperCase + "\"").mkString(", ")
+    // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted
+    // (unless already quoted):
+    val columnList = requiredColumns.map(
+      col => if(isQuoted(col)) col else "\"" + col.toUpperCase + "\"").mkString(", ")
     val whereClause = FilterPushdown.buildWhereClause(schema, filters)
     var credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
     val query = {
@@ -205,5 +207,9 @@ private[snowflake] case class SnowflakeRelation(
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
     val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
     new StructType(columns.map(name => fieldMap(name)))
+  }
+
+  private def isQuoted(name: String): Boolean = {
+    name.startsWith("\"") && name.endsWith("\"")
   }
 }
