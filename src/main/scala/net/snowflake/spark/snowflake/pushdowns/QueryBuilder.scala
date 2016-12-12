@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.{SnowflakeRelation, UnpackLogicalRelation}
+import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation, UnpackLogicalRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -22,7 +22,16 @@ class QueryBuilder(plan: LogicalPlan) {
 
   var treeRoot: SnowflakeQuery = new DummyQuery
 
-  def tryBuild(): Option[QueryBuilder] = Try(build).toOption
+  def tryBuild(): Option[QueryBuilder] = {
+    try{
+      Some(build)
+     } catch {
+      case e: IndexOutOfBoundsException =>
+        throw(e)
+
+      case _ => None
+    }
+  }
 
   private def build(): QueryBuilder = {
     treeRoot = generateQueries(plan).get
@@ -93,28 +102,33 @@ class QueryBuilder(plan: LogicalPlan) {
           subQuery,
           subqueryAlias.next))
 
-      /*
       case Limit(limitExpr, child) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-        } yield {
-          buildSortLimit(limitExpr, Seq(), alias, subTree)
-        }
+        Some(SortLimitQuery(
+          limitExpr,
+          Seq.empty,
+          subQuery,
+          subqueryAlias.next))
 
       case Limit(limitExpr, Sort(orderExpr, /* global= */ true, child)) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-        } yield buildSortLimit(limitExpr, orderExpr, alias, subTree)
+        Some(SortLimitQuery(
+          limitExpr,
+          orderExpr,
+          subQuery,
+          subqueryAlias.next))
 
       case Sort(orderExpr, /* global= */ true, Limit(limitExpr, child)) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-        } yield buildSortLimit(limitExpr, orderExpr, alias, subTree)
+        Some(SortLimitQuery(
+          limitExpr,
+          orderExpr,
+          subQuery,
+          subqueryAlias.next))
 
       case Sort(orderExpr, /* global= */ true, child) =>
-        for {
-          subTree <- buildQueryTree(fieldIdIter, alias.child, child)
-        } yield buildSortLimit(Literal(Long.MaxValue), orderExpr, alias, subTree) */
+        Some(SortLimitQuery(
+          Literal(Long.MaxValue),
+          orderExpr,
+          subQuery,
+          subqueryAlias.next))
 
       case Join(_, _, Inner, condition) => {
         if (!subQuery.sharesCluster(optQuery.get)) None
@@ -130,21 +144,6 @@ class QueryBuilder(plan: LogicalPlan) {
 
       case _ => None
     }
-
   }
-
-  def buildSortLimit(limitExpr: Expression, orderExpr: Seq[Expression], alias: QueryAlias, subTree: AbstractQuery): AbstractQuery =
-    PartialQuery(
-      alias = alias,
-      output = subTree.output,
-      inner = subTree,
-      suffix = Some({
-        val sb = SQLBuilder.withFields(subTree.qualifiedOutput)
-        if (orderExpr.nonEmpty) {
-          sb.raw(" ORDER BY ").addExpressions(orderExpr, ", ")
-        }
-        sb.raw(" LIMIT ").addExpression(limitExpr)
-      })
-    )
 }
 

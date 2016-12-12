@@ -25,8 +25,14 @@ object SnowflakePlan {
   def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] = {
    SnowflakeQuery.fromPlan(plan).map {
      builder => {
-       Seq(SnowflakePlan(builder.source.output,
-         builder.source.relation.buildScanFromSQL[InternalRow](builder.treeRoot.getQuery)))
+       Seq(
+         SnowflakePlan(
+         builder.source.output,
+         builder.source.relation.
+           buildScanFromSQL[InternalRow]
+           (builder.treeRoot.getQuery)
+         )
+       )
      }
    }
   }

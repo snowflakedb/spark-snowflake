@@ -21,4 +21,7 @@ object SnowflakeConnectorUtils {
     session.experimental.extraStrategies = session.experimental.extraStrategies
       .filterNot(strategy => strategy.isInstanceOf[SnowflakeStrategy])
   }
+
 }
+
+class SnowflakePushdownException(message: String) extends Exception(message)

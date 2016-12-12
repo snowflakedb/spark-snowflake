@@ -62,7 +62,6 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
       df2.createOrReplaceTempView("df2")
   }
 
-  /*
   // Dummy test
   test("Basic join") {
 
@@ -74,21 +73,6 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
   ON first.i = second.p""")
 
     joinedResult.show()
-  }
-*/
-  // Dummy test
-  test("Basic aggregation") {
-
-    val userSchema = new StructType().add("name1", "integer").add("age", "integer")
-    val a = sparkSession.readStream.schema(userSchema).
-      csv("file:///home/ema/asdf.csv").writeStream.format("console").start()
-
-    val sumDF = sparkSession.sql("""
-  SELECT sum(o) as sum, p
-  FROM df2
-  GROUP BY p""")
-
-    sumDF.show()
   }
 
   override def beforeEach(): Unit = {
