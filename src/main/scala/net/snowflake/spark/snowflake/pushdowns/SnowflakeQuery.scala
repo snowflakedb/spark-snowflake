@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, IsNotNull, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -63,7 +64,10 @@ private[snowflake] object SnowflakeQuery {
             "CAST" + block(convertExpression(child, fields) + "AS " + t)
           }
         }
-
+      case binExpr: expressions.BinaryOperator =>
+        block(convertExpression(binExpr.left, fields)
+          + s"${binExpr.symbol}"
+          + convertExpression(binExpr.right, fields))
       case IsNotNull(child) => block(convertExpression(child, fields) + " IS NOT NULL")
       case Aggregates(name, child) => name + block(convertExpression(child, fields))
     }
@@ -107,27 +111,20 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   val alias: String
   val child: SnowflakeQuery
 
+  val columns: Seq[NamedExpression] = Seq.empty
+
   val fields: Seq[Attribute] = if(child != null) child.qualifiedOutput else null
 
   def qualifiedOutput: Seq[Attribute] = output.map(
     a => AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId, Some(alias.toString)))
 
-  def selectedColumns: String = {
-    if (output.isEmpty) {
-      "*"
-    } else {
-      output.map(expr => expressionToString(expr)).mkString(", ")
-    }
-  }
+  def selectedColumns: String =
+    if (columns.isEmpty) "*" else columns.map(expr => expressionToString(expr)).mkString(", ")
 
   val suffix: String = ""
 
   val source =
-    if (child == null) {
-    ""
-  } else {
-    child.getQuery(true)
-  }
+    if (child == null) "" else child.getQuery(true)
 
   def getQuery(useAlias: Boolean = false): String = {
     val query =  s"SELECT $selectedColumns FROM $source $suffix"
@@ -139,12 +136,8 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   }
 
   def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
-    query.lift(this).orElse({
-      if (child == null)
-        None
-      else
-        child.find(query)
-    })
+    query.lift(this).orElse(
+      if (child == null) None else child.find(query))
 
   def expressionToString(expression: Expression): String = {
     SnowflakeQuery.convertExpression(expression, fields)
@@ -165,7 +158,6 @@ case class SourceQuery(relation: SnowflakeRelation, output: Seq[Attribute], alia
 
   // No child subquery for SourceQueries
   override val child = null
-//  override val output = relation.schema.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   override val fields = output
 
   val cluster = relation.params.sfURL + "/" + relation.params.sfWarehouse + "/" + relation.params.sfDatabase
@@ -179,37 +171,28 @@ case class FilterQuery(condition: Expression, child: SnowflakeQuery, alias: Stri
   override val suffix = "WHERE " + expressionToString(condition)
 }
 
-case class ProjectQuery(projectionColumns: Seq[NamedExpression],
+case class ProjectQuery(override val columns: Seq[NamedExpression],
                         columnAliases: Iterator[String],
                         child: SnowflakeQuery,
                         alias: String) extends SnowflakeQuery {
 
-  override val output = SnowflakeQuery.
-    renameExpressions(columnAliases, projectionColumns).map(_.toAttribute)
+  override val output = columns.map(_.toAttribute)
+ // override val output = SnowflakeQuery.
+  //  renameExpressions(columnAliases, columns).map(_.toAttribute)
 }
 
-case class AggregateQuery(projectionColumns: Seq[NamedExpression],
+case class AggregateQuery(override val columns: Seq[NamedExpression],
                           groups: Seq[Expression],
                           columnAliases: Iterator[String],
                           child: SnowflakeQuery,
                           alias: String) extends SnowflakeQuery {
 
-  override val output = SnowflakeQuery.
-    renameExpressions(columnAliases, projectionColumns).map(_.toAttribute)
+  override val output = columns.map(_.toAttribute)
+  //override val output = SnowflakeQuery.
+   // renameExpressions(columnAliases, columns).map(_.toAttribute)
 
   override def selectedColumns: String = {
-    var columnList = ""
-    if (output.isEmpty) {
-      columnList = "count(*)"
-    } else {
-      for (i <- output.indices) {
-        if (i != 0) {
-          columnList += ", "
-        }
-        columnList += expressionToString(output(i))
-      }
-    }
-    columnList
+    if (columns.isEmpty) "count(*)" else columns.map(expr => expressionToString(expr)).mkString(", ")
   }
 
   override val suffix = "GROUP BY " +
@@ -224,11 +207,11 @@ case class SortLimitQuery(limit: Expression,
   override val output = child.output
   override val suffix = {
 
-    val order_clause = if (!orderBy.isEmpty) {
-      "GROUP BY " + orderBy.map(e => expressionToString(e)).mkString(", ")
-    } else {
-      ""
-    }
+    val order_clause =
+      if (!orderBy.isEmpty)
+      "GROUP BY " +
+        orderBy.map(e => expressionToString(e)).mkString(", ")
+      else ""
 
     order_clause + " LIMIT " + expressionToString(limit)
   }
@@ -246,11 +229,16 @@ case class JoinQuery(columnAliases: Iterator[String],
     left.qualifiedOutput ++ right.qualifiedOutput
   }
 
-  override val output = SnowflakeQuery.
-    renameExpressions(columnAliases, fields).map(_.toAttribute)
+  override val output = fields
+
+ // override val output = SnowflakeQuery.
+   // renameExpressions(columns, fields).map(_.toAttribute)
 
   override val source = left.getQuery(true) +
       " INNER JOIN " + right.getQuery(true)
+
+  override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
+    query.lift(this).orElse(left.find(query)).orElse(right.find(query))
 
   override val suffix = {
     val str = conditions match {
