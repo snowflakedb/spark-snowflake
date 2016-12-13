@@ -23,6 +23,8 @@ class QueryBuilder(plan: LogicalPlan) {
   var treeRoot: SnowflakeQuery = new DummyQuery
 
   def tryBuild(): Option[QueryBuilder] = {
+    val e = Try(build)
+    /*
     try{
       Some(build)
      } catch {
@@ -31,6 +33,8 @@ class QueryBuilder(plan: LogicalPlan) {
 
       case _ => None
     }
+    */
+    e.toOption
   }
 
   private def build(): QueryBuilder = {
@@ -57,8 +61,8 @@ class QueryBuilder(plan: LogicalPlan) {
     // Must be a base query
     if (childPlans == Nil) {
       return plan match {
-        case LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
-          Some(SourceQuery(sfRelation, subqueryAlias.next))
+        case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
+          Some(SourceQuery(sfRelation, l.output, subqueryAlias.next))
         case _ => None
       }
     }

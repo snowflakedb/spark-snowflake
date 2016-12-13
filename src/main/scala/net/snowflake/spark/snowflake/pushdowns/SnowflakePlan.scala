@@ -30,7 +30,7 @@ object SnowflakePlan {
          builder.source.output,
          builder.source.relation.
            buildScanFromSQL[InternalRow]
-           (builder.treeRoot.getQuery)
+           (builder.treeRoot.getQuery())
          )
        )
      }

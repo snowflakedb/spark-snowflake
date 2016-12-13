@@ -46,7 +46,7 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"insert into $test_table values(null, 'Hello'), (2, 'Snowflake'), (3, 'Spark'), (4, null)")
     jdbcUpdate(s"insert into $join_table values(null, 1), (2, 2), (3, 2), (4, 3)")
 
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession);
+    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
 
      val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -75,6 +75,51 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
     joinedResult.show()
   }
 
+  // Dummy test
+  /*
+  test("Basic join") {
+    val dfOrdersTiny = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+    .option("sfDatabase","testdb")
+    .option("sfRole","sysadmin")
+      .option("dbtable", "orderstiny").load()
+
+    val dfOrders = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "orders").load()
+
+    val joinedResult =
+    dfOrdersTiny.join(dfOrders, dfOrders("c2") === dfOrdersTiny("c1"))
+
+    println(joinedResult.show)
+  } */
+/*
+
+// Dummy test
+  test("Basic join") {
+
+    val joinedResult = sparkSession.sql("""
+  SELECT first.s,
+         second.p
+  FROM df1 first
+  JOIN df2 second
+  ON first.i = second.p""")
+
+    joinedResult.show()
+  }
+  // Dummy test
+  test("Basic aggregation") {
+
+    val sumDF = sparkSession.sql("""
+  SELECT sum(o) as sum, p
+  FROM df2
+  GROUP BY p""")
+
+    sumDF.show()
+  }
+*/
   override def beforeEach(): Unit = {
     super.beforeEach()
   }

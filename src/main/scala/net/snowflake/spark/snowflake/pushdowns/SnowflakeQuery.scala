@@ -19,6 +19,56 @@ private[snowflake] object SnowflakeQuery {
     new QueryBuilder(plan).tryBuild
   }
 
+    protected final def wrap(name: String): String = {
+    SnowflakeQuery.identifier + name + SnowflakeQuery.identifier
+  }
+
+  protected final def block(text: String): String = {
+    "(" + text + ")"
+  }
+
+  // Aliased block
+  protected final def block(text: String, alias: String): String = {
+    "(" + text + ") AS " + wrap(alias)
+  }
+
+  def aliasedAttribute(alias: Option[String], name: String) = {
+    val str = alias match {
+      case Some(qualifier) => wrap(qualifier) + "."
+      case None => ""
+    }
+    str + wrap(name)
+  }
+
+  def attr(a: Attribute, fields: Seq[Attribute]): String = {
+    fields.find(e => e.exprId == a.exprId) match {
+      case Some(resolved) =>
+        aliasedAttribute(resolved.qualifier, resolved.name)
+      case None =>
+        aliasedAttribute(a.qualifier, a.name)
+    }
+  }
+
+  def convertExpression(expression: Expression, fields: Seq[Attribute]): String = {
+    expression match {
+      case a: Attribute => attr(a,fields)
+      case l: Literal => l.toString
+      case Alias(child: Expression, name: String) =>
+        block(convertExpression(child, fields), name)
+
+      case Cast(child, t) =>
+        SnowflakeQuery.getCastType(t) match {
+          case None => convertExpression(child, fields)
+          case Some(t) => {
+            "CAST" + block(convertExpression(child, fields) + "AS " + t)
+          }
+        }
+
+      case IsNotNull(child) => block(convertExpression(child, fields) + " IS NOT NULL")
+      case Aggregates(name, child) => name + block(convertExpression(child, fields))
+    }
+  }
+
   final def renameExpressions(columnAliases: Iterator[String],
                               expressions: Seq[NamedExpression]): Seq[NamedExpression] =
     expressions.map {
@@ -72,14 +122,20 @@ private[snowflake] abstract sealed class SnowflakeQuery {
 
   val suffix: String = ""
 
-  def getQuery: String = {
-    val source = if (child == null) {
-      ""
-    } else {
-      child.getQuery
-    }
+  val source =
+    if (child == null) {
+    ""
+  } else {
+    child.getQuery(true)
+  }
 
-    s"""(SELECT $selectedColumns FROM $source $suffix) AS "$alias""""
+  def getQuery(useAlias: Boolean = false): String = {
+    val query =  s"SELECT $selectedColumns FROM $source $suffix"
+
+    if(useAlias)
+      SnowflakeQuery.block(query) + s""" AS "$alias""""
+    else
+      query
   }
 
   def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
@@ -90,46 +146,8 @@ private[snowflake] abstract sealed class SnowflakeQuery {
         child.find(query)
     })
 
-  protected final def wrap(name: String): String = {
-    SnowflakeQuery.identifier + name + SnowflakeQuery.identifier
-  }
-
-  protected final def block(text: String): String = {
-    "(" + text + ")"
-  }
-
-  // Aliased block
-  protected final def block(text: String, alias: String): String = {
-    "(" + text + ") AS " + wrap(alias)
-  }
-
-  def attr(a: Attribute): String = {
-    fields.find(e => e.exprId == a.exprId) match {
-      case Some(resolved) =>
-        wrap(resolved.qualifier.get) + "." + wrap(resolved.name)
-      case None =>
-        wrap(a.qualifier.get) + "." + wrap(a.name)
-    }
-  }
-
   def expressionToString(expression: Expression): String = {
-    expression match {
-      case a: Attribute => attr(a)
-      case l: Literal => l.toString
-      case Alias(child: Expression, name: String) =>
-        block(expressionToString(child), name)
-
-      case Cast(child, t) =>
-        SnowflakeQuery.getCastType(t) match {
-          case None => expressionToString(child)
-          case Some(t) => {
-            "CAST" + block(expressionToString(child) + "AS " + t)
-          }
-        }
-
-      case IsNotNull(child) => block(expressionToString(child) + " IS NOT NULL")
-      case Aggregates(name, child) => name + block(expressionToString(child))
-    }
+    SnowflakeQuery.convertExpression(expression, fields)
   }
 
   def sharesCluster(otherTree: SnowflakeQuery): Boolean = {
@@ -143,17 +161,15 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   }
 }
 
-case class SourceQuery(relation: SnowflakeRelation, alias: String) extends SnowflakeQuery {
+case class SourceQuery(relation: SnowflakeRelation, output: Seq[Attribute], alias: String) extends SnowflakeQuery {
 
   // No child subquery for SourceQueries
   override val child = null
-  override val output = relation.schema.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+//  override val output = relation.schema.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   override val fields = output
 
   val cluster = relation.params.sfURL + "/" + relation.params.sfWarehouse + "/" + relation.params.sfDatabase
-  val tableOrQuery = relation.params.query.getOrElse(relation.params.table.get)
-
-  override def getQuery: String = s"""(SELECT * FROM $tableOrQuery) as "$alias""""
+  override val source = relation.params.query.getOrElse(relation.params.table.get.toString)
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] = query.lift(this)
 }
@@ -233,12 +249,8 @@ case class JoinQuery(columnAliases: Iterator[String],
   override val output = SnowflakeQuery.
     renameExpressions(columnAliases, fields).map(_.toAttribute)
 
-  override def getQuery: String = {
-    val source = left.getQuery +
-      " INNER JOIN " + right.getQuery
-
-    s"SELECT $selectedColumns FROM ($source) $suffix AS $alias"
-  }
+  override val source = left.getQuery(true) +
+      " INNER JOIN " + right.getQuery(true)
 
   override val suffix = {
     val str = conditions match {
