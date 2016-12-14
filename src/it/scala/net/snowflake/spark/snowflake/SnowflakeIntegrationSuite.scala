@@ -81,7 +81,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
          |create table $test_table3 (
          |   "testint1" int,
          |   testint2 int,
-         |   "teststring" string
+         |   "!#TES#STRI?NG" string
          )
       """.stripMargin
     )
@@ -164,7 +164,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .option("dbtable", s"$test_table3")
       .load()
 
-    checkAnswer(df.select("\"testint1\"","\"teststring\"","testint2"),
+    checkAnswer(df.select("\"testint1\"","\"!#TES#STRI?NG\"","testint2"),
       Seq(Row(1,"Unicode",42), Row(2,"Mario",3), Row(3,"Luigi",42)))
   }
 
