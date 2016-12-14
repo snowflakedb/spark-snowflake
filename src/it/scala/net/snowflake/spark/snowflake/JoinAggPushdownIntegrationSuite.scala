@@ -75,6 +75,16 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
     joinedResult.show()
   }
 
+  test("Basic aggregation") {
+    val aggResult = sparkSession.sql(
+      """
+        select p, avg(o) as avg from df2
+        group by p
+      """.stripMargin)
+
+    aggResult.show()
+  }
+
   // Dummy test
   /*
   test("Basic join") {

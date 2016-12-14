@@ -70,12 +70,6 @@ private[snowflake] object SnowflakeQuery {
     }
   }
 
-  final def renameExpressions(columnAliases: Iterator[String],
-                              expressions: Seq[NamedExpression]): Seq[NamedExpression] =
-    expressions.map { expr =>
-      Alias(expr, columnAliases.next)(expr.exprId, None, Some(expr.metadata))
-    }
-
   def decimalTypeToMySQLType(decimal: DecimalType): String = {
     val precision = Math.min(DECIMAL_MAX_PRECISION, decimal.precision)
     val scale =
@@ -150,9 +144,9 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
     val indent = "\n" + ("\t" * depth)
 
-    val src =
-      if (child == null) indent + getQuery(true)
-      else child.getPrettyQuery(true, depth+1)
+    if(child == null) return indent + getQuery(true)
+
+    val src = child.getPrettyQuery(true, depth+1)
 
     val query =
       s"""${indent}SELECT $selectedColumns FROM $src$indent$suffix"""
@@ -212,19 +206,15 @@ case class FilterQuery(condition: Expression, child: SnowflakeQuery, alias: Stri
 }
 
 case class ProjectQuery(override val columns: Seq[NamedExpression],
-                        columnAliases: Iterator[String],
                         child: SnowflakeQuery,
                         alias: String)
     extends SnowflakeQuery {
 
   override val output = columns.map(_.toAttribute)
-  // override val output = SnowflakeQuery.
-  //  renameExpressions(columnAliases, columns).map(_.toAttribute)
 }
 
 case class AggregateQuery(override val columns: Seq[NamedExpression],
                           groups: Seq[Expression],
-                          columnAliases: Iterator[String],
                           child: SnowflakeQuery,
                           alias: String)
     extends SnowflakeQuery {
@@ -232,8 +222,6 @@ case class AggregateQuery(override val columns: Seq[NamedExpression],
   override val output = columns.map(_.toAttribute)
   override val suffix = " GROUP BY " + groups.map(group => expressionToString(group)).mkString(",")
 
-  //override val output = SnowflakeQuery.
-  // renameExpressions(columnAliases, columns).map(_.toAttribute)
   override def selectedColumns: String = {
     if (columns.isEmpty) "count(*)"
     else
@@ -255,8 +243,7 @@ case class SortLimitQuery(limit: Expression, orderBy: Seq[Expression], child: Sn
   }
 }
 
-case class JoinQuery(columnAliases: Iterator[String],
-                     left: SnowflakeQuery,
+case class JoinQuery(left: SnowflakeQuery,
                      right: SnowflakeQuery,
                      conditions: Option[Expression],
                      alias: String)
@@ -270,8 +257,6 @@ case class JoinQuery(columnAliases: Iterator[String],
 
   override val output = fields
 
-  // override val output = SnowflakeQuery.
-  // renameExpressions(columns, fields).map(_.toAttribute)
   override val source = left.getQuery(true) + " INNER JOIN " + right.getQuery(true)
 
   // Use for pretty printing.
@@ -300,4 +285,3 @@ case class JoinQuery(columnAliases: Iterator[String],
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this).orElse(left.find(query)).orElse(right.find(query))
 }
-

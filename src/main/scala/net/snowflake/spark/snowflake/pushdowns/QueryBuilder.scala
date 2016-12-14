@@ -20,7 +20,6 @@ import scala.reflect.ClassTag
   */
 private[snowflake] class QueryBuilder(plan: LogicalPlan) {
 
-  lazy val columnAlias = Iterator.from(1).map(n => s"column_$n")
   lazy val subqueryAlias = Iterator.from(0).map(n => s"subquery_$n")
 
   lazy val physicalRDD = toRDD[InternalRow]
@@ -108,14 +107,14 @@ private[snowflake] class QueryBuilder(plan: LogicalPlan) {
           ))
 
       case Project(fields, _) =>
-        Some(ProjectQuery(fields, columnAlias, subQuery, subqueryAlias.next))
+        Some(ProjectQuery(fields, subQuery, subqueryAlias.next))
 
       // NOTE: The Catalyst optimizer will sometimes produce an aggregate with empty fields.
       // (Try "select count(*) from (select count(*) from foo) bar".) Spark seems to treat
       // it as a single empty tuple; we're not sure whether this is defined behavior, so we
       // let Spark handle that case to avoid any inconsistency.
       case Aggregate(groups, fields, _) =>
-        Some(AggregateQuery(fields, groups, columnAlias, subQuery, subqueryAlias.next))
+        Some(AggregateQuery(fields, groups, subQuery, subqueryAlias.next))
 
       case Limit(limitExpr, child) =>
         Some(SortLimitQuery(limitExpr, Seq.empty, subQuery, subqueryAlias.next))
@@ -134,7 +133,6 @@ private[snowflake] class QueryBuilder(plan: LogicalPlan) {
         else
           Some(
             JoinQuery(
-              columnAlias,
               subQuery,
               optQuery.get,
               condition,
