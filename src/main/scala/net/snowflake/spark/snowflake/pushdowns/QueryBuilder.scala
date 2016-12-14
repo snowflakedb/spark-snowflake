@@ -1,56 +1,74 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation, UnpackLogicalRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, NamedExpression}
+import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 
-import scala.util.Try
+import scala.reflect.ClassTag
 
 /**
   * Created by ema on 11/30/16.
+  *
+  * This class takes a Spark LogicalPlan and attempts to generate
+  * a query for Snowflake using tryBuild. Here we use lazy instantiation
+  * to avoid recomputation.
+  *
   */
+private[snowflake] class QueryBuilder(plan: LogicalPlan) {
 
-class QueryBuilder(plan: LogicalPlan) {
-
-  // Iterators are not thread safe
   lazy val columnAlias = Iterator.from(1).map(n => s"column_$n")
   lazy val subqueryAlias = Iterator.from(0).map(n => s"subquery_$n")
-  lazy val source = getBase()
 
-  var treeRoot: SnowflakeQuery = new DummyQuery
+  lazy val physicalRDD = toRDD[InternalRow]
 
-  def tryBuild(): Option[QueryBuilder] = {
-    val e = Try(build)
-    /*
-    try{
-      Some(build)
-     } catch {
-      case e: IndexOutOfBoundsException =>
-        throw(e)
+  lazy val tryBuild: Option[QueryBuilder] = if (treeRoot == null) None else Some(this)
 
-      case _ => None
-    }
-    */
-    e.toOption
+  lazy val query: String = {
+    checkTree()
+    val query = treeRoot.getQuery()
+    val pretty = treeRoot.getPrettyQuery()
+    SnowflakeQuery.log.info(s"""Generated query: '$pretty'""")
+    query
   }
-
-  private def build(): QueryBuilder = {
-    treeRoot = generateQueries(plan).get
-    this
+  // Fetch the output attributes.
+  lazy val getOutput = {
+    checkTree()
+    treeRoot.output
   }
-
-  // Returns the base (source table) query for this entire query tree.
-  // We use the source node's relation object's buildScan() to issue
-  // the full query to Snowflake and dump to S3.
-  def getBase(): SourceQuery = {
+  // Finds the SourceQuery in this given tree.
+  private lazy val source = {
+    checkTree()
     treeRoot.find {
       case q: SourceQuery => q
     }.getOrElse(
-      throw new SnowflakePushdownException("Uh Oh!")
+      throw new SnowflakePushdownException(
+        "Something went wrong: a query tree was generated with no " +
+          "Snowflake SourceQuery found.")
     )
+  }
+  private lazy val treeRoot: SnowflakeQuery = {
+    try {
+      generateQueries(plan).get
+    } catch {
+      case e: MatchError => {
+        SnowflakeQuery.log.debug("Could not generate a query.")
+        null
+      }
+    }
+  }
+
+  def toRDD[T: ClassTag]: RDD[T] = {
+    source.relation.buildScanFromSQL[T](query)
+  }
+
+  private def checkTree(): Unit = {
+    if (treeRoot == null) {
+      throw new SnowflakePushdownException("QueryBuilder's tree accessed without generation.")
+    }
   }
 
   private def generateQueries(plan: LogicalPlan): Option[SnowflakeQuery] = {
@@ -82,72 +100,49 @@ class QueryBuilder(plan: LogicalPlan) {
 
     plan match {
       case Filter(condition, _) =>
-        Some(FilterQuery(
-          condition,
-          subQuery,
-          subqueryAlias.next
-        ))
+        Some(
+          FilterQuery(
+            condition,
+            subQuery,
+            subqueryAlias.next
+          ))
 
       case Project(fields, _) =>
-        Some(ProjectQuery(fields,
-          columnAlias,
-          subQuery,
-          subqueryAlias.next))
+        Some(ProjectQuery(fields, columnAlias, subQuery, subqueryAlias.next))
 
       // NOTE: The Catalyst optimizer will sometimes produce an aggregate with empty fields.
       // (Try "select count(*) from (select count(*) from foo) bar".) Spark seems to treat
       // it as a single empty tuple; we're not sure whether this is defined behavior, so we
       // let Spark handle that case to avoid any inconsistency.
       case Aggregate(groups, fields, _) =>
-        Some(AggregateQuery(
-          fields,
-          groups,
-          columnAlias,
-          subQuery,
-          subqueryAlias.next))
+        Some(AggregateQuery(fields, groups, columnAlias, subQuery, subqueryAlias.next))
 
       case Limit(limitExpr, child) =>
-        Some(SortLimitQuery(
-          limitExpr,
-          Seq.empty,
-          subQuery,
-          subqueryAlias.next))
+        Some(SortLimitQuery(limitExpr, Seq.empty, subQuery, subqueryAlias.next))
 
       case Limit(limitExpr, Sort(orderExpr, /* global= */ true, child)) =>
-        Some(SortLimitQuery(
-          limitExpr,
-          orderExpr,
-          subQuery,
-          subqueryAlias.next))
+        Some(SortLimitQuery(limitExpr, orderExpr, subQuery, subqueryAlias.next))
 
       case Sort(orderExpr, /* global= */ true, Limit(limitExpr, child)) =>
-        Some(SortLimitQuery(
-          limitExpr,
-          orderExpr,
-          subQuery,
-          subqueryAlias.next))
+        Some(SortLimitQuery(limitExpr, orderExpr, subQuery, subqueryAlias.next))
 
       case Sort(orderExpr, /* global= */ true, child) =>
-        Some(SortLimitQuery(
-          Literal(Long.MaxValue),
-          orderExpr,
-          subQuery,
-          subqueryAlias.next))
+        Some(SortLimitQuery(Literal(Long.MaxValue), orderExpr, subQuery, subqueryAlias.next))
 
       case Join(_, _, Inner, condition) => {
         if (!subQuery.sharesCluster(optQuery.get)) None
         else
-          Some(JoinQuery(
-            columnAlias,
-            subQuery,
-            optQuery.get,
-            condition,
-            subqueryAlias.next
-          ))
+          Some(
+            JoinQuery(
+              columnAlias,
+              subQuery,
+              optQuery.get,
+              condition,
+              subqueryAlias.next
+            ))
       }
 
       case _ => None
     }
   }
 }
-

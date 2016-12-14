@@ -19,14 +19,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.util.Try
+import scala.util.{Random, Try}
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
@@ -68,8 +68,9 @@ private[snowflake] class JDBCWrapper {
    * @throws SQLException if the table specification is garbage.
    * @throws SQLException if the table contains an unsupported type.
    */
-  def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as foo WHERE 1=0")
+  def resolveTable(conn: Connection, table: String): StructType = { Math.abs(Random.nextLong()).toString
+    val randStr = Math.abs(Random.nextLong()).toString
+    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as temp_$randStr WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount
@@ -92,7 +93,6 @@ private[snowflake] class JDBCWrapper {
       rs.close()
     }
   }
-
 
   /**
    *  Get a connection based on the provided parameters

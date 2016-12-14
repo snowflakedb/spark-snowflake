@@ -10,30 +10,19 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
   * Created by ema on 11/22/16.
   */
-case class SnowflakePlan(output: Seq[Attribute],
-                         rdd: RDD[InternalRow]) extends SparkPlan
-{
+case class SnowflakePlan(builder: QueryBuilder) extends SparkPlan {
+
+  override def output = builder.getOutput
   override def children: Seq[SparkPlan] = Nil
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    rdd
-  }
+  protected override def doExecute(): RDD[InternalRow] =
+    builder.physicalRDD
+
 }
 
 object SnowflakePlan {
 
-  def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] = {
-   SnowflakeQuery.fromPlan(plan).map {
-     builder => {
-       Seq(
-         SnowflakePlan(
-         builder.source.output,
-         builder.source.relation.
-           buildScanFromSQL[InternalRow]
-           (builder.treeRoot.getQuery())
-         )
-       )
-     }
-   }
-  }
+  def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] =
+    new QueryBuilder(plan).tryBuild.map(builder => Seq(SnowflakePlan(builder)))
+
 }
