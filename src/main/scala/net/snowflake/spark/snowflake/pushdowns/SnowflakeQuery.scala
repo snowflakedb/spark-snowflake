@@ -45,6 +45,11 @@ private[snowflake] object SnowflakeQuery {
     }
   }
 
+  /** This performs the conversion from Spark expressions to SQL runnable by Snowflake.
+    * We should have as many entries here as possible, or the translation will not be able ot happen.
+    *
+    * @note (A MatchError will be raised for unsupported Spark expressions).
+   */
   def convertExpression(expression: Expression, fields: Seq[Attribute]): String = {
     expression match {
       case a: Attribute => attr(a, fields)
@@ -64,17 +69,11 @@ private[snowflake] object SnowflakeQuery {
           convertExpression(binExpr.left, fields) + s"${binExpr.symbol}" + convertExpression(binExpr.right, fields)
         )
       case IsNotNull(child) =>
-       block(convertExpression(child, fields) + " IS NOT NULL")
+        block(convertExpression(child, fields) + " IS NOT NULL")
+
       case Aggregates(name, child) =>
         name + block(convertExpression(child, fields))
     }
-  }
-
-  def decimalTypeToMySQLType(decimal: DecimalType): String = {
-    val precision = Math.min(DECIMAL_MAX_PRECISION, decimal.precision)
-    val scale =
-      Math.min(DECIMAL_MAX_SCALE, decimal.scale)
-    s"DECIMAL" + s"($precision, $scale)"
   }
 
   protected final def wrap(name: String): String = {
@@ -100,12 +99,13 @@ private[snowflake] object SnowflakeQuery {
     case StringType => Some("VARCHAR")
     case BinaryType => Some("BINARY")
     case DateType => Some("DATE")
-    case TimestampType => Some("DATE")
-    case decimal: DecimalType =>
-      Some(decimalTypeToMySQLType(decimal))
-    case LongType => Some("SIGNED")
-    case FloatType => Some("DECIMAL(14, 7)")
-    case DoubleType => Some("DECIMAL(30, 15)")
+    case TimestampType => Some("TIMESTAMP")
+    case d: DecimalType =>
+      Some("DECIMAL(" + d.precision + ", " + d.scale + ")")
+    case LongType => Some("NUMBER")
+    case IntegerType => Some("NUMBER")
+    case FloatType => Some("FLOAT")
+    case DoubleType => Some("DOUBLE")
     case _ => None
   }
 }
@@ -144,9 +144,9 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
     val indent = "\n" + ("\t" * depth)
 
-    if(child == null) return indent + getQuery(true)
+    if (child == null) return indent + getQuery(true)
 
-    val src = child.getPrettyQuery(true, depth+1)
+    val src = child.getPrettyQuery(true, depth + 1)
 
     val query =
       s"""${indent}SELECT $selectedColumns FROM $src$indent$suffix"""
@@ -205,9 +205,7 @@ case class FilterQuery(condition: Expression, child: SnowflakeQuery, alias: Stri
   override val suffix = " WHERE " + expressionToString(condition)
 }
 
-case class ProjectQuery(override val columns: Seq[NamedExpression],
-                        child: SnowflakeQuery,
-                        alias: String)
+case class ProjectQuery(override val columns: Seq[NamedExpression], child: SnowflakeQuery, alias: String)
     extends SnowflakeQuery {
 
   override val output = columns.map(_.toAttribute)
@@ -243,10 +241,7 @@ case class SortLimitQuery(limit: Expression, orderBy: Seq[Expression], child: Sn
   }
 }
 
-case class JoinQuery(left: SnowflakeQuery,
-                     right: SnowflakeQuery,
-                     conditions: Option[Expression],
-                     alias: String)
+case class JoinQuery(left: SnowflakeQuery, right: SnowflakeQuery, conditions: Option[Expression], alias: String)
     extends SnowflakeQuery {
 
   override val child = null
@@ -263,8 +258,8 @@ case class JoinQuery(left: SnowflakeQuery,
   override def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
     val indent = "\n" + ("\t" * depth)
 
-    val l = left.getPrettyQuery(true, depth+1)
-    val r = right.getPrettyQuery(true, depth+1)
+    val l = left.getPrettyQuery(true, depth + 1)
+    val r = right.getPrettyQuery(true, depth + 1)
 
     val query =
       s"""${indent}SELECT $selectedColumns FROM $l$indent INNER JOIN $r $indent$suffix"""
