@@ -1,18 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
-import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  AttributeReference,
-  Cast,
-  Expression,
-  IsNotNull,
-  Literal,
-  NamedExpression
-}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, NamedExpression}
 import org.slf4j.LoggerFactory
 
 /**
@@ -22,95 +11,9 @@ private[snowflake] object SnowflakeQuery {
 
   final val log =
     LoggerFactory.getLogger(getClass)
-  private final val identifier = "\""
-  private final val DECIMAL_MAX_PRECISION = 65
-  private final val DECIMAL_MAX_SCALE = 30
-
-  def aliasedAttribute(alias: Option[String], name: String) = {
-    val str = alias match {
-      case Some(qualifier) =>
-        wrap(qualifier) + "."
-      case None => ""
-    }
-
-    str + wrap(name)
-  }
-
-  def attr(a: Attribute, fields: Seq[Attribute]): String = {
-    fields.find(e => e.exprId == a.exprId) match {
-      case Some(resolved) =>
-        aliasedAttribute(resolved.qualifier, resolved.name)
-      case None =>
-        aliasedAttribute(a.qualifier, a.name)
-    }
-  }
-
-  /** This performs the conversion from Spark expressions to SQL runnable by Snowflake.
-    * We should have as many entries here as possible, or the translation will not be able ot happen.
-    *
-    * @note (A MatchError will be raised for unsupported Spark expressions).
-   */
-  def convertExpression(expression: Expression, fields: Seq[Attribute]): String = {
-    expression match {
-      case a: Attribute => attr(a, fields)
-      case l: Literal => l.toString
-      case Alias(child: Expression, name: String) =>
-        block(convertExpression(child, fields), name)
-      case Cast(child, t) =>
-        SnowflakeQuery.getCastType(t) match {
-          case None =>
-            convertExpression(child, fields)
-          case Some(t) => {
-            "CAST" + block(convertExpression(child, fields) + "AS " + t)
-          }
-        }
-      case binExpr: expressions.BinaryOperator =>
-        block(
-          convertExpression(binExpr.left, fields) + s"${binExpr.symbol}" + convertExpression(binExpr.right, fields)
-        )
-      case IsNotNull(child) =>
-        block(convertExpression(child, fields) + " IS NOT NULL")
-
-      case Aggregates(name, child) =>
-        name + block(convertExpression(child, fields))
-    }
-  }
-
-  protected final def wrap(name: String): String = {
-    SnowflakeQuery.identifier + name + SnowflakeQuery.identifier
-  }
-
-  final def block(text: String): String = {
-    "(" + text + ")"
-  }
-
-  // Aliased block
-  final def block(text: String, alias: String): String = {
-    "(" + text + ") AS " + wrap(alias)
-  }
-
-  /**
-    * Attempts a best effort conversion from a SparkType
-    * to a Snowflake type to be used in a Cast.
-    *
-    * @note Will raise a match error for unsupported casts
-    */
-  protected final def getCastType(t: DataType): Option[String] = t match {
-    case StringType => Some("VARCHAR")
-    case BinaryType => Some("BINARY")
-    case DateType => Some("DATE")
-    case TimestampType => Some("TIMESTAMP")
-    case d: DecimalType =>
-      Some("DECIMAL(" + d.precision + ", " + d.scale + ")")
-    case LongType => Some("NUMBER")
-    case IntegerType => Some("NUMBER")
-    case FloatType => Some("FLOAT")
-    case DoubleType => Some("DOUBLE")
-    case _ => None
-  }
 }
 
-private[snowflake] abstract sealed class SnowflakeQuery {
+private[snowflake] abstract sealed class SnowflakeQuery extends SQLGenerator {
 
   lazy val queryType = getClass.getSimpleName
   val output: Seq[Attribute]
@@ -136,7 +39,7 @@ private[snowflake] abstract sealed class SnowflakeQuery {
       s"SELECT $selectedColumns FROM $source$suffix"
 
     if (useAlias)
-      SnowflakeQuery.block(query) + s""" AS "$alias""""
+      block(query) + s""" AS "$alias""""
     else query
   }
 
@@ -152,7 +55,7 @@ private[snowflake] abstract sealed class SnowflakeQuery {
       s"""${indent}SELECT $selectedColumns FROM $src$indent$suffix"""
 
     if (useAlias)
-      SnowflakeQuery.block(query) + s"""$indent AS "$alias""""
+      block(query) + s"""$indent AS "$alias""""
     else query
   }
 
@@ -162,7 +65,7 @@ private[snowflake] abstract sealed class SnowflakeQuery {
       columns.map(expr => expressionToString(expr)).mkString(", ")
 
   def expressionToString(expression: Expression): String = {
-    SnowflakeQuery.convertExpression(expression, fields)
+    convertExpression(expression, fields)
   }
 
   def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
@@ -190,7 +93,7 @@ private[snowflake] abstract sealed class SnowflakeQuery {
 case class SourceQuery(relation: SnowflakeRelation, output: Seq[Attribute], alias: String) extends SnowflakeQuery {
 
   // No child subquery for SourceQueries
-  override val child = null
+  override val child  = null
   override val fields = output
   override val source =
     relation.params.query.getOrElse(relation.params.table.get.toString)
@@ -253,6 +156,13 @@ case class JoinQuery(left: SnowflakeQuery, right: SnowflakeQuery, conditions: Op
   override val output = fields
 
   override val source = left.getQuery(true) + " INNER JOIN " + right.getQuery(true)
+  override val suffix = {
+    val str = conditions match {
+      case Some(e) => " ON "
+      case None    => ""
+    }
+    str + conditions.map(cond => expressionToString(cond)).mkString(",")
+  }
 
   // Use for pretty printing.
   override def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
@@ -265,16 +175,8 @@ case class JoinQuery(left: SnowflakeQuery, right: SnowflakeQuery, conditions: Op
       s"""${indent}SELECT $selectedColumns FROM $l$indent INNER JOIN $r $indent$suffix"""
 
     if (useAlias)
-      SnowflakeQuery.block(query) + s"""$indent AS "$alias""""
+      block(query) + s"""$indent AS "$alias""""
     else query
-  }
-
-  override val suffix = {
-    val str = conditions match {
-      case Some(e) => " ON "
-      case None => ""
-    }
-    str + conditions.map(cond => expressionToString(cond)).mkString(",")
   }
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =

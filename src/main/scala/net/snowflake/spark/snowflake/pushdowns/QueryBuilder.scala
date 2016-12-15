@@ -28,9 +28,8 @@ private[snowflake] class QueryBuilder(plan: LogicalPlan) {
 
   lazy val query: String = {
     checkTree()
-    val query = treeRoot.getQuery()
-    val pretty = treeRoot.getPrettyQuery()
-    SnowflakeQuery.log.info(s"""Generated query: '$pretty'""")
+    val query = treeRoot.getPrettyQuery()
+    SnowflakeQuery.log.info(s"""Generated query: '$query'""")
     query
   }
   // Fetch the output attributes.
@@ -109,10 +108,6 @@ private[snowflake] class QueryBuilder(plan: LogicalPlan) {
       case Project(fields, _) =>
         Some(ProjectQuery(fields, subQuery, subqueryAlias.next))
 
-      // NOTE: The Catalyst optimizer will sometimes produce an aggregate with empty fields.
-      // (Try "select count(*) from (select count(*) from foo) bar".) Spark seems to treat
-      // it as a single empty tuple; we're not sure whether this is defined behavior, so we
-      // let Spark handle that case to avoid any inconsistency.
       case Aggregate(groups, fields, _) =>
         Some(AggregateQuery(fields, groups, subQuery, subqueryAlias.next))
 
