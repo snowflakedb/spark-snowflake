@@ -1,12 +1,14 @@
 package net.snowflake.spark.snowflake.pushdowns
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.slf4j.LoggerFactory
 
 /**
   * Created by ema on 12/15/16.
   */
 package object QueryGeneration {
   private final val identifier = "\""
+  private[snowflake] final val log = LoggerFactory.getLogger(getClass)
 
   private[snowflake] final def block(text: String): String = {
     "(" + text + ")"

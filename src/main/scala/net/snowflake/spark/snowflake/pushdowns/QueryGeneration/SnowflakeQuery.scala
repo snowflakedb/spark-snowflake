@@ -2,17 +2,10 @@ package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, NamedExpression}
-import org.slf4j.LoggerFactory
 
 /**
   * Created by ema on 11/30/16.
   */
-private[snowflake] object SnowflakeQuery {
-
-  final val log =
-    LoggerFactory.getLogger(getClass)
-}
-
 private[snowflake] abstract sealed class SnowflakeQuery {
 
   lazy val queryType = getClass.getSimpleName
@@ -33,7 +26,7 @@ private[snowflake] abstract sealed class SnowflakeQuery {
     output.map(a => AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId, Some(alias.toString)))
 
   def getQuery(useAlias: Boolean = false): String = {
-    SnowflakeQuery.log.debug(s"""Now generating the query for $queryType""")
+    log.debug(s"""Now generating the query for $queryType""")
 
     val query =
       s"SELECT $selectedColumns FROM $source$suffix"

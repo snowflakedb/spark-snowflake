@@ -1,5 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
+import java.util.NoSuchElementException
+
 import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,14 +54,14 @@ private class QueryBuilder(plan: LogicalPlan) {
     try {
       generateQueries(plan).get
     } catch {
-      case e: MatchError => {
+      case e: MatchError | NoSuchElementException => {
         SnowflakeQuery.log.debug("Could not generate a query.")
       }
       null
     }
   }
 
-  def toRDD[T: ClassTag]: RDD[T] = {
+  private def toRDD[T: ClassTag]: RDD[T] = {
     source.relation.buildScanFromSQL[T](query)
   }
 
@@ -75,8 +77,7 @@ private class QueryBuilder(plan: LogicalPlan) {
       case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
         Some(SourceQuery(sfRelation, l.output, alias.next))
 
-      case Unary(child) => {
-
+      case UnaryOp(child) => {
         generateQueries(child) map { subQuery =>
           plan match {
 
@@ -84,18 +85,18 @@ private class QueryBuilder(plan: LogicalPlan) {
             case Project(fields, _)           => ProjectQuery(fields, subQuery, alias.next)
             case Aggregate(groups, fields, _) => AggregateQuery(fields, groups, subQuery, alias.next)
             case Limit(limitExpr, _)          => SortLimitQuery(limitExpr, Seq.empty, subQuery, alias.next)
-            case Limit(limitExpr, Sort(orderExpr, /* global= */ true, _)) =>
+            case Limit(limitExpr, Sort(orderExpr, true, _)) =>
               SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
 
-            case Sort(orderExpr, /* global= */ true, Limit(limitExpr, _)) =>
+            case Sort(orderExpr, true, Limit(limitExpr, _)) =>
               SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
-            case Sort(orderExpr, /* global= */ true, _) =>
+            case Sort(orderExpr, true, _) =>
               SortLimitQuery(Literal(Long.MaxValue), orderExpr, subQuery, alias.next)
           }
         }
       }
 
-      case Binary(left, right) =>
+      case BinaryOp(left, right) =>
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
