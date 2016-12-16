@@ -1,13 +1,12 @@
-package net.snowflake.spark.snowflake.pushdowns.SQLExpressions
+package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import net.snowflake.spark.snowflake.pushdowns.{SQLGenerator, SnowflakeQuery}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, BinaryOperator, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression}
 import org.apache.spark.sql.types._
 
 /**
   * Created by ema on 12/15/16.
   */
-object MiscExpression extends SQLGenerator {
+private[snowflake] object MiscExpression {
 
   def unapply(expAttr: (Expression, Seq[Attribute])): Option[String] = {
     val expr   = expAttr._1
@@ -35,7 +34,7 @@ object MiscExpression extends SQLGenerator {
     *
     * @note Will raise a match error for unsupported casts
     */
-  final def getCastType(t: DataType): Option[String] = t match {
+  private final def getCastType(t: DataType): Option[String] = t match {
     case StringType    => Some("VARCHAR")
     case BinaryType    => Some("BINARY")
     case DateType      => Some("DATE")

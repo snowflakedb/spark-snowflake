@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns
+package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, NamedExpression}
@@ -13,7 +13,7 @@ private[snowflake] object SnowflakeQuery {
     LoggerFactory.getLogger(getClass)
 }
 
-private[snowflake] abstract sealed class SnowflakeQuery extends SQLGenerator {
+private[snowflake] abstract sealed class SnowflakeQuery {
 
   lazy val queryType = getClass.getSimpleName
   val output: Seq[Attribute]

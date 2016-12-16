@@ -1,12 +1,11 @@
-package net.snowflake.spark.snowflake.pushdowns.SQLExpressions
+package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import net.snowflake.spark.snowflake.pushdowns.SQLGenerator
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, IsNotNull, IsNull}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, IsNotNull, IsNull}
 
 /**
   * Created by ema on 12/15/16.
   */
-object BooleanExpression extends SQLGenerator {
+private[snowflake] object BooleanExpression {
 
   def unapply(expAttr: (Expression, Seq[Attribute])): Option[String] = {
     val expr   = expAttr._1

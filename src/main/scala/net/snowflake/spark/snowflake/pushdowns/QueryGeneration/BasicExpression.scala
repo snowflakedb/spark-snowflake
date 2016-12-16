@@ -1,12 +1,11 @@
-package net.snowflake.spark.snowflake.pushdowns.SQLExpressions
+package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import net.snowflake.spark.snowflake.pushdowns.{SQLGenerator, SnowflakeQuery}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, Expression, Literal}
 
 /**
   * Created by ema on 12/15/16.
   */
-object BasicExpression extends SQLGenerator {
+private[snowflake] object BasicExpression {
 
   def unapply(expAttr: (Expression, Seq[Attribute])): Option[String] = {
     val expr   = expAttr._1
