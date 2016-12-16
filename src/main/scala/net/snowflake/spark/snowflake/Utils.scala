@@ -225,8 +225,7 @@ object Utils {
        |  date_output_format = 'YYYY-MM-DD',
        |  timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
        |  timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
-       |  timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
-       |  quoted_identifiers_ignore_case = true;
+       |  timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3';
     """.stripMargin.trim
   }
   // Issue a set of changes reverting genPrologueSql
@@ -241,8 +240,7 @@ object Utils {
        |  date_output_format,
        |  timestamp_ntz_output_format,
        |  timestamp_ltz_output_format,
-       |  timestamp_tz_output_format,
-       |  quoted_identifiers_ignore_case;
+       |  timestamp_tz_output_format;
      """.stripMargin.trim
   }
 
