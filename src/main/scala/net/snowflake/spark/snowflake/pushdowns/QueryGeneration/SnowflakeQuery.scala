@@ -1,72 +1,47 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import net.snowflake.spark.snowflake.SnowflakeRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, NamedExpression}
+import net.snowflake.spark.snowflake.{
+  SnowflakeRelation
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  Expression,
+  NamedExpression
+}
 
 /**
   * Created by ema on 11/30/16.
   */
 private[snowflake] abstract sealed class SnowflakeQuery {
 
-  lazy val queryType = getClass.getSimpleName
-  val output: Seq[Attribute]
-  val alias: String
-  val child: SnowflakeQuery
-  val columns: Seq[NamedExpression] = Seq.empty
-
-  val fields: Seq[Attribute] =
-    if (child != null) child.qualifiedOutput
-    else null
+  val helper: QueryHelper
   val suffix: String = ""
-  val source =
-    if (child == null) ""
-    else child.getQuery(true)
 
-  def qualifiedOutput: Seq[Attribute] =
-    output.map(a => AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId, Some(alias.toString)))
-
-  def getQuery(useAlias: Boolean = false): String = {
-    log.debug(s"""Now generating the query for $queryType""")
-
-    val query =
-      s"SELECT $selectedColumns FROM $source$suffix"
-
-    if (useAlias)
-      block(query) + s""" AS "$alias""""
-    else query
+  def expressionToString(expr: Expression): String = {
+    convertExpression(expr, helper.colSet)
   }
 
-  // Use for pretty printing.
-  def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
-    val indent = "\n" + ("\t" * depth)
-
-    if (child == null) return indent + getQuery(true)
-
-    val src = child.getPrettyQuery(true, depth + 1)
+  def getQuery(useAlias: Boolean = false,
+               prettyPrint: Boolean = false,
+               depth: Int = 0): String = {
+    val indent = if (prettyPrint) "\n" + ("\t" * depth) else ""
+    val src =
+      if (prettyPrint) getQuery(useAlias, true, depth + 1) else helper.source
 
     val query =
-      s"""${indent}SELECT $selectedColumns FROM $src$indent$suffix"""
+      s"""${indent}SELECT ${helper.columns.getOrElse("*")} FROM $src$indent$suffix"""
 
     if (useAlias)
-      block(query) + s"""$indent AS "$alias""""
+      block(query) + s""" AS "${helper.alias}""""
     else query
-  }
-
-  def selectedColumns: String =
-    if (columns.isEmpty) "*"
-    else
-      columns.map(expr => expressionToString(expr)).mkString(", ")
-
-  def expressionToString(expression: Expression): String = {
-    convertExpression(expression, fields)
   }
 
   def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query
       .lift(this)
       .orElse(
-        if (child == null) None
-        else child.find(query)
+        if (helper.children.isEmpty) None
+        else helper.children.head.find(query)
       )
 
   def sharesCluster(otherTree: SnowflakeQuery): Boolean = {
@@ -83,50 +58,57 @@ private[snowflake] abstract sealed class SnowflakeQuery {
   }
 }
 
-case class SourceQuery(relation: SnowflakeRelation, output: Seq[Attribute], alias: String) extends SnowflakeQuery {
+case class SourceQuery(relation: SnowflakeRelation,
+                       output: Seq[Attribute],
+                       alias: String)
+    extends SnowflakeQuery {
 
-  // No child subquery for SourceQueries
-  override val child  = null
-  override val fields = output
-  override val source =
-    relation.params.query.getOrElse(relation.params.table.get.toString)
-  val cluster = relation.params.sfURL + "/" + relation.params.sfWarehouse + "/" + relation.params.sfDatabase
+  val cluster = (relation.params.sfURL, relation.params.sfWarehouse, relation.params.sfDatabase)
+  override val helper: QueryHelper = new QueryHelper(
+    Seq.empty,
+    None,
+    Some(output),
+    alias,
+    relation.params.query.getOrElse(relation.params.table.get.toString))
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this)
 }
 
-case class FilterQuery(condition: Expression, child: SnowflakeQuery, alias: String) extends SnowflakeQuery {
-  override val output = child.output
+case class FilterQuery(condition: Expression,
+                       child: SnowflakeQuery,
+                       alias: String)
+    extends SnowflakeQuery {
+  override val helper: QueryHelper = new QueryHelper(Seq(child), None, None, alias, "")
   override val suffix = " WHERE " + expressionToString(condition)
 }
 
-case class ProjectQuery(override val columns: Seq[NamedExpression], child: SnowflakeQuery, alias: String)
+case class ProjectQuery(columns: Seq[NamedExpression],
+                        child: SnowflakeQuery,
+                        alias: String)
     extends SnowflakeQuery {
-
-  override val output = columns.map(_.toAttribute)
+  override val helper: QueryHelper = new QueryHelper(Seq(child), Some(columns), None, alias, "")
 }
 
-case class AggregateQuery(override val columns: Seq[NamedExpression],
+case class AggregateQuery(columns: Seq[NamedExpression],
                           groups: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
     extends SnowflakeQuery {
 
-  override val output = columns.map(_.toAttribute)
-  override val suffix = " GROUP BY " + groups.map(group => expressionToString(group)).mkString(",")
-
-  override def selectedColumns: String = {
-    if (columns.isEmpty) "count(*)"
-    else
-      columns.map(expr => expressionToString(expr)).mkString(", ")
-  }
+  override val helper: QueryHelper = new QueryHelper(Seq(child), Some(columns), None, alias, "")
+  override val suffix = " GROUP BY " + groups
+      .map(group => expressionToString(group))
+      .mkString(",")
 }
 
-case class SortLimitQuery(limit: Expression, orderBy: Seq[Expression], child: SnowflakeQuery, alias: String)
+case class SortLimitQuery(limit: Expression,
+                          orderBy: Seq[Expression],
+                          child: SnowflakeQuery,
+                          alias: String)
     extends SnowflakeQuery {
 
-  override val output = child.output
+  override val helper: QueryHelper = new QueryHelper(Seq(child), None, None, alias, "")
   override val suffix = {
     val order_clause =
       if (!orderBy.isEmpty)
@@ -137,18 +119,14 @@ case class SortLimitQuery(limit: Expression, orderBy: Seq[Expression], child: Sn
   }
 }
 
-case class JoinQuery(left: SnowflakeQuery, right: SnowflakeQuery, conditions: Option[Expression], alias: String)
+case class JoinQuery(left: SnowflakeQuery,
+                     right: SnowflakeQuery,
+                     conditions: Option[Expression],
+                     alias: String)
     extends SnowflakeQuery {
 
-  override val child = null
+  override val helper: QueryHelper = new QueryHelper(Seq(left,right), None, None, alias, "INNER JOIN")
 
-  override val fields: Seq[Attribute] = {
-    left.qualifiedOutput ++ right.qualifiedOutput
-  }
-
-  override val output = fields
-
-  override val source = left.getQuery(true) + " INNER JOIN " + right.getQuery(true)
   override val suffix = {
     val str = conditions match {
       case Some(e) => " ON "
@@ -157,15 +135,37 @@ case class JoinQuery(left: SnowflakeQuery, right: SnowflakeQuery, conditions: Op
     str + conditions.map(cond => expressionToString(cond)).mkString(",")
   }
 
-  // Use for pretty printing.
-  override def getPrettyQuery(useAlias: Boolean = false, depth: Int = 0): String = {
-    val indent = "\n" + ("\t" * depth)
-
-    val l = left.getPrettyQuery(true, depth + 1)
-    val r = right.getPrettyQuery(true, depth + 1)
+  override def getQuery(useAlias: Boolean = false,
+    prettyPrint: Boolean = false,
+    depth: Int = 0): String = {
+    val indent = if (prettyPrint) "\n" + ("\t" * depth) else ""
+    val src =
+      if (prettyPrint) {
+        val l = left.getQuery(useAlias, true, depth + 1)
+        val r = right.getQuery(useAlias, true, depth + 1)
+      } else helper.source
 
     val query =
-      s"""${indent}SELECT $selectedColumns FROM $l$indent INNER JOIN $r $indent$suffix"""
+      s"""${indent}SELECT FROM $l$indent INNER JOIN $r $indent$suffix"""
+      s"""${indent}SELECT ${helper.columns.getOrElse("*")} FROM $src$indent$suffix"""
+
+    if (useAlias)
+      block(query) + s""" AS "${helper.alias}""""
+    else query
+  }
+
+  // Use for pretty printing.
+  override def getPrettyQuery(useAlias: Boolean = false,
+                              depth: Int = 0): String = {
+    val indent = "\n" + ("\t" * depth)
+
+    val l = 1
+    val r = "a"
+   // val l = left.getQuery(true, depth + 1)
+   // val r = right.getQuery(true, depth + 1)
+
+    val query =
+      s"""${indent}SELECT FROM $l$indent INNER JOIN $r $indent$suffix"""
 
     if (useAlias)
       block(query) + s"""$indent AS "$alias""""

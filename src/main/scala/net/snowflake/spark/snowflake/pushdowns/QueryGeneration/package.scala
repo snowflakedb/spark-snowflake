@@ -21,12 +21,12 @@ package object QueryGeneration {
 
   private[snowflake] final def addAttribute(a: Attribute, fields: Seq[Attribute]): String = {
     fields.find(e => e.exprId == a.exprId) match {
-      case Some(resolved) => aliasedAttribute(resolved.qualifier, resolved.name)
-      case None           => aliasedAttribute(a.qualifier, a.name)
+      case Some(resolved) => qualifiedAttribute(resolved.qualifier, resolved.name)
+      case None           => qualifiedAttribute(a.qualifier, a.name)
     }
   }
 
-  private[snowflake] final def aliasedAttribute(alias: Option[String], name: String) = {
+  private[snowflake] final def qualifiedAttribute(alias: Option[String], name: String) = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
       case None            => ""

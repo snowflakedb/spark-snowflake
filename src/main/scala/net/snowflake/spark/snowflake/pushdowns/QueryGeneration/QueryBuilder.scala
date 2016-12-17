@@ -31,7 +31,7 @@ private class QueryBuilder(plan: LogicalPlan) {
   lazy val query: String = {
     checkTree()
     val query = treeRoot.getPrettyQuery()
-    SnowflakeQuery.log.info(s"""Generated query: '$query'""")
+    log.info(s"""Generated query: '$query'""")
     query
   }
   // Fetch the output attributes.
@@ -54,8 +54,8 @@ private class QueryBuilder(plan: LogicalPlan) {
     try {
       generateQueries(plan).get
     } catch {
-      case e: MatchError | NoSuchElementException => {
-        SnowflakeQuery.log.debug("Could not generate a query.")
+      case _: MatchError | _: NoSuchElementException => {
+        log.debug("Could not generate a query.")
       }
       null
     }
