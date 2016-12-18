@@ -17,8 +17,8 @@ private[snowflake] case class QueryHelper(
     alias: String,
     conjunction: String) {
 
-  lazy val output = {
-    projections.map(p => p.map((_.toAttribute))).getOrElse {
+  val output: Seq[Attribute] = {
+    projections.map(p => p.map(_.toAttribute)).getOrElse {
 
       if (children.isEmpty) {
         outputAttributes.getOrElse(throw new SnowflakePushdownException(
@@ -29,22 +29,23 @@ private[snowflake] case class QueryHelper(
     }
   }
 
-  lazy val outputWithQualifier = output.map(
+  val outputWithQualifier = output.map(
     a =>
       AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
         a.exprId,
         Some(alias)))
 
-  lazy val colSet = children.foldLeft(Seq.empty[Attribute])((x, y) =>
+  val colSet = children.foldLeft(Seq.empty[Attribute])((x, y) =>
     x ++ y.helper.outputWithQualifier)
 
-  lazy val columns: Option[String] = projections map { p =>
+  val columns: Option[String] = projections map { p =>
     p.map(e => convertExpression(e, colSet)).mkString(", ")
   }
 
-  lazy val source = children
-    .map(c => c.getQuery(true))
-    .mkString(if (children.isEmpty) conjunction else "",
-              s""" $conjunction """,
-              "")
+  val source =
+    if (children.nonEmpty)
+      children
+        .map(c => c.getQuery(useAlias = true))
+        .mkString(s""" $conjunction """)
+    else conjunction
 }

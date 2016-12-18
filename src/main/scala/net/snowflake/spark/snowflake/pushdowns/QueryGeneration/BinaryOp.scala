@@ -1,6 +1,10 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  BinaryNode,
+  Join,
+  LogicalPlan
+}
 
 /**
   * Created by ema on 12/15/16.

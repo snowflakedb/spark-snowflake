@@ -27,7 +27,8 @@ class SnowflakeStrategy extends Strategy {
 
   private def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] =
     QueryBuilder.getRDDFromPlan(plan).map {
-      case (output: Seq[Attribute], rdd: RDD[InternalRow]) => Seq(SnowflakePlan(output, rdd))
+      case (output: Seq[Attribute], rdd: RDD[InternalRow]) =>
+        Seq(SnowflakePlan(output, rdd))
     }
 
 }

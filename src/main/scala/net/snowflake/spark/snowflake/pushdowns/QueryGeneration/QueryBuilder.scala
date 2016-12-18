@@ -2,7 +2,10 @@ package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import java.util.NoSuchElementException
 
-import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
+import net.snowflake.spark.snowflake.{
+  SnowflakePushdownException,
+  SnowflakeRelation
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
@@ -16,21 +19,23 @@ import scala.reflect.ClassTag
   * Created by ema on 11/30/16.
   *
   * This class takes a Spark LogicalPlan and attempts to generate
-  * a query for Snowflake using tryBuild. Here we use lazy instantiation
-  * to avoid recomputation.
+  * a query for Snowflake using tryBuild(). Here we use lazy instantiation
+  * to avoid building the query from the get-go without tryBuild().
+  * TODO: Is this actually helpful?
   *
   */
 private class QueryBuilder(plan: LogicalPlan) {
 
-  lazy val alias = Iterator.from(0).map(n => s"subquery_$n")
+  private final val alias = Iterator.from(0).map(n => s"subquery_$n")
 
   lazy val rdd = toRDD[InternalRow]
 
-  lazy val tryBuild: Option[QueryBuilder] = if (treeRoot == null) None else Some(this)
+  lazy val tryBuild: Option[QueryBuilder] =
+    if (treeRoot == null) None else Some(this)
 
   lazy val query: String = {
     checkTree()
-    val query = treeRoot.getPrettyQuery()
+    val query = treeRoot.getQuery()
     log.info(s"""Generated query: '$query'""")
     query
   }
@@ -67,7 +72,8 @@ private class QueryBuilder(plan: LogicalPlan) {
 
   private def checkTree(): Unit = {
     if (treeRoot == null) {
-      throw new SnowflakePushdownException("QueryBuilder's tree accessed without generation.")
+      throw new SnowflakePushdownException(
+        "QueryBuilder's tree accessed without generation.")
     }
   }
 
@@ -77,30 +83,37 @@ private class QueryBuilder(plan: LogicalPlan) {
       case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
         Some(SourceQuery(sfRelation, l.output, alias.next))
 
-      case UnaryOp(child) => {
+      case UnaryOp(child) =>
         generateQueries(child) map { subQuery =>
           plan match {
 
-            case Filter(condition, _)         => FilterQuery(condition, subQuery, alias.next)
-            case Project(fields, _)           => ProjectQuery(fields, subQuery, alias.next)
-            case Aggregate(groups, fields, _) => AggregateQuery(fields, groups, subQuery, alias.next)
-            case Limit(limitExpr, _)          => SortLimitQuery(limitExpr, Seq.empty, subQuery, alias.next)
+            case Filter(condition, _) =>
+              FilterQuery(condition, subQuery, alias.next)
+            case Project(fields, _) =>
+              ProjectQuery(fields, subQuery, alias.next)
+            case Aggregate(groups, fields, _) =>
+              AggregateQuery(fields, groups, subQuery, alias.next)
+            case Limit(limitExpr, _) =>
+              SortLimitQuery(limitExpr, Seq.empty, subQuery, alias.next)
             case Limit(limitExpr, Sort(orderExpr, true, _)) =>
               SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
 
             case Sort(orderExpr, true, Limit(limitExpr, _)) =>
               SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
             case Sort(orderExpr, true, _) =>
-              SortLimitQuery(Literal(Long.MaxValue), orderExpr, subQuery, alias.next)
+              SortLimitQuery(Literal(Long.MaxValue),
+                             orderExpr,
+                             subQuery,
+                             alias.next)
           }
         }
-      }
 
       case BinaryOp(left, right) =>
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, Inner, condition) => JoinQuery(l, r, condition, alias.next)
+              case Join(_, _, Inner, condition) =>
+                JoinQuery(l, r, condition, alias.next)
             }
           }
         }
@@ -111,7 +124,8 @@ private class QueryBuilder(plan: LogicalPlan) {
 }
 
 private[snowflake] object QueryBuilder {
-  def getRDDFromPlan(plan: LogicalPlan): Option[(Seq[Attribute], RDD[InternalRow])] = {
+  def getRDDFromPlan(
+      plan: LogicalPlan): Option[(Seq[Attribute], RDD[InternalRow])] = {
     val qb = new QueryBuilder(plan)
 
     qb.tryBuild.map { executedBuilder =>

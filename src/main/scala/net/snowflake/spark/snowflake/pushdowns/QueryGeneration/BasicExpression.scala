@@ -1,6 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  BinaryOperator,
+  Expression,
+  Literal
+}
 
 /**
   * Created by ema on 12/15/16.

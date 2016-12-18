@@ -1,6 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, IsNotNull, IsNull}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  Expression,
+  IsNotNull,
+  IsNull
+}
 
 /**
   * Created by ema on 12/15/16.

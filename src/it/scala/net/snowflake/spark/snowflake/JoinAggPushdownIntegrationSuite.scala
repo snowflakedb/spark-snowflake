@@ -82,7 +82,7 @@ class JoinAggPushdownIntegrationSuite extends IntegrationSuiteBase {
         group by p
       """.stripMargin)
 
-    aggResult.queryExecution.executedPlan
+    //aggResult.queryExecution.executedPlan
 
 
     aggResult.show()

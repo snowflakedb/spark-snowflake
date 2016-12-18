@@ -1,6 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  Cast,
+  Expression
+}
 import org.apache.spark.sql.types._
 
 /**
@@ -19,9 +24,9 @@ private[snowflake] object MiscExpression {
         getCastType(t) match {
           case None =>
             Some(convertExpression(child, fields))
-          case Some(t) => {
-            Some("CAST" + block(convertExpression(child, fields) + "AS " + t))
-          }
+          case Some(cast) =>
+            Some(
+              "CAST" + block(convertExpression(child, fields) + "AS " + cast))
         }
 
       case _ => None

@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
   * Created by ema on 12/15/16.
   */
 package object QueryGeneration {
-  private final val identifier = "\""
+  private final val identifier     = "\""
   private[snowflake] final val log = LoggerFactory.getLogger(getClass)
 
   private[snowflake] final def block(text: String): String = {
@@ -19,14 +19,17 @@ package object QueryGeneration {
     "(" + text + ") AS " + wrap(alias)
   }
 
-  private[snowflake] final def addAttribute(a: Attribute, fields: Seq[Attribute]): String = {
+  private[snowflake] final def addAttribute(a: Attribute,
+                                            fields: Seq[Attribute]): String = {
     fields.find(e => e.exprId == a.exprId) match {
-      case Some(resolved) => qualifiedAttribute(resolved.qualifier, resolved.name)
-      case None           => qualifiedAttribute(a.qualifier, a.name)
+      case Some(resolved) =>
+        qualifiedAttribute(resolved.qualifier, resolved.name)
+      case None => qualifiedAttribute(a.qualifier, a.name)
     }
   }
 
-  private[snowflake] final def qualifiedAttribute(alias: Option[String], name: String) = {
+  private[snowflake] final def qualifiedAttribute(alias: Option[String],
+                                                  name: String) = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
       case None            => ""
@@ -44,7 +47,9 @@ package object QueryGeneration {
     *
     * @note (A MatchError will be raised for unsupported Spark expressions).
     */
-  private[snowflake] final def convertExpression(expression: Expression, fields: Seq[Attribute]): String = {
+  private[snowflake] final def convertExpression(
+      expression: Expression,
+      fields: Seq[Attribute]): String = {
     (expression, fields) match {
       case BasicExpression(sql)     => sql
       case BooleanExpression(sql)   => sql
