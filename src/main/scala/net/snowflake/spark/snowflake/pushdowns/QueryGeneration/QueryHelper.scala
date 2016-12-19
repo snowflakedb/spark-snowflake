@@ -8,9 +8,20 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 
 /**
-  * Created by ema on 12/16/16.
+  * Helper class to maintain the fields, output, and projection expressions of
+  * a SnowflakeQuery. This may be refactored into the SnowflakeQuery abstract class.
+  *
+  * @constructor Creates an instance of a QueryHelper. Created by every SnowflakeQuery.
+  * @param children A sequence containing the child queries. May be empty in the case
+  *                 of a source (bottom-level) query, contain one element (for most
+  *                 unary operations), or contain two elements (for joins, etc.).
+  * @param projections Contains optional projection columns for this query.
+  * @param outputAttributes Optional manual override for output.
+  * @param alias The alias for this subquery.
+  * @param conjunction Conjunction phrase to be used in between subquery children, or simple phrase
+  *                    when there are no subqueries.
   */
-private[snowflake] case class QueryHelper(
+private[QueryGeneration] case class QueryHelper(
     children: Seq[SnowflakeQuery],
     projections: Option[Seq[NamedExpression]] = None,
     outputAttributes: Option[Seq[Attribute]],
