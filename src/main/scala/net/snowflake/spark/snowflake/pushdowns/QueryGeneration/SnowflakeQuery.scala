@@ -32,6 +32,8 @@ private[QueryGeneration] abstract sealed class SnowflakeQuery {
     * @return SQL statement for this query.
     */
   def getQuery(useAlias: Boolean = false): String = {
+    log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
+
     val query =
       s"""SELECT ${helper.columns.getOrElse("*")} FROM ${helper.source}$suffix"""
 
@@ -88,11 +90,12 @@ case class SourceQuery(relation: SnowflakeRelation,
     extends SnowflakeQuery {
 
   override val helper: QueryHelper = QueryHelper(
-    Seq.empty,
-    None,
-    Some(refColumns),
-    alias,
-    relation.params.query.getOrElse(relation.params.table.get.toString))
+    children = Seq.empty,
+    projections = None,
+    outputAttributes = Some(refColumns),
+    alias = alias,
+    conjunction =
+      relation.params.query.getOrElse(relation.params.table.get.toString))
 
   /** Triplet that defines the Snowflake cluster that houses this base relation.
     * Currently an exact match on cluster is needed for a join, but we may not need
@@ -119,7 +122,10 @@ case class FilterQuery(condition: Expression,
     extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(Seq(child), None, None, alias, "")
+    QueryHelper(children = Seq(child),
+                projections = None,
+                outputAttributes = None,
+                alias = alias)
 
   override val suffix = " WHERE " + expressionToString(condition)
 }
@@ -137,10 +143,13 @@ case class ProjectQuery(columns: Seq[NamedExpression],
     extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(Seq(child), Some(columns), None, alias, "")
+    QueryHelper(children = Seq(child),
+                projections = Some(columns),
+                outputAttributes = None,
+                alias = alias)
 }
 
-/** The query for a projection operation.
+/** The query for a aggregation operation.
   *
   * @constructor
   * @param columns The projection columns, containing also the aggregate expressions.
@@ -155,7 +164,10 @@ case class AggregateQuery(columns: Seq[NamedExpression],
     extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(Seq(child), Some(columns), None, alias, "")
+    QueryHelper(children = Seq(child),
+                projections = Some(columns),
+                outputAttributes = None,
+                alias = alias)
 
   override val suffix = " GROUP BY " + groups
       .map(group => expressionToString(group))
@@ -177,7 +189,10 @@ case class SortLimitQuery(limit: Expression,
     extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(Seq(child), None, None, alias, "")
+    QueryHelper(children = Seq(child),
+                projections = None,
+                outputAttributes = None,
+                alias = alias)
 
   override val suffix = {
     val order_clause =
@@ -205,7 +220,11 @@ case class JoinQuery(left: SnowflakeQuery,
 
   /** Currently only inner joins are supported. */
   override val helper: QueryHelper =
-    QueryHelper(Seq(left, right), None, None, alias, "INNER JOIN")
+    QueryHelper(children = Seq(left, right),
+                projections = None,
+                outputAttributes = None,
+                alias = alias,
+                conjunction = "INNER JOIN")
 
   override val suffix = {
     val str = conditions match {

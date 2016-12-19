@@ -21,7 +21,8 @@ package object QueryGeneration {
   }
 
   /** Same as block() but with an alias. */
-  private[QueryGeneration] final def block(text: String, alias: String): String = {
+  private[QueryGeneration] final def block(text: String,
+                                           alias: String): String = {
     "(" + text + ") AS " + wrap(alias)
   }
 
@@ -33,8 +34,9 @@ package object QueryGeneration {
     *               usually derived from the output of a subquery.
     * @return A string representing the attribute expression.
     */
-  private[QueryGeneration] final def addAttribute(attr: Attribute,
-                                            fields: Seq[Attribute]): String = {
+  private[QueryGeneration] final def addAttribute(
+      attr: Attribute,
+      fields: Seq[Attribute]): String = {
     fields.find(e => e.exprId == attr.exprId) match {
       case Some(resolved) =>
         qualifiedAttribute(resolved.qualifier, resolved.name)
@@ -44,7 +46,7 @@ package object QueryGeneration {
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
   private[QueryGeneration] final def qualifiedAttribute(alias: Option[String],
-                                                  name: String) = {
+                                                        name: String) = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
       case None            => ""
@@ -83,6 +85,8 @@ package object QueryGeneration {
     * This is useful for logging and debugging.
     */
   private[QueryGeneration] final def prettyPrint(query: String): String = {
+    log.debug(s"""Attempting to prettify query $query...""")
+
     val opener = "\\(SELECT"
     val closer = "\\) AS \\\"subquery_[0-9]{1,10}\\\""
 
@@ -118,7 +122,6 @@ package object QueryGeneration {
         }
         remainder = parts.last
       } else remainder = ""
-
     }
 
     str.toString()

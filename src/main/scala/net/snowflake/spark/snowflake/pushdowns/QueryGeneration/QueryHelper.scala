@@ -26,7 +26,7 @@ private[QueryGeneration] case class QueryHelper(
     projections: Option[Seq[NamedExpression]] = None,
     outputAttributes: Option[Seq[Attribute]],
     alias: String,
-    conjunction: String) {
+    conjunction: String = "") {
 
   val output: Seq[Attribute] = {
     projections.map(p => p.map(_.toAttribute)).getOrElse {
