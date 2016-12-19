@@ -27,10 +27,10 @@ private[QueryGeneration] object BooleanExpression {
     val fields = expAttr._2
 
     expr match {
-      case IsNotNull(child) =>
-        Some(block(convertExpression(child, fields) + " IS NOT NULL"))
       case IsNull(child) =>
         Some(block(convertExpression(child, fields) + " IS NULL"))
+      case IsNotNull(child) =>
+        Some(block(convertExpression(child, fields) + " IS NOT NULL"))
 
       case _ => None
     }

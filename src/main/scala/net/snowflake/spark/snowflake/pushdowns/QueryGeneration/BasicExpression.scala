@@ -28,13 +28,13 @@ private[QueryGeneration] object BasicExpression {
 
     expr match {
       case a: Attribute => Some(addAttribute(a, fields))
-      case l: Literal   => Some(l.toString)
       case b: BinaryOperator =>
         Some(
           block(
             convertExpression(b.left, fields) + s"${b.symbol}" +
               convertExpression(b.right, fields)
           ))
+      case l: Literal => Some(l.toString)
 
       case _ => None
     }

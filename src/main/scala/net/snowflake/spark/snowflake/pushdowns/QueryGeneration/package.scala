@@ -15,7 +15,7 @@ package object QueryGeneration {
 
   private[QueryGeneration] final val log = LoggerFactory.getLogger(getClass)
 
-  /** Query blocks */
+  /** Query blocks. */
   private[QueryGeneration] final def block(text: String): String = {
     "(" + text + ")"
   }
