@@ -26,17 +26,16 @@ private[QueryGeneration] object BasicExpression {
     val expr   = expAttr._1
     val fields = expAttr._2
 
-    expr match {
-      case a: Attribute => Some(addAttribute(a, fields))
+    Option(expr match {
+      case a: Attribute => addAttribute(a, fields)
       case b: BinaryOperator =>
-        Some(
-          block(
-            convertExpression(b.left, fields) + s"${b.symbol}" +
-              convertExpression(b.right, fields)
-          ))
-      case l: Literal => Some(l.toString)
+        block(
+          convertExpression(b.left, fields) + s"${b.symbol}" +
+            convertExpression(b.right, fields)
+        )
+      case l: Literal => l.toString
 
-      case _ => None
-    }
+      case _ => null
+    })
   }
 }

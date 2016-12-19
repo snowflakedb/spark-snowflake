@@ -27,20 +27,19 @@ private[QueryGeneration] object MiscExpression {
     val expr   = expAttr._1
     val fields = expAttr._2
 
-    expr match {
+    Option(expr match {
       case Alias(child: Expression, name: String) =>
-        Some(block(convertExpression(child, fields), name))
+        block(convertExpression(child, fields), name)
       case Cast(child, t) =>
         getCastType(t) match {
           case None =>
-            Some(convertExpression(child, fields))
+            convertExpression(child, fields)
           case Some(cast) =>
-            Some(
-              "CAST" + block(convertExpression(child, fields) + "AS " + cast))
+            "CAST" + block(convertExpression(child, fields) + "AS " + cast)
         }
 
-      case _ => None
-    }
+      case _ => null
+    })
   }
 
   /**
@@ -48,16 +47,17 @@ private[QueryGeneration] object MiscExpression {
     * to a Snowflake type to be used in a Cast.
     *
     */
-  private final def getCastType(t: DataType): Option[String] = t match {
-    case StringType    => Some("VARCHAR")
-    case BinaryType    => Some("BINARY")
-    case DateType      => Some("DATE")
-    case TimestampType => Some("TIMESTAMP")
-    case d: DecimalType =>
-      Some("DECIMAL(" + d.precision + ", " + d.scale + ")")
-    case IntegerType | LongType => Some("NUMBER")
-    case FloatType              => Some("FLOAT")
-    case DoubleType             => Some("DOUBLE")
-    case _                      => None
-  }
+  private final def getCastType(t: DataType): Option[String] =
+    Option(t match {
+      case StringType    => "VARCHAR"
+      case BinaryType    => "BINARY"
+      case DateType      => "DATE"
+      case TimestampType => "TIMESTAMP"
+      case d: DecimalType =>
+        "DECIMAL(" + d.precision + ", " + d.scale + ")"
+      case IntegerType | LongType => "NUMBER"
+      case FloatType              => "FLOAT"
+      case DoubleType             => "DOUBLE"
+      case _                      => null
+    })
 }

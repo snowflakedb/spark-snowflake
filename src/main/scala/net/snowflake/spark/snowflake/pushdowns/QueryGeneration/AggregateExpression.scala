@@ -24,9 +24,9 @@ private[QueryGeneration] object AggregateExpression {
     // Take only the first child, as all of the functions below have only one.
     expr.children.headOption.flatMap(agg_fun => {
       val fn_name = agg_fun.prettyName.trim.toLowerCase
-      (fn_name match {
-        case "avg" | "max" | "min" | "sum" => Some(fn_name)
-        case _                             => None
+      Option(fn_name match {
+        case "avg" | "max" | "min" | "sum" => fn_name
+        case _                             => null
       }).flatMap(name =>
         agg_fun.children.headOption.map(child =>
           name + block(convertExpression(child, fields))))

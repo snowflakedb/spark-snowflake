@@ -63,7 +63,6 @@ package object QueryGeneration {
     * We should have as many entries here as possible, or the translation will not be able ot happen.
     *
     * @note (A MatchError may be raised for unsupported Spark expressions).
-    * @throws MatchError
     */
   private[QueryGeneration] final def convertExpression(
       expression: Expression,

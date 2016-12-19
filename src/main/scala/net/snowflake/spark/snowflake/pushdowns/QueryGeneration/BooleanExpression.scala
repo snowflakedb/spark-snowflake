@@ -2,10 +2,18 @@ package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
+  Contains,
+  EndsWith,
   Expression,
+  In,
+  InSet,
   IsNotNull,
-  IsNull
+  IsNull,
+  Literal,
+  StartsWith
 }
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
   * Extractor for boolean expressions (return true or false).
@@ -26,13 +34,26 @@ private[QueryGeneration] object BooleanExpression {
     val expr   = expAttr._1
     val fields = expAttr._2
 
-    expr match {
-      case IsNull(child) =>
-        Some(block(convertExpression(child, fields) + " IS NULL"))
-      case IsNotNull(child) =>
-        Some(block(convertExpression(child, fields) + " IS NOT NULL"))
+    Option(
+      expr match {
+        case In(child, list) if list.forall(_.isInstanceOf[Literal]) =>
+          convertExpression(child, fields) + " IN " + block(
+            list.map(l => convertExpression(l, fields)).mkString(", "))
 
-      case _ => None
-    }
+        case IsNull(child) =>
+          block(convertExpression(child, fields) + " IS NULL")
+        case IsNotNull(child) =>
+          block(convertExpression(child, fields) + " IS NOT NULL")
+
+        case Contains(child, Literal(v: UTF8String, StringType)) =>
+          convertExpression(child, fields) + " LIKE " + s"%${v.toString}%"
+        case EndsWith(child, Literal(v: UTF8String, StringType)) =>
+          convertExpression(child, fields) + " LIKE " + s"%${v.toString}"
+        case StartsWith(child, Literal(v: UTF8String, StringType)) =>
+          convertExpression(child, fields) + " LIKE " + s"${v.toString}%"
+
+        case _ => null
+      }
+    )
   }
 }

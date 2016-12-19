@@ -89,7 +89,6 @@ private[QueryGeneration] class QueryBuilder(plan: LogicalPlan) {
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
     * the bottom up, but the validation of supported nodes for translation happens on the way down.
     *
-    * @throws MatchError
     * @param plan The LogicalPlan to be processed.
     * @return An object of type Option[SnowflakeQuery], which is None if the plan contains an
     *         unsupported node type.
