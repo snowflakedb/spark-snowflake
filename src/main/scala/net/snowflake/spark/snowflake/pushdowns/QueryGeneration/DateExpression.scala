@@ -1,22 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  Contains,
-  EndsWith,
-  Expression,
-  In,
-  IsNotNull,
-  IsNull,
-  Literal,
-  Month,
-  Not,
-  Quarter,
-  StartsWith,
-  Year
-}
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Month, Quarter, Year}
 
 /**
   * Extractor for boolean expressions (return true or false).

@@ -13,7 +13,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Floor,
   Greatest,
   Least,
-  Literal,
   Log,
   Pi,
   Rand,
