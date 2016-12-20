@@ -38,7 +38,7 @@ private[QueryGeneration] object BooleanExpression {
       expr match {
         case In(child, list) if list.forall(_.isInstanceOf[Literal]) =>
           convertExpression(child, fields) + " IN " + block(
-            convertExpressions(list, fields))
+            convertExpressions(fields, list:_*))
 
         case IsNull(child) =>
           block(convertExpression(child, fields) + " IS NULL")

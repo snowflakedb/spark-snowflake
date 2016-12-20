@@ -52,15 +52,15 @@ private[QueryGeneration] object NumericExpression {
             convertExpression(expr.children.head, fields))
 
         case Greatest(children) =>
-          "GREATEST" + block(convertExpressions(children, fields))
+          "GREATEST" + block(convertExpressions(fields, children:_*))
         case Least(children) =>
-          "LEAST" + block(convertExpressions(children, fields))
+          "LEAST" + block(convertExpressions(fields, children:_*))
 
         case Pi() => "PI()"
 
         case Rand(seed) => "RANDOM" + block(seed.toString)
         case Round(child, scale) =>
-          "ROUND" + block(convertExpressions(Seq(child, scale), fields))
+          "ROUND" + block(convertExpressions(fields, child, scale))
 
         case _ => null
       }

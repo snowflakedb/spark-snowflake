@@ -43,7 +43,7 @@ private[QueryGeneration] object MiscExpression {
         }
       case If(child, trueValue, falseValue) =>
         "IFF" + block(
-          convertExpressions(Seq(child, trueValue, falseValue), fields))
+          convertExpressions(fields, child, trueValue, falseValue))
       case SortOrder(child, Ascending) =>
         block(convertExpression(child, fields)) + " ASC"
       case SortOrder(child, Descending) =>

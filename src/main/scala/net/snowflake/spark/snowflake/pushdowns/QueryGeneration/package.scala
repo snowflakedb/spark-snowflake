@@ -79,8 +79,8 @@ package object QueryGeneration {
   }
 
   private[QueryGeneration] final def convertExpressions(
-      expressions: Seq[Expression],
-      fields: Seq[Attribute]): String = {
+      fields: Seq[Attribute],
+      expressions: Expression*): String = {
     expressions.map(e => convertExpression(e, fields)).mkString(", ")
   }
 

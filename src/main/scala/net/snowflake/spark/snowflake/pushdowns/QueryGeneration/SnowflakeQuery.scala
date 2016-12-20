@@ -231,7 +231,7 @@ case class JoinQuery(left: SnowflakeQuery,
       case Some(e) => " ON "
       case None    => ""
     }
-    str + conditions.map(cond => expressionToString(cond)).mkString(",")
+    str + conditions.map(cond => expressionToString(cond)).mkString(" AND ")
   }
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
