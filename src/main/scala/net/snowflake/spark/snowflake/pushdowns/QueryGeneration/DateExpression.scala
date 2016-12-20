@@ -9,8 +9,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   IsNotNull,
   IsNull,
   Literal,
+  Month,
   Not,
-  StartsWith
+  Quarter,
+  StartsWith,
+  Year
 }
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
@@ -18,7 +21,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
   * Extractor for boolean expressions (return true or false).
   */
-private[QueryGeneration] object BooleanExpression {
+private[QueryGeneration] object DateExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -36,23 +39,9 @@ private[QueryGeneration] object BooleanExpression {
 
     Option(
       expr match {
-        case In(child, list) if list.forall(_.isInstanceOf[Literal]) =>
-          convertExpression(child, fields) + " IN " + block(
-            convertExpressions(list, fields))
-
-        case IsNull(child) =>
-          block(convertExpression(child, fields) + " IS NULL")
-        case IsNotNull(child) =>
-          block(convertExpression(child, fields) + " IS NOT NULL")
-
-        case Not(child) => "NOT" + block(convertExpression(child, fields))
-
-        case Contains(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"%${pattern.toString}%"
-        case EndsWith(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"%${pattern.toString}"
-        case StartsWith(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"${pattern.toString}%"
+        case Month(_) | Quarter(_) | Year(_) =>
+          expr.prettyName.toUpperCase + block(
+            convertExpression(expr.children.head, fields))
 
         case _ => null
       }

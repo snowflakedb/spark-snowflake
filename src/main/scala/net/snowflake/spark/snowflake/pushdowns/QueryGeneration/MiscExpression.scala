@@ -2,9 +2,13 @@ package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
+  Ascending,
   Attribute,
   Cast,
-  Expression
+  Descending,
+  Expression,
+  If,
+  SortOrder
 }
 import org.apache.spark.sql.types._
 
@@ -37,6 +41,13 @@ private[QueryGeneration] object MiscExpression {
           case Some(cast) =>
             "CAST" + block(convertExpression(child, fields) + "AS " + cast)
         }
+      case If(child, trueValue, falseValue) =>
+        "IFF" + block(
+          convertExpressions(Seq(child, trueValue, falseValue), fields))
+      case SortOrder(child, Ascending) =>
+        block(convertExpression(child, fields)) + " ASC"
+      case SortOrder(child, Descending) =>
+        block(convertExpression(child, fields)) + " DESC"
 
       case _ => null
     })

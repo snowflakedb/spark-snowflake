@@ -68,11 +68,20 @@ package object QueryGeneration {
       expression: Expression,
       fields: Seq[Attribute]): String = {
     (expression, fields) match {
-      case BasicExpression(sql)     => sql
-      case BooleanExpression(sql)   => sql
-      case AggregateExpression(sql) => sql
-      case MiscExpression(sql)      => sql
+      case AggregationExpression(sql) => sql
+      case BasicExpression(sql)       => sql
+      case BooleanExpression(sql)     => sql
+      case DateExpression(sql)        => sql
+      case MiscExpression(sql)        => sql
+      case NumericExpression(sql)     => sql
+      case StringExpression(sql)      => sql
     }
+  }
+
+  private[QueryGeneration] final def convertExpressions(
+      expressions: Seq[Expression],
+      fields: Seq[Attribute]): String = {
+    expressions.map(e => convertExpression(e, fields)).mkString(", ")
   }
 
   /** This takes a query in the shape produced by QueryBuilder and
