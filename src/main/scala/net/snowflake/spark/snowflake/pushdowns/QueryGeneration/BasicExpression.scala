@@ -1,6 +1,14 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BinaryOperator, Expression, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{
+  And,
+  Attribute,
+  BinaryOperator,
+  Expression,
+  Literal,
+  Or
+}
+import org.apache.spark.sql.types.StringType
 
 /**
   * Extractor for basic (attributes and literals) expressions.
@@ -36,7 +44,11 @@ private[QueryGeneration] object BasicExpression {
           convertExpression(b.left, fields) + s" ${b.symbol} " +
             convertExpression(b.right, fields)
         )
-      case l: Literal => l.toString
+      case l: Literal =>
+        l.dataType match {
+          case StringType => "'" + l.toString() + "'"
+          case _          => l.toString()
+        }
 
       case _ => null
     })

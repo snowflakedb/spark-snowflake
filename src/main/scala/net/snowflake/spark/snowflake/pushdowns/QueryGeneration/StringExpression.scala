@@ -28,9 +28,9 @@ private[QueryGeneration] object StringExpression {
             convertExpression(expr.children.head, fields))
 
         case StringLPad(str, len, pad) =>
-          "LPAD " + block(convertExpressions(fields, str, len, pad))
+          "LPAD" + block(convertExpressions(fields, str, len, pad))
         case StringRPad(str, len, pad) =>
-          "RPAD " + block(convertExpressions(fields, str, len, pad))
+          "RPAD" + block(convertExpressions(fields, str, len, pad))
 
         case _ => null
       }

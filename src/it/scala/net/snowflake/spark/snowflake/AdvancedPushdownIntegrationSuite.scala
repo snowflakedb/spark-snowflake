@@ -152,8 +152,79 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
       """.stripMargin,
       result,
       Seq(Row(2, 3), Row(2, 2)))
+  }
+
+  test("Nested complex self-join") {
+    val result =
+      sparkSession.sql(
+        """
+        select foo.k from (select a.o as k, b.p from df2 as a inner join df2 as b
+        on a.o=b.p and a.o > -1) as foo inner join df2 as c on foo.p < 10 and foo.p=c.o order by foo.p
+                       """.stripMargin)
+
+    testPushdown(s"""SELECT "subquery_13"."k" FROM
+          | (SELECT * FROM
+          |		(SELECT "subquery_11"."k", "subquery_11"."P" FROM
+          |			(SELECT * FROM
+          |				(SELECT ("subquery_6"."O") AS "k", "subquery_6"."P" FROM
+          |					(SELECT * FROM
+          |						(SELECT "subquery_1"."O" FROM
+          |							(SELECT * FROM
+          |								(SELECT * FROM $test_table2
+          |							) AS "subquery_0"
+          |						 WHERE ((("subquery_0"."O" IS NOT NULL) AND ("subquery_0"."O" > -1)) AND ("subquery_0"."O" < 10))
+          |						) AS "subquery_1"
+          |					) AS "subquery_2"
+          |				 INNER JOIN
+          |					(SELECT "subquery_4"."P" FROM
+          |						(SELECT * FROM
+          |							(SELECT * FROM $test_table2
+          |							) AS "subquery_3"
+          |						 WHERE ((("subquery_3"."P" IS NOT NULL) AND ("subquery_3"."P" < 10)) AND ("subquery_3"."P" > -1))
+          |						) AS "subquery_4"
+          |					) AS "subquery_5"
+          |				 ON ("subquery_2"."O" = "subquery_5"."P")
+          |				) AS "subquery_6"
+          |			) AS "subquery_7"
+          |		 INNER JOIN
+          |			(SELECT "subquery_9"."O" FROM
+          |				(SELECT * FROM
+          |					(SELECT * FROM $test_table2
+          |					) AS "subquery_8"
+          |				 WHERE ((("subquery_8"."O" > -1) AND ("subquery_8"."O" IS NOT NULL)) AND ("subquery_8"."O" < 10))
+          |				) AS "subquery_9"
+          |			) AS "subquery_10"
+          |		 ON ((true AND true) AND ("subquery_7"."P" = "subquery_10"."O"))
+          |		) AS "subquery_11"
+          |	) AS "subquery_12"
+          | ORDER BY ("subquery_12"."P") ASC
+          |) AS "subquery_13"
+      """.stripMargin,
+                 result,
+                 Seq(Row(2), Row(2), Row(3)))
+  }
+
+  test("Sum and RPAD") {
+    val result =
+      sparkSession.sql(
+        """
+        select sum(i) as hi, rpad(s,10,"*") as ho from df1 group by s
+                       """.stripMargin)
+
+    testPushdown(
+      s"""SELECT (sum("subquery_0"."I")) AS "hi", (RPAD("subquery_0"."S", 10, '*')) AS "ho" FROM 
+          |		(SELECT * FROM $test_table
+          |	) AS "subquery_0"
+          | GROUP BY "subquery_0"."S"
+      """.stripMargin,
+      result,
+      Seq(Row(null, "Hello*****"),
+          Row(2, "Snowflake*"),
+          Row(3, "Spark*****"),
+          Row(4, null)))
 
   }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -175,13 +246,12 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
   def testPushdown(reference: String,
                    result: DataFrame,
                    expectedAnswer: Seq[Row]): Unit = {
-    // Clean reference string
-    val ref: String = reference.trim.replaceAll(" +", " ").replaceAll("\n", "")
 
-    checkAnswer(result, expectedAnswer)
     // Verify the query issued is what we expect
-    val o = Utils.getLastSelect
-    //  assert(Utils.getLastSelect == ref)
-    assert(o == ref)
+    checkAnswer(result, expectedAnswer)
+
+    assert(
+      Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
+        .replaceAll("\\s+", ""))
   }
 }
