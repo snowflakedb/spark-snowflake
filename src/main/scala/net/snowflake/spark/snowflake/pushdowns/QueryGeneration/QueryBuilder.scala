@@ -108,17 +108,19 @@ private[QueryGeneration] class QueryBuilder(plan: LogicalPlan) {
             case Aggregate(groups, fields, _) =>
               AggregateQuery(fields, groups, subQuery, alias.next)
             case Limit(limitExpr, _) =>
-              SortLimitQuery(limitExpr, Seq.empty, subQuery, alias.next)
+              SortLimitQuery(Some(limitExpr), Seq.empty, subQuery, alias.next)
             case Limit(limitExpr, Sort(orderExpr, true, _)) =>
-              SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
+              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
 
             case Sort(orderExpr, true, Limit(limitExpr, _)) =>
-              SortLimitQuery(limitExpr, orderExpr, subQuery, alias.next)
+              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
             case Sort(orderExpr, true, _) =>
-              SortLimitQuery(Literal(Long.MaxValue),
+              SortLimitQuery(None,
                              orderExpr,
                              subQuery,
                              alias.next)
+
+            case _ => subQuery
           }
         }
 

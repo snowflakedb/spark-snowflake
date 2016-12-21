@@ -28,8 +28,30 @@ private[QueryGeneration] case class QueryHelper(
     alias: String,
     conjunction: String = "") {
 
+  val colSet = children.foldLeft(Seq.empty[Attribute])((x, y) =>
+    x ++ y.helper.outputWithQualifier)
+
+  val pureColSet =
+    children.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)
+
+  val processedProjections = projections
+    .map(p =>
+      p.map(e =>
+        colSet.find(c => c.exprId == e.exprId) match {
+          case Some(a) =>
+            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+              a.exprId,
+              None)
+          case None => e
+      }))
+    .map(p => p.map(_.toAttribute))
+
+  val columns: Option[String] = projections map { p =>
+    p.map(e => convertExpression(e, colSet)).mkString(", ")
+  }
+
   val output: Seq[Attribute] = {
-    projections.map(p => p.map(_.toAttribute)).getOrElse {
+    processedProjections.getOrElse {
 
       if (children.isEmpty) {
         outputAttributes.getOrElse(throw new SnowflakePushdownException(
@@ -45,13 +67,6 @@ private[QueryGeneration] case class QueryHelper(
       AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
         a.exprId,
         Some(alias)))
-
-  val colSet = children.foldLeft(Seq.empty[Attribute])((x, y) =>
-    x ++ y.helper.outputWithQualifier)
-
-  val columns: Option[String] = projections map { p =>
-    p.map(e => convertExpression(e, colSet)).mkString(", ")
-  }
 
   val source =
     if (children.nonEmpty)

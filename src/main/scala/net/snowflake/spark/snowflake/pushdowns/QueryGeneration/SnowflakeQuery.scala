@@ -182,7 +182,7 @@ case class AggregateQuery(columns: Seq[NamedExpression],
   * @param child The child node.
   * @param alias Query alias.
   */
-case class SortLimitQuery(limit: Expression,
+case class SortLimitQuery(limit: Option[Expression],
                           orderBy: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
@@ -197,10 +197,12 @@ case class SortLimitQuery(limit: Expression,
   override val suffix = {
     val order_clause =
       if (orderBy.nonEmpty)
-        " GROUP BY " + orderBy.map(e => expressionToString(e)).mkString(", ")
+        " ORDER BY " + orderBy.map(e => expressionToString(e)).mkString(", ")
       else ""
 
-    order_clause + " LIMIT " + expressionToString(limit)
+    order_clause + limit
+      .map(l => " LIMIT " + expressionToString(l))
+      .getOrElse("")
   }
 }
 

@@ -22,7 +22,7 @@ class SnowflakeStrategy extends Strategy {
         case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
-      case _: Exception => Nil
+      case e: Exception => throw(e)
     }
 
   /** Attempts to get a SparkPlan from the provided LogicalPlan.

@@ -66,12 +66,12 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   test("Basic join") {
 
-    val joinedResult = sparkSession.sql("""
+    val result = sparkSession.sql("""
   SELECT first.s,
          second.p
   FROM df1 first
   JOIN df2 second
-  ON first.i = second.p""")
+  ON first.i = second.p""".stripMargin)
 
     testPushdown(
       s"""SELECT "subquery_5"."S", "subquery_5"."P" FROM
@@ -84,13 +84,13 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
       (SELECT * FROM
       (SELECT * FROM $test_table2) AS "subquery_2"
         WHERE ("subquery_2"."P" IS NOT NULL)) AS "subquery_3") AS "subquery_4"
-    ON ("subquery_1"."I"="subquery_4"."P")) AS "subquery_5"""",
-      joinedResult,
+    ON ("subquery_1"."I" = "subquery_4"."P")) AS "subquery_5"""".stripMargin,
+      result,
       Seq(Row("Snowflake", 2), Row("Snowflake", 2), Row("Spark", 3)))
   }
 
   test("Basic aggregation") {
-    val aggResult =
+    val result =
       sparkSession.sql("""
         select p, count(distinct o) as avg from df2
         group by p
@@ -99,18 +99,73 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
     testPushdown(
       s"""SELECT "subquery_0"."P", (count(DISTINCT "subquery_0"."O")) AS "avg" FROM
           (SELECT * FROM $test_table2) AS "subquery_0" GROUP BY "subquery_0"."P"
-      """,
-      aggResult,
+      """.stripMargin,
+      result,
       Seq(Row(1, 0), Row(2, 2), Row(3, 1)))
   }
 
+  test("Basic filters") {
+    val result =
+      sparkSession.sql("""
+        select * from df2
+        where p > 1 AND p < 3
+      """.stripMargin)
+
+    testPushdown(s"""SELECT * FROM (SELECT * FROM $test_table2) AS "subquery_0"
+          WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+      """.stripMargin,
+                 result,
+                 Seq(Row(2, 2), Row(3, 2)))
+  }
+
+  test("LIMIT and SORT") {
+    val result =
+      sparkSession.sql("""
+        select * from df2
+        where p > 1 AND p < 3 order by p desc limit 1
+      """.stripMargin)
+
+    testPushdown(s"""SELECT * FROM
+                 (SELECT * FROM
+                 (SELECT * FROM
+                 (SELECT * FROM $test_table2) AS "subquery_0"
+                 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3)))
+                 AS "subquery_1" ORDER BY ("subquery_1"."P") DESC) AS "subquery_2" LIMIT 1
+      """.stripMargin,
+                 result,
+                 Seq(Row(2, 2)))
+  }
+
+  test("Nested query with column alias") {
+    val result =
+      sparkSession.sql("""
+        select f, o from (select o, p as f from df2
+        where p > 1 AND p < 3) as foo order by f,o desc
+      """.stripMargin)
+
+    testPushdown(
+      s"""SELECT * FROM (SELECT ("subquery_1"."P") AS "f", "subquery_1"."O" FROM
+                 (SELECT * FROM
+                 (SELECT * FROM $test_table2) AS "subquery_0"
+                 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3)))
+                 AS "subquery_1") AS "subquery_2" ORDER BY ("subquery_2"."f") ASC, ("subquery_2"."O") DESC
+      """.stripMargin,
+      result,
+      Seq(Row(2, 3), Row(2, 2)))
+
+  }
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+    try {
+      jdbcUpdate(s"drop table if exists $test_table")
+      jdbcUpdate(s"drop table if exists $test_table2")
+    } finally {
+      super.afterAll()
+      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+    }
   }
 
   /**
@@ -126,7 +181,7 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
     checkAnswer(result, expectedAnswer)
     // Verify the query issued is what we expect
     val o = Utils.getLastSelect
-  //  assert(Utils.getLastSelect == ref)
-      assert(o == ref)
+    //  assert(Utils.getLastSelect == ref)
+    assert(o == ref)
   }
 }
