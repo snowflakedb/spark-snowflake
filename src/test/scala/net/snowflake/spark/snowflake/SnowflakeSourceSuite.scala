@@ -201,14 +201,14 @@ class SnowflakeSourceSuite extends BaseTest {
     assert(s3FileSystem.listStatus(new Path(s3TempDir)).length === 1)
     val dirWithFiles = s3FileSystem.listStatus(new Path(s3TempDir)).head.getPath.toUri.toString
     // Read the file as single strings
-    val written = testSqlContext.read.format("com.databricks.spark.csv")
+    val written = testSqlContext.read
         .options(Map(
           "header" -> "false",
           "inferSchema" -> "false",
           "delimiter" -> "~",  // Read as 1 record - we don't have ~ in data
           "quote" -> "\""))
         .schema(StructType(Seq(StructField("recordstring", StringType))))
-        .load(dirWithFiles)
+        .csv(dirWithFiles)
     checkAnswer(written, TestUtils.expectedDataAsSingleStrings)
   }
 

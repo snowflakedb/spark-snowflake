@@ -227,6 +227,10 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     // Verify the query issued is what we expect
     checkAnswer(result, expectedAnswer)
 
+    val o = Utils.getLastSelect.replaceAll("\\s+", "")
+    val p = reference.trim
+      .replaceAll("\\s+", "")
+
     assert(
       Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
         .replaceAll("\\s+", ""))

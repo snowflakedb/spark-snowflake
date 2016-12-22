@@ -30,4 +30,6 @@ object SnowflakeConnectorUtils {
   }
 }
 
-class SnowflakePushdownException(message: String) extends Exception(message)
+class SnowflakeConnectorException(message: String) extends Exception(message)
+class SnowflakePushdownException(message: String)
+    extends SnowflakeConnectorException(message)
