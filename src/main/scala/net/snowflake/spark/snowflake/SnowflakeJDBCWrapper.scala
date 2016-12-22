@@ -86,7 +86,14 @@ private[snowflake] class JDBCWrapper {
         val isSigned = rsmd.isSigned(i + 1)
         val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
         val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
-        fields(i) = StructField(columnName, columnType, nullable)
+        fields(i) = StructField(
+                                // Add quotes around column names if Snowflake would usually require them.
+                                if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
+                                  columnName
+                                else
+                                  s""""$columnName"""",
+                                columnType,
+                                nullable)
         i = i + 1
       }
       new StructType(fields)
@@ -199,7 +206,7 @@ private[snowflake] class JDBCWrapper {
             throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
         }
         val nullable = if (field.nullable) "" else "NOT NULL"
-        sb.append(s""", "${name.replace("\"", "\\\"")}" $typ $nullable""".trim)
+        sb.append(s""", ${name.replace("\"", "\\\"")} $typ $nullable""".trim)
       }
     }
     if (sb.length < 2) "" else sb.substring(2)
