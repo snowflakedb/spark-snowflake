@@ -1,28 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Abs,
-  Acos,
-  Asin,
-  Atan,
-  Attribute,
-  Ceil,
-  Cos,
-  Cosh,
-  Expression,
-  Floor,
-  Greatest,
-  Least,
-  Log,
-  Pi,
-  Rand,
-  Round,
-  Sin,
-  Sinh,
-  Sqrt,
-  Tan,
-  Tanh
-}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Expression, Floor, Greatest, Least, Log, Pi, Pmod, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
 
 /**
   * Extractor for boolean expressions (return true or false).
@@ -50,6 +28,8 @@ private[QueryGeneration] object NumericExpression {
             Sqrt(_) | Sinh(_) =>
           expr.prettyName.toUpperCase + block(
             convertExpression(expr.children.head, fields))
+
+        case CheckOverflow(child, _) => convertExpression(child, fields)
 
         case Greatest(children) =>
           "GREATEST" + block(convertExpressions(fields, children:_*))

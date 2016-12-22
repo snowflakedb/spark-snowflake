@@ -19,10 +19,10 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{DataFrame, Row}
 
-class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
+class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
-  private val test_table: String = s"test_table_$randomSuffix"
-  val test_table2                = test_table + "j"
+  private val test_table: String = s"test_table_simple_$randomSuffix"
+  private val test_table2                = s"test_table_simple2_$randomSuffix"
 
   // Values used for comparison
   private val row1 = Row(null, "Hello")
@@ -54,6 +54,8 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
       .option("dbtable", s"$test_table")
       .load()
 
+    df1.queryExecution.executedPlan
+
     val df2 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -75,16 +77,22 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
 
     testPushdown(
       s"""SELECT "subquery_5"."S", "subquery_5"."P" FROM
-      (SELECT * FROM
-      (SELECT * FROM
-      (SELECT * FROM $test_table) AS "subquery_0"
-        WHERE ("subquery_0"."I" IS NOT NULL)) AS "subquery_1"
-    INNER JOIN
-      (SELECT "subquery_3"."P" FROM
-      (SELECT * FROM
-      (SELECT * FROM $test_table2) AS "subquery_2"
-        WHERE ("subquery_2"."P" IS NOT NULL)) AS "subquery_3") AS "subquery_4"
-    ON ("subquery_1"."I" = "subquery_4"."P")) AS "subquery_5"""".stripMargin,
+	(SELECT * FROM
+		(SELECT * FROM
+			(SELECT * FROM $test_table
+		) AS "subquery_0"
+	 WHERE ("subquery_0"."I" IS NOT NULL)
+	) AS "subquery_1"
+ INNER JOIN
+	(SELECT "subquery_3"."P" FROM
+		(SELECT * FROM
+			(SELECT * FROM $test_table2
+			) AS "subquery_2"
+		 WHERE ("subquery_2"."P" IS NOT NULL)
+		) AS "subquery_3"
+	) AS "subquery_4"
+ ON ("subquery_1"."I" = "subquery_4"."P")
+) AS "subquery_5"""".stripMargin,
       result,
       Seq(Row("Snowflake", 2), Row("Snowflake", 2), Row("Spark", 3)))
   }
@@ -98,7 +106,9 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
 
     testPushdown(
       s"""SELECT "subquery_0"."P", (count(DISTINCT "subquery_0"."O")) AS "avg" FROM
-          (SELECT * FROM $test_table2) AS "subquery_0" GROUP BY "subquery_0"."P"
+          |	(SELECT * FROM $test_table2
+          |) AS "subquery_0"
+          | GROUP BY "subquery_0"."P"
       """.stripMargin,
       result,
       Seq(Row(1, 0), Row(2, 2), Row(3, 1)))
@@ -111,8 +121,10 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3
       """.stripMargin)
 
-    testPushdown(s"""SELECT * FROM (SELECT * FROM $test_table2) AS "subquery_0"
-          WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+    testPushdown(s"""SELECT * FROM
+                     |	(SELECT * FROM $test_table2
+                     |) AS "subquery_0"
+                     | WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
       """.stripMargin,
                  result,
                  Seq(Row(2, 2), Row(3, 2)))
@@ -126,11 +138,15 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
       """.stripMargin)
 
     testPushdown(s"""SELECT * FROM
-                 (SELECT * FROM
-                 (SELECT * FROM
-                 (SELECT * FROM $test_table2) AS "subquery_0"
-                 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3)))
-                 AS "subquery_1" ORDER BY ("subquery_1"."P") DESC) AS "subquery_2" LIMIT 1
+                     |	(SELECT * FROM
+                     |		(SELECT * FROM
+                     |			(SELECT * FROM $test_table2
+                     |		) AS "subquery_0"
+                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+                     |	) AS "subquery_1"
+                     | ORDER BY ("subquery_1"."P") DESC
+                     |) AS "subquery_2"
+                     | LIMIT 1
       """.stripMargin,
                  result,
                  Seq(Row(2, 2)))
@@ -144,16 +160,21 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
       """.stripMargin)
 
     testPushdown(
-      s"""SELECT * FROM (SELECT ("subquery_1"."P") AS "f", "subquery_1"."O" FROM
-                 (SELECT * FROM
-                 (SELECT * FROM $test_table2) AS "subquery_0"
-                 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3)))
-                 AS "subquery_1") AS "subquery_2" ORDER BY ("subquery_2"."f") ASC, ("subquery_2"."O") DESC
+      s"""SELECT * FROM
+          |	(SELECT ("subquery_1"."P") AS "f", "subquery_1"."O" FROM
+          |		(SELECT * FROM
+          |			(SELECT * FROM $test_table2
+          |		) AS "subquery_0"
+          |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+          |	) AS "subquery_1"
+          |) AS "subquery_2"
+          | ORDER BY ("subquery_2"."f") ASC, ("subquery_2"."O") DESC
       """.stripMargin,
       result,
       Seq(Row(2, 3), Row(2, 2)))
   }
 
+  /*
   test("Nested complex self-join") {
     val result =
       sparkSession.sql(
@@ -204,6 +225,7 @@ class AdvancedPushdownIntegrationSuite extends IntegrationSuiteBase {
                  Seq(Row(2), Row(2), Row(3)))
   }
 
+  */
   test("Sum and RPAD") {
     val result =
       sparkSession.sql(

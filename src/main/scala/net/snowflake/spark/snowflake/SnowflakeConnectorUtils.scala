@@ -13,7 +13,10 @@ object SnowflakeConnectorUtils {
     * @param session The SparkSession for which pushdowns are to be enabled.
     */
   def enablePushdownSession(session: SparkSession): Unit = {
-    session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
+    if (session.experimental.extraStrategies
+          .find(s => s.isInstanceOf[SnowflakeStrategy])
+          .isEmpty)
+      session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
   }
 
   /** Disable more advanced query pushdowns to Snowflake.
@@ -21,8 +24,9 @@ object SnowflakeConnectorUtils {
     * @param session The SparkSession for which pushdowns are to be disabled.
     */
   def disablePushdownSession(session: SparkSession): Unit = {
-    session.experimental.extraStrategies = session.experimental.extraStrategies
-      .filterNot(strategy => strategy.isInstanceOf[SnowflakeStrategy])
+    session.experimental.extraStrategies =
+      session.experimental.extraStrategies.filterNot(strategy =>
+        strategy.isInstanceOf[SnowflakeStrategy])
   }
 }
 

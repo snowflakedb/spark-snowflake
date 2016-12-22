@@ -39,7 +39,7 @@ private[QueryGeneration] object MiscExpression {
           case None =>
             convertExpression(child, fields)
           case Some(cast) =>
-            "CAST" + block(convertExpression(child, fields) + "AS " + cast)
+            "CAST" + block(convertExpression(child, fields) + " AS " + cast)
         }
       case If(child, trueValue, falseValue) =>
         "IFF" + block(
