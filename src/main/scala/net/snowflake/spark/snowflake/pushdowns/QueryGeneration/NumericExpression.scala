@@ -23,18 +23,13 @@ private[QueryGeneration] object NumericExpression {
 
     Option(
       expr match {
-        case Abs(_) | Acos(_) | Cos(_) | Tan(_) | Tanh(_) | Cosh(_) | Atan(_) |
-            Floor(_) | Sin(_) | Log(_) | Asin(_) | Sqrt(_) | Ceil(_) |
-            Sqrt(_) | Sinh(_) =>
+        case _: Abs | _: Acos | _: Cos | _: Tan | _: Tanh | _: Cosh | _: Atan |
+            _: Floor | _: Sin | _: Log | _: Asin | _: Sqrt | _: Ceil |
+            _: Sqrt | _: Sinh | _: Greatest | _: Least =>
           expr.prettyName.toUpperCase + block(
-            convertExpression(expr.children.head, fields))
+            convertExpressions(fields, expr.children:_*))
 
         case CheckOverflow(child, _) => convertExpression(child, fields)
-
-        case Greatest(children) =>
-          "GREATEST" + block(convertExpressions(fields, children:_*))
-        case Least(children) =>
-          "LEAST" + block(convertExpressions(fields, children:_*))
 
         case Pi() => "PI()"
 

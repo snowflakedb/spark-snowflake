@@ -23,9 +23,9 @@ private[QueryGeneration] object DateExpression {
 
     Option(
       expr match {
-        case Month(_) | Quarter(_) | Year(_) =>
+        case _: Month | _: Quarter | _: Year =>
           expr.prettyName.toUpperCase + block(
-            convertExpression(expr.children.head, fields))
+            convertExpressions(fields, expr.children:_*))
 
         case _ => null
       }

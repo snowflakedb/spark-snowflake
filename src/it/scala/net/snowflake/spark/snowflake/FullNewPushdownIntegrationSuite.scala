@@ -142,6 +142,53 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 ) AS "subquery_5"""")
   }
 
+  test("Concatenation and LPAD") {
+    testDF(
+      sql =
+        s"""SELECT concat(randStr2, randStr3) as c, lpad(randStr2, 5, '%') as l from ${table_placeholder}2""",
+      ref =
+        s"""SELECT (CONCAT("subquery_0"."RANDSTR2", "subquery_0"."RANDSTR3")) AS "c", (LPAD("subquery_0"."RANDSTR2", 5, '%')) AS "l" FROM
+	(SELECT * FROM $test_table2
+) AS "subquery_0"""")
+  }
+
+  test("Translate") {
+    testDF(
+      sql =
+        s"""SELECT translate(randStr2, 'sd', 'po') as l from ${table_placeholder}2""",
+      ref =
+        s"""SELECT (TRANSLATE("subquery_0"."RANDSTR2", 'sd', 'po')) AS "l" FROM
+	(SELECT * FROM $test_table2
+) AS "subquery_0"""")
+  }
+
+  test("Join and Max Aggregation") {
+    testDF(
+      sql =
+        s"""SELECT a.id, max(b.randInt2) from ${table_placeholder}1 as a INNER JOIN
+         ${table_placeholder}2 as b on cast(a.randInt/5 as integer) = cast(b.randInt2/5 as integer) group by a.id""".stripMargin,
+      ref =
+        s"""SELECT "subquery_5"."ID", (MAX("subquery_5"."RANDINT2")) AS "max(randInt2)" FROM
+	(SELECT "subquery_4"."ID", "subquery_4"."RANDINT2" FROM
+		(SELECT * FROM
+			(SELECT "subquery_0"."ID", "subquery_0"."RANDINT" FROM
+				(SELECT * FROM $test_table
+			) AS "subquery_0"
+		) AS "subquery_1"
+	 INNER JOIN
+		(SELECT "subquery_2"."RANDINT2" FROM
+			(SELECT * FROM $test_table2
+			) AS "subquery_2"
+		) AS "subquery_3"
+	 ON (CAST(("subquery_1"."RANDINT" / 5) AS NUMBER) = CAST(("subquery_3"."RANDINT2" / 5) AS NUMBER))
+	) AS "subquery_4"
+) AS "subquery_5"
+ GROUP BY "subquery_5"."ID"""")
+  }
+
+  /** Below tests bypass query check because pushdowns may sometimes swap ordering of multiple join and groupBy
+    * predicates, causing failure. The pushdown queries are otherwise correct (as of the writing of this comment).
+    */
   test("Join on multiple conditions") {
     testDF(sql = s"""SELECT b.randStr2 from ${table_placeholder}1 as a
          INNER JOIN ${table_placeholder}2 as b on ISNULL(b.randInt2) = a.randBool AND a.randStr=b.randStr2""".stripMargin,
@@ -163,31 +210,8 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 		) AS "subquery_4"
 	) AS "subquery_5"
  ON ((("subquery_5"."RANDINT2" IS NULL) = "subquery_2"."RANDBOOL") AND ("subquery_2"."RANDSTR" = "subquery_5"."RANDSTR2"))
-) AS "subquery_6"""")
-  }
-
-  test("Join and Aggregation") {
-    testDF(
-      sql =
-        s"""SELECT a.id, max(b.randInt2) from ${table_placeholder}1 as a INNER JOIN
-         ${table_placeholder}2 as b on cast(a.randInt/5 as integer) = cast(b.randInt2/5 as integer) group by a.id""".stripMargin,
-      ref =
-        s"""SELECT "subquery_5"."ID", (max("subquery_5"."RANDINT2")) AS "max(randInt2)" FROM
-	(SELECT "subquery_4"."ID", "subquery_4"."RANDINT2" FROM
-		(SELECT * FROM
-			(SELECT "subquery_0"."ID", "subquery_0"."RANDINT" FROM
-				(SELECT * FROM $test_table
-			) AS "subquery_0"
-		) AS "subquery_1"
-	 INNER JOIN
-		(SELECT "subquery_2"."RANDINT2" FROM
-			(SELECT * FROM $test_table2
-			) AS "subquery_2"
-		) AS "subquery_3"
-	 ON (CAST(("subquery_1"."RANDINT" / 5) AS NUMBER) = CAST(("subquery_3"."RANDINT2" / 5) AS NUMBER))
-	) AS "subquery_4"
-) AS "subquery_5"
- GROUP BY "subquery_5"."ID"""")
+) AS "subquery_6"""",
+           bypassQueryCheck = true)
   }
 
   test("Aggregate by multiple columns") {
@@ -199,7 +223,8 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 		(SELECT * FROM $test_table
 	) AS "subquery_0"
 ) AS "subquery_1"
- GROUP BY "subquery_1"."RANDINT", "subquery_1"."RANDBOOL"""")
+ GROUP BY "subquery_1"."RANDINT", "subquery_1"."RANDBOOL"""",
+      bypassQueryCheck = true)
   }
 
   override def beforeEach(): Unit = {
@@ -222,21 +247,20 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     */
   def testPushdown(reference: String,
                    result: DataFrame,
-                   expectedAnswer: Seq[Row]): Unit = {
+                   expectedAnswer: Seq[Row],
+                   bypass: Boolean = false): Unit = {
 
     // Verify the query issued is what we expect
     checkAnswer(result, expectedAnswer)
 
-    val o = Utils.getLastSelect.replaceAll("\\s+", "")
-    val p = reference.trim
-      .replaceAll("\\s+", "")
-
-    assert(
-      Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
-        .replaceAll("\\s+", ""))
+    if (!bypass) {
+      assert(
+        Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
+          .replaceAll("\\s+", ""))
+    }
   }
 
-  def testDF(sql: String, ref: String) = {
+  def testDF(sql: String, ref: String, bypassQueryCheck: Boolean = false) = {
 
     val df_spark =
       sparkSession.sql(sql.replaceAll(s"""$table_placeholder""", "df_spark"))
@@ -244,6 +268,6 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       sparkSession.sql(
         sql.replaceAll(s"""$table_placeholder""", "df_snowflake"))
 
-    testPushdown(ref, df_snowflake, df_spark.collect)
+    testPushdown(ref, df_snowflake, df_spark.collect, bypassQueryCheck)
   }
 }

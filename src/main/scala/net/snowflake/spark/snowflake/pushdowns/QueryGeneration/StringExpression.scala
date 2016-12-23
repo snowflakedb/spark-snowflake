@@ -1,6 +1,21 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Expression, Lower, StringLPad, StringRPad, StringReverse, StringTrim, Upper}
+import org.apache.spark.sql.catalyst.expressions.{
+  Ascii,
+  Attribute,
+  Concat,
+  Contains,
+  Expression,
+  Lower,
+  StringLPad,
+  StringRPad,
+  StringReverse,
+  StringTranslate,
+  StringTrim,
+  StringTrimLeft,
+  StringTrimRight,
+  Upper
+}
 
 /**
   * Extractor for boolean expressions (return true or false).
@@ -23,14 +38,17 @@ private[QueryGeneration] object StringExpression {
 
     Option(
       expr match {
-        case Ascii(_) | Lower(_) | StringReverse(_) | StringTrim(_) | Upper(_) =>
+        case _: Ascii | _: Lower | _: StringLPad |
+            _: StringRPad | _: StringReverse | _: StringTranslate |
+            _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
+            _: Upper =>
           expr.prettyName.toUpperCase + block(
-            convertExpression(expr.children.head, fields))
+            convertExpressions(fields, expr.children: _*))
 
-        case StringLPad(str, len, pad) =>
-          "LPAD" + block(convertExpressions(fields, str, len, pad))
-        case StringRPad(str, len, pad) =>
-          "RPAD" + block(convertExpressions(fields, str, len, pad))
+        case Concat(children) =>
+          if (children.length == 2)
+            "CONCAT" + block(convertExpressions(fields, children: _*))
+          else null
 
         case _ => null
       }

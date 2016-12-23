@@ -52,7 +52,8 @@ package object QueryGeneration {
       case None            => ""
     }
 
-    str + wrap(name)
+    if (name.startsWith("\"") && name.endsWith("\"")) str + name
+    else str + wrap(name)
   }
 
   private[QueryGeneration] final def wrap(name: String): String = {

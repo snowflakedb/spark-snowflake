@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 
 /**
   * Extractor for aggregate-style expressions.
@@ -26,13 +27,15 @@ private[QueryGeneration] object AggregationExpression {
       if (expr.sql contains "(DISTINCT ") "DISTINCT " else ""
     // Take only the first child, as all of the functions below have only one.
     expr.children.headOption.flatMap(agg_fun => {
-      val fn_name = agg_fun.prettyName.trim.toLowerCase
-      Option(fn_name match {
-        case "avg" | "count" | "max" | "min" | "sum" => fn_name
+      Option(agg_fun match {
+        case _: Average | _: Corr | _: CovPopulation | _: CovSample |
+            _: Count | _: Max | _: Min | _: Sum | _: StddevPop |
+            _: StddevSamp | _: VariancePop | _: VarianceSamp =>
+          agg_fun.prettyName.toUpperCase + block(
+            distinct + convertExpressions(fields, agg_fun.children: _*))
+
         case _ => null
-      }).flatMap(name =>
-        agg_fun.children.headOption.map(child =>
-          name + block(distinct + convertExpression(child, fields))))
+      })
     })
   }
 }
