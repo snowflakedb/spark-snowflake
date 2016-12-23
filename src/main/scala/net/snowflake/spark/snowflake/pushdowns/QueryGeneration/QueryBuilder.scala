@@ -39,7 +39,7 @@ private[QueryGeneration] class QueryBuilder(plan: LogicalPlan) {
   lazy val query: String = {
     checkTree()
     val query = treeRoot.getQuery()
-    log.info(s"""Generated query: '${prettyPrint(query)}'""")
+    //log.info(s"""Generated query: '${prettyPrint(query)}'""")
     query
   }
 
