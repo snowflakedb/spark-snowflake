@@ -12,6 +12,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.types.{StructField, StructType}
 
 import scala.reflect.ClassTag
 
@@ -76,7 +77,11 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
 
   /** Invokes buildScan in SnowflakeRelation to build the RDD from a generated query. */
   private def toRDD[T: ClassTag]: RDD[T] = {
-    source.relation.buildScanFromSQL[T](query)
+
+    val schema = StructType(getOutput.map(attr =>
+      StructField(attr.name, attr.dataType, attr.nullable)))
+
+    source.relation.buildScanFromSQL[T](query, Some(schema))
   }
 
   private def checkTree(): Unit = {
@@ -115,10 +120,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             case Sort(orderExpr, true, Limit(limitExpr, _)) =>
               SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
             case Sort(orderExpr, true, _) =>
-              SortLimitQuery(None,
-                             orderExpr,
-                             subQuery,
-                             alias.next)
+              SortLimitQuery(None, orderExpr, subQuery, alias.next)
 
             case _ => subQuery
           }
