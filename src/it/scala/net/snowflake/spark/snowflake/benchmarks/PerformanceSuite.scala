@@ -88,7 +88,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     for ((param, acceptedSet) <- argCheckMap) {
       val argValue = fullParams
         .getOrElse(param, fail(s"Required parameter $param missing."))
-      if (!acceptedSet.contains(argValue))
+      if (!acceptedSet.contains(argValue) && !acceptedSet.contains("*"))
         fail(
           s"""Value $argValue not accepted for parameter $param. Accepted values are: ${acceptedSet
             .mkString(", ")} """)
@@ -118,12 +118,13 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     var result: String = ""
 
     if (runOption == "both") {
-      result = runWithSnowflake(query, name, true).getOrElse(failedMessage)
-      outputResult(s"""${name.toUpperCase}, with full pushdowns: """ + result)
-
       result = runWithSnowflake(query, name, false).getOrElse(failedMessage)
       outputResult(
         s"""${name.toUpperCase}, with only filter/proj pushdowns: """ + result)
+
+      result = runWithSnowflake(query, name, true).getOrElse(failedMessage)
+      outputResult(s"""${name.toUpperCase}, with full pushdowns: """ + result)
+
     } else if (runOption == "full-only") {
       result = runWithSnowflake(query, name, true).getOrElse(failedMessage)
       outputResult(s"""${name.toUpperCase}, with full pushdowns: """ + result)
