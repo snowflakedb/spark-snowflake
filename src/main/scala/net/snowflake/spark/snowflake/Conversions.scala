@@ -22,8 +22,7 @@ import java.text._
 import java.util.Date
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -168,12 +167,10 @@ private[snowflake] object Conversions {
           }
     }
 
-    val r = Row.fromSeq(converted)
-
     if (isInternalRow) {
-      unsafeRowConverter(schema)(r).asInstanceOf[T]
+      InternalRow.fromSeq(converted).asInstanceOf[T]
     } else
-      r.asInstanceOf[T]
+      Row.fromSeq(converted).asInstanceOf[T]
   }
 
   /**
@@ -211,16 +208,4 @@ private[snowflake] object Conversions {
     if (isInternalRow) Decimal(res)
     else res
   }
-
-  private def unsafeRowConverter(schema: StructType): Row => UnsafeRow = {
-    val converter = UnsafeProjection.create(schema)
-    (row: Row) =>
-      {
-        converter(
-          CatalystTypeConverters
-            .convertToCatalyst(row)
-            .asInstanceOf[InternalRow])
-      }
-  }
-
 }

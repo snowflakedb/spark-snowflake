@@ -16,11 +16,7 @@
 
 package net.snowflake.spark.snowflake.benchmarks
 
-import net.snowflake.spark.snowflake.{Conversions, SnowflakeInputFormat}
 import net.snowflake.spark.snowflake.Utils._
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types._
 
 import scala.collection.mutable
 
@@ -49,44 +45,21 @@ class TCPHSuite extends PerformanceSuite {
       .load()
 
     df1.createOrReplaceTempView("df1")
-    */
+   */
   }
 
   /*
-  test("Conversion performance") {
-
-    val resultSchema = new StructType(
-      Array(StructField("C1", DecimalType(38,0), nullable = true),
-        StructField("C2", DecimalType(38,0), nullable = true),
-        StructField("C3", DecimalType(38,0), nullable = true)))
-
-    val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-      "s3n://sfc-dev1/edm/55dc539e-2b65-4b51-b48c-ced1396ae196/",
-      classOf[SnowflakeInputFormat],
-      classOf[java.lang.Long],
-      classOf[Array[String]])
-     val r = rdd.values.mapPartitions { iter =>
-      val converter: Array[String] => InternalRow = Conversions.createRowConverter[InternalRow](resultSchema)
-      iter.map(converter)
-    }
-
-    val t1 = System.nanoTime()
-    r.collect()
-    println((System.nanoTime() - t1) / 1e9d)
-  }
-
   test("First test") {
-    testQuery("SELECT C1, C2, C3 FROM df1", "first test")
+    testQuery("SELECT * FROM df1", "first test")
   }
-*/
+   */
 
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
 
   override def afterAll(): Unit = {
-    try {
-    } finally {
+    try {} finally {
       super.afterAll()
     }
   }
