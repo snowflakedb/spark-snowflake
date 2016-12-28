@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -6,7 +6,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 /**
   * Extractor for aggregate-style expressions.
   */
-private[QueryGeneration] object AggregationExpression {
+private[querygeneration] object AggregationExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to

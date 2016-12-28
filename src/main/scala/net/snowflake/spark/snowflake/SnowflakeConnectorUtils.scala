@@ -28,6 +28,13 @@ object SnowflakeConnectorUtils {
       session.experimental.extraStrategies.filterNot(strategy =>
         strategy.isInstanceOf[SnowflakeStrategy])
   }
+
+  def setPushdownSession(session: SparkSession, enabled: Boolean): Unit = {
+    if (enabled)
+      enablePushdownSession(session)
+    else
+      disablePushdownSession(session)
+  }
 }
 
 class SnowflakeConnectorException(message: String) extends Exception(message)

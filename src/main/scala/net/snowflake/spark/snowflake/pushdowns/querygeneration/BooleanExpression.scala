@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
@@ -18,7 +18,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
   * Extractor for boolean expressions (return true or false).
   */
-private[QueryGeneration] object BooleanExpression {
+private[querygeneration] object BooleanExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to

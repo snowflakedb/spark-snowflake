@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
 import org.apache.spark.sql.catalyst.expressions.{
@@ -10,7 +10,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 /**
   * Building blocks of a translated query, with nested subqueries.
   */
-private[QueryGeneration] abstract sealed class SnowflakeQuery {
+private[querygeneration] abstract sealed class SnowflakeQuery {
 
   /** Output columns. */
   lazy val output: Seq[Attribute] =

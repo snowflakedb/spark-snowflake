@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.plans.logical.{
   BinaryNode,
@@ -9,7 +9,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 /**
   * Extractor for binary logical operations (e.g., joins).
   */
-private[QueryGeneration] object BinaryOp {
+private[querygeneration] object BinaryOp {
 
   def unapply(node: BinaryNode): Option[(LogicalPlan, LogicalPlan)] =
     Option(node match {

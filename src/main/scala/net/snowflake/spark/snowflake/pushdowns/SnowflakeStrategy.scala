@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.pushdowns.QueryGeneration.QueryBuilder
+import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkPlan
@@ -22,7 +22,7 @@ class SnowflakeStrategy extends Strategy {
         case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
-      case e: Exception => throw(e)
+      case _: Exception => Nil
     }
 
   /** Attempts to get a SparkPlan from the provided LogicalPlan.

@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.util.NoSuchElementException
 
@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
   * to avoid building the query from the get-go without tryBuild().
   * TODO: Is laziness actually helpful?
   */
-private[QueryGeneration] class QueryBuilder(plan: LogicalPlan) {
+private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
 
   /** This iterator automatically increments every time it is used, and is for aliasing subqueries. */
   private final val alias = Iterator.from(0).map(n => s"subquery_$n")

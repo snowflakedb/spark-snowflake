@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakePushdownException
 import org.apache.spark.sql.catalyst.expressions.{
@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   * @param conjunction Conjunction phrase to be used in between subquery children, or simple phrase
   *                    when there are no subqueries.
   */
-private[QueryGeneration] case class QueryHelper(
+private[querygeneration] case class QueryHelper(
     children: Seq[SnowflakeQuery],
     projections: Option[Seq[NamedExpression]] = None,
     outputAttributes: Option[Seq[Attribute]],

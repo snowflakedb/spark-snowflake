@@ -1,11 +1,11 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Month, Quarter, Year}
 
 /**
   * Extractor for boolean expressions (return true or false).
   */
-private[QueryGeneration] object DateExpression {
+private[querygeneration] object DateExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to

@@ -22,12 +22,9 @@ import java.text._
 import java.util.Date
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{
-  GenericMutableRow,
-  SpecificMutableRow,
-  UnsafeProjection
-}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -95,19 +92,13 @@ private[snowflake] object Conversions {
     override protected def initialValue: SimpleDateFormat =
       new SimpleDateFormat(PATTERN_DATE)
   }
-
-  /**
-    * Parse a string exported from a Snowflake TIMESTAMP column
-    */
-  private def parseTimestamp(s: String): Timestamp = {
-    new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
-  }
-
-  /**
-    * Parse a string exported from a Snowflake DATE column
-    */
-  private def parseDate(s: String): java.sql.Date = {
-    new java.sql.Date(snowflakeDateFormat.get().parse(s).getTime)
+  // Thread local DecimalFormat for parsing
+  private var snowflakeDecimalFormat = new ThreadLocal[DecimalFormat] {
+    override protected def initialValue: DecimalFormat = {
+      var df = new DecimalFormat()
+      df.setParseBigDecimal(true)
+      df
+    }
   }
 
   def formatDate(d: Date): String = {
@@ -129,28 +120,13 @@ private[snowflake] object Conversions {
     else v.toString
   }
 
-  private def parseBoolean(s: String): Boolean = {
-    if (s == "true") true
-    else if (s == "false") false
-    else
-      throw new IllegalArgumentException(
-        s"Expected 'true' or 'false' but got '$s'")
-  }
-
-  // Thread local DecimalFormat for parsing
-  private var snowflakeDecimalFormat = new ThreadLocal[DecimalFormat] {
-    override protected def initialValue: DecimalFormat = {
-      var df = new DecimalFormat()
-      df.setParseBigDecimal(true)
-      df
-    }
-  }
-
   /**
-    * Parse a decimal using Snowflake's UNLOAD decimal syntax.
+    * Return a function that will convert arrays of strings conforming to
+    * the given schema to Row instances
     */
-  def parseDecimal(s: String): java.math.BigDecimal = {
-    snowflakeDecimalFormat.get().parse(s).asInstanceOf[java.math.BigDecimal]
+  def createRowConverter[T: ClassTag](
+      schema: StructType): (Array[String]) => T = {
+    convertRow[T](schema, _: Array[String])
   }
 
   /**
@@ -176,38 +152,75 @@ private[snowflake] object Conversions {
         if (data == null) null
         else
           field.dataType match {
-            case ByteType    => data.toByte
-            case BooleanType => parseBoolean(data)
-            case DateType    => parseDate(data)
-            case DoubleType  => data.toDouble
-            case FloatType   => data.toFloat
-            case dt: DecimalType =>
-              if (isInternalRow) Decimal(parseDecimal(data))
-              else parseDecimal(data)
-            case IntegerType => data.toInt
-            case LongType    => data.toLong
-            case ShortType   => data.toShort
+            case ByteType        => data.toByte
+            case BooleanType     => parseBoolean(data)
+            case DateType        => parseDate(data, isInternalRow)
+            case DoubleType      => data.toDouble
+            case FloatType       => data.toFloat
+            case dt: DecimalType => parseDecimal(data, isInternalRow)
+            case IntegerType     => data.toInt
+            case LongType        => data.toLong
+            case ShortType       => data.toShort
             case StringType =>
               if (isInternalRow) UTF8String.fromString(data) else data
-            case TimestampType => parseTimestamp(data)
+            case TimestampType => parseTimestamp(data, isInternalRow)
             case _             => data
           }
     }
 
+    val r = Row.fromSeq(converted)
+
     if (isInternalRow) {
-      val row        = InternalRow.fromSeq(converted)
-      val unsafeProj = UnsafeProjection.create(schema)
-      unsafeProj(row).copy().asInstanceOf[T]
+      unsafeRowConverter(schema)(r).asInstanceOf[T]
     } else
-      Row.fromSeq(converted).asInstanceOf[T]
+      r.asInstanceOf[T]
   }
 
   /**
-    * Return a function that will convert arrays of strings conforming to
-    * the given schema to Row instances
+    * Parse a string exported from a Snowflake TIMESTAMP column
     */
-  def createRowConverter[T: ClassTag](
-      schema: StructType): (Array[String]) => T = {
-    convertRow[T](schema, _: Array[String])
+  private def parseTimestamp(s: String, isInternalRow: Boolean): Any = {
+    val res = new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
+    if (isInternalRow) DateTimeUtils.fromJavaTimestamp(res)
+    else res
   }
+
+  /**
+    * Parse a string exported from a Snowflake DATE column
+    */
+  private def parseDate(s: String, isInternalRow: Boolean): Any = {
+    val d = new java.sql.Date(snowflakeDateFormat.get().parse(s).getTime)
+    if (isInternalRow) DateTimeUtils.fromJavaDate(d)
+    else d
+  }
+
+  private def parseBoolean(s: String): Boolean = {
+    if (s == "true") true
+    else if (s == "false") false
+    else
+      throw new IllegalArgumentException(
+        s"Expected 'true' or 'false' but got '$s'")
+  }
+
+  /**
+    * Parse a decimal using Snowflake's UNLOAD decimal syntax.
+    */
+  def parseDecimal(s: String, isInternalRow: Boolean): Any = {
+    val res =
+      snowflakeDecimalFormat.get().parse(s).asInstanceOf[java.math.BigDecimal]
+    if (isInternalRow) Decimal(res)
+    else res
+  }
+
+  private def unsafeRowConverter(schema: StructType): Row => UnsafeRow = {
+    val converter = UnsafeProjection.create(schema)
+    (row: Row) =>
+      {
+        converter(
+          CatalystTypeConverters
+            .convertToCatalyst(row)
+            .asInstanceOf[InternalRow])
+      }
+  }
+
 }

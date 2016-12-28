@@ -8,20 +8,20 @@ import org.slf4j.LoggerFactory
   * adding and converting expressions, formatting blocks and identifiers, logging, and
   * formatting SQL.
   */
-package object QueryGeneration {
+package object querygeneration {
 
   /** This wraps all identifiers with the following symbol. */
   private final val identifier = "\""
 
-  private[QueryGeneration] final val log = LoggerFactory.getLogger(getClass)
+  private[querygeneration] final val log = LoggerFactory.getLogger(getClass)
 
   /** Query blocks. */
-  private[QueryGeneration] final def block(text: String): String = {
+  private[querygeneration] final def block(text: String): String = {
     "(" + text + ")"
   }
 
   /** Same as block() but with an alias. */
-  private[QueryGeneration] final def block(text: String,
+  private[querygeneration] final def block(text: String,
                                            alias: String): String = {
     "(" + text + ") AS " + wrap(alias)
   }
@@ -34,7 +34,7 @@ package object QueryGeneration {
     *               usually derived from the output of a subquery.
     * @return A string representing the attribute expression.
     */
-  private[QueryGeneration] final def addAttribute(
+  private[querygeneration] final def addAttribute(
       attr: Attribute,
       fields: Seq[Attribute]): String = {
     fields.find(e => e.exprId == attr.exprId) match {
@@ -45,7 +45,7 @@ package object QueryGeneration {
   }
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
-  private[QueryGeneration] final def qualifiedAttribute(alias: Option[String],
+  private[querygeneration] final def qualifiedAttribute(alias: Option[String],
                                                         name: String) = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
@@ -56,7 +56,7 @@ package object QueryGeneration {
     else str + wrap(name)
   }
 
-  private[QueryGeneration] final def wrap(name: String): String = {
+  private[querygeneration] final def wrap(name: String): String = {
     identifier + name + identifier
   }
 
@@ -65,7 +65,7 @@ package object QueryGeneration {
     *
     * @note (A MatchError may be raised for unsupported Spark expressions).
     */
-  private[QueryGeneration] final def convertExpression(
+  private[querygeneration] final def convertExpression(
       expression: Expression,
       fields: Seq[Attribute]): String = {
     (expression, fields) match {
@@ -79,7 +79,7 @@ package object QueryGeneration {
     }
   }
 
-  private[QueryGeneration] final def convertExpressions(
+  private[querygeneration] final def convertExpressions(
       fields: Seq[Attribute],
       expressions: Expression*): String = {
     expressions.map(e => convertExpression(e, fields)).mkString(", ")
@@ -93,7 +93,7 @@ package object QueryGeneration {
     *
     * This is useful for logging and debugging.
     */
-  private[QueryGeneration] final def prettyPrint(query: String): String = {
+  private[querygeneration] final def prettyPrint(query: String): String = {
     log.debug(s"""Attempting to prettify query $query...""")
 
     val opener = "\\(SELECT"

@@ -1,4 +1,4 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -15,7 +15,7 @@ import org.apache.spark.sql.types._
 /**
   * Extractors for everything else.
   */
-private[QueryGeneration] object MiscExpression {
+private[querygeneration] object MiscExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to

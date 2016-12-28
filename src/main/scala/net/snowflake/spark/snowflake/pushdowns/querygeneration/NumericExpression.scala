@@ -1,11 +1,11 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Expression, Floor, Greatest, Least, Log, Pi, Pmod, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
 
 /**
   * Extractor for boolean expressions (return true or false).
   */
-private[QueryGeneration] object NumericExpression {
+private[querygeneration] object NumericExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to

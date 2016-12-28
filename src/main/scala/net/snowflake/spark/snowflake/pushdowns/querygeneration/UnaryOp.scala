@@ -1,11 +1,11 @@
-package net.snowflake.spark.snowflake.pushdowns.QueryGeneration
+package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
   * Extractor for supported unary operations.
   */
-private[QueryGeneration] object UnaryOp {
+private[querygeneration] object UnaryOp {
 
   def unapply(node: UnaryNode): Option[LogicalPlan] =
     node match {
