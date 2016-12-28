@@ -100,6 +100,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   }
 
   override def afterAll(): Unit = {
+    super.afterAll()
     SnowflakeConnectorUtils.setPushdownSession(sparkSession, sessionStatus)
   }
 
