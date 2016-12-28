@@ -40,6 +40,7 @@ class TCPHSuite extends PerformanceSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    /*
     val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -48,8 +49,10 @@ class TCPHSuite extends PerformanceSuite {
       .load()
 
     df1.createOrReplaceTempView("df1")
+    */
   }
 
+  /*
   test("Conversion performance") {
 
     val resultSchema = new StructType(
@@ -75,6 +78,7 @@ class TCPHSuite extends PerformanceSuite {
   test("First test") {
     testQuery("SELECT C1, C2, C3 FROM df1", "first test")
   }
+*/
 
   override def beforeEach(): Unit = {
     super.beforeEach()
