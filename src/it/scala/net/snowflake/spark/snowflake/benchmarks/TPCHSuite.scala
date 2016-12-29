@@ -24,12 +24,12 @@ class TPCHSuite extends PerformanceSuite {
 
   override var requiredParams = {
     val map = new mutable.LinkedHashMap[String, String]
-    map.put("RegSuite", "")
+    map.put("TPCHSuite", "")
     map
   }
   override var acceptedArguments = {
     val map = new mutable.LinkedHashMap[String, Set[String]]
-    map.put("RegSuite", Set("*"))
+    map.put("TPCHSuite", Set("*"))
     map
   }
 
@@ -41,56 +41,174 @@ class TPCHSuite extends PerformanceSuite {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", "LINEITEM")
-        .option("sfSchema", "TESTSCHEMA")
+        .option("sfSchema", "TPCH_SF1")
         .load()
 
       lineitem.createOrReplaceTempView("LINEITEM")
-
-      val ordersTiny = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "ORDERSTINY")
-        .option("sfSchema", "TESTSCHEMA")
-        .load()
-
-      ordersTiny.createOrReplaceTempView("ORDERSTINY")
 
       val orders = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", "ORDERS")
-        .option("sfSchema", "TESTSCHEMA")
+        .option("sfSchema", "TPCH_SF1")
         .load()
 
       orders.createOrReplaceTempView("ORDERS")
+
+      val partsupp = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "PARTSUPP")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      partsupp.createOrReplaceTempView("PARTSUPP")
+
+      val part = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "PART")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      part.createOrReplaceTempView("PART")
+
+      val supplier = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "SUPPLIER")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      supplier.createOrReplaceTempView("SUPPLIER")
+
+      val customer = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "CUSTOMER")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      customer.createOrReplaceTempView("CUSTOMER")
+
+      val nation = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "NATION")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      nation.createOrReplaceTempView("NATION")
+
+      val region = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", "REGION")
+        .option("sfSchema", "TPCH_SF1")
+        .load()
+
+      region.createOrReplaceTempView("REGION")
     }
   }
 
-  test("SELECT ALL FROM LINEITEM") {
-    testQuery("SELECT * FROM LINEITEM", "LINEITEM all")
+  test("TPCH-Q01") {
+    testQuery(s"""select
+        l_returnflag,
+        l_linestatus,
+        sum(l_quantity) as sum_qty,
+        sum(l_extendedprice) as sum_base_price,
+        sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+        sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+        avg(l_quantity) as avg_qty,
+        avg(l_extendedprice) as avg_price,
+        avg(l_discount) as avg_disc,
+        count(*) as count_order
+from
+        lineitem
+where
+        l_shipdate <= cast(date_add('1998-12-01', -90) as varchar)
+group by
+        l_returnflag,
+        l_linestatus
+order by
+        l_returnflag,
+        l_linestatus""",
+              "TPCH-Q01")
   }
 
-  test("AGGREGATE BY C15") {
-    testQuery(
-      "SELECT C15 AS TYPE, SUM(C2) as SUM_C2, AVG(C3) AS AVG_C3 FROM LINEITEM GROUP BY C15",
-      "Aggregate LINEITEM by transport type (C15)")
+  test("TPCH-Q02") {
+    testQuery(s"""select
+       s_acctbal,
+       s_name,
+       n_name,
+       p_partkey,
+       p_mfgr,
+       s_address,
+       s_phone,
+       s_comment
+from
+       part,
+       supplier,
+       partsupp,
+       nation,
+       region
+where
+       p_partkey = ps_partkey
+   and s_suppkey = ps_suppkey
+   and p_size = 15
+   and p_type like '%%BRASS'
+   and s_nationkey = n_nationkey
+   and n_regionkey = r_regionkey
+   and r_name = 'EUROPE'
+   and ps_supplycost = (
+    select
+           min(ps_supplycost)
+      from
+           partsupp,
+           supplier,
+           nation,
+           region
+     where
+           p_partkey = ps_partkey
+       and s_suppkey = ps_suppkey
+       and s_nationkey = n_nationkey
+       and n_regionkey = r_regionkey
+       and r_name = 'EUROPE'
+       )
+order by
+       s_acctbal desc,
+       n_name,
+       s_name,
+       p_partkey
+limit 100""",
+              "TPCH-Q02")
   }
 
-  test("AGGREGATE BY C14 AND C15") {
-    testQuery(
-      "SELECT C15 AS TYPE, SUM(C2) as SUM_C2, AVG(C3) AS AVG_C3 FROM LINEITEM GROUP BY C14,C15",
-      "Aggregate LINEITEM by delivery status and transport type (C14,C15)")
-  }
-
-  test("JOIN ORDERS AND ORDERSTINY") {
-    testQuery("SELECT * FROM ORDERS O1 JOIN ORDERSTINY O2 ON O1.C2=O2.C2",
-              "Join orders and orderstiny on c2")
-  }
-
-  test("JOIN ORDERS AND LINEITEM") {
-    testQuery(
-      "SELECT * FROM ORDERS O JOIN LINEITEM L ON O.C6=L.C14",
-      "Join orders and lineitem on c6 and c14")
+  test("TPCH-Q03") {
+    testQuery(s"""select
+       l_orderkey,
+       sum(l_extendedprice*(1-l_discount)) as revenue,
+       o_orderdate,
+       o_shippriority
+  from
+       customer,
+       orders,
+       lineitem
+where
+       c_mktsegment = 'BUILDING'
+   and c_custkey = o_custkey
+   and l_orderkey = o_orderkey
+   and o_orderdate < '1995-03-15'
+   and l_shipdate > '1995-03-15'
+ group by
+       l_orderkey,
+       o_orderdate,
+       o_shippriority
+ order by
+       2 desc,
+       o_orderdate
+limit 10""",
+              "TPCH-Q03")
   }
 
   override def beforeEach(): Unit = {

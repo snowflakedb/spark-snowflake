@@ -6,6 +6,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Concat,
   Contains,
   Expression,
+  Like,
   Lower,
   StringLPad,
   StringRPad,
@@ -38,10 +39,9 @@ private[querygeneration] object StringExpression {
 
     Option(
       expr match {
-        case _: Ascii | _: Lower | _: StringLPad |
-            _: StringRPad | _: StringReverse | _: StringTranslate |
-            _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
-            _: Upper =>
+        case _: Ascii | _: Lower | _: StringLPad | _: StringRPad |
+            _: StringReverse | _: StringTranslate | _: StringTrim |
+            _: StringTrimLeft | _: StringTrimRight | _: Upper =>
           expr.prettyName.toUpperCase + block(
             convertExpressions(fields, expr.children: _*))
 
@@ -49,6 +49,11 @@ private[querygeneration] object StringExpression {
           if (children.length == 2)
             "CONCAT" + block(convertExpressions(fields, children: _*))
           else null
+
+        case Like(left, right) =>
+          convertExpression(left, fields) + " LIKE " + convertExpression(
+            right,
+            fields)
 
         case _ => null
       }
