@@ -14,7 +14,7 @@ coverage:
   status:
     changes: false
     patch: false
-    project: true
+    project:
       default:
         target: 70
 parsers:
