@@ -1,6 +1,12 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  Expression,
+  NamedExpression
+}
+import org.apache.spark.sql.types.MetadataBuilder
 import org.slf4j.LoggerFactory
 
 /**
@@ -9,6 +15,8 @@ import org.slf4j.LoggerFactory
   * formatting SQL.
   */
 package object querygeneration {
+
+  private[querygeneration] final val ORIG_NAME = "orig_name"
 
   /** This wraps all identifiers with the following symbol. */
   private final val identifier = "\""
@@ -83,6 +91,32 @@ package object querygeneration {
       fields: Seq[Attribute],
       expressions: Expression*): String = {
     expressions.map(e => convertExpression(e, fields)).mkString(", ")
+  }
+
+  private[querygeneration] def renameColumns(
+      origOutput: Seq[NamedExpression],
+      alias: String): Seq[NamedExpression] = {
+
+    val col_names = Iterator.from(0).map(n => s"col_$n")
+
+    origOutput.map { expr =>
+      val metadata =
+        if (!expr.metadata.contains(ORIG_NAME)) {
+          new MetadataBuilder()
+            .withMetadata(expr.metadata)
+            .putString(ORIG_NAME, expr.name)
+            .build
+        } else expr.metadata
+
+      val altName = s"""${alias}_${col_names.next()}"""
+
+      expr match {
+        case a @ Alias(child: Expression, name: String) =>
+          Alias(child, altName)(a.exprId, None, Some(metadata))
+        case _ =>
+          Alias(expr, altName)(expr.exprId, None, Some(metadata))
+      }
+    }
   }
 
   /** This takes a query in the shape produced by QueryBuilder and

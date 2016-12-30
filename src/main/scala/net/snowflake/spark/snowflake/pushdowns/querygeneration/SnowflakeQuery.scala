@@ -2,7 +2,9 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
 import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
   Attribute,
+  Cast,
   Expression,
   NamedExpression
 }
@@ -15,7 +17,18 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
   /** Output columns. */
   lazy val output: Seq[Attribute] =
     if (helper == null) Seq.empty
-    else helper.output
+    else {
+      helper.output.map { col =>
+        val orig_name =
+          if (col.metadata.contains(ORIG_NAME)) {
+            col.metadata.getString(ORIG_NAME)
+          } else col.name
+
+        Alias(Cast(col, col.dataType), orig_name)(col.exprId,
+                                                  None,
+                                                  Some(col.metadata))
+      }.map(_.toAttribute)
+    }
 
   val helper: QueryHelper
 
@@ -169,9 +182,12 @@ case class AggregateQuery(columns: Seq[NamedExpression],
                 outputAttributes = None,
                 alias = alias)
 
-  override val suffix = " GROUP BY " + groups
-      .map(group => expressionToString(group))
-      .mkString(", ")
+  override val suffix =
+    if (!groups.isEmpty) {
+      " GROUP BY " + groups
+        .map(group => expressionToString(group))
+        .mkString(", ")
+    } else ""
 }
 
 /** The query for Sort and Limit operations.
@@ -223,7 +239,7 @@ case class JoinQuery(left: SnowflakeQuery,
   /** Currently only inner joins are supported. */
   override val helper: QueryHelper =
     QueryHelper(children = Seq(left, right),
-                projections = None,
+                projections = Some(left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
                 outputAttributes = None,
                 alias = alias,
                 conjunction = "INNER JOIN")

@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_simple_$randomSuffix"
-  private val test_table2                = s"test_table_simple2_$randomSuffix"
+  private val test_table2        = s"test_table_simple2_$randomSuffix"
 
   // Values used for comparison
   private val row1 = Row(null, "Hello")
@@ -74,22 +74,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
   ON first.i = second.p""".stripMargin)
 
     testPushdown(
-      s"""SELECT "subquery_5"."S", "subquery_5"."P" FROM
-	(SELECT * FROM
+      s"""SELECT ("subquery_5"."subquery_5_col_1") AS "subquery_6_col_0", ("subquery_5"."subquery_5_col_2") AS "subquery_6_col_1" FROM
+	(SELECT ("subquery_1"."I") AS "subquery_5_col_0", ("subquery_1"."S") AS "subquery_5_col_1", ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_2" FROM
 		(SELECT * FROM
 			(SELECT * FROM $test_table
 		) AS "subquery_0"
 	 WHERE ("subquery_0"."I" IS NOT NULL)
 	) AS "subquery_1"
  INNER JOIN
-	(SELECT "subquery_3"."P" FROM
+	(SELECT ("subquery_3"."P") AS "subquery_4_col_0" FROM
 		(SELECT * FROM
 			(SELECT * FROM $test_table2
 			) AS "subquery_2"
 		 WHERE ("subquery_2"."P" IS NOT NULL)
 		) AS "subquery_3"
 	) AS "subquery_4"
- ON ("subquery_1"."I" = "subquery_4"."P")
+ ON ("subquery_1"."I" = "subquery_4"."subquery_4_col_0")
 ) AS "subquery_5"""".stripMargin,
       result,
       Seq(Row("Snowflake", 2), Row("Snowflake", 2), Row("Spark", 3)))
@@ -103,7 +103,8 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       """.stripMargin)
 
     testPushdown(
-      s"""SELECT "subquery_0"."P", (COUNT(DISTINCT "subquery_0"."O")) AS "avg" FROM
+      s"""SELECT ("subquery_0"."P") AS "subquery_1_col_0", (COUNT(DISTINCT "subquery_0"."O")) AS "subquery_1_col_1"
+          |FROM
           |	(SELECT * FROM $test_table2
           |) AS "subquery_0"
           | GROUP BY "subquery_0"."P"
@@ -111,8 +112,6 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       result,
       Seq(Row(1, 0), Row(2, 2), Row(3, 1)))
   }
-
-
 
   test("Basic filters") {
     val result =
@@ -159,19 +158,19 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3) as foo order by f,o desc
       """.stripMargin)
 
-    testPushdown(
-      s"""SELECT * FROM
-          |	(SELECT ("subquery_1"."P") AS "f", "subquery_1"."O" FROM
-          |		(SELECT * FROM
-          |			(SELECT * FROM $test_table2
-          |		) AS "subquery_0"
-          |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
-          |	) AS "subquery_1"
-          |) AS "subquery_2"
-          | ORDER BY ("subquery_2"."f") ASC, ("subquery_2"."O") DESC
+    testPushdown(s"""SELECT * FROM
+                     |	(SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O") AS "subquery_2_col_1"
+                     | FROM
+                     |		(SELECT * FROM
+                     |			(SELECT * FROM $test_table2
+                     |		) AS "subquery_0"
+                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+                     |	) AS "subquery_1"
+                     |) AS "subquery_2"
+                     | ORDER BY ("subquery_2"."subquery_2_col_0") ASC, ("subquery_2"."subquery_2_col_1") DESC
       """.stripMargin,
-      result,
-      Seq(Row(2, 3), Row(2, 2)))
+                 result,
+                 Seq(Row(2, 3), Row(2, 2)))
   }
 
   test("Sum and RPAD") {
@@ -182,9 +181,10 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
                        """.stripMargin)
 
     testPushdown(
-      s"""SELECT (SUM("subquery_0"."I")) AS "hi", (RPAD("subquery_0"."S", 10, '*')) AS "ho" FROM
-          |		(SELECT * FROM $test_table
-          |	) AS "subquery_0"
+      s"""SELECT (SUM("subquery_0"."I")) AS "subquery_1_col_0", (RPAD("subquery_0"."S", 10, '*')) AS
+          |"subquery_1_col_1" FROM
+          |	(SELECT * FROM $test_table
+          |) AS "subquery_0"
           | GROUP BY "subquery_0"."S"
       """.stripMargin,
       result,

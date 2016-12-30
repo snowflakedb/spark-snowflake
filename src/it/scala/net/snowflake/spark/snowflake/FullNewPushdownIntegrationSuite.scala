@@ -122,11 +122,13 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Join") {
-    testDF(sql = s"""SELECT b.id, a.randInt from ${table_placeholder}1 as a
+    testDF(
+      sql = s"""SELECT b.id, a.randInt from ${table_placeholder}1 as a
          INNER JOIN ${table_placeholder}2 as b on a.randBool = ISNULL(b.randInt2)""".stripMargin,
-           ref = s"""SELECT "subquery_5"."ID", "subquery_5"."RANDINT" FROM
-	(SELECT * FROM
-		(SELECT "subquery_1"."RANDINT", "subquery_1"."RANDBOOL" FROM
+      ref =
+        s"""SELECT ("subquery_5"."subquery_5_col_2") AS "subquery_6_col_0", ("subquery_5"."subquery_5_col_0") AS "subquery_6_col_1" FROM
+	(SELECT ("subquery_2"."subquery_2_col_0") AS "subquery_5_col_0", ("subquery_2"."subquery_2_col_1") AS "subquery_5_col_1", ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_2", ("subquery_4"."subquery_4_col_1") AS "subquery_5_col_3" FROM
+		(SELECT ("subquery_1"."RANDINT") AS "subquery_2_col_0", ("subquery_1"."RANDBOOL") AS "subquery_2_col_1" FROM
 			(SELECT * FROM
 				(SELECT * FROM $test_table
 			) AS "subquery_0"
@@ -134,11 +136,11 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 		) AS "subquery_1"
 	) AS "subquery_2"
  INNER JOIN
-	(SELECT "subquery_3"."ID", "subquery_3"."RANDINT2" FROM
+	(SELECT ("subquery_3"."ID") AS "subquery_4_col_0", ("subquery_3"."RANDINT2") AS "subquery_4_col_1" FROM
 		(SELECT * FROM $test_table2
 		) AS "subquery_3"
 	) AS "subquery_4"
- ON ("subquery_2"."RANDBOOL" = ("subquery_4"."RANDINT2" IS NULL))
+ ON ("subquery_2"."subquery_2_col_1" = ("subquery_4"."subquery_4_col_1" IS NULL))
 ) AS "subquery_5"""")
   }
 
@@ -147,7 +149,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       sql =
         s"""SELECT concat(randStr2, randStr3) as c, lpad(randStr2, 5, '%') as l from ${table_placeholder}2""",
       ref =
-        s"""SELECT (CONCAT("subquery_0"."RANDSTR2", "subquery_0"."RANDSTR3")) AS "c", (LPAD("subquery_0"."RANDSTR2", 5, '%')) AS "l" FROM
+        s"""SELECT (CONCAT("subquery_0"."RANDSTR2", "subquery_0"."RANDSTR3")) AS "subquery_1_col_0", (LPAD("subquery_0"."RANDSTR2", 5, '%')) AS "subquery_1_col_1" FROM
 	(SELECT * FROM $test_table2
 ) AS "subquery_0"""")
   }
@@ -157,7 +159,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       sql =
         s"""SELECT translate(randStr2, 'sd', 'po') as l from ${table_placeholder}2""",
       ref =
-        s"""SELECT (TRANSLATE("subquery_0"."RANDSTR2", 'sd', 'po')) AS "l" FROM
+        s"""SELECT (TRANSLATE("subquery_0"."RANDSTR2", 'sd', 'po')) AS "subquery_1_col_0" FROM
 	(SELECT * FROM $test_table2
 ) AS "subquery_0"""")
   }
@@ -168,22 +170,22 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         s"""SELECT a.id, max(b.randInt2) from ${table_placeholder}1 as a INNER JOIN
          ${table_placeholder}2 as b on cast(a.randInt/5 as integer) = cast(b.randInt2/5 as integer) group by a.id""".stripMargin,
       ref =
-        s"""SELECT "subquery_5"."ID", (MAX("subquery_5"."RANDINT2")) AS "max(randInt2)" FROM
-	(SELECT "subquery_4"."ID", "subquery_4"."RANDINT2" FROM
-		(SELECT * FROM
-			(SELECT "subquery_0"."ID", "subquery_0"."RANDINT" FROM
+        s"""SELECT ("subquery_5"."subquery_5_col_0") AS "subquery_6_col_0", (MAX("subquery_5"."subquery_5_col_1")) AS "subquery_6_col_1" FROM
+	(SELECT ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_0", ("subquery_4"."subquery_4_col_2") AS "subquery_5_col_1" FROM
+		(SELECT ("subquery_1"."subquery_1_col_0") AS "subquery_4_col_0", ("subquery_1"."subquery_1_col_1") AS "subquery_4_col_1", ("subquery_3"."subquery_3_col_0") AS "subquery_4_col_2" FROM
+			(SELECT ("subquery_0"."ID") AS "subquery_1_col_0", ("subquery_0"."RANDINT") AS "subquery_1_col_1" FROM
 				(SELECT * FROM $test_table
 			) AS "subquery_0"
 		) AS "subquery_1"
 	 INNER JOIN
-		(SELECT "subquery_2"."RANDINT2" FROM
+		(SELECT ("subquery_2"."RANDINT2") AS "subquery_3_col_0" FROM
 			(SELECT * FROM $test_table2
 			) AS "subquery_2"
 		) AS "subquery_3"
-	 ON (CAST(("subquery_1"."RANDINT" / 5) AS NUMBER) = CAST(("subquery_3"."RANDINT2" / 5) AS NUMBER))
+	 ON (CAST(("subquery_1"."subquery_1_col_1" / 5) AS NUMBER) = CAST(("subquery_3"."subquery_3_col_0" / 5) AS NUMBER))
 	) AS "subquery_4"
 ) AS "subquery_5"
- GROUP BY "subquery_5"."ID"""")
+ GROUP BY "subquery_5"."subquery_5_col_0"""")
   }
 
   /** Below tests bypass query check because pushdowns may sometimes swap ordering of multiple join and groupBy

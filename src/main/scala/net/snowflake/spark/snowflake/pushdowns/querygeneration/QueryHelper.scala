@@ -4,6 +4,7 @@ import net.snowflake.spark.snowflake.SnowflakePushdownException
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
+  ExprId,
   NamedExpression
 }
 
@@ -44,14 +45,14 @@ private[querygeneration] case class QueryHelper(
               None)
           case None => e
       }))
-    .map(p => p.map(_.toAttribute))
+    .map(p => renameColumns(p, alias))
 
-  val columns: Option[String] = projections map { p =>
+  val columns: Option[String] = processedProjections map { p =>
     p.map(e => convertExpression(e, colSet)).mkString(", ")
   }
 
   val output: Seq[Attribute] = {
-    processedProjections.getOrElse {
+    processedProjections.map(p => p.map(_.toAttribute)).getOrElse {
 
       if (children.isEmpty) {
         outputAttributes.getOrElse(throw new SnowflakePushdownException(
