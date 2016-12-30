@@ -13,7 +13,5 @@ case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
 
   override def children: Seq[SparkPlan]                = Nil
   protected override def doExecute(): RDD[InternalRow] = rdd
-  override def executeCollect(): Array[InternalRow] = {
-    execute().map(_.copy()).collect()
-  }
+
 }
