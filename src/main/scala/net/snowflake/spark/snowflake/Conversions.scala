@@ -23,7 +23,6 @@ import java.util.Date
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -169,9 +168,7 @@ private[snowflake] object Conversions {
     }
 
     if (isInternalRow) {
-      UnsafeProjection
-        .create(schema)(InternalRow.fromSeq(converted))
-        .asInstanceOf[T]
+      InternalRow.fromSeq(converted).asInstanceOf[T]
     } else
       Row.fromSeq(converted).asInstanceOf[T]
   }
