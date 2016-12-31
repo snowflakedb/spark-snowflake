@@ -4,6 +4,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Ascending,
   Attribute,
+  CaseWhenCodegen,
   Cast,
   Descending,
   Expression,
@@ -34,6 +35,17 @@ private[querygeneration] object MiscExpression {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         block(convertExpression(child, fields), name)
+      case CaseWhenCodegen(branches, elseValue) => {
+        val cases = "CASE " + branches
+          .map(
+            b =>
+              "WHEN " + convertExpression(b._1, fields) + " THEN " + convertExpression(
+                b._2,
+                fields))
+          .mkString(" ")
+        if (!elseValue.isEmpty) block(cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
+        else block(cases + " END")
+      }
       case Cast(child, t) =>
         getCastType(t) match {
           case None =>
@@ -42,8 +54,7 @@ private[querygeneration] object MiscExpression {
             "CAST" + block(convertExpression(child, fields) + " AS " + cast)
         }
       case If(child, trueValue, falseValue) =>
-        "IFF" + block(
-          convertExpressions(fields, child, trueValue, falseValue))
+        "IFF" + block(convertExpressions(fields, child, trueValue, falseValue))
       case SortOrder(child, Ascending) =>
         block(convertExpression(child, fields)) + " ASC"
       case SortOrder(child, Descending) =>

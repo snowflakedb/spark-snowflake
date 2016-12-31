@@ -280,8 +280,8 @@ where
               "TPCH-Q06")
   }
 
-  // Extract function
-  /*
+  /* Fails because of extract function
+
   test("TPCH-Q07") {
     testQuery(s"""select
       supp_nation,
@@ -310,7 +310,7 @@ where
              (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')
           or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')
           )
-          and l_shipdate between '1995-01-01) and '1996-12-31'
+          and l_shipdate between '1995-01-01' and '1996-12-31'
       ) shipping
 group by
       supp_nation,
@@ -321,6 +321,7 @@ order by
       cust_nation,
       l_year""", "TPCH-Q07")
   }
+
 
 
   test("TPCH-Q08") {
@@ -397,7 +398,7 @@ order by
       o_year desc""", "TPCH-Q09")
   }
 
-   */
+*/
 
   test("TPCH-Q10") {
     testQuery(s"""select
@@ -435,6 +436,7 @@ limit 20""",
               "TPCH-Q10")
   }
 
+  // Having clause not yet supported for pushdown, but query can work
   test("TPCH-Q11") {
     testQuery(s"""select ps_partkey,
       sum(ps_supplycost * ps_availqty) as value
@@ -541,7 +543,7 @@ order by
               "TPCH-Q14")
   }
 
-  /*
+// Converts to scalar-subquery, does not push down
   test("TPCH-Q15") {
 
     val partsupp = sparkSession.read
@@ -582,10 +584,10 @@ where
       )
 order by
       s_suppkey""", "TPCH-Q15")
-  } */
+  }
 
-  // Spark analysis fails with threshold warning
-  /*
+  // Anti-join failure, will not pushdown. Analysis sometimes fails.
+/*
   test("TPCH-Q16") {
     testQuery(s"""select
       p_brand,
@@ -618,8 +620,8 @@ order by
       p_type,
       p_size
 limit 20""", "TPCH-Q16")
-  }
-   */
+  } */
+
 
   test("TPCH-Q17") {
     testQuery(s"""select
@@ -642,6 +644,7 @@ where
               "TPCH-Q17")
   }
 
+  // Left-Semi join does not pushdown
   test("TPCH-Q18") {
     testQuery(s"""select
       c_name,
@@ -720,6 +723,7 @@ where
               "TPCH-Q19")
   }
 
+  // Left-Semi
   test("TPCH-Q20") {
     testQuery(s"""select
       s_name,
@@ -762,6 +766,7 @@ limit 30""",
               "TPCH-Q20")
   }
 
+  // Left-Semi
   test("TPCH-Q21") {
     testQuery(s"""select
       s_name,
@@ -806,6 +811,7 @@ limit 100""",
               "TPCH-Q21")
   }
 
+  // Scalar subquery
   test("TPCH-Q22") {
     testQuery(s"""select
       cntrycode,

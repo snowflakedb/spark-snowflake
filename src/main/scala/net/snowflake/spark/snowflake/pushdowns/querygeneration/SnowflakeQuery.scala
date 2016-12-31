@@ -1,13 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Cast,
-  Expression,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.plans._
 
 /**
   * Building blocks of a translated query, with nested subqueries.
@@ -228,21 +223,33 @@ case class SortLimitQuery(limit: Option[Expression],
   * @param left The left query subtree.
   * @param right The right query subtree.
   * @param conditions The join conditions.
+  * @param joinType The join type.
   * @param alias Query alias.
   */
 case class JoinQuery(left: SnowflakeQuery,
                      right: SnowflakeQuery,
                      conditions: Option[Expression],
+                     joinType: JoinType,
                      alias: String)
     extends SnowflakeQuery {
 
+
+  val conj = joinType match {
+    case Inner => "INNER JOIN"
+    case LeftOuter => "LEFT OUTER JOIN"
+    case RightOuter => "RIGHT OUTER JOIN"
+    case FullOuter => "OUTER JOIN"
+  }
+
   /** Currently only inner joins are supported. */
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(left, right),
-                projections = Some(left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
-                outputAttributes = None,
-                alias = alias,
-                conjunction = "INNER JOIN")
+    QueryHelper(
+      children = Seq(left, right),
+      projections = Some(
+        left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
+      outputAttributes = None,
+      alias = alias,
+      conjunction = conj)
 
   override val suffix = {
     val str = conditions match {

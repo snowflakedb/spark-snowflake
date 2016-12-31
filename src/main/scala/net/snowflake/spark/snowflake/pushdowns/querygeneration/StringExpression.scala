@@ -1,22 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Ascii,
-  Attribute,
-  Concat,
-  Contains,
-  Expression,
-  Like,
-  Lower,
-  StringLPad,
-  StringRPad,
-  StringReverse,
-  StringTranslate,
-  StringTrim,
-  StringTrimLeft,
-  StringTrimRight,
-  Upper
-}
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Concat, Contains, Expression, Like, Lower, StringLPad, StringRPad, StringReverse, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper}
 
 /**
   * Extractor for boolean expressions (return true or false).
@@ -39,7 +23,7 @@ private[querygeneration] object StringExpression {
 
     Option(
       expr match {
-        case _: Ascii | _: Lower | _: StringLPad | _: StringRPad |
+        case _: Ascii | _: Lower | _: Substring | _: StringLPad | _: StringRPad |
             _: StringReverse | _: StringTranslate | _: StringTrim |
             _: StringTrimLeft | _: StringTrimRight | _: Upper =>
           expr.prettyName.toUpperCase + block(
