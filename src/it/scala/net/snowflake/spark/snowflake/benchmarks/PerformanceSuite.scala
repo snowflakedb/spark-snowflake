@@ -247,7 +247,6 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     } catch {
       case e: Exception =>
         println(s"""Query $name failed.""")
-        throw e
         None
     }
   }
