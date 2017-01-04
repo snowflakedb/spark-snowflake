@@ -65,7 +65,7 @@ trait IntegrationSuiteBase
 
   protected def getConfigValue(name : String): String = {
     connectorOptions.getOrElse(name.toLowerCase, {
-      fail("Config file needs to contain $name value")
+      fail(s"Config file needs to contain $name value")
     })
   }
 

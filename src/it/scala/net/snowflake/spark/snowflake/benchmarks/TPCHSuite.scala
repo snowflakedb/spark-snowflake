@@ -17,97 +17,65 @@
 package net.snowflake.spark.snowflake.benchmarks
 
 import net.snowflake.spark.snowflake.Utils._
+import org.apache.spark.sql.DataFrame
 
 import scala.collection.mutable
 
 class TPCHSuite extends PerformanceSuite {
+
+  protected final var s3RootDir: String = ""
+
+  protected final val tables: Seq[String] = Seq("lineitem",
+                                                "orders",
+                                                "part",
+                                                "partsupp",
+                                                "customer",
+                                                "supplier",
+                                                "region",
+                                                "nation")
 
   override var requiredParams = {
     val map = new mutable.LinkedHashMap[String, String]
     map.put("TPCHSuite", "")
     map
   }
+
   override var acceptedArguments = {
     val map = new mutable.LinkedHashMap[String, Set[String]]
     map.put("TPCHSuite", Set("*"))
     map
   }
 
+  override protected var dataSources: mutable.LinkedHashMap[
+    String,
+    Map[String, DataFrame]] =
+    new mutable.LinkedHashMap[String, Map[String, DataFrame]]
+
+  private def registerDF(tableName: String): Unit = {
+
+    val sf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableName.toUpperCase)
+      .option("sfSchema", "TPCH_SF1")
+      .load()
+
+    val parquet = sparkSession.read.schema(sf.schema)
+      .parquet(s3RootDir + s"/$tableName/parquet")
+
+    val csv =
+      sparkSession.read.schema(sf.schema).option("delimiter", "|").csv(s3RootDir + s"/$tableName/csv")
+
+    dataSources.put(tableName.toUpperCase,
+                    Map("parquet" -> parquet, "csv" -> csv, "snowflake" -> sf))
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     if (runTests) {
-      val lineitem = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "LINEITEM")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      lineitem.createOrReplaceTempView("LINEITEM")
-
-      val orders = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "ORDERS")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      orders.createOrReplaceTempView("ORDERS")
-
-      val partsupp = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "PARTSUPP")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      partsupp.createOrReplaceTempView("PARTSUPP")
-
-      val part = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "PART")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      part.createOrReplaceTempView("PART")
-
-      val supplier = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "SUPPLIER")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      supplier.createOrReplaceTempView("SUPPLIER")
-
-      val customer = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "CUSTOMER")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      customer.createOrReplaceTempView("CUSTOMER")
-
-      val nation = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "NATION")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      nation.createOrReplaceTempView("NATION")
-
-      val region = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", "REGION")
-        .option("sfSchema", "TPCH_SF1")
-        .load()
-
-      region.createOrReplaceTempView("REGION")
+      s3RootDir = getConfigValue("s3SourceFilesRoot")
+      tables.foreach(registerDF)
     }
   }
 
@@ -398,7 +366,7 @@ order by
       o_year desc""", "TPCH-Q09")
   }
 
-*/
+   */
 
   test("TPCH-Q10") {
     testQuery(s"""select
@@ -543,6 +511,7 @@ order by
               "TPCH-Q14")
   }
 
+  /*
 // Converts to scalar-subquery, does not push down
   test("TPCH-Q15") {
 
@@ -583,11 +552,12 @@ where
               revenue
       )
 order by
-      s_suppkey""", "TPCH-Q15")
+      s_suppkey""",
+              "TPCH-Q15")
   }
-
+*/
   // Anti-join failure, will not pushdown. Analysis sometimes fails.
-/*
+  /*
   test("TPCH-Q16") {
     testQuery(s"""select
       p_brand,
@@ -621,7 +591,6 @@ order by
       p_size
 limit 20""", "TPCH-Q16")
   } */
-
 
   test("TPCH-Q17") {
     testQuery(s"""select

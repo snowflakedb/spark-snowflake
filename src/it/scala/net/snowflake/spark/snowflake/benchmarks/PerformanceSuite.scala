@@ -16,19 +16,36 @@
 
 package net.snowflake.spark.snowflake.benchmarks
 
+import java.io.{BufferedWriter, File, FileWriter, Writer}
+
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import net.snowflake.spark.snowflake.{
   IntegrationSuiteBase,
   SnowflakeConnectorUtils
 }
+import org.apache.spark.sql.DataFrame
 import org.scalatest.exceptions.TestFailedException
 
 import scala.collection.mutable
 
 trait PerformanceSuite extends IntegrationSuiteBase {
 
-  protected final val runOptionAccepted    = Set[String]("both", "full-only", "partial-only")
-  protected final val outputFormatAccepted = Set[String]("csv", "print")
+  protected final val runOptionAccepted = Set[String](
+    "all",
+    "s3-all",
+    "s3-parquet",
+    "s3-csv",
+    "snowflake-all",
+    "snowflake-with-pushdown",
+    "snowflake-partial-pushdown")
+
+  protected final val outputFormatAccepted = Set[String]("csv", "print", "both")
+  protected var dataSources: mutable.LinkedHashMap[String,
+                                                   Map[String, DataFrame]]
+  protected final var headersWritten: Boolean    = false
+  protected final var fileWriter: Option[Writer] = None
+
+  protected final var currentSource: String = ""
 
   // For implementing classes to add their own required config params
   protected var requiredParams: mutable.LinkedHashMap[String, String]
@@ -48,7 +65,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sessionStatus = getSessionStatus()
+    sessionStatus = sparkSession.experimental.extraStrategies.exists(s =>
+      s.isInstanceOf[SnowflakeStrategy])
 
     try {
       runOption = getConfigValue("runOption")
@@ -58,7 +76,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
         requiredParams.put(k, getConfigValue(k).toLowerCase)
 
     } catch {
-      case t: TestFailedException => {
+      case t: TestFailedException =>
         if (t.getMessage contains "Config file needs to contain") {
           runTests = false
           val reqParams = requiredParams.keySet.mkString(", ")
@@ -67,12 +85,13 @@ trait PerformanceSuite extends IntegrationSuiteBase {
               "runOption, outputFormat, $reqParams. Skipping ${getClass.getSimpleName}.""")
         } else throw t
 
-      }
       case e: Exception => throw e
     }
 
-    if (runTests)
+    if (runTests) {
       verifyParams()
+      if (outputFormat == "csv" || outputFormat == "both") prepareCSV()
+    }
   }
 
   protected final def verifyParams(): Unit = {
@@ -102,6 +121,10 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   override def afterAll(): Unit = {
     super.afterAll()
     SnowflakeConnectorUtils.setPushdownSession(sparkSession, sessionStatus)
+
+    if (fileWriter.isDefined) {
+      fileWriter.get.close()
+    }
   }
 
   /**
@@ -116,61 +139,135 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     // Skip if invalid configs
     if (!runTests) return
 
-    var result: String = ""
+    var columnWriters =
+      new mutable.ListBuffer[((String, String) => Option[String])]
 
-    if (runOption == "both") {
-      result = runWithSnowflake(query, name, false).getOrElse(failedMessage)
-      outputResult(
-        s"""${name.toUpperCase}, with only filter/proj pushdowns: """ + result)
+    var outputHeaders =
+      new mutable.ListBuffer[String]
 
-      result = runWithSnowflake(query, name, true).getOrElse(failedMessage)
-      outputResult(s"""${name.toUpperCase}, with full pushdowns: """ + result)
-
-    } else if (runOption == "full-only") {
-      result = runWithSnowflake(query, name, true).getOrElse(failedMessage)
-      outputResult(s"""${name.toUpperCase}, with full pushdowns: """ + result)
-    } else {
-      result = runWithSnowflake(query, name, false).getOrElse(failedMessage)
-      outputResult(
-        s"""${name.toUpperCase}, with only filter/proj pushdowns: """ + result)
+    if (Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption) {
+      columnWriters += runWithSnowflake(pushdown = false)
+      outputHeaders += s"""Only filter/proj pushdowns"""
     }
 
-    // runWithoutSnowflake(query)
+    if (Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption) {
+      columnWriters += runWithSnowflake(pushdown = true)
+      outputHeaders += s"""With full pushdowns"""
+    }
+
+    if (Set("all", "s3-all", "s3-parquet") contains runOption) {
+      columnWriters += runWithS3File(format = "parquet")
+      outputHeaders += s"""Direct from S3 Parquet"""
+    }
+
+
+    if (Set("all", "s3-all", "s3-csv") contains runOption) {
+      columnWriters += runWithS3File(format = "csv")
+      outputHeaders += s"""Direct from S3 CSV"""
+    }
+
+
+    val results =
+      columnWriters.map(f => f(query, name).getOrElse(failedMessage))
+
+    if (outputFormat == "print" || outputFormat == "both") {
+      outputHeaders
+        .zip(results)
+        .foreach(x => println(name + ", " + x._1 + ": " + x._2))
+    }
+
+    if (outputFormat == "csv" || outputFormat == "both") {
+      writeToCSV(outputHeaders, results, name)
+    }
   }
 
-  protected def outputResult(result: String): Unit = {
-    if (outputFormat == "print") {
-      println(result)
+  protected final def writeToCSV(headers: Seq[String],
+                                 results: Seq[String],
+                                 name: String): Unit = {
+
+    val writer = {
+      if (fileWriter.isEmpty) prepareCSV()
+      fileWriter.get
+    }
+
+    if (!headersWritten) {
+      headersWritten = true
+      writer.write("Name, " + headers.mkString(", ") + "\n")
+    }
+
+    writer.write(name + ", " + results.mkString(", ") + "\n")
+  }
+
+  protected final def prepareCSV(): Unit = {
+
+    if (fileWriter.isEmpty) {
+      try {
+        val outputFile = new File(getConfigValue("outputFile"))
+        fileWriter = Some(
+          new BufferedWriter(new FileWriter(outputFile, false)))
+      } catch {
+        case e: Exception =>
+          if (fileWriter.isDefined) {
+            fileWriter.get.close()
+          }
+          throw e
+      }
     }
   }
 
   protected final def runWithSnowflake(
-      sql: String,
-      name: String,
-      pushdown: Boolean = true): Option[String] = {
+      pushdown: Boolean)(sql: String, name: String): Option[String] = {
 
-    val state = getSessionStatus()
+    if (currentSource != "snowflake") {
+      dataSources.foreach {
+        case (tableName: String, sources: Map[String, DataFrame]) => {
+          val df: DataFrame = sources.getOrElse(
+            "snowflake",
+            fail(
+              "Snowflake datasource missing for snowflake performance test."))
+          df.createOrReplaceTempView(tableName)
+        }
+      }
+      currentSource = "snowflake"
+    }
+
+    val state = sessionStatus
     SnowflakeConnectorUtils.setPushdownSession(sparkSession, pushdown)
+    val result = executeSqlBenchmarkStatement(sql, name)
+    SnowflakeConnectorUtils.setPushdownSession(sparkSession, state)
+    result
+  }
 
+  private def executeSqlBenchmarkStatement(sql: String,
+                                           name: String): Option[String] = {
     try {
       val t1 = System.nanoTime()
       sparkSession.sql(sql).collect()
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         println(s"""Query $name failed.""")
-        throw(e)
+        throw e
         None
-      }
-    } finally {
-      SnowflakeConnectorUtils.setPushdownSession(sparkSession, state)
     }
-
   }
 
-  protected final def getSessionStatus(): Boolean = {
-    !(sparkSession.experimental.extraStrategies
-      .find(s => s.isInstanceOf[SnowflakeStrategy])
-      .isEmpty)
+  protected final def runWithS3File(
+      format: String)(sql: String, name: String): Option[String] = {
+
+    if (currentSource != format) {
+      dataSources.foreach {
+        case (tableName: String, sources: Map[String, DataFrame]) => {
+          val df: DataFrame = sources.getOrElse(
+            format,
+            fail(
+              s"$format datasource missing for snowflake performance test."))
+          df.createOrReplaceTempView(tableName)
+        }
+      }
+      currentSource = format
+    }
+
+    executeSqlBenchmarkStatement(sql, name)
   }
 }

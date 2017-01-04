@@ -17,8 +17,12 @@
 package net.snowflake.spark.snowflake.benchmarks
 
 import net.snowflake.spark.snowflake.Utils._
+import org.apache.spark.sql._
 
 import scala.collection.mutable
+
+// This suite only runs with the Snowflake deployment defined in the conf file, so we fill the parquet and csv
+// options with the same DF for those.
 
 class RegDeploymentSuite extends PerformanceSuite {
 
@@ -33,6 +37,11 @@ class RegDeploymentSuite extends PerformanceSuite {
     map
   }
 
+  override protected var dataSources: mutable.LinkedHashMap[
+    String,
+    Map[String, DataFrame]] =
+    new mutable.LinkedHashMap[String, Map[String, DataFrame]]
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -44,7 +53,9 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
-      lineitem.createOrReplaceTempView("LINEITEM")
+      dataSources.put(
+        "LINEITEM",
+        Map("parquet" -> lineitem, "csv" -> lineitem, "snowflake" -> lineitem))
 
       val ordersTiny = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -53,7 +64,10 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
-      ordersTiny.createOrReplaceTempView("ORDERSTINY")
+      dataSources.put("ORDERSTINY",
+                      Map("parquet"   -> ordersTiny,
+                          "csv"       -> ordersTiny,
+                          "snowflake" -> ordersTiny))
 
       val orders = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -62,7 +76,9 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
-      orders.createOrReplaceTempView("ORDERS")
+      dataSources.put(
+        "ORDERS",
+        Map("parquet" -> orders, "csv" -> orders, "snowflake" -> orders))
     }
   }
 
@@ -88,9 +104,8 @@ class RegDeploymentSuite extends PerformanceSuite {
   }
 
   test("JOIN ORDERS AND LINEITEM") {
-    testQuery(
-      "SELECT * FROM ORDERS O JOIN LINEITEM L ON O.C6=L.C14",
-      "Join orders and lineitem on c6 and c14")
+    testQuery("SELECT * FROM ORDERS O JOIN LINEITEM L ON O.C6=L.C14",
+              "Join orders and lineitem on c6 and c14")
   }
 
   override def beforeEach(): Unit = {
