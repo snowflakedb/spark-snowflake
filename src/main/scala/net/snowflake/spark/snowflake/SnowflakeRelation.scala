@@ -32,9 +32,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 import scala.reflect.ClassTag
 
-/**
- * Data Source API implementation for Amazon Snowflake database tables
- */
+/** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
     jdbcWrapper: JDBCWrapper,
     s3ClientFactory: AWSCredentials => AmazonS3Client,

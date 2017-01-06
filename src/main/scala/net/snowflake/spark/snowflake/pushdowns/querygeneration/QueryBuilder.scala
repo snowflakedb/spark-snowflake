@@ -16,8 +16,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 import scala.reflect.ClassTag
 
-/**
-  * This class takes a Spark LogicalPlan and attempts to generate
+/** This class takes a Spark LogicalPlan and attempts to generate
   * a query for Snowflake using tryBuild(). Here we use lazy instantiation
   * to avoid building the query from the get-go without tryBuild().
   * TODO: Is laziness actually helpful?

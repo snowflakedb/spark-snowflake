@@ -208,20 +208,4 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
     }
   }
-
-  /**
-    * Verify that the pushdown was done by looking at the generated SQL,
-    * and check the results are as expected
-    */
-  def testPushdown(reference: String,
-                   result: DataFrame,
-                   expectedAnswer: Seq[Row]): Unit = {
-
-    // Verify the query issued is what we expect
-    checkAnswer(result, expectedAnswer)
-
-    assert(
-      Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
-        .replaceAll("\\s+", ""))
-  }
 }

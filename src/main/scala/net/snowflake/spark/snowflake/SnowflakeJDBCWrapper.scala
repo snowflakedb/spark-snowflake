@@ -69,9 +69,8 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table contains an unsupported type.
     */
   def resolveTable(conn: Connection, table: String): StructType = {
-    Math.abs(Random.nextLong()).toString
-    val randStr = Math.abs(Random.nextLong()).toString
-    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as temp_$randStr WHERE 1=0")
+    val str = "somereallylongnamethatisunlikelytobeused12321999"
+    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as temp_$str WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount

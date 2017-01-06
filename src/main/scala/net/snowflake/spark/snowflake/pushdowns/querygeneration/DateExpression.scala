@@ -2,9 +2,7 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Month, Quarter, Year}
 
-/**
-  * Extractor for boolean expressions (return true or false).
-  */
+/** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches

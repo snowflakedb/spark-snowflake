@@ -6,9 +6,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   LogicalPlan
 }
 
-/**
-  * Extractor for binary logical operations (e.g., joins).
-  */
+/** Extractor for binary logical operations (e.g., joins). */
 private[querygeneration] object BinaryOp {
 
   def unapply(node: BinaryNode): Option[(LogicalPlan, LogicalPlan)] =

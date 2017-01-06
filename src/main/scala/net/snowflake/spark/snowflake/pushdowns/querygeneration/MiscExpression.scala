@@ -13,9 +13,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.types._
 
-/**
-  * Extractors for everything else.
-  */
+/** Extractors for everything else. */
 private[querygeneration] object MiscExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
@@ -64,10 +62,8 @@ private[querygeneration] object MiscExpression {
     })
   }
 
-  /**
-    * Attempts a best effort conversion from a SparkType
+  /** Attempts a best effort conversion from a SparkType
     * to a Snowflake type to be used in a Cast.
-    *
     */
   private final def getCastType(t: DataType): Option[String] =
     Option(t match {

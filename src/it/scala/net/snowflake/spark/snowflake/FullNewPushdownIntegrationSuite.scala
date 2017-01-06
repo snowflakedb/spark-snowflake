@@ -243,25 +243,6 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
-  /**
-    * Verify that the pushdown was done by looking at the generated SQL,
-    * and check the results are as expected
-    */
-  def testPushdown(reference: String,
-                   result: DataFrame,
-                   expectedAnswer: Seq[Row],
-                   bypass: Boolean = false): Unit = {
-
-    // Verify the query issued is what we expect
-    checkAnswer(result, expectedAnswer)
-
-    if (!bypass) {
-      assert(
-        Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
-          .replaceAll("\\s+", ""))
-    }
-  }
-
   def testDF(sql: String, ref: String, bypassQueryCheck: Boolean = false) = {
 
     val df_spark =

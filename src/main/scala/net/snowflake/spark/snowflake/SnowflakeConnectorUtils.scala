@@ -3,9 +3,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql.SparkSession
 
-/**
-  * Connector utils, including what needs to be invoked to enable pushdowns.
-  */
+/** Connector utils, including what needs to be invoked to enable pushdowns. */
 object SnowflakeConnectorUtils {
 
   /** Enable more advanced query pushdowns to Snowflake.
@@ -13,9 +11,8 @@ object SnowflakeConnectorUtils {
     * @param session The SparkSession for which pushdowns are to be enabled.
     */
   def enablePushdownSession(session: SparkSession): Unit = {
-    if (session.experimental.extraStrategies
-          .find(s => s.isInstanceOf[SnowflakeStrategy])
-          .isEmpty)
+    if (!session.experimental.extraStrategies
+          .exists(s => s.isInstanceOf[SnowflakeStrategy]))
       session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
   }
 

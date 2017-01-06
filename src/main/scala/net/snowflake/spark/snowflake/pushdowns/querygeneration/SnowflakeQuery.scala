@@ -4,9 +4,7 @@ import net.snowflake.spark.snowflake.SnowflakeRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 
-/**
-  * Building blocks of a translated query, with nested subqueries.
-  */
+/** Building blocks of a translated query, with nested subqueries. */
 private[querygeneration] abstract sealed class SnowflakeQuery {
 
   /** Output columns. */
@@ -241,7 +239,6 @@ case class JoinQuery(left: SnowflakeQuery,
     case FullOuter => "OUTER JOIN"
   }
 
-  /** Currently only inner joins are supported. */
   override val helper: QueryHelper =
     QueryHelper(
       children = Seq(left, right),

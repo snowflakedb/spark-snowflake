@@ -15,9 +15,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
-  * Extractor for boolean expressions (return true or false).
-  */
+/** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object BooleanExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches

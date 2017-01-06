@@ -27,7 +27,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -170,6 +170,27 @@ trait IntegrationSuiteBase
   override protected def beforeEach(): Unit = {
     super.beforeEach()
   }
+
+
+  /**
+    * Verify that the pushdown was done by looking at the generated SQL,
+    * and check the results are as expected
+    */
+  def testPushdown(reference: String,
+    result: DataFrame,
+    expectedAnswer: Seq[Row],
+    bypass: Boolean = false): Unit = {
+
+    // Verify the query issued is what we expect
+    checkAnswer(result, expectedAnswer)
+
+    if (!bypass) {
+      assert(
+        Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
+          .replaceAll("\\s+", ""))
+    }
+  }
+
 
   /**
    * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check

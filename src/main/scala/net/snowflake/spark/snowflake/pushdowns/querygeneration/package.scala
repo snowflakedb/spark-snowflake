@@ -9,8 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.types.MetadataBuilder
 import org.slf4j.LoggerFactory
 
-/**
-  * Package-level static methods and variable constants. These includes helper functions for
+/** Package-level static methods and variable constants. These includes helper functions for
   * adding and converting expressions, formatting blocks and identifiers, logging, and
   * formatting SQL.
   */

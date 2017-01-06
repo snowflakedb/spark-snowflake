@@ -2,9 +2,7 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Expression, Floor, Greatest, Least, Log, Pi, Pmod, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
 
-/**
-  * Extractor for boolean expressions (return true or false).
-  */
+/** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object NumericExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches

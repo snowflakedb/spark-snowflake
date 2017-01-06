@@ -57,7 +57,6 @@ private[querygeneration] case class QueryHelper(
       if (children.isEmpty) {
         outputAttributes.getOrElse(throw new SnowflakePushdownException(
           "Query output attributes must not be empty when it has no children."))
-
       } else
         children.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)
     }

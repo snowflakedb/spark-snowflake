@@ -29,8 +29,7 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 
-/**
- * Input format for text records saved with in-record delimiter and newline characters escaped.
+/** Input format for text records saved with in-record delimiter and newline characters escaped.
  *
  * Note, Snowflake exports fields where
  * - strings/dates are "-quoted, with a " inside represented as ""

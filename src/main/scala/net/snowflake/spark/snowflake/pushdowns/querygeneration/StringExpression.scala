@@ -2,9 +2,7 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Concat, Contains, Expression, Like, Lower, StringLPad, StringRPad, StringReverse, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper}
 
-/**
-  * Extractor for boolean expressions (return true or false).
-  */
+/** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringExpression {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches

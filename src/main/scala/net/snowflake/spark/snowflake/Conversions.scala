@@ -41,7 +41,8 @@ private[snowflake] object Conversions {
   private val PATTERN_TZLTZ =
     if (System.getProperty("java.version").startsWith("1.6."))
       "Z yyyy-MM-dd HH:mm:ss.SSS"
-    else "XX yyyy-MM-dd HH:mm:ss.SSS"
+    else
+      "XX yyyy-MM-dd HH:mm:ss.SSS"
 
   // For NTZ, Snowflake serializes w/o timezone
   private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss.SSS"
