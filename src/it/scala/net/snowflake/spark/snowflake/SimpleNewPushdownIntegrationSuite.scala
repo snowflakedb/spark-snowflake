@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.Row
 
 class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
@@ -77,14 +77,14 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       s"""SELECT ("subquery_5"."subquery_5_col_1") AS "subquery_6_col_0", ("subquery_5"."subquery_5_col_2") AS "subquery_6_col_1" FROM
 	(SELECT ("subquery_1"."I") AS "subquery_5_col_0", ("subquery_1"."S") AS "subquery_5_col_1", ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_2" FROM
 		(SELECT * FROM
-			(SELECT * FROM $test_table
+			(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 		) AS "subquery_0"
 	 WHERE ("subquery_0"."I" IS NOT NULL)
 	) AS "subquery_1"
  INNER JOIN
 	(SELECT ("subquery_3"."P") AS "subquery_4_col_0" FROM
 		(SELECT * FROM
-			(SELECT * FROM $test_table2
+			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 			) AS "subquery_2"
 		 WHERE ("subquery_2"."P" IS NOT NULL)
 		) AS "subquery_3"
@@ -105,7 +105,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     testPushdown(
       s"""SELECT ("subquery_0"."P") AS "subquery_1_col_0", (COUNT(DISTINCT "subquery_0"."O")) AS "subquery_1_col_1"
           |FROM
-          |	(SELECT * FROM $test_table2
+          |	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
           |) AS "subquery_0"
           | GROUP BY "subquery_0"."P"
       """.stripMargin,
@@ -121,7 +121,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       """.stripMargin)
 
     testPushdown(s"""SELECT * FROM
-                     |	(SELECT * FROM $test_table2
+                     |	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
                      |) AS "subquery_0"
                      | WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
       """.stripMargin,
@@ -139,7 +139,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     testPushdown(s"""SELECT * FROM
                      |	(SELECT * FROM
                      |		(SELECT * FROM
-                     |			(SELECT * FROM $test_table2
+                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
                      |		) AS "subquery_0"
                      |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
                      |	) AS "subquery_1"
@@ -162,7 +162,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
                      |	(SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O") AS "subquery_2_col_1"
                      | FROM
                      |		(SELECT * FROM
-                     |			(SELECT * FROM $test_table2
+                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
                      |		) AS "subquery_0"
                      |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
                      |	) AS "subquery_1"
@@ -183,7 +183,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     testPushdown(
       s"""SELECT (SUM("subquery_0"."I")) AS "subquery_1_col_0", (RPAD("subquery_0"."S", 10, '*')) AS
           |"subquery_1_col_1" FROM
-          |	(SELECT * FROM $test_table
+          |	(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
           |) AS "subquery_0"
           | GROUP BY "subquery_0"."S"
       """.stripMargin,

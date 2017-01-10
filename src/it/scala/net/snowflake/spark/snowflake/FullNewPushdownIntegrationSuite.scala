@@ -118,7 +118,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   test("Select all columns.") {
     testDF(sql = s"""SELECT * FROM ${table_placeholder}1""",
-           ref = s"""SELECT * FROM $test_table""")
+           ref = s"""SELECT * FROM ($test_table) AS "sf_connector_query_alias"""")
   }
 
   test("Join") {
@@ -130,14 +130,14 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 	(SELECT ("subquery_2"."subquery_2_col_0") AS "subquery_5_col_0", ("subquery_2"."subquery_2_col_1") AS "subquery_5_col_1", ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_2", ("subquery_4"."subquery_4_col_1") AS "subquery_5_col_3" FROM
 		(SELECT ("subquery_1"."RANDINT") AS "subquery_2_col_0", ("subquery_1"."RANDBOOL") AS "subquery_2_col_1" FROM
 			(SELECT * FROM
-				(SELECT * FROM $test_table
+				(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 			) AS "subquery_0"
 		 WHERE ("subquery_0"."RANDBOOL" IS NOT NULL)
 		) AS "subquery_1"
 	) AS "subquery_2"
  INNER JOIN
 	(SELECT ("subquery_3"."ID") AS "subquery_4_col_0", ("subquery_3"."RANDINT2") AS "subquery_4_col_1" FROM
-		(SELECT * FROM $test_table2
+		(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 		) AS "subquery_3"
 	) AS "subquery_4"
  ON ("subquery_2"."subquery_2_col_1" = ("subquery_4"."subquery_4_col_1" IS NULL))
@@ -150,7 +150,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         s"""SELECT concat(randStr2, randStr3) as c, lpad(randStr2, 5, '%') as l from ${table_placeholder}2""",
       ref =
         s"""SELECT (CONCAT("subquery_0"."RANDSTR2", "subquery_0"."RANDSTR3")) AS "subquery_1_col_0", (LPAD("subquery_0"."RANDSTR2", 5, '%')) AS "subquery_1_col_1" FROM
-	(SELECT * FROM $test_table2
+	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 ) AS "subquery_0"""")
   }
 
@@ -160,7 +160,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         s"""SELECT translate(randStr2, 'sd', 'po') as l from ${table_placeholder}2""",
       ref =
         s"""SELECT (TRANSLATE("subquery_0"."RANDSTR2", 'sd', 'po')) AS "subquery_1_col_0" FROM
-	(SELECT * FROM $test_table2
+	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 ) AS "subquery_0"""")
   }
 
@@ -174,12 +174,12 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 	(SELECT ("subquery_4"."subquery_4_col_0") AS "subquery_5_col_0", ("subquery_4"."subquery_4_col_2") AS "subquery_5_col_1" FROM
 		(SELECT ("subquery_1"."subquery_1_col_0") AS "subquery_4_col_0", ("subquery_1"."subquery_1_col_1") AS "subquery_4_col_1", ("subquery_3"."subquery_3_col_0") AS "subquery_4_col_2" FROM
 			(SELECT ("subquery_0"."ID") AS "subquery_1_col_0", ("subquery_0"."RANDINT") AS "subquery_1_col_1" FROM
-				(SELECT * FROM $test_table
+				(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 			) AS "subquery_0"
 		) AS "subquery_1"
 	 INNER JOIN
 		(SELECT ("subquery_2"."RANDINT2") AS "subquery_3_col_0" FROM
-			(SELECT * FROM $test_table2
+			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 			) AS "subquery_2"
 		) AS "subquery_3"
 	 ON (CAST(("subquery_1"."subquery_1_col_1" / 5) AS NUMBER) = CAST(("subquery_3"."subquery_3_col_0" / 5) AS NUMBER))
@@ -198,7 +198,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 	(SELECT * FROM
 		(SELECT "subquery_1"."RANDSTR", "subquery_1"."RANDBOOL" FROM
 			(SELECT * FROM
-				(SELECT * FROM $test_table
+				(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 			) AS "subquery_0"
 		 WHERE (("subquery_0"."RANDSTR" IS NOT NULL) AND ("subquery_0"."RANDBOOL" IS NOT NULL))
 		) AS "subquery_1"
@@ -206,7 +206,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
  INNER JOIN
 	(SELECT "subquery_4"."RANDSTR2", "subquery_4"."RANDINT2" FROM
 		(SELECT * FROM
-			(SELECT * FROM $test_table2
+			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
 			) AS "subquery_3"
 		 WHERE ("subquery_3"."RANDSTR2" IS NOT NULL)
 		) AS "subquery_4"
@@ -222,7 +222,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         s"""SELECT max(randLong) as m from ${table_placeholder}1 group by randInt,randBool""",
       ref = s"""SELECT (max("subquery_1"."RANDLONG")) AS "m" FROM
 	(SELECT "subquery_0"."RANDINT", "subquery_0"."RANDBOOL", "subquery_0"."RANDLONG" FROM
-		(SELECT * FROM $test_table
+		(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 	) AS "subquery_0"
 ) AS "subquery_1"
  GROUP BY "subquery_1"."RANDINT", "subquery_1"."RANDBOOL"""",

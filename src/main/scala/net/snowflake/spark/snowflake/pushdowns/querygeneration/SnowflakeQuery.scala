@@ -106,8 +106,9 @@ case class SourceQuery(relation: SnowflakeRelation,
     projections = None,
     outputAttributes = Some(refColumns),
     alias = alias,
-    conjunction =
-      relation.params.query.getOrElse(relation.params.table.get.toString))
+    conjunction = block(
+      relation.params.query.getOrElse(relation.params.table.get.toString),
+      alias = "sf_connector_query_alias"))
 
   /** Triplet that defines the Snowflake cluster that houses this base relation.
     * Currently an exact match on cluster is needed for a join, but we may not need
