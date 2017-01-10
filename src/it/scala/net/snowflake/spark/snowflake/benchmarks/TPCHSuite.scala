@@ -60,21 +60,42 @@ class TPCHSuite extends PerformanceSuite {
       .option("sfSchema", "TPCH_SF1")
       .load()
 
-    val parquet = sparkSession.read.schema(sf.schema)
-      .parquet(s3RootDir + s"/$tableName/parquet")
+    val parquet =
+      if (s3Parquet)
+        sparkSession.read
+          .schema(sf.schema)
+          .parquet(s3RootDir + s"/$tableName/parquet")
+      else sf
 
     val csv =
-      sparkSession.read.schema(sf.schema).option("delimiter", "|").csv(s3RootDir + s"/$tableName/csv")
+      if (s3CSV)
+        sparkSession.read
+          .schema(sf.schema)
+          .option("delimiter", "|")
+          .csv(s3RootDir + s"/$tableName/csv")
+      else sf
+
+    val jdbc =
+      if (jdbcSource)
+        sparkSession.read
+          .schema(sf.schema)
+          .jdbc(jdbcURL, tableName, jdbcProperties)
+      else sf
 
     dataSources.put(tableName.toUpperCase,
-                    Map("parquet" -> parquet, "csv" -> csv, "snowflake" -> sf))
+                    Map("parquet"   -> parquet,
+                        "csv"       -> csv,
+                        "snowflake" -> sf,
+                        "jdbc"      -> jdbc))
   }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     if (runTests) {
-      s3RootDir = getConfigValue("s3SourceFilesRoot")
+      if (s3Parquet || s3CSV)
+        s3RootDir = getConfigValue("s3SourceFilesRoot")
+
       tables.foreach(registerDF)
     }
   }
@@ -555,7 +576,7 @@ order by
       s_suppkey""",
               "TPCH-Q15")
   }
-*/
+   */
   // Anti-join failure, will not pushdown. Analysis sometimes fails.
   /*
   test("TPCH-Q16") {

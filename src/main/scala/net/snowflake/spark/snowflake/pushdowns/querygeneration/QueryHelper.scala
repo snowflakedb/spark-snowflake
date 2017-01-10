@@ -27,10 +27,14 @@ private[querygeneration] case class QueryHelper(
     projections: Option[Seq[NamedExpression]] = None,
     outputAttributes: Option[Seq[Attribute]],
     alias: String,
-    conjunction: String = "") {
+    conjunction: String = "",
+    fields: Option[Seq[Attribute]] = None) {
 
-  val colSet = children.foldLeft(Seq.empty[Attribute])((x, y) =>
-    x ++ y.helper.outputWithQualifier)
+  val colSet =
+    if (fields.isEmpty)
+      children.foldLeft(Seq.empty[Attribute])((x, y) =>
+        x ++ y.helper.outputWithQualifier)
+    else fields.get
 
   val pureColSet =
     children.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)

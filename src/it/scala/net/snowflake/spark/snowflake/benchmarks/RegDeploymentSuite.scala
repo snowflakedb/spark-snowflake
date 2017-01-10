@@ -16,6 +16,9 @@
 
 package net.snowflake.spark.snowflake.benchmarks
 
+import java.util.Properties
+
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper
 import net.snowflake.spark.snowflake.Utils._
 import org.apache.spark.sql._
 
@@ -53,9 +56,15 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
-      dataSources.put(
-        "LINEITEM",
-        Map("parquet" -> lineitem, "csv" -> lineitem, "snowflake" -> lineitem))
+      val jdbc_lineitem = if (jdbcSource) {
+        sparkSession.read.jdbc(jdbcURL, "LINEITEM", jdbcProperties)
+      } else lineitem
+
+      dataSources.put("LINEITEM",
+                      Map("parquet"   -> lineitem,
+                          "csv"       -> lineitem,
+                          "snowflake" -> lineitem,
+                          "jdbc"      -> jdbc_lineitem))
 
       val ordersTiny = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -64,10 +73,15 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
+      val jdbc_ordersTiny = if (jdbcSource) {
+        sparkSession.read.jdbc(jdbcURL, "ORDERSTINY", jdbcProperties)
+      } else ordersTiny
+
       dataSources.put("ORDERSTINY",
                       Map("parquet"   -> ordersTiny,
                           "csv"       -> ordersTiny,
-                          "snowflake" -> ordersTiny))
+                          "snowflake" -> ordersTiny,
+                          "jdbc"      -> jdbc_ordersTiny))
 
       val orders = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -76,9 +90,16 @@ class RegDeploymentSuite extends PerformanceSuite {
         .option("sfSchema", "TESTSCHEMA")
         .load()
 
-      dataSources.put(
-        "ORDERS",
-        Map("parquet" -> orders, "csv" -> orders, "snowflake" -> orders))
+      val jdbc_orders = if (jdbcSource) {
+        sparkSession.read.jdbc(jdbcURL, "ORDERS", jdbcProperties)
+        orders
+      } else orders
+
+      dataSources.put("ORDERS",
+                      Map("parquet"   -> orders,
+                          "csv"       -> orders,
+                          "snowflake" -> orders,
+                          "jdbc"      -> jdbc_orders))
     }
   }
 

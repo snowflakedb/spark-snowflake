@@ -1,7 +1,13 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakeRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  Cast,
+  Expression,
+  NamedExpression
+}
 import org.apache.spark.sql.catalyst.plans._
 
 /** Building blocks of a translated query, with nested subqueries. */
@@ -118,22 +124,26 @@ case class SourceQuery(relation: SnowflakeRelation,
 /** The query for a filter operation.
   *
   * @constructor
-  * @param condition The filter condition.
+  * @param conditions The filter condition.
   * @param child The child node.
   * @param alias Query alias.
   */
-case class FilterQuery(condition: Expression,
+case class FilterQuery(conditions: Seq[Expression],
                        child: SnowflakeQuery,
-                       alias: String)
+                       alias: String,
+                       fields: Option[Seq[Attribute]] = None)
     extends SnowflakeQuery {
 
   override val helper: QueryHelper =
     QueryHelper(children = Seq(child),
                 projections = None,
                 outputAttributes = None,
-                alias = alias)
+                alias = alias,
+                fields = fields)
 
-  override val suffix = " WHERE " + expressionToString(condition)
+  override val suffix = " WHERE " + conditions
+      .map(cond => expressionToString(cond))
+      .mkString(" AND ")
 }
 
 /** The query for a projection operation.
@@ -231,12 +241,11 @@ case class JoinQuery(left: SnowflakeQuery,
                      alias: String)
     extends SnowflakeQuery {
 
-
   val conj = joinType match {
-    case Inner => "INNER JOIN"
-    case LeftOuter => "LEFT OUTER JOIN"
+    case Inner      => "INNER JOIN"
+    case LeftOuter  => "LEFT OUTER JOIN"
     case RightOuter => "RIGHT OUTER JOIN"
-    case FullOuter => "OUTER JOIN"
+    case FullOuter  => "OUTER JOIN"
   }
 
   override val helper: QueryHelper =
@@ -255,6 +264,33 @@ case class JoinQuery(left: SnowflakeQuery,
     }
     str + conditions.map(cond => expressionToString(cond)).mkString(" AND ")
   }
+
+  override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
+    query.lift(this).orElse(left.find(query)).orElse(right.find(query))
+}
+
+case class LeftSemiJoinQuery(left: SnowflakeQuery,
+                             right: SnowflakeQuery,
+                             conditions: Option[Expression],
+                             alias: Iterator[String])
+    extends SnowflakeQuery {
+
+  override val helper: QueryHelper =
+    QueryHelper(children = Seq(left),
+                projections = Some(left.helper.outputWithQualifier),
+                outputAttributes = None,
+                alias = alias.next)
+
+  val cond = if (conditions.isEmpty) Seq.empty else Seq(conditions.get)
+
+  override val suffix = " WHERE EXISTS" + block(
+      FilterQuery(
+        conditions = cond,
+        child = right,
+        alias = alias.next,
+        fields = Some(
+          left.helper.outputWithQualifier ++ right.helper.outputWithQualifier))
+        .getQuery(useAlias = false))
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this).orElse(left.find(query)).orElse(right.find(query))

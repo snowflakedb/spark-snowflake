@@ -2,14 +2,11 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.util.NoSuchElementException
 
-import net.snowflake.spark.snowflake.{
-  SnowflakePushdownException,
-  SnowflakeRelation
-}
+import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -106,7 +103,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(child) map { subQuery =>
           plan match {
             case Filter(condition, _) =>
-              FilterQuery(condition, subQuery, alias.next)
+              FilterQuery(Seq(condition), subQuery, alias.next)
             case Project(fields, _) =>
               ProjectQuery(fields, subQuery, alias.next)
             case Aggregate(groups, fields, _) =>
@@ -129,8 +126,13 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, join, condition) =>
-                JoinQuery(l, r, condition, join, alias.next)
+              case Join(_, _, joinType, condition) =>
+                joinType match {
+                  case Inner | LeftOuter | RightOuter |  FullOuter =>
+                    JoinQuery(l, r, condition, joinType, alias.next)
+                  case LeftSemi =>
+                    LeftSemiJoinQuery(l, r, condition, alias)
+                }
             }
           }
         }

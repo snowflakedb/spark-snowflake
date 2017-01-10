@@ -17,12 +17,10 @@
 package net.snowflake.spark.snowflake.benchmarks
 
 import java.io.{BufferedWriter, File, FileWriter, Writer}
+import java.util.Properties
 
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
-import net.snowflake.spark.snowflake.{
-  IntegrationSuiteBase,
-  SnowflakeConnectorUtils
-}
+import net.snowflake.spark.snowflake.{IntegrationSuiteBase, SnowflakeConnectorUtils}
 import org.apache.spark.sql.DataFrame
 import org.scalatest.exceptions.TestFailedException
 
@@ -32,6 +30,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
   protected final val runOptionAccepted = Set[String](
     "all",
+    "jdbc-source",
     "s3-all",
     "s3-parquet",
     "s3-csv",
@@ -39,7 +38,14 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     "snowflake-with-pushdown",
     "snowflake-partial-pushdown")
 
-  protected final val outputFormatAccepted = Set[String]("csv", "print", "both")
+  protected final var fullPushdown: Boolean    = false
+  protected final var partialPushdown: Boolean = false
+  protected final var s3CSV: Boolean           = false
+  protected final var s3Parquet: Boolean       = false
+  protected final var jdbcSource: Boolean      = false
+
+  protected final val outputFormatAccepted =
+    Set[String]("csv", "print", "both")
   protected var dataSources: mutable.LinkedHashMap[String,
                                                    Map[String, DataFrame]]
   protected final var headersWritten: Boolean    = false
@@ -61,6 +67,9 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
   // Maintain session state to make sure it is restored upon finishing of suite
   protected final var sessionStatus: Boolean = false
+
+  protected final var jdbcProperties: Properties = new Properties
+  protected final var jdbcURL: String = ""
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -91,6 +100,31 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     if (runTests) {
       verifyParams()
       if (outputFormat == "csv" || outputFormat == "both") prepareCSV()
+    }
+
+    partialPushdown = Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption
+    fullPushdown = Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption
+    jdbcSource = Set("all", "jdbc-source") contains runOption
+    s3Parquet = Set("all", "s3-all", "s3-parquet") contains runOption
+    s3CSV = Set("all", "s3-all", "s3-csv") contains runOption
+
+    jdbcURL = s"""jdbc:snowflake://${params.sfURL}"""
+
+    jdbcProperties.put("db", params.sfDatabase)
+    jdbcProperties.put("schema", params.sfSchema) // Has a default
+    jdbcProperties.put("user", params.sfUser)
+    jdbcProperties.put("password", params.sfPassword)
+    jdbcProperties.put("ssl", params.sfSSL) // Has a default
+
+    // Optional properties
+    if (params.sfAccount.isDefined) {
+      jdbcProperties.put("account", params.sfAccount.get)
+    }
+    if (params.sfWarehouse.isDefined) {
+      jdbcProperties.put("warehouse", params.sfWarehouse.get)
+    }
+    if (params.sfRole.isDefined) {
+      jdbcProperties.put("role", params.sfRole.get)
     }
   }
 
@@ -145,27 +179,30 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     var outputHeaders =
       new mutable.ListBuffer[String]
 
-    if (Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption) {
+    if (partialPushdown) {
       columnWriters += runWithSnowflake(pushdown = false)
       outputHeaders += s"""Only filter/proj pushdowns"""
     }
 
-    if (Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption) {
+    if (fullPushdown) {
       columnWriters += runWithSnowflake(pushdown = true)
       outputHeaders += s"""With full pushdowns"""
     }
 
-    if (Set("all", "s3-all", "s3-parquet") contains runOption) {
-      columnWriters += runWithS3File(format = "parquet")
+    if (jdbcSource) {
+      columnWriters += runWithoutSnowflake(format = "jdbc")
+      outputHeaders += s"""Using Spark JDBC Source"""
+    }
+
+    if (s3Parquet) {
+      columnWriters += runWithoutSnowflake(format = "parquet")
       outputHeaders += s"""Direct from S3 Parquet"""
     }
 
-
-    if (Set("all", "s3-all", "s3-csv") contains runOption) {
-      columnWriters += runWithS3File(format = "csv")
+    if (s3CSV) {
+      columnWriters += runWithoutSnowflake(format = "csv")
       outputHeaders += s"""Direct from S3 CSV"""
     }
-
 
     val results =
       columnWriters.map(f => f(query, name).getOrElse(failedMessage))
@@ -251,7 +288,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     }
   }
 
-  protected final def runWithS3File(
+  /* Used for running direct from S3, or JDBC Source */
+  protected final def runWithoutSnowflake(
       format: String)(sql: String, name: String): Option[String] = {
 
     if (currentSource != format) {
