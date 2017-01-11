@@ -200,8 +200,6 @@ limit 10""",
               "TPCH-Q03")
   }
 
-  // TODO: Fix because Snowflake does not support LEFT SEMI JOINs (which exist translates to in Spark)
-  /*
   test("TPCH-Q04") {
     testQuery(s"""select
        o_orderpriority,
@@ -226,7 +224,6 @@ limit 10""",
       o_orderpriority""",
               "TPCH-Q04")
   }
-   */
 
   test("TPCH-Q05") {
     testQuery(s"""select
@@ -269,8 +266,6 @@ where
               "TPCH-Q06")
   }
 
-  /* Fails because of extract function
-
   test("TPCH-Q07") {
     testQuery(s"""select
       supp_nation,
@@ -280,7 +275,7 @@ where
    select
           n1.n_name as supp_nation,
           n2.n_name as cust_nation,
-          extract(year from l_shipdate) as l_year,
+          year(l_shipdate) as l_year,
           l_extendedprice * (1 - l_discount) as v1
      from
           supplier,
@@ -311,8 +306,6 @@ order by
       l_year""", "TPCH-Q07")
   }
 
-
-
   test("TPCH-Q08") {
     testQuery(s"""select
       o_year,
@@ -323,7 +316,7 @@ order by
           end) / sum(v1) as mkt_share
  from (
    select
-          extract(year from o_orderdate) as o_year,
+          year(o_orderdate) as o_year,
           l_extendedprice * (1-l_discount) as v1,
           n2.n_name as nation
      from
@@ -361,7 +354,7 @@ order by
  from (
    select
           n_name as nation,
-          extract(year from o_orderdate) as o_year,
+          year(o_orderdate) as o_year,
           l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
      from
           part,
@@ -386,8 +379,6 @@ order by
       nation,
       o_year desc""", "TPCH-Q09")
   }
-
-   */
 
   test("TPCH-Q10") {
     testQuery(s"""select
@@ -425,7 +416,6 @@ limit 20""",
               "TPCH-Q10")
   }
 
-  // Having clause not yet supported for pushdown, but query can work
   test("TPCH-Q11") {
     testQuery(s"""select ps_partkey,
       sum(ps_supplycost * ps_availqty) as value
@@ -532,8 +522,7 @@ order by
               "TPCH-Q14")
   }
 
-  /*
-// Converts to scalar-subquery, does not push down
+/*
   test("TPCH-Q15") {
 
     val partsupp = sparkSession.read
@@ -576,9 +565,8 @@ order by
       s_suppkey""",
               "TPCH-Q15")
   }
-   */
-  // Anti-join failure, will not pushdown. Analysis sometimes fails.
-  /*
+*/
+
   test("TPCH-Q16") {
     testQuery(s"""select
       p_brand,
@@ -611,7 +599,7 @@ order by
       p_type,
       p_size
 limit 20""", "TPCH-Q16")
-  } */
+  }
 
   test("TPCH-Q17") {
     testQuery(s"""select
@@ -634,7 +622,6 @@ where
               "TPCH-Q17")
   }
 
-  // Left-Semi join does not pushdown
   test("TPCH-Q18") {
     testQuery(s"""select
       c_name,
@@ -713,7 +700,6 @@ where
               "TPCH-Q19")
   }
 
-  // Left-Semi
   test("TPCH-Q20") {
     testQuery(s"""select
       s_name,
@@ -756,7 +742,6 @@ limit 30""",
               "TPCH-Q20")
   }
 
-  // Left-Semi
   test("TPCH-Q21") {
     testQuery(s"""select
       s_name,
@@ -801,7 +786,6 @@ limit 100""",
               "TPCH-Q21")
   }
 
-  // Scalar subquery
   test("TPCH-Q22") {
     testQuery(s"""select
       cntrycode,

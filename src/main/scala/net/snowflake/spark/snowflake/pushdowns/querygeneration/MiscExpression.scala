@@ -9,6 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Descending,
   Expression,
   If,
+  ScalarSubquery,
   SortOrder
 }
 import org.apache.spark.sql.types._
@@ -33,17 +34,18 @@ private[querygeneration] object MiscExpression {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         block(convertExpression(child, fields), name)
-      case CaseWhenCodegen(branches, elseValue) => {
+      case CaseWhenCodegen(branches, elseValue) =>
         val cases = "CASE " + branches
-          .map(
-            b =>
-              "WHEN " + convertExpression(b._1, fields) + " THEN " + convertExpression(
-                b._2,
-                fields))
-          .mkString(" ")
-        if (!elseValue.isEmpty) block(cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
+            .map(
+              b =>
+                "WHEN " + convertExpression(b._1, fields) + " THEN " + convertExpression(
+                  b._2,
+                  fields))
+            .mkString(" ")
+        if (elseValue.isDefined)
+          block(
+            cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
         else block(cases + " END")
-      }
       case Cast(child, t) =>
         getCastType(t) match {
           case None =>
@@ -57,6 +59,9 @@ private[querygeneration] object MiscExpression {
         block(convertExpression(child, fields)) + " ASC"
       case SortOrder(child, Descending) =>
         block(convertExpression(child, fields)) + " DESC"
+
+      case ScalarSubquery(subquery, _, _) =>
+        block(new QueryBuilder(subquery).query)
 
       case _ => null
     })

@@ -68,11 +68,11 @@ private[querygeneration] object BooleanExpression {
         }
 
         case Contains(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"%${pattern.toString}%"
+          convertExpression(child, fields) + " LIKE " + s"'%${pattern.toString}%'"
         case EndsWith(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"%${pattern.toString}"
+          convertExpression(child, fields) + " LIKE " + s"'%${pattern.toString}'"
         case StartsWith(child, Literal(pattern: UTF8String, StringType)) =>
-          convertExpression(child, fields) + " LIKE " + s"${pattern.toString}%"
+          convertExpression(child, fields) + " LIKE " + s"'${pattern.toString}%'"
 
         case _ => null
       }
