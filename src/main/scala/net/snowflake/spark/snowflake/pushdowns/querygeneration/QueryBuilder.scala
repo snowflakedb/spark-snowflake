@@ -2,7 +2,10 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.util.NoSuchElementException
 
-import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
+import net.snowflake.spark.snowflake.{
+  SnowflakePushdownException,
+  SnowflakeRelation
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
@@ -128,10 +131,12 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             plan match {
               case Join(_, _, joinType, condition) =>
                 joinType match {
-                  case Inner | LeftOuter | RightOuter |  FullOuter =>
+                  case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)
                   case LeftSemi =>
-                    LeftSemiJoinQuery(l, r, condition, alias)
+                    LeftSemiJoinQuery(l, r, condition, false, alias)
+                  case LeftAnti =>
+                    LeftSemiJoinQuery(l, r, condition, true, alias)
                 }
             }
           }

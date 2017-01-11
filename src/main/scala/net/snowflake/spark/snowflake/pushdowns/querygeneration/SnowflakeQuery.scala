@@ -273,6 +273,7 @@ case class JoinQuery(left: SnowflakeQuery,
 case class LeftSemiJoinQuery(left: SnowflakeQuery,
                              right: SnowflakeQuery,
                              conditions: Option[Expression],
+                             isAntiJoin: Boolean = false,
                              alias: Iterator[String])
     extends SnowflakeQuery {
 
@@ -284,7 +285,9 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
 
   val cond = if (conditions.isEmpty) Seq.empty else Seq(conditions.get)
 
-  override val suffix = " WHERE EXISTS" + block(
+  val anti = if (isAntiJoin) " NOT " else " "
+
+  override val suffix = " WHERE" + anti + "EXISTS" + block(
       FilterQuery(
         conditions = cond,
         child = right,
