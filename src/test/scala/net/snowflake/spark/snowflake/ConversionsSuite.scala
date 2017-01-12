@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DateType, StructField, BooleanType, StructTyp
 class ConversionsSuite extends FunSuite {
 
   test("Data should be correctly converted") {
-    val convertRow = Conversions.createRowConverter(TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
@@ -72,14 +72,14 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Row conversion handles null values") {
-    val convertRow = Conversions.createRowConverter(TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
     val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
   }
 
   test("Dates are correctly converted") {
-    val convertRow = Conversions.createRowConverter(StructType(Seq(StructField("a", DateType))))
+    val convertRow = Conversions.createRowConverter[Row](StructType(Seq(StructField("a", DateType))))
     assert(convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9)))
     assert(convertRow(Array(null)) === Row(null))
     intercept[java.text.ParseException] {

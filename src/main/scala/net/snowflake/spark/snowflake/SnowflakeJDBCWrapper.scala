@@ -19,14 +19,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.util.Try
+import scala.util.{Random, Try}
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
@@ -69,7 +69,9 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table contains an unsupported type.
     */
   def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM $table WHERE 1=0")
+    Math.abs(Random.nextLong()).toString
+    val randStr = Math.abs(Random.nextLong()).toString
+    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as temp_$randStr WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount
@@ -300,7 +302,13 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.CLOB => StringType
       case java.sql.Types.DATALINK => null
       case java.sql.Types.DATE => DateType
-      case java.sql.Types.DECIMAL if precision != 0 || scale != 0 => DecimalType(precision, scale)
+      case java.sql.Types.DECIMAL if precision != 0 || scale != 0 => {
+        if (precision > DecimalType.MAX_PRECISION) {
+          DecimalType(DecimalType.MAX_PRECISION, scale + (precision - DecimalType.MAX_SCALE))
+        } else {
+          DecimalType(precision, scale)
+        }
+      }
       case java.sql.Types.DECIMAL => DecimalType(38, 18) // Spark 1.5.0 default
       case java.sql.Types.DISTINCT => null
       case java.sql.Types.DOUBLE => DoubleType
