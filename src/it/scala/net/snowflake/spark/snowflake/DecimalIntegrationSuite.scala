@@ -32,7 +32,7 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
     test(s"reading DECIMAL($precision, $scale)") {
       val tableName = s"reading_decimal_${precision}_${scale}_$randomSuffix"
       val expectedRows =
-        decimalStrings.map(d => Row(if (d == null) null else Conversions.parseDecimal(d)))
+        decimalStrings.map(d => Row(if (d == null) null else Conversions.parseDecimal(d, false)))
       try {
         conn.createStatement().executeUpdate(
           s"CREATE TABLE $tableName (x DECIMAL($precision, $scale))")

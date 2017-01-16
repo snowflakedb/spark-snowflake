@@ -27,7 +27,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -65,7 +65,7 @@ trait IntegrationSuiteBase
 
   protected def getConfigValue(name : String): String = {
     connectorOptions.getOrElse(name.toLowerCase, {
-      fail("Config file needs to contain $name value")
+      fail(s"Config file needs to contain $name value")
     })
   }
 
@@ -90,6 +90,8 @@ trait IntegrationSuiteBase
   protected var sc: SparkContext = _
   protected var sqlContext: SQLContext = _
   protected var conn: Connection = _
+
+  protected var sparkSession: SparkSession = _
 
   def runSql(query: String): Unit = {
     log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
@@ -137,6 +139,8 @@ trait IntegrationSuiteBase
 
     // Use fewer partitions to make tests faster
     sqlContext.setConf("spark.sql.shuffle.partitions", "6")
+
+    sparkSession = sqlContext.sparkSession
   }
 
   override def afterAll(): Unit = {
@@ -166,6 +170,27 @@ trait IntegrationSuiteBase
   override protected def beforeEach(): Unit = {
     super.beforeEach()
   }
+
+
+  /**
+    * Verify that the pushdown was done by looking at the generated SQL,
+    * and check the results are as expected
+    */
+  def testPushdown(reference: String,
+    result: DataFrame,
+    expectedAnswer: Seq[Row],
+    bypass: Boolean = false): Unit = {
+
+    // Verify the query issued is what we expect
+    checkAnswer(result, expectedAnswer)
+
+    if (!bypass) {
+      assert(
+        Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
+          .replaceAll("\\s+", ""))
+    }
+  }
+
 
   /**
    * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check
