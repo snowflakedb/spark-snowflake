@@ -1,14 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  And,
-  Attribute,
-  BinaryOperator,
-  Expression,
-  Literal,
-  Or
-}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BinaryOperator, Expression, Literal, Or}
+import org.apache.spark.sql.types.{DateType, StringType}
 
 /**
   * Extractor for basic (attributes and literals) expressions.
@@ -47,6 +40,7 @@ private[querygeneration] object BasicExpression {
       case l: Literal =>
         l.dataType match {
           case StringType => "'" + l.toString() + "'"
+          case DateType =>  s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
           case _          => l.toString()
         }
 

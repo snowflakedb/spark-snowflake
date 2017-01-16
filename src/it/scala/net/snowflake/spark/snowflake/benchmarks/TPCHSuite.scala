@@ -115,7 +115,7 @@ class TPCHSuite extends PerformanceSuite {
 from
         lineitem
 where
-        l_shipdate <= '1998-09-02'
+        l_shipdate <= date_add(to_date('1998-12-01'), -90)
 group by
         l_returnflag,
         l_linestatus
@@ -187,8 +187,8 @@ where
        c_mktsegment = 'BUILDING'
    and c_custkey = o_custkey
    and l_orderkey = o_orderkey
-   and o_orderdate < '1995-03-15'
-   and l_shipdate > '1995-03-15'
+   and o_orderdate < to_date('1995-03-15')
+   and l_shipdate > to_date('1995-03-15')
  group by
        l_orderkey,
        o_orderdate,
@@ -207,8 +207,8 @@ limit 10""",
   from
        orders
  where
-       o_orderdate >= '1993-07-01'
-   and o_orderdate < cast(date_add('1993-07-01', 92) as varchar)
+       o_orderdate >= to_date('1993-07-01')
+   and o_orderdate < add_months(to_date('1993-07-01'), 3)
    and exists (
         select
    *
@@ -244,8 +244,8 @@ where
   and s_nationkey = n_nationkey
   and n_regionkey = r_regionkey
   and r_name = 'ASIA'
-  and o_orderdate >= '1994-01-01'
-  and o_orderdate < '1995-01-01'
+  and o_orderdate >= to_date('1994-01-01')
+  and o_orderdate < to_date('1995-01-01')
 group by
       n_name
 order by
@@ -259,8 +259,8 @@ order by
 from
   lineitem
 where
-  l_shipdate >= '1994-01-01'
-  and l_shipdate < '1995-01-01'
+  l_shipdate >= to_date('1994-01-01')
+  and l_shipdate < to_date('1995-01-01')
   and l_discount >= 0.05 and l_discount <= 0.07
   and l_quantity < 24""",
               "TPCH-Q06")
@@ -294,7 +294,7 @@ where
              (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')
           or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')
           )
-          and l_shipdate between '1995-01-01' and '1996-12-31'
+          and l_shipdate between to_date('1995-01-01') and to_date('1996-12-31')
       ) shipping
 group by
       supp_nation,
@@ -337,7 +337,7 @@ order by
       and n1.n_regionkey = r_regionkey
       and r_name = 'AMERICA'
       and s_nationkey = n2.n_nationkey
-      and o_orderdate between '1995-01-01' and '1996-12-31'
+      and o_orderdate between to_date('1995-01-01') and to_date('1996-12-31')
       and p_type = 'ECONOMY ANODIZED STEEL'
      ) all_nations
 group by
@@ -398,8 +398,8 @@ order by
 where
       c_custkey = o_custkey
   and l_orderkey = o_orderkey
-  and o_orderdate >= '1993-10-01'
-  and o_orderdate < '1994-01-01'
+  and o_orderdate >= to_date('1993-10-01')
+  and o_orderdate < to_date('1994-01-01')
   and l_returnflag = 'R'
   and c_nationkey = n_nationkey
 group by
@@ -471,8 +471,8 @@ limit 20""",
    and l_shipmode in ('MAIL', 'SHIP')
    and l_commitdate < l_receiptdate
    and l_shipdate < l_commitdate
-   and l_receiptdate >= '1994-01-01'
-   and l_receiptdate < '1995-01-01'
+   and l_receiptdate >= to_date('1994-01-01')
+   and l_receiptdate < to_date('1995-01-01')
  group by
        l_shipmode
  order by
@@ -517,8 +517,8 @@ order by
         lineitem,
         part
   where l_partkey = p_partkey
-    and l_shipdate >= '1995-09-01'
-    and l_shipdate < '1995-10-01'""",
+    and l_shipdate >= to_date('1995-09-01')
+    and l_shipdate < to_date('1995-10-01')""",
               "TPCH-Q14")
   }
 
@@ -529,7 +529,6 @@ order by
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", "PARTSUPP")
-      .option("sfSchema", "TPCH_SF1")
       .load()
 
     val revenue = sparkSession.sql(s"""select
@@ -538,8 +537,8 @@ order by
 from
       lineitem
 where
-      l_shipdate >= '1998-12-01'
-      and l_shipdate <  '1999-03-01'
+      l_shipdate >= to_date('1998-12-01')
+      and l_shipdate <  to_date('1999-03-01')
 group by l_suppkey""")
 
     revenue.createOrReplaceTempView("revenue")
@@ -730,8 +729,8 @@ where
             where
                   l_partkey = ps_partkey
               and l_suppkey = ps_suppkey
-              and l_shipdate >= '1994-01-01'
-              and l_shipdate < '1995-01-01'
+              and l_shipdate >= to_date('1994-01-01')
+              and l_shipdate < to_date('1995-01-01')
                    )
       )
   and s_nationkey = n_nationkey
