@@ -142,6 +142,7 @@ object SparkSnowflakeBuild extends Build {
         </developers>,
 
       bintrayReleaseOnPublish in ThisBuild := false,
+      bintrayOrganization := Some("snowflakedb"),
 
       // Add publishing to spark packages as another step.
       releaseProcess := Seq[ReleaseStep](
