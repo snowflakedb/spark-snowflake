@@ -47,6 +47,7 @@ object SparkSnowflakeBuild extends Build {
       sparkVersion := sys.props.get("spark.version").getOrElse("2.0.0"),
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
       testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.2.0"),
+      javacOptions ++= Seq("-source", "1.6", "-target", "1.6"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
       spIgnoreProvided := true,
