@@ -57,7 +57,6 @@ class TPCHSuite extends PerformanceSuite {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName.toUpperCase)
-      .option("sfSchema", "TPCH_SF1")
       .load()
 
     val parquet =
