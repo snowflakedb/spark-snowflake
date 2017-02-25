@@ -1,1 +1,1 @@
-version in ThisBuild := "2.1.2-spark_2.1-SNAPSHOT"
+version in ThisBuild := "2.1.2-spark_2.0-SNAPSHOT"
