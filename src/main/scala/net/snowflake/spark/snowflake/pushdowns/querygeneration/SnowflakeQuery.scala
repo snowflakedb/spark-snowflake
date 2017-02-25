@@ -247,6 +247,7 @@ case class JoinQuery(left: SnowflakeQuery,
     case LeftOuter  => "LEFT OUTER JOIN"
     case RightOuter => "RIGHT OUTER JOIN"
     case FullOuter  => "OUTER JOIN"
+    case _ => throw new MatchError
   }
 
   override val helper: QueryHelper =

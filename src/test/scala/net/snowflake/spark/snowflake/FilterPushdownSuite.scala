@@ -21,25 +21,12 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.FilterPushdown._
-import org.apache.spark.sql.catalyst.expressions.StartsWith
-
 
 class FilterPushdownSuite extends FunSuite {
 
   // Fake filter class to detect fallback logic
-  case class UnknownFilter() extends Filter
-
   test("buildWhereClause with empty list of filters") {
     assert(buildWhereClause(StructType(Nil), Seq.empty) === "")
-  }
-
-  test("buildWhereClause with no filters that can be pushed down") {
-    assert(buildWhereClause(StructType(Nil), Seq(NewFilter, NewFilter)) === "")
-  }
-
-  test("buildWhereClause with with some filters that cannot be pushed down") {
-    val whereClause = buildWhereClause(testSchema, Seq(EqualTo("test_int", 1), NewFilter))
-    assert(whereClause === """WHERE "test_int" = 1""")
   }
 
   test("buildWhereClause with string literals that contain Unicode characters") {
@@ -114,25 +101,6 @@ class FilterPushdownSuite extends FunSuite {
     assert(whereClause === expectedWhereClause)
   }
 
-  test("buildWhereClause for unknown filters") {
-    val filters = Seq(
-      EqualTo("test_bool", true),
-      UnknownFilter(),
-      EqualTo("test_int", 7),
-      Not(UnknownFilter()),
-      Or(EqualTo("test_int", 7), UnknownFilter())
-    )
-    val whereClause = buildWhereClause(testSchema, filters)
-    // scalastyle:off
-    val expectedWhereClause =
-    """
-      |WHERE "test_bool" = true
-      |AND "test_int" = 7
-    """.stripMargin.lines.mkString(" ").trim
-    // scalastyle:on
-    assert(whereClause === expectedWhereClause)
-  }
-
   test("buildWhereClause for unknown attributes") {
     val filters = Seq(
       EqualTo("test_bool", true),
@@ -176,7 +144,6 @@ class FilterPushdownSuite extends FunSuite {
     assert(whereClause === expectedWhereClause)
   }
 
-
   private val testSchema: StructType = StructType(Seq(
     StructField("test_byte", ByteType),
     StructField("test_bool", BooleanType),
@@ -188,7 +155,4 @@ class FilterPushdownSuite extends FunSuite {
     StructField("test_short", ShortType),
     StructField("test_string", StringType),
     StructField("test_timestamp", TimestampType)))
-
-  /** A new filter subclasss which our pushdown logic does not know how to handle */
-  private case object NewFilter extends Filter
 }

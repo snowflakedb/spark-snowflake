@@ -55,9 +55,9 @@ private[querygeneration] object MiscExpression {
         }
       case If(child, trueValue, falseValue) =>
         "IFF" + block(convertExpressions(fields, child, trueValue, falseValue))
-      case SortOrder(child, Ascending) =>
+      case SortOrder(child, Ascending, _) =>
         block(convertExpression(child, fields)) + " ASC"
-      case SortOrder(child, Descending) =>
+      case SortOrder(child, Descending, _) =>
         block(convertExpression(child, fields)) + " DESC"
 
       case ScalarSubquery(subquery, _, _) =>

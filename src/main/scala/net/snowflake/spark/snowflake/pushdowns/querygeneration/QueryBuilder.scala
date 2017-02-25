@@ -137,6 +137,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
                     LeftSemiJoinQuery(l, r, condition, false, alias)
                   case LeftAnti =>
                     LeftSemiJoinQuery(l, r, condition, true, alias)
+                  case _ => throw new MatchError
                 }
             }
           }
