@@ -282,9 +282,10 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       sparkSession.sql(sql).collect()
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
-      case e: Exception =>
-        println(s"""Query $name failed.""")
-        None
+      case e: Exception => throw e
+    //  case e: Exception =>
+    //    println(s"""Query $name failed.""")
+    //    None
     }
   }
 

@@ -8,11 +8,16 @@ import org.apache.spark.sql.catalyst.expressions.{
   Cast,
   Descending,
   Expression,
+  Floor,
   If,
+  In,
+  InSet,
+  MakeDecimal,
   ScalarSubquery,
-  SortOrder
+  SortOrder,
+  UnscaledValue
 }
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
 private[querygeneration] object MiscExpression {
@@ -55,6 +60,17 @@ private[querygeneration] object MiscExpression {
         }
       case If(child, trueValue, falseValue) =>
         "IFF" + block(convertExpressions(fields, child, trueValue, falseValue))
+
+      case In(child, list) => {
+        block(
+          convertExpression(child, fields) + " IN " + block(
+            convertExpressions(fields, list: _*)))
+      }
+
+      case MakeDecimal(child, precision, scale) =>
+        "TO_DECIMAL " + block(
+          convertExpression(child, fields) + s", $precision, $scale")
+
       case SortOrder(child, Ascending, _) =>
         block(convertExpression(child, fields)) + " ASC"
       case SortOrder(child, Descending, _) =>
@@ -62,6 +78,17 @@ private[querygeneration] object MiscExpression {
 
       case ScalarSubquery(subquery, _, _) =>
         block(new QueryBuilder(subquery).query)
+
+      case UnscaledValue(child) => {
+        child.dataType match {
+          case d: DecimalType => {
+            if (d.scale >= 0)
+              convertExpression(Floor(child), fields)
+            else null // TODO: Convert values with negative scale
+          }
+          case _ => null
+        }
+      }
 
       case _ => null
     })

@@ -9,6 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /** Building blocks of a translated query, with nested subqueries. */
 private[querygeneration] abstract sealed class SnowflakeQuery {
@@ -247,7 +248,7 @@ case class JoinQuery(left: SnowflakeQuery,
     case LeftOuter  => "LEFT OUTER JOIN"
     case RightOuter => "RIGHT OUTER JOIN"
     case FullOuter  => "OUTER JOIN"
-    case _ => throw new MatchError
+    case _          => throw new MatchError
   }
 
   override val helper: QueryHelper =
@@ -299,4 +300,45 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this).orElse(left.find(query)).orElse(right.find(query))
+}
+
+/** The query for union.
+  *
+  * @constructor
+  * @param children Children of the union expression.
+  */
+case class UnionQuery(children: Seq[LogicalPlan], alias: String)
+    extends SnowflakeQuery {
+
+  val queries: Seq[SnowflakeQuery] = children.map { child =>
+    new QueryBuilder(child).treeRoot
+  }
+
+  override val helper: QueryHelper =
+    QueryHelper(children = Seq(queries.head),
+                projections = None,
+                outputAttributes = None,
+                alias = alias)
+
+  override def getQuery(useAlias: Boolean = false): String = {
+    log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
+
+    val query =
+      if (queries.nonEmpty)
+        queries.map(c => block(c.getQuery())).mkString(" UNION ALL  ")
+      else ""
+
+    if (useAlias)
+      block(query) + s""" AS "$alias""""
+    else query
+  }
+
+  override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
+    query
+      .lift(this)
+      .orElse(
+        queries
+          .map(q => q.find(query))
+          .view
+          .foldLeft[Option[T]](None)(_ orElse _))
 }
