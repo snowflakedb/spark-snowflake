@@ -68,8 +68,8 @@ private[querygeneration] object MiscExpression {
       }
 
       case MakeDecimal(child, precision, scale) =>
-        "TO_DECIMAL " + block(
-          convertExpression(child, fields) + s", $precision, $scale")
+        "TO_DECIMAL " + block(block(
+          convertExpression(child, fields) + "/ POW(10, " + scale + ")") + s", $precision, $scale")
 
       case SortOrder(child, Ascending, _) =>
         block(convertExpression(child, fields)) + " ASC"
@@ -82,9 +82,8 @@ private[querygeneration] object MiscExpression {
       case UnscaledValue(child) => {
         child.dataType match {
           case d: DecimalType => {
-            if (d.scale >= 0)
-              convertExpression(Floor(child), fields)
-            else null // TODO: Convert values with negative scale
+            block(
+              convertExpression(child, fields) + " * POW(10," + d.scale + ")")
           }
           case _ => null
         }
