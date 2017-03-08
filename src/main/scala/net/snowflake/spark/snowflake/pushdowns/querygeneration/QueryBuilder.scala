@@ -39,7 +39,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   lazy val query: String = {
     checkTree()
     val query = treeRoot.getQuery()
-    log.info(s"""Generated query: '${prettyPrint(query)}'""")
+    // log.info(s"""Generated query: '${prettyPrint(query)}'""")
     query
   }
 
@@ -67,12 +67,10 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
       log.debug("Begin query generation.")
       generateQueries(plan).get
     } catch {
-      case e: Exception =>
-        throw e
-        // case _: MatchError | _: NoSuchElementException => {
-        //   log.debug("Could not generate a query.")
-        //  }
-        null
+      case _: MatchError | _: NoSuchElementException => {
+        log.debug("Could not generate a query for pushdown.")
+      }
+      null
     }
   }
 
@@ -135,7 +133,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)
-                  case LeftSemi  =>
+                  case LeftSemi =>
                     LeftSemiJoinQuery(l, r, condition, false, alias)
                   case LeftAnti =>
                     LeftSemiJoinQuery(l, r, condition, true, alias)
