@@ -22,18 +22,17 @@ private[querygeneration] object AggregationExpression {
     val expr   = expAttr._1
     val fields = expAttr._2
 
-    // Use this hack because AggregateExpression.isDistinct is not accessible from our package
-    val distinct: String =
-      if (expr.sql contains "(DISTINCT ") "DISTINCT " else ""
     // Take only the first child, as all of the functions below have only one.
     expr.children.headOption.flatMap(agg_fun => {
       Option(agg_fun match {
         case _: Average | _: Corr | _: CovPopulation | _: CovSample |
             _: Count | _: Max | _: Min | _: Sum | _: StddevPop |
-            _: StddevSamp | _: VariancePop | _: VarianceSamp =>
+            _: StddevSamp | _: VariancePop | _: VarianceSamp => {
+          val distinct: String =
+            if (expr.sql contains "(DISTINCT ") "DISTINCT " else ""
           agg_fun.prettyName.toUpperCase + block(
             distinct + convertExpressions(fields, agg_fun.children: _*))
-
+        }
         case _ => null
       })
     })

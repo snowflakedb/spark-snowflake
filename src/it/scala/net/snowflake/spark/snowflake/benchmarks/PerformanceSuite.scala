@@ -20,7 +20,10 @@ import java.io.{BufferedWriter, File, FileWriter, Writer}
 import java.util.Properties
 
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
-import net.snowflake.spark.snowflake.{IntegrationSuiteBase, SnowflakeConnectorUtils}
+import net.snowflake.spark.snowflake.{
+  IntegrationSuiteBase,
+  SnowflakeConnectorUtils
+}
 import org.apache.spark.sql.DataFrame
 import org.scalatest.exceptions.TestFailedException
 
@@ -69,7 +72,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   protected final var sessionStatus: Boolean = false
 
   protected final var jdbcProperties: Properties = new Properties
-  protected final var jdbcURL: String = ""
+  protected final var jdbcURL: String            = ""
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -282,7 +285,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       sparkSession.sql(sql).collect()
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         println(s"""Query $name failed.""")
         None
     }

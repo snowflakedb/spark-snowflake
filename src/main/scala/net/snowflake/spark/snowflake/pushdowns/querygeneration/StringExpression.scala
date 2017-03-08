@@ -23,7 +23,7 @@ private[querygeneration] object StringExpression {
       expr match {
         case _: Ascii | _: Lower | _: Substring | _: StringLPad | _: StringRPad |
             _: StringReverse | _: StringTranslate | _: StringTrim |
-            _: StringTrimLeft | _: StringTrimRight | _: Upper =>
+            _: StringTrimLeft | _: StringTrimRight | _: Substring | _: Upper =>
           expr.prettyName.toUpperCase + block(
             convertExpressions(fields, expr.children: _*))
 
