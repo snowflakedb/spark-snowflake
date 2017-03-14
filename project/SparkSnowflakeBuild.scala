@@ -79,9 +79,7 @@ object SparkSnowflakeBuild extends Build {
         //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
         // },
 
-
-        // Snowflake driver is a dependency for testing
-        "net.snowflake" % "snowflake-jdbc" % "2.8.0" % "test",
+        "net.snowflake" % "snowflake-jdbc" % "3.0.12" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc.jar",
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",

@@ -17,12 +17,11 @@
 
 package net.snowflake.spark.snowflake
 
-import java.io.{BufferedInputStream, IOException}
+import java.io.{BufferedInputStream, IOException, InputStream}
 import java.lang.{Long => JavaLong}
 import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.compress.CompressionCodecFactory
@@ -67,7 +66,7 @@ object SnowflakeInputFormat {
 private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Array[String]] {
 
   /** Source stream we're reading from */
-  private var inputStream: FSDataInputStream = _
+  private var inputStream: InputStream = _
   /** Effective stream, including compression */
   private var reader: BufferedInputStream = _
 
@@ -137,7 +136,7 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     if (eof) {
       1.0f
     } else {
-      math.min(inputStream.getPos.toFloat / size, 1.0f)
+      math.min(cur.toFloat / size, 1.0f)
     }
   }
 
