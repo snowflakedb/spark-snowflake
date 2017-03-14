@@ -1,6 +1,23 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Concat, Contains, Expression, Like, Lower, StringLPad, StringRPad, StringReverse, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper}
+import org.apache.spark.sql.catalyst.expressions.{
+  Ascii,
+  Attribute,
+  Concat,
+  Contains,
+  Expression,
+  Like,
+  Lower,
+  StringLPad,
+  StringRPad,
+  StringReverse,
+  StringTranslate,
+  StringTrim,
+  StringTrimLeft,
+  StringTrimRight,
+  Substring,
+  Upper
+}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringExpression {
@@ -21,16 +38,20 @@ private[querygeneration] object StringExpression {
 
     Option(
       expr match {
-        case _: Ascii | _: Lower | _: Substring | _: StringLPad | _: StringRPad |
-            _: StringReverse | _: StringTranslate | _: StringTrim |
-            _: StringTrimLeft | _: StringTrimRight | _: Substring | _: Upper =>
+        case _: Ascii | _: Lower | _: Substring | _: StringLPad |
+            _: StringRPad | _: StringReverse | _: StringTranslate |
+            _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
+            _: Substring | _: Upper =>
           expr.prettyName.toUpperCase + block(
             convertExpressions(fields, expr.children: _*))
 
         case Concat(children) =>
-          if (children.length == 2)
-            "CONCAT" + block(convertExpressions(fields, children: _*))
-          else null
+          val rightSide =
+            if (children.length > 2) Concat(children.drop(1)) else children(1)
+          "CONCAT" + block(
+            convertExpression(children.head, fields) + ", " + convertExpression(
+              rightSide,
+              fields))
 
         case Like(left, right) =>
           convertExpression(left, fields) + " LIKE " + convertExpression(
