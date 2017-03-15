@@ -80,6 +80,7 @@ object SparkSnowflakeBuild extends Build {
         // },
 
         "net.snowflake" % "snowflake-jdbc" % "3.0.12" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc.jar",
+        "net.snowflake" % "snowflake-jdbc-sources" % "3.0.12" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-sources.jar",
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",

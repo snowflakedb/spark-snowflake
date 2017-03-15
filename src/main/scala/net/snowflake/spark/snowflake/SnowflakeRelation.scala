@@ -23,7 +23,7 @@ import java.sql.Connection
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.SnowflakeConnectionV1
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
@@ -210,6 +210,8 @@ private[snowflake] case class SnowflakeRelation(
         jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1],
         SnowflakeRelation.TEMP_STAGE_LOCATION)
     }
+
+    new HadoopRDD[]()
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
