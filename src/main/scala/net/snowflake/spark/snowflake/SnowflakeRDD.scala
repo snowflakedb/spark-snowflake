@@ -23,8 +23,7 @@ import org.apache.spark.util.ShutdownHookManager
 import scala.reflect.ClassTag
 
 private[snowflake] class SnowflakeRDDPartition(
-    val srcFiles: List[String],
-    val encMats: List[S3FileEncryptionMaterial],
+    val srcFiles: List[(String, S3FileEncryptionMaterial)],
     val rddId: Int,
     val index: Int)
     extends Partition {
@@ -73,10 +72,10 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
 
     var i = 0
 
+    // TODO: Split file list for partitions evenly instead of one each.
     while (it.hasNext) {
       val next = it.next
-      partitions(i) = new SnowflakeRDDPartition(List(next.getKey),
-                                                List(next.getValue),
+      partitions(i) = new SnowflakeRDDPartition(List((next.getKey, next.getValue)),
                                                 id,
                                                 i)
       i = i + 1
@@ -87,8 +86,10 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
   override def compute(thePartition: Partition,
      context: TaskContext):Iterator[T] = {
 
-    val mats = thePartition.asInstanceOf[SnowflakeRDDPartition].encMats
-    val files = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
+
+    val iter = new Iterator[T] {
+
+    val filesIter = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles.iterator
     val decodedKey = Base64.decode(mats.head.getQueryStageMasterKey)
 
     val encryptionKeySize = decodedKey.length*8
@@ -109,6 +110,29 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
     clientConfig.setMaxErrorRetry(S3_MAX_RETRIES);
 
       val items = files.zip(mats)
+
+      override def hasNext: Boolean = {
+        if (!finished && !havePair) {
+          try {
+            finished = !reader.nextKeyValue
+          } catch {
+            case e: IOException if ignoreCorruptFiles =>
+              logWarning(
+                s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
+                e)
+              finished = true
+          }
+          if (finished) {
+            // Close and release the reader here; close() will also be called when the task
+            // completes, but for tasks that read from many files, it helps to release the
+            // resources early.
+            close()
+          }
+          havePair = !finished
+        }
+        !finished
+      }
+
 
     items.foreach { case (file, material) => {
       if (material != null) {
@@ -142,7 +166,6 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
     }
 
 
-    val iter = new Iterator[(K, V)] {
       private val split = theSplit.asInstanceOf[SnowflakeRDDPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
       private val conf = getConf
@@ -209,27 +232,6 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
       private var havePair                  = false
       private var recordsSinceMetricsUpdate = 0
 
-      override def hasNext: Boolean = {
-        if (!finished && !havePair) {
-          try {
-            finished = !reader.nextKeyValue
-          } catch {
-            case e: IOException if ignoreCorruptFiles =>
-              logWarning(
-                s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
-                e)
-              finished = true
-          }
-          if (finished) {
-            // Close and release the reader here; close() will also be called when the task
-            // completes, but for tasks that read from many files, it helps to release the
-            // resources early.
-            close()
-          }
-          havePair = !finished
-        }
-        !finished
-      }
 
       override def next(): (K, V) = {
         if (!hasNext) {
@@ -284,6 +286,7 @@ private[snowflake] class SnowflakeRDD[T](sc: SparkContext,
       }
     }
     new InterruptibleIterator(context, iter)
+
   }
 
   /** Maps over a partition, providing the InputSplit that was used as the base of the partition. */
