@@ -56,14 +56,16 @@ private[querygeneration] case class QueryHelper(
   }
 
   val output: Seq[Attribute] = {
-    processedProjections.map(p => p.map(_.toAttribute)).getOrElse {
-
-      if (children.isEmpty) {
-        outputAttributes.getOrElse(throw new SnowflakePushdownException(
-          "Query output attributes must not be empty when it has no children."))
-      } else
-        children.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)
-    }
+    outputAttributes.getOrElse(
+      processedProjections.map(p => p.map(_.toAttribute)).getOrElse {
+        if (children.isEmpty) {
+          throw new SnowflakePushdownException(
+            "Query output attributes must not be empty when it has no children.")
+        } else
+          children.foldLeft(Seq.empty[Attribute])((x, y) =>
+            x ++ y.helper.output)
+      }
+    )
   }
 
   val outputWithQualifier = output.map(
