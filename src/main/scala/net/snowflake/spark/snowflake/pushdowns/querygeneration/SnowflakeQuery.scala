@@ -307,7 +307,9 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
   * @constructor
   * @param children Children of the union expression.
   */
-case class UnionQuery(children: Seq[LogicalPlan], alias: String)
+case class UnionQuery(children: Seq[LogicalPlan],
+                      alias: String,
+                      outputCols: Option[Seq[Attribute]] = None)
     extends SnowflakeQuery {
 
   val queries: Seq[SnowflakeQuery] = children.map { child =>
@@ -315,8 +317,7 @@ case class UnionQuery(children: Seq[LogicalPlan], alias: String)
   }
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(queries.head),
-                projections = None,
+    QueryHelper(children = queries,
                 outputAttributes = None,
                 alias = alias)
 
@@ -341,4 +342,24 @@ case class UnionQuery(children: Seq[LogicalPlan], alias: String)
           .map(q => q.find(query))
           .view
           .foldLeft[Option[T]](None)(_ orElse _))
+}
+
+/** Query including a windowing clause.
+  *
+  * @constructor
+  * @param windowExpressions The windowing expressions.
+  * @param child The child query.
+  * @param alias Query alias.
+  */
+case class WindowQuery(windowExpressions: Seq[NamedExpression],
+                       child: SnowflakeQuery,
+                       alias: String)
+    extends SnowflakeQuery {
+
+  override val helper: QueryHelper =
+    QueryHelper(children = Seq(child),
+                projections =
+                  Some(windowExpressions ++ child.helper.outputWithQualifier),
+                outputAttributes = None,
+                alias = alias)
 }

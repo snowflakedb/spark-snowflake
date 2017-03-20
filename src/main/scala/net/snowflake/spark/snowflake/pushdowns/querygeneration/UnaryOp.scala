@@ -8,7 +8,7 @@ private[querygeneration] object UnaryOp {
   def unapply(node: UnaryNode): Option[LogicalPlan] =
     node match {
       case _: Filter | _: Project | _: GlobalLimit | _: LocalLimit |
-          _: Aggregate | _: Sort | _: ReturnAnswer =>
+          _: Aggregate | _: Sort | _: ReturnAnswer | _: Window =>
         Some(node.child)
 
       case _ => None
