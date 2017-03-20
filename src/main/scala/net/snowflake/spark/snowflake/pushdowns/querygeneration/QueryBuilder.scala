@@ -2,13 +2,10 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.util.NoSuchElementException
 
-import net.snowflake.spark.snowflake.{
-  SnowflakePushdownException,
-  SnowflakeRelation
-}
+import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -22,6 +19,7 @@ import scala.reflect.ClassTag
   * TODO: Is laziness actually helpful?
   */
 private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
+  import QueryBuilder.convertProjections
 
   /** This iterator automatically increments every time it is used, and is for aliasing subqueries. */
   private final val alias = Iterator.from(0).map(n => s"subquery_$n")
@@ -121,6 +119,9 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             case Sort(orderExpr, true, _) =>
               SortLimitQuery(None, orderExpr, subQuery, alias.next)
 
+            case Window(windowExpressions, _, _, _) =>
+              WindowQuery(windowExpressions, subQuery, alias.next)
+
             case _ => subQuery
           }
         }
@@ -146,6 +147,14 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
       case Union(children) =>
         Some(UnionQuery(children, alias.next))
 
+      case Expand(projections, output, child) => {
+        val children = projections.map { p =>
+          val proj = convertProjections(p, output)
+          Project(proj, child)
+        }
+        Some(UnionQuery(children, alias.next, Some(output)))
+      }
+
       case _ => None
     }
   }
@@ -155,6 +164,16 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   * Right now, this is merely a wrapper around the QueryBuilder class.
   */
 private[snowflake] object QueryBuilder {
+
+  final def convertProjections(
+      projections: Seq[Expression], output: Seq[Attribute]): Seq[NamedExpression] = {
+        projections zip output map {
+          expr => expr._1 match {
+            case e: NamedExpression => e
+            case _ => Alias(expr._1, expr._2.name)(expr._2.exprId)
+          }
+        }
+  }
 
   def getRDDFromPlan(
       plan: LogicalPlan): Option[(Seq[Attribute], RDD[InternalRow])] = {
