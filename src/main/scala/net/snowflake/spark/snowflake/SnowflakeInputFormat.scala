@@ -17,25 +17,31 @@
 
 package net.snowflake.spark.snowflake
 
-import java.io.{BufferedInputStream, IOException, InputStream}
+import java.io.{BufferedInputStream, InputStream}
 import java.lang.{Long => JavaLong}
 import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FSDataInputStream
-import org.apache.hadoop.io.compress.CompressionCodecFactory
+import org.apache.hadoop.io.compress.{
+  CompressionCodec,
+  CompressionCodecFactory
+}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{
+  InputSplit,
+  RecordReader,
+  TaskAttemptContext
+}
 
 /** Input format for text records saved with in-record delimiter and newline characters escaped.
- *
- * Note, Snowflake exports fields where
- * - strings/dates are "-quoted, with a " inside represented as ""
- * - variants are not quoted, with \ escape
- * - numbers are not quoted
- * - nulls are empty, unquoted strings
- */
+  *
+  * Note, Snowflake exports fields where
+  * - strings/dates are "-quoted, with a " inside represented as ""
+  * - variants are not quoted, with \ escape
+  * - numbers are not quoted
+  * - nulls are empty, unquoted strings
+  */
 class SnowflakeInputFormat extends FileInputFormat[JavaLong, Array[String]] {
 
   override def createRecordReader(
@@ -49,6 +55,7 @@ object SnowflakeInputFormat {
 
   /** configuration key for delimiter */
   val KEY_DELIMITER = "snowflake.delimiter"
+
   /** default delimiter */
   val DEFAULT_DELIMITER = '|'
 
@@ -56,36 +63,45 @@ object SnowflakeInputFormat {
   private[snowflake] def getDelimiterOrDefault(conf: Configuration): Char = {
     val c = conf.get(KEY_DELIMITER, DEFAULT_DELIMITER.toString)
     if (c.length != 1) {
-      throw new IllegalArgumentException(s"Expect delimiter be a single character but got '$c'.")
+      throw new IllegalArgumentException(
+        s"Expect delimiter be a single character but got '$c'.")
     } else {
       c.charAt(0)
     }
   }
 }
 
-private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Array[String]] {
+private[snowflake] class SnowflakeRecordReader
+    extends RecordReader[JavaLong, Array[String]] {
 
   /** Source stream we're reading from */
-  private var inputStream: InputStream = _
+  private var inputStreams: Seq[InputStream] = _
+
+  private var currentStream: Int = 0
+
   /** Effective stream, including compression */
   private var reader: BufferedInputStream = _
 
-  private var key: JavaLong = _
+  private var key: JavaLong        = _
   private var value: Array[String] = _
 
   /** Start index when reading. 0 if we're reading, size if we skip this file */
   private var start: Long = _
+
   /** The size of the underlying file */
   private var size: Long = _
+
   /** Position in the reader - note, not in the input stream */
   private var cur: Long = _
 
   private var eof: Boolean = false
 
-  private var delimiter: Byte = _
-  @inline private[this] final val escapeChar: Byte = '\\'
-  @inline private[this] final val quoteChar: Byte = '"'
-  @inline private[this] final val lineFeed: Byte = '\n'
+  private var codec: CompressionCodec = _
+
+  private var delimiter: Byte                          = _
+  @inline private[this] final val escapeChar: Byte     = '\\'
+  @inline private[this] final val quoteChar: Byte      = '"'
+  @inline private[this] final val lineFeed: Byte       = '\n'
   @inline private[this] final val carriageReturn: Byte = '\r'
 
   @inline private[this] final val inputBufferSize = 1024 * 1024
@@ -93,20 +109,26 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
 
   private[this] val chars = ArrayBuffer.empty[Byte]
 
-  override def initialize(inputSplit: InputSplit, context: TaskAttemptContext): Unit = {
-    val split = inputSplit.asInstanceOf[FileSplit]
-    val file = split.getPath
+  override def initialize(inputSplit: InputSplit,
+                          context: TaskAttemptContext): Unit = {
+    val split               = inputSplit.asInstanceOf[FileSplit]
+    val file                = split.getPath
     val conf: Configuration = context.getConfiguration
-    delimiter = SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
-    require(delimiter != escapeChar,
+    delimiter =
+      SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
+    require(
+      delimiter != escapeChar,
       s"The delimiter and the escape char cannot be the same but found $delimiter.")
-    require(delimiter != lineFeed, "The delimiter cannot be the lineFeed character.")
-    require(delimiter != carriageReturn, "The delimiter cannot be the carriage return.")
+    require(delimiter != lineFeed,
+            "The delimiter cannot be the lineFeed character.")
+    require(delimiter != carriageReturn,
+            "The delimiter cannot be the carriage return.")
     val compressionCodecs = new CompressionCodecFactory(conf)
-    val codec = compressionCodecs.getCodec(file)
+    codec = compressionCodecs.getCodec(file)
     val fs = file.getFileSystem(conf)
 
     size = fs.getFileStatus(file).getLen
+    codec.createCompressor()
 
     // Note, for Snowflake, we do not support splitting the file.
     // This is because it is in general not possible to find the record boundary
@@ -120,16 +142,25 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
       eof = true
       start = size
     } else {
-      // Only the 0-split reads, and reads everything.
-      start = 0
-      cur = 0
-      inputStream = fs.open(file)
-      reader = new BufferedInputStream(inputStream, inputBufferSize)
-      if (codec != null) {
-        reader = new BufferedInputStream(codec.createInputStream(reader), codecBufferSize)
-      }
+      initializeWithStreams(Seq(fs.open(file)))
     }
+  }
 
+  def initializeWithStreams(streams: Seq[InputStream]): Unit = {
+    // Only the 0-split reads, and reads everything.
+    start = 0
+    cur = 0
+
+    inputStreams = streams
+
+    if (inputStreams.isEmpty) {
+      eof = true
+      start = size
+    } else getNextStream
+  }
+
+  def addStream(stream: InputStream): Unit = {
+    inputStreams = inputStreams :+ stream
   }
 
   override def getProgress: Float = {
@@ -145,9 +176,11 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
       key = cur
       value = nextValue()
       if (eof) {
-        key = null
-        value = null
-        false
+        if (!getNextStream) {
+          key = null
+          value = null
+          false
+        } else nextKeyValue()
       } else {
         true
       }
@@ -156,6 +189,21 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
       value = null
       false
     }
+  }
+
+  def getNextStream: Boolean = {
+    close()
+
+    if (currentStream < inputStreams.length) {
+      reader =
+        new BufferedInputStream(inputStreams(currentStream), inputBufferSize)
+      if (codec != null)
+        reader = new BufferedInputStream(codec.createInputStream(reader),
+                                         codecBufferSize)
+      currentStream += 1
+      eof = false
+      true
+    } else false
   }
 
   override def getCurrentValue: Array[String] = value
@@ -168,7 +216,7 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     }
   }
 
-  private def nextChar() : Byte = {
+  private def nextChar(): Byte = {
     val v = reader.read()
     if (v < 0) {
       eof = true
@@ -188,8 +236,8 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     * - input empty fields are returned as NULLs
     */
   private def nextValue(): Array[String] = {
-    val fields = ArrayBuffer.empty[String]
-    var escaped = false
+    val fields      = ArrayBuffer.empty[String]
+    var escaped     = false
     var endOfRecord = false
     while (!endOfRecord && !eof) {
       chars.clear()
@@ -260,4 +308,3 @@ private[snowflake] class SnowflakeRecordReader extends RecordReader[JavaLong, Ar
     fields.toArray
   }
 }
-

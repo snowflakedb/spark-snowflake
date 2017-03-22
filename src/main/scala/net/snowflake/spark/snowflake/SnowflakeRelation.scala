@@ -23,7 +23,7 @@ import java.sql.Connection
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.SnowflakeConnectionV1
-import org.apache.spark.rdd.{HadoopRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
@@ -33,7 +33,9 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import scala.reflect.ClassTag
 
 private[snowflake] object SnowflakeRelation {
-  private final val TEMP_STAGE_LOCATION = "@spark_connector_unload_stage"
+  private final val TEMP_STAGE_LOCATION = "spark_connector_unload_stage"
+  private final val CREATE_TEMP_STAGE_STMT =
+    s"""CREATE TEMP STAGE IF NOT EXISTS $TEMP_STAGE_LOCATION""".stripMargin.trim
 }
 
 /** Data Source API implementation for Amazon Snowflake database tables */
@@ -45,6 +47,8 @@ private[snowflake] case class SnowflakeRelation(
     extends BaseRelation
     with PrunedFilteredScan
     with InsertableRelation {
+
+  import SnowflakeRelation._
 
   private val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
@@ -177,6 +181,7 @@ private[snowflake] case class SnowflakeRelation(
 
       // Run the unload query
       log.debug(Utils.sanitizeQueryText(unloadStatement))
+      jdbcWrapper.executeQueryInterruptibly(conn, CREATE_TEMP_STAGE_STMT)
       val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadStatement)
 
       // Verify it's the expected format
@@ -205,13 +210,12 @@ private[snowflake] case class SnowflakeRelation(
       // For no records, create an empty RDD
       sqlContext.sparkContext.emptyRDD[T]
     } else {
-      new SnowflakeRDD(
+      new SnowflakeRDD[T](
         sqlContext.sparkContext,
+        resultSchema,
         jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1],
-        SnowflakeRelation.TEMP_STAGE_LOCATION)
+        TEMP_STAGE_LOCATION)
     }
-
-    new HadoopRDD[]()
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
@@ -241,7 +245,7 @@ private[snowflake] case class SnowflakeRelation(
     val compressionString = if (params.sfCompress) "gzip" else "none"
 
     s"""
-       |COPY INTO $tempStageLocation
+       |COPY INTO @$TEMP_STAGE_LOCATION
        |FROM ($query)
        |$credsString
        |FILE_FORMAT = (
