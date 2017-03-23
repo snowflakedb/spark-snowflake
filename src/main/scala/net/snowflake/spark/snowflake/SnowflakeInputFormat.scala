@@ -61,6 +61,7 @@ object SnowflakeInputFormat {
 
   /** Gets the delimiter char from conf or the default. */
   private[snowflake] def getDelimiterOrDefault(conf: Configuration): Char = {
+    if (conf == null) return DEFAULT_DELIMITER
     val c = conf.get(KEY_DELIMITER, DEFAULT_DELIMITER.toString)
     if (c.length != 1) {
       throw new IllegalArgumentException(
@@ -98,6 +99,8 @@ private[snowflake] class SnowflakeRecordReader
 
   private var codec: CompressionCodec = _
 
+  private var started: Boolean = false
+
   private var delimiter: Byte                          = _
   @inline private[this] final val escapeChar: Byte     = '\\'
   @inline private[this] final val quoteChar: Byte      = '"'
@@ -114,15 +117,9 @@ private[snowflake] class SnowflakeRecordReader
     val split               = inputSplit.asInstanceOf[FileSplit]
     val file                = split.getPath
     val conf: Configuration = context.getConfiguration
-    delimiter =
-      SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
-    require(
-      delimiter != escapeChar,
-      s"The delimiter and the escape char cannot be the same but found $delimiter.")
-    require(delimiter != lineFeed,
-            "The delimiter cannot be the lineFeed character.")
-    require(delimiter != carriageReturn,
-            "The delimiter cannot be the carriage return.")
+
+    initializeDelimiter(conf)
+
     val compressionCodecs = new CompressionCodecFactory(conf)
     codec = compressionCodecs.getCodec(file)
     val fs = file.getFileSystem(conf)
@@ -146,6 +143,18 @@ private[snowflake] class SnowflakeRecordReader
     }
   }
 
+  private def initializeDelimiter(conf: Configuration = null): Unit = {
+    delimiter =
+      SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
+    require(
+      delimiter != escapeChar,
+      s"The delimiter and the escape char cannot be the same but found $delimiter.")
+    require(delimiter != lineFeed,
+            "The delimiter cannot be the lineFeed character.")
+    require(delimiter != carriageReturn,
+            "The delimiter cannot be the carriage return.")
+  }
+
   def initializeWithStreams(streams: Seq[InputStream]): Unit = {
     // Only the 0-split reads, and reads everything.
     start = 0
@@ -160,7 +169,8 @@ private[snowflake] class SnowflakeRecordReader
   }
 
   def addStream(stream: InputStream): Unit = {
-    inputStreams = inputStreams :+ stream
+    inputStreams =
+      if (inputStreams == null) Seq(stream) else inputStreams :+ stream
   }
 
   override def getProgress: Float = {
@@ -172,6 +182,11 @@ private[snowflake] class SnowflakeRecordReader
   }
 
   override def nextKeyValue(): Boolean = {
+    if (!started) {
+      initializeDelimiter()
+      getNextStream
+      started = true
+    }
     if (size >= 0 && !eof) {
       key = cur
       value = nextValue()
@@ -200,6 +215,7 @@ private[snowflake] class SnowflakeRecordReader
       if (codec != null)
         reader = new BufferedInputStream(codec.createInputStream(reader),
                                          codecBufferSize)
+
       currentStream += 1
       eof = false
       true

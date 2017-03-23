@@ -22,7 +22,6 @@ import java.sql.Connection
 
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
-import net.snowflake.client.jdbc.SnowflakeConnectionV1
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -31,12 +30,6 @@ import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
 import scala.reflect.ClassTag
-
-private[snowflake] object SnowflakeRelation {
-  private final val TEMP_STAGE_LOCATION = "spark_connector_unload_stage"
-  private final val CREATE_TEMP_STAGE_STMT =
-    s"""CREATE TEMP STAGE IF NOT EXISTS $TEMP_STAGE_LOCATION""".stripMargin.trim
-}
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
@@ -47,8 +40,6 @@ private[snowflake] case class SnowflakeRelation(
     extends BaseRelation
     with PrunedFilteredScan
     with InsertableRelation {
-
-  import SnowflakeRelation._
 
   private val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
@@ -101,13 +92,19 @@ private[snowflake] case class SnowflakeRelation(
 
     log.debug(Utils.sanitizeQueryText(sql))
 
-    val tempDir   = params.createPerQueryTempDir()
-    val unloadSql = buildUnloadStmt(sql, tempDir)
+  //  val tempDir   = params.createPerQueryTempDir()
+  //  val unloadSql = buildUnloadStmt(sql, tempDir)
 
     val conn         = jdbcWrapper.getConnector(params)
-    val resultSchema = schema.getOrElse(jdbcWrapper.resolveTable(conn, sql))
+    val resultSchema = schema.getOrElse(try {
+      jdbcWrapper.resolveTable(conn, sql)
+    } finally {
+      conn.close()
+    }
+    )
 
-    getRDDFromS3[T](Some(conn), unloadSql, tempDir, resultSchema)
+
+    getRDDFromS3[T](sql, resultSchema)
   }
 
   // Build RDD result from PrunedFilteredScan interface. Maintain this here for backwards compatibility and for
@@ -148,22 +145,22 @@ private[snowflake] case class SnowflakeRelation(
       }
     } else {
       // Unload data from Snowflake into a temporary directory in S3:
-      val tempDir = params.createPerQueryTempDir()
-      val unloadSql =
-        buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
+    //  val tempDir = params.createPerQueryTempDir()
+     // val unloadSql =
+   //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
-      getRDDFromS3[Row](None, unloadSql, tempDir, prunedSchema)
+      getRDDFromS3[Row](standardQuery(requiredColumns, filters), prunedSchema)
     }
   }
 
   // Get an RDD from an unload statement. Provide result schema because
   // when a custom SQL statement is used, this means that we cannot know the results
   // without first executing it.
-  private def getRDDFromS3[T: ClassTag](connection: Option[Connection],
-                                        unloadStatement: String,
-                                        tempDir: String,
+  private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
+
+    /*
 
     val conn = connection match {
       case Some(c) => c
@@ -181,7 +178,8 @@ private[snowflake] case class SnowflakeRelation(
 
       // Run the unload query
       log.debug(Utils.sanitizeQueryText(unloadStatement))
-      jdbcWrapper.executeQueryInterruptibly(conn, CREATE_TEMP_STAGE_STMT)
+      jdbcWrapper
+        .executeQueryInterruptibly(conn, CREATE_TEMP_STAGE_STMT + tempStage)
       val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadStatement)
 
       // Verify it's the expected format
@@ -206,16 +204,18 @@ private[snowflake] case class SnowflakeRelation(
       conn.close()
     }
 
-    if (numRows == 0) {
-      // For no records, create an empty RDD
-      sqlContext.sparkContext.emptyRDD[T]
-    } else {
-      new SnowflakeRDD[T](
-        sqlContext.sparkContext,
-        resultSchema,
-        jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1],
-        TEMP_STAGE_LOCATION)
-    }
+     */
+
+//    if (numRows == 0) {
+    // For no records, create an empty RDD
+//      sqlContext.sparkContext.emptyRDD[T]
+    //   } else {
+    new SnowflakeRDD[T](sqlContext,
+                        resultSchema,
+                        jdbcWrapper,
+                        params,
+                        sql)
+    //   }
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
@@ -233,33 +233,7 @@ private[snowflake] case class SnowflakeRelation(
     s"SELECT $columnList FROM $tableNameOrSubquery $whereClause"
   }
 
-  private def buildUnloadStmt(query: String, tempDir: String): String = {
 
-    val credsString =
-      AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
-
-    // Save the last SELECT so it can be inspected
-    Utils.setLastSelect(query)
-
-    // Determine the compression type
-    val compressionString = if (params.sfCompress) "gzip" else "none"
-
-    s"""
-       |COPY INTO @$TEMP_STAGE_LOCATION
-       |FROM ($query)
-       |$credsString
-       |FILE_FORMAT = (
-       |    TYPE=CSV
-       |    COMPRESSION='$compressionString'
-       |    FIELD_DELIMITER='|'
-       |    /*ESCAPE='\\\\'*/
-       |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
-       |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    NULL_IF= ()
-       |  )
-       |MAX_FILE_SIZE = ${params.s3maxfilesize}
-       |""".stripMargin.trim
-  }
 
   private def pruneSchema(schema: StructType,
                           columns: Array[String]): StructType = {

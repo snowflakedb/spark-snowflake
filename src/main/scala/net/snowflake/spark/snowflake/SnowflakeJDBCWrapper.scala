@@ -105,7 +105,7 @@ private[snowflake] class JDBCWrapper {
     */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
-    val driverClassName = params.jdbcDriver.getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
+    val driverClassName = params.jdbcDriver.getOrElse("net.snowflake.client.jdbc.SnowflakeDriver")
     try {
       val driverClass = Utils.classForName(driverClassName)
       DriverRegistry.register(driverClass.getCanonicalName)

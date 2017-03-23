@@ -282,7 +282,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
                                            name: String): Option[String] = {
     try {
       val t1 = System.nanoTime()
-      sparkSession.sql(sql).collect()
+      //sparkSession.sql(sql).collect()
+      sparkSession.sql(sql).show
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
       case e: Exception =>
