@@ -1,7 +1,8 @@
 package net.snowflake.spark.snowflake
 
 import java.io.IOException
-import javax.crypto.spec.SecretKeySpec
+import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
+import javax.crypto.{Cipher, SecretKey}
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
@@ -15,6 +16,7 @@ import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
 import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
 import net.snowflake.client.jdbc._
+import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark._
 import org.apache.spark.rdd._
@@ -35,16 +37,18 @@ private[snowflake] class SnowflakeRDDPartition(
   override def equals(other: Any): Boolean = super.equals(other)
 }
 
-object SnowflakeRDD {
-  final val DUMMY_LOCATION      = "file:///tmp/dummy_location_spark_connector_tmp/"
-  final val AES                 = "AES"
-  final val DEFAULT_PARALLELISM = 10
-  final val S3_MAX_RETRIES      = 3
-
-  final def TEMP_STAGE_LOCATION: String =
-    "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString (""))
-  final val CREATE_TEMP_STAGE_STMT =
+private[snowflake] object SnowflakeRDD {
+  private final val DUMMY_LOCATION =
+    "file:///tmp/dummy_location_spark_connector_tmp/"
+  private final val AES                 = "AES"
+  private final val DEFAULT_PARALLELISM = 10
+  private final val S3_MAX_RETRIES      = 3
+  private final val CREATE_TEMP_STAGE_STMT =
     s"""CREATE OR REPLACE TEMP STAGE """
+  private final val AMZ_KEY: String     = "x-amz-key"
+  private final val AMZ_IV: String      = "x-amz-iv"
+  private final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
+  private final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
 
   /**
     * A small helper for extracting bucket name and path from stage location.
@@ -52,7 +56,8 @@ object SnowflakeRDD {
     * @param stageLocation stage location
     * @return s3 location
     */
-  def extractBucketNameAndPath(stageLocation: String): (String, String) = {
+  private final def extractBucketNameAndPath(
+      stageLocation: String): (String, String) = {
     var bucketName = stageLocation
     var s3path     = ""
 
@@ -64,22 +69,23 @@ object SnowflakeRDD {
 
     (bucketName, s3path)
   }
+
+  private final def TEMP_STAGE_LOCATION: String =
+    "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
 }
 
 private[snowflake] class SnowflakeRDD[T: ClassTag](
     @transient val sqlContext: SQLContext,
-    resultSchema: StructType,
     @transient val jdbcWrapper: JDBCWrapper,
     @transient val params: MergedParameters,
-    @transient val sql: String)
-    extends RDD[T](sqlContext.sparkContext, Nil) {
+    @transient val sql: String,
+    resultSchema: StructType
+) extends RDD[T](sqlContext.sparkContext, Nil) {
   import SnowflakeRDD._
 
   @transient private val tempStage = TEMP_STAGE_LOCATION
-
-  @transient private final val GET_COMMAND =
+  @transient private val GET_COMMAND =
     s"GET @$tempStage $DUMMY_LOCATION"
-
   @transient private val connection: SnowflakeConnectionV1 =
     jdbcWrapper.getConnector(params) match {
       case conn: SnowflakeConnectionV1 => conn
@@ -88,7 +94,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
   @transient private val unloadSql = buildUnloadStmt(sql)
 
-  setup
+  setup()
 
   @transient private val sfAgent = new SnowflakeFileTransferAgent(
     GET_COMMAND,
@@ -96,8 +102,14 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     new SFStatement(connection.getSfSession))
 
   @transient private val encryptionMaterials = sfAgent.getEncryptionMaterials
-  private val stageCredentials               = sfAgent.getStageCredentials
-  private val stageLocation                  = sfAgent.getStageLocation
+  @transient private val stageCredentials    = sfAgent.getStageCredentials
+
+  private val stageLocation = sfAgent.getStageLocation
+
+  private val awsID    = stageCredentials.get("AWS_ID").toString
+  private val awsKey   = stageCredentials.get("AWS_KEY").toString
+  private val awsToken = stageCredentials.get("AWS_TOKEN").toString
+  private val compress = if (params.sfCompress) "GZIP" else null
 
   private val masterKey: String = if (encryptionMaterials.size() > 0) {
     encryptionMaterials
@@ -137,39 +149,43 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
     val converter = Conversions.createRowConverter[T](resultSchema)
 
-    val mats   = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
-    val reader = new SnowflakeRecordReader
+    val mats       = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
+    val decodedKey = Base64.decode(masterKey)
+    val reader     = new SnowflakeRecordReader
+
+    reader.setCompressionType(compress)
+
+    val awsCredentials =
+      if (awsToken != null)
+        new BasicSessionCredentials(awsID, awsKey, awsToken)
+      else new BasicAWSCredentials(awsID, awsKey)
+
+    val encryptionKeySize = decodedKey.length * 8
+
+    val clientConfig = new ClientConfiguration
+
+    clientConfig.setMaxConnections(DEFAULT_PARALLELISM)
+    clientConfig.setMaxErrorRetry(S3_MAX_RETRIES)
+    val queryStageMasterKey: SecretKey =
+      new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
+
+    val cryptoConfig =
+      new CryptoConfiguration(CryptoMode.EncryptionOnly)
+
+    val keyCipher: Cipher = Cipher.getInstance(KEY_CIPHER)
+
+    keyCipher.init(Cipher.DECRYPT_MODE, queryStageMasterKey)
 
     mats.foreach {
       case (file, queryId, smkId) =>
-        val decodedKey = Base64.decode(masterKey)
-
-        val encryptionKeySize = decodedKey.length * 8
-
-        val awsID    = stageCredentials.get("AWS_ID").toString
-        val awsKey   = stageCredentials.get("AWS_KEY").toString
-        val awsToken = stageCredentials.get("AWS_TOKEN").toString
-
-        val awsCredentials =
-          if (awsToken != null)
-            new BasicSessionCredentials(awsID, awsKey, awsToken)
-          else new BasicAWSCredentials(awsID, awsKey)
-
-        val clientConfig = new ClientConfiguration
-        clientConfig.setMaxConnections(DEFAULT_PARALLELISM)
-        clientConfig.setMaxErrorRetry(S3_MAX_RETRIES)
-
         if (queryId != null) {
           var amazonClient: AmazonS3Client = null
           if (encryptionKeySize == 256) {
-            val queryStageMasterKey =
-              new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
             val encryptionMaterials =
               new EncryptionMaterials(queryStageMasterKey)
             encryptionMaterials.addDescription("queryId", queryId)
             encryptionMaterials.addDescription("smkId", smkId.toString)
-            val cryptoConfig =
-              new CryptoConfiguration(CryptoMode.EncryptionOnly)
+
             amazonClient = new AmazonS3EncryptionClient(
               awsCredentials,
               new StaticEncryptionMaterialsProvider(encryptionMaterials),
@@ -190,14 +206,39 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
           if (!stagePath.isEmpty) {
             stageFilePath =
               SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
-
           }
+
           val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+          val metaData   = dataObject.getObjectMetadata.getUserMetadata
+          val (key, iv)  = (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
+
+          if (key == null || iv == null)
+            throw new SnowflakeSQLException(
+              SqlState.INTERNAL_ERROR,
+              ErrorCode.INTERNAL_ERROR.getMessageCode,
+              "File " +
+                "metadata incomplete")
+
+          val keyBytes: Array[Byte] = Base64.decode(key)
+          val ivBytes: Array[Byte]  = Base64.decode(iv)
+
+          val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes) // NB: we assume qsmk
+          // .length == fileKey.length
+          //     (fileKeyBytes.length may be bigger due to padding)
+          val fileKey =
+            new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+
+          val dataCipher: Cipher   = Cipher.getInstance(DATA_CIPHER)
+          val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
+          dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
+
+          // TODO: Ciphers need to be on a per file basis, not a per reader basis!!!
+          reader.setCipher(dataCipher)
           reader.addStream(dataObject.getObjectContent)
         }
     }
 
-    val iter = new Iterator[T] {
+    new InterruptibleIterator(context, new Iterator[T] {
 
       private var finished = false
       private var havePair = false
@@ -224,13 +265,15 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
         converter(reader.getCurrentValue)
       }
-
-    }
-    new InterruptibleIterator(context, iter)
-
+    })
   }
 
-  private def setup: Unit = {
+  override def finalize(): Unit = {
+    connection.close()
+    super.finalize()
+  }
+
+  private def setup(): Unit = {
     // Prologue
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(Utils.sanitizeQueryText(prologueSql))
@@ -269,9 +312,8 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     Utils.setLastSelect(query)
 
     // Determine the compression type
-//    val compressionString = if (params.sfCompress) "gzip" else "none"
+    val compressionString = if (params.sfCompress) "gzip" else "none"
 
-    val compressionString = "none"
     s"""
        |COPY INTO @$tempStage
        |FROM ($query)
@@ -287,10 +329,5 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
        |  )
        |MAX_FILE_SIZE = ${params.s3maxfilesize}
        |""".stripMargin.trim
-  }
-
-  override def finalize(): Unit = {
-    connection.close()
-    super.finalize()
   }
 }

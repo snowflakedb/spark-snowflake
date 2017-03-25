@@ -92,17 +92,15 @@ private[snowflake] case class SnowflakeRelation(
 
     log.debug(Utils.sanitizeQueryText(sql))
 
-  //  val tempDir   = params.createPerQueryTempDir()
-  //  val unloadSql = buildUnloadStmt(sql, tempDir)
+    //  val tempDir   = params.createPerQueryTempDir()
+    //  val unloadSql = buildUnloadStmt(sql, tempDir)
 
-    val conn         = jdbcWrapper.getConnector(params)
+    val conn = jdbcWrapper.getConnector(params)
     val resultSchema = schema.getOrElse(try {
       jdbcWrapper.resolveTable(conn, sql)
     } finally {
       conn.close()
-    }
-    )
-
+    })
 
     getRDDFromS3[T](sql, resultSchema)
   }
@@ -145,9 +143,9 @@ private[snowflake] case class SnowflakeRelation(
       }
     } else {
       // Unload data from Snowflake into a temporary directory in S3:
-    //  val tempDir = params.createPerQueryTempDir()
-     // val unloadSql =
-   //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
+      //  val tempDir = params.createPerQueryTempDir()
+      // val unloadSql =
+      //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
       getRDDFromS3[Row](standardQuery(requiredColumns, filters), prunedSchema)
@@ -210,11 +208,7 @@ private[snowflake] case class SnowflakeRelation(
     // For no records, create an empty RDD
 //      sqlContext.sparkContext.emptyRDD[T]
     //   } else {
-    new SnowflakeRDD[T](sqlContext,
-                        resultSchema,
-                        jdbcWrapper,
-                        params,
-                        sql)
+    new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
     //   }
   }
 
@@ -232,8 +226,6 @@ private[snowflake] case class SnowflakeRelation(
       params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
     s"SELECT $columnList FROM $tableNameOrSubquery $whereClause"
   }
-
-
 
   private def pruneSchema(schema: StructType,
                           columns: Array[String]): StructType = {

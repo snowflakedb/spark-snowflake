@@ -20,6 +20,8 @@ package net.snowflake.spark.snowflake
 import java.io.{BufferedInputStream, InputStream}
 import java.lang.{Long => JavaLong}
 import java.nio.charset.Charset
+import java.util.zip.GZIPInputStream
+import javax.crypto.{Cipher, CipherInputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
@@ -81,7 +83,7 @@ private[snowflake] class SnowflakeRecordReader
   private var currentStream: Int = 0
 
   /** Effective stream, including compression */
-  private var reader: BufferedInputStream = _
+  private var reader: InputStream = _
 
   private var key: JavaLong        = _
   private var value: Array[String] = _
@@ -100,6 +102,10 @@ private[snowflake] class SnowflakeRecordReader
   private var codec: CompressionCodec = _
 
   private var started: Boolean = false
+
+  private var cipher: Cipher = _
+
+  private var compressionType: String = _
 
   private var delimiter: Byte                          = _
   @inline private[this] final val escapeChar: Byte     = '\\'
@@ -173,6 +179,14 @@ private[snowflake] class SnowflakeRecordReader
       if (inputStreams == null) Seq(stream) else inputStreams :+ stream
   }
 
+  def setCipher(cipher: Cipher): Unit = {
+    this.cipher = cipher
+  }
+
+  def setCompressionType(compression: String): Unit = {
+    compressionType = compression
+  }
+
   override def getProgress: Float = {
     if (eof) {
       1.0f
@@ -212,9 +226,20 @@ private[snowflake] class SnowflakeRecordReader
     if (currentStream < inputStreams.length) {
       reader =
         new BufferedInputStream(inputStreams(currentStream), inputBufferSize)
-      if (codec != null)
+      if (codec != null) {
         reader = new BufferedInputStream(codec.createInputStream(reader),
                                          codecBufferSize)
+      } else {
+        if (cipher != null) reader = new CipherInputStream(reader, cipher)
+        if (compressionType != null) {
+          reader = compressionType match {
+            case "GZIP" =>
+              new GZIPInputStream(reader)
+
+            case _ => reader
+          }
+        }
+      }
 
       currentStream += 1
       eof = false
