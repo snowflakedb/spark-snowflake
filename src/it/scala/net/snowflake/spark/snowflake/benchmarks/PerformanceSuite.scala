@@ -37,12 +37,14 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     "s3-all",
     "s3-parquet",
     "s3-csv",
+    "snowflake-all-with-stage",
     "snowflake-all",
     "snowflake-with-pushdown",
     "snowflake-partial-pushdown")
 
   protected final var fullPushdown: Boolean    = false
   protected final var partialPushdown: Boolean = false
+  protected final var internalStage: Boolean   = false
   protected final var s3CSV: Boolean           = false
   protected final var s3Parquet: Boolean       = false
   protected final var jdbcSource: Boolean      = false
@@ -105,6 +107,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       if (outputFormat == "csv" || outputFormat == "both") prepareCSV()
     }
 
+    internalStage = Set("all", "snowflake-all-with-stage") contains runOption
     partialPushdown = Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption
     fullPushdown = Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption
     jdbcSource = Set("all", "jdbc-source") contains runOption
@@ -190,6 +193,14 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     if (fullPushdown) {
       columnWriters += runWithSnowflake(pushdown = true)
       outputHeaders += s"""With full pushdowns"""
+    }
+
+    if (internalStage) {
+      columnWriters += runWithSnowflakeStage(pushdown = false)
+      outputHeaders += s"""Only filter/proj pushdowns, internal stage"""
+
+      columnWriters += runWithSnowflakeStage(pushdown = true)
+      outputHeaders += s"""With full pushdowns, internal stage"""
     }
 
     if (jdbcSource) {
@@ -278,16 +289,37 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     result
   }
 
+  protected final def runWithSnowflakeStage(
+      pushdown: Boolean)(sql: String, name: String): Option[String] = {
+
+    if (currentSource != "snowflake-stage") {
+      dataSources.foreach {
+        case (tableName: String, sources: Map[String, DataFrame]) => {
+          val df: DataFrame = sources.getOrElse(
+            "snowflake-stage",
+            fail(
+              "Snowflake-Stage datasource missing for snowflake performance test."))
+          df.createOrReplaceTempView(tableName)
+        }
+      }
+      currentSource = "snowflake-stage"
+    }
+
+    val state = sessionStatus
+    SnowflakeConnectorUtils.setPushdownSession(sparkSession, pushdown)
+    val result = executeSqlBenchmarkStatement(sql, name)
+    SnowflakeConnectorUtils.setPushdownSession(sparkSession, state)
+    result
+  }
+
   private def executeSqlBenchmarkStatement(sql: String,
                                            name: String): Option[String] = {
     try {
       val t1 = System.nanoTime()
-      //sparkSession.sql(sql).collect()
-      sparkSession.sql(sql).show
+      sparkSession.sql(sql).collect()
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
-      case e: Exception =>
-        throw e
+      case _: Exception =>
         println(s"""Query $name failed.""")
         None
     }

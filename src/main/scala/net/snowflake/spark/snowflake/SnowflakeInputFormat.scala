@@ -103,7 +103,7 @@ private[snowflake] class SnowflakeRecordReader
 
   private var started: Boolean = false
 
-  private var cipher: Cipher = _
+  private var ciphers: Seq[Cipher] = _
 
   private var compressionType: String = _
 
@@ -171,16 +171,14 @@ private[snowflake] class SnowflakeRecordReader
     if (inputStreams.isEmpty) {
       eof = true
       start = size
-    } else getNextStream
+    }
   }
 
-  def addStream(stream: InputStream): Unit = {
+  def addStreamWithCipher(stream: InputStream, cipher: Cipher): Unit = {
     inputStreams =
       if (inputStreams == null) Seq(stream) else inputStreams :+ stream
-  }
 
-  def setCipher(cipher: Cipher): Unit = {
-    this.cipher = cipher
+    ciphers = if (ciphers == null) Seq(cipher) else ciphers :+ cipher
   }
 
   def setCompressionType(compression: String): Unit = {
@@ -229,11 +227,16 @@ private[snowflake] class SnowflakeRecordReader
       if (codec != null) {
         reader = new BufferedInputStream(codec.createInputStream(reader),
                                          codecBufferSize)
-      } else {
+      }
+      if (ciphers != null) {
+        if (currentStream >= ciphers.length)
+          throw new SnowflakeConnectorException(
+            "Ciphers for decryption not properly set by the code. (Possibly a bug)")
+        val cipher = ciphers(currentStream)
         if (cipher != null) reader = new CipherInputStream(reader, cipher)
         if (compressionType != null) {
           reader = compressionType match {
-            case "GZIP" =>
+            case "gzip" =>
               new GZIPInputStream(reader)
 
             case _ => reader

@@ -18,7 +18,6 @@
 package net.snowflake.spark.snowflake
 
 import java.net.URI
-import java.sql.Connection
 
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
@@ -39,9 +38,11 @@ private[snowflake] case class SnowflakeRelation(
     userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
     extends BaseRelation
     with PrunedFilteredScan
-    with InsertableRelation {
+    with InsertableRelation
+    with DataUnloader {
+  import SnowflakeRelation._
 
-  private val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
+  override val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
   private lazy val creds = AWSCredentialsUtils
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
@@ -91,9 +92,6 @@ private[snowflake] case class SnowflakeRelation(
     }
 
     log.debug(Utils.sanitizeQueryText(sql))
-
-    //  val tempDir   = params.createPerQueryTempDir()
-    //  val unloadSql = buildUnloadStmt(sql, tempDir)
 
     val conn = jdbcWrapper.getConnector(params)
     val resultSchema = schema.getOrElse(try {
@@ -158,58 +156,37 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
 
-    /*
+    if (!params.rootTempDir.isEmpty) {
+      val tempDir = params.createPerQueryTempDir()
 
-    val conn = connection match {
-      case Some(c) => c
-      case None    => jdbcWrapper.getConnector(params)
+      val numRows = setup(
+        sql = buildUnloadStmt(
+          query = sql,
+          location = Utils.fixS3Url(tempDir),
+          compression = if (params.sfCompress) "gzip" else "none",
+          credentialsString = Some(
+            AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
+                                                              params))),
+        conn = jdbcWrapper.getConnector(params))
+
+      if (numRows == 0) {
+        // For no records, create an empty RDD
+        sqlContext.sparkContext.emptyRDD[T]
+      } else {
+        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
+          tempDir,
+          classOf[SnowflakeInputFormat],
+          classOf[java.lang.Long],
+          classOf[Array[String]])
+        rdd.values.mapPartitions { iter =>
+          val converter: Array[String] => T =
+            Conversions.createRowConverter[T](resultSchema)
+          iter.map(converter)
+        }
+      }
+    } else {
+      new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
     }
-
-    var numRows = 0
-    try {
-      // Prologue
-      val prologueSql = Utils.genPrologueSql(params)
-      log.debug(Utils.sanitizeQueryText(prologueSql))
-      jdbcWrapper.executeInterruptibly(conn, prologueSql)
-
-      Utils.executePreActions(jdbcWrapper, conn, params)
-
-      // Run the unload query
-      log.debug(Utils.sanitizeQueryText(unloadStatement))
-      jdbcWrapper
-        .executeQueryInterruptibly(conn, CREATE_TEMP_STAGE_STMT + tempStage)
-      val res = jdbcWrapper.executeQueryInterruptibly(conn, unloadStatement)
-
-      // Verify it's the expected format
-      val sch = res.getMetaData
-      assert(sch.getColumnCount == 3)
-      assert(sch.getColumnName(1) == "rows_unloaded")
-      assert(sch.getColumnTypeName(1) == "NUMBER")
-      // First record must be in
-      val first = res.next()
-      assert(first)
-      numRows = res.getInt(1)
-      // There can be no more records
-      val second = res.next()
-      assert(!second)
-
-      Utils.executePostActions(jdbcWrapper, conn, params)
-
-      // Epilogue - disabled for now, as we close the connection
-      //        log.debug(epilogueSql)
-      //        jdbcWrapper.executeInterruptibly(conn, epilogueSql)
-    } finally {
-      conn.close()
-    }
-
-     */
-
-//    if (numRows == 0) {
-    // For no records, create an empty RDD
-//      sqlContext.sparkContext.emptyRDD[T]
-    //   } else {
-    new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
-    //   }
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
@@ -226,6 +203,9 @@ private[snowflake] case class SnowflakeRelation(
       params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
     s"SELECT $columnList FROM $tableNameOrSubquery $whereClause"
   }
+}
+
+private[snowflake] object SnowflakeRelation {
 
   private def pruneSchema(schema: StructType,
                           columns: Array[String]): StructType = {

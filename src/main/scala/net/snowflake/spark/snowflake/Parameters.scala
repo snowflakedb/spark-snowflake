@@ -18,12 +18,15 @@
 package net.snowflake.spark.snowflake
 
 import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.org.slf4j.LoggerFactory
 
 /**
  * All user-specifiable parameters for spark-snowflake, along with their validation rules and
  * defaults.
  */
 object Parameters {
+
+  val log = LoggerFactory.getLogger(getClass)
 
   val PARAM_S3_MAX_FILE_SIZE = "s3maxfilesize"
   val DEFAULT_S3_MAX_FILE_SIZE = (10*1000*1000).toString
@@ -95,8 +98,9 @@ object Parameters {
    * Merge user parameters with the defaults, preferring user parameters if specified
    */
   def mergeParameters(userParameters: Map[String, String]): MergedParameters = {
-    if (!userParameters.contains("tempdir")) {
-      throw new IllegalArgumentException("'tempdir' is required for all Snowflake loads and saves")
+    if (userParameters.contains("tempdir")) {
+      log.warn("Use of an external S3 bucket for staging is deprecated and will be removed in a future version. " +
+        "Unset your 'tempDir' parameter to use the Snowflake internal stage instead.")
     }
     // Snowflake-todo Add more parameter checking
     if (!userParameters.contains("sfurl")) {
@@ -190,7 +194,7 @@ object Parameters {
      * and read from by Snowflake.
      * Make sure that AWS credentials are available for S3.
      */
-    def rootTempDir: String = parameters("tempdir")
+    def rootTempDir: String = parameters.getOrElse("tempdir", "")
 
     /**
      * Creates a per-query subdirectory in the [[rootTempDir]], with a random UUID.

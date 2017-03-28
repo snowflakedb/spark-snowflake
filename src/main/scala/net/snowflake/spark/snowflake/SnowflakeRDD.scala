@@ -6,12 +6,7 @@ import javax.crypto.{Cipher, SecretKey}
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
-import com.amazonaws.services.s3.model.{
-  CryptoConfiguration,
-  CryptoMode,
-  EncryptionMaterials,
-  StaticEncryptionMaterialsProvider
-}
+import com.amazonaws.services.s3.model.{CryptoConfiguration, CryptoMode, EncryptionMaterials, StaticEncryptionMaterialsProvider}
 import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
 import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
@@ -22,6 +17,7 @@ import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
+import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -80,9 +76,11 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     @transient val params: MergedParameters,
     @transient val sql: String,
     resultSchema: StructType
-) extends RDD[T](sqlContext.sparkContext, Nil) {
+) extends RDD[T](sqlContext.sparkContext, Nil)
+    with DataUnloader {
   import SnowflakeRDD._
 
+  @transient override val log = LoggerFactory.getLogger(getClass)
   @transient private val tempStage = TEMP_STAGE_LOCATION
   @transient private val GET_COMMAND =
     s"GET @$tempStage $DUMMY_LOCATION"
@@ -92,9 +90,12 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
       case _                           => throw new SnowflakeConnectorException("JDBC Connection Error.")
     }
 
-  @transient private val unloadSql = buildUnloadStmt(sql)
+  private val compress = if (params.sfCompress) "gzip" else "none"
 
-  setup()
+  setup(preStatements = Seq(CREATE_TEMP_STAGE_STMT + tempStage),
+        sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
+        conn = connection,
+        keepOpen = true)
 
   @transient private val sfAgent = new SnowflakeFileTransferAgent(
     GET_COMMAND,
@@ -109,7 +110,6 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   private val awsID    = stageCredentials.get("AWS_ID").toString
   private val awsKey   = stageCredentials.get("AWS_KEY").toString
   private val awsToken = stageCredentials.get("AWS_TOKEN").toString
-  private val compress = if (params.sfCompress) "GZIP" else null
 
   private val masterKey: String = if (encryptionMaterials.size() > 0) {
     encryptionMaterials
@@ -232,9 +232,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
           val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
           dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
 
-          // TODO: Ciphers need to be on a per file basis, not a per reader basis!!!
-          reader.setCipher(dataCipher)
-          reader.addStream(dataObject.getObjectContent)
+          reader.addStreamWithCipher(dataObject.getObjectContent, dataCipher)
         }
     }
 
@@ -271,63 +269,5 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   override def finalize(): Unit = {
     connection.close()
     super.finalize()
-  }
-
-  private def setup(): Unit = {
-    // Prologue
-    val prologueSql = Utils.genPrologueSql(params)
-    log.debug(Utils.sanitizeQueryText(prologueSql))
-    jdbcWrapper.executeInterruptibly(connection, prologueSql)
-
-    Utils.executePreActions(jdbcWrapper, connection, params)
-
-    // Run the unload query
-    log.debug(Utils.sanitizeQueryText(unloadSql))
-    jdbcWrapper.executeQueryInterruptibly(connection,
-                                          CREATE_TEMP_STAGE_STMT + tempStage)
-    val res = jdbcWrapper.executeQueryInterruptibly(connection, unloadSql)
-
-    // Verify it's the expected format
-    val sch = res.getMetaData
-    assert(sch.getColumnCount == 3)
-    assert(sch.getColumnName(1) == "rows_unloaded")
-    assert(sch.getColumnTypeName(1) == "NUMBER")
-    // First record must be in
-    val first = res.next()
-    assert(first)
-    val numRows = res.getInt(1)
-    // There can be no more records
-    val second = res.next()
-    assert(!second)
-
-    Utils.executePostActions(jdbcWrapper, connection, params)
-  }
-
-  private def buildUnloadStmt(query: String): String = {
-
-    val credsString =
-      AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
-
-    // Save the last SELECT so it can be inspected
-    Utils.setLastSelect(query)
-
-    // Determine the compression type
-    val compressionString = if (params.sfCompress) "gzip" else "none"
-
-    s"""
-       |COPY INTO @$tempStage
-       |FROM ($query)
-       |$credsString
-       |FILE_FORMAT = (
-       |    TYPE=CSV
-       |    COMPRESSION='$compressionString'
-       |    FIELD_DELIMITER='|'
-       |    /*ESCAPE='\\\\'*/
-       |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
-       |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    NULL_IF= ()
-       |  )
-       |MAX_FILE_SIZE = ${params.s3maxfilesize}
-       |""".stripMargin.trim
   }
 }

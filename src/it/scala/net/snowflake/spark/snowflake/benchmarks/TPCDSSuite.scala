@@ -76,6 +76,15 @@ class TPCDSSuite extends PerformanceSuite {
       .option("dbtable", tableName.toUpperCase)
       .load()
 
+    val sf_stage =
+      if (internalStage)
+        sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(connectorOptionsNoTable.filterNot(x => x._1 == "tempDir"))
+          .option("dbtable", tableName.toUpperCase)
+          .load()
+      else sf
+
     val parquet =
       if (s3Parquet)
         sparkSession.read
@@ -99,10 +108,11 @@ class TPCDSSuite extends PerformanceSuite {
       else sf
 
     dataSources.put(tableName.toUpperCase,
-                    Map("parquet"   -> parquet,
-                        "csv"       -> csv,
-                        "snowflake" -> sf,
-                        "jdbc"      -> jdbc))
+                    Map("parquet"         -> parquet,
+                        "csv"             -> csv,
+                        "snowflake"       -> sf,
+                        "snowflake-stage" -> sf_stage,
+                        "jdbc"            -> jdbc))
   }
 
   override def beforeAll(): Unit = {
@@ -138,7 +148,8 @@ class TPCDSSuite extends PerformanceSuite {
       and s_state = 'TN'
       and ctr1.ctr_customer_sk = c_customer_sk
       order by c_customer_id
-      limit 100""", "TPCDS-Q01")
+      limit 100""",
+              "TPCDS-Q01")
   }
 
   test("TPCDS-Q02") {
@@ -198,7 +209,8 @@ class TPCDSSuite extends PerformanceSuite {
   where date_dim.d_week_seq = wswscs.d_week_seq and
         d_year = 2001+1) z
  where d_week_seq1=d_week_seq2-53
- order by d_week_seq1""", "TPCDS-Q02")
+ order by d_week_seq1""",
+              "TPCDS-Q02")
   }
 
   test("TPCDS-Q03") {
@@ -220,7 +232,8 @@ class TPCDSSuite extends PerformanceSuite {
          ,sum_agg desc
          ,brand_id
  limit 100
-""", "TPCDS-Q03")
+""",
+              "TPCDS-Q03")
   }
 
   test("TPCDS-Q017") {
@@ -265,7 +278,8 @@ class TPCDSSuite extends PerformanceSuite {
  order by i_item_id
          ,i_item_desc
          ,s_state
-limit 100""", "TPCDS-Q17")
+limit 100""",
+              "TPCDS-Q17")
   }
 
   test("TPCDS-Q21") {
@@ -295,7 +309,8 @@ limit 100""", "TPCDS-Q17")
              end) between 2.0/3.0 and 3.0/2.0
  order by w_warehouse_name
          ,i_item_id
- limit 100""", "TPCDS-Q21")
+ limit 100""",
+              "TPCDS-Q21")
   }
 
   test("TPCDS-Q26") {
@@ -316,7 +331,8 @@ limit 100""", "TPCDS-Q17")
        d_year = 1999
  group by i_item_id
  order by i_item_id
- limit 100""", "TPCDS-Q26")
+ limit 100""",
+              "TPCDS-Q26")
   }
 
   test("TPCDS-Q32") {
@@ -344,7 +360,8 @@ and cs_ext_discount_amt
 	      	     	     date_add(to_date('2000-01-27'), 90)
           and d_date_sk = cs_sold_date_sk
       )
-limit 100""", "TPCDS-Q32")
+limit 100""",
+              "TPCDS-Q32")
   }
 
   test("TPCDS-Q42") {
@@ -366,7 +383,8 @@ limit 100""", "TPCDS-Q32")
  order by       sum(ss_ext_sales_price) desc,dt.d_year
  		,item.i_category_id
  		,item.i_category
-limit 100""", "TPCDS-Q42")
+limit 100""",
+              "TPCDS-Q42")
   }
 
   test("TPCDS-Q58") {
@@ -431,7 +449,8 @@ limit 100""", "TPCDS-Q42")
    and ws_item_rev between 0.9 * cs_item_rev and 1.1 * cs_item_rev
  order by item_id
          ,ss_item_rev
- limit 100""", "TPCDS-Q58")
+ limit 100""",
+              "TPCDS-Q58")
   }
 
   test("TPCDS-Q83") {
@@ -498,7 +517,8 @@ limit 100""", "TPCDS-Q42")
    and sr_items.item_id=wr_items.item_id
  order by sr_items.item_id
          ,sr_item_qty
- limit 100""", "TPCDS-Q05")
+ limit 100""",
+              "TPCDS-Q05")
   }
 
   override def beforeEach(): Unit = {
