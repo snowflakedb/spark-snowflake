@@ -108,8 +108,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     }
 
     internalStage = Set("all", "snowflake-all-with-stage") contains runOption
-    partialPushdown = Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption
-    fullPushdown = Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption
+    partialPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-partial-pushdown") contains runOption
+    fullPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-with-pushdown") contains runOption
     jdbcSource = Set("all", "jdbc-source") contains runOption
     s3Parquet = Set("all", "s3-all", "s3-parquet") contains runOption
     s3CSV = Set("all", "s3-all", "s3-csv") contains runOption
