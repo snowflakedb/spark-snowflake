@@ -80,7 +80,7 @@ class TPCDSSuite extends PerformanceSuite {
       if (internalStage)
         sparkSession.read
           .format(SNOWFLAKE_SOURCE_NAME)
-          .options(connectorOptionsNoTable.filterNot(x => x._1 == "tempDir"))
+          .options(connectorOptionsNoTable.filterKeys(_ != "tempdir"))
           .option("dbtable", tableName.toUpperCase)
           .load()
       else sf
