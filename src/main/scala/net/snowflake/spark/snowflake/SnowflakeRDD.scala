@@ -1,12 +1,18 @@
 package net.snowflake.spark.snowflake
 
-import java.io.IOException
+import java.io.{IOException, InputStream}
+import java.util.zip.GZIPInputStream
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import javax.crypto.{Cipher, SecretKey}
+import javax.crypto.{Cipher, CipherInputStream, SecretKey}
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
-import com.amazonaws.services.s3.model.{CryptoConfiguration, CryptoMode, EncryptionMaterials, StaticEncryptionMaterialsProvider}
+import com.amazonaws.services.s3.model.{
+  CryptoConfiguration,
+  CryptoMode,
+  EncryptionMaterials,
+  StaticEncryptionMaterialsProvider
+}
 import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
 import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
@@ -19,6 +25,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -45,6 +52,7 @@ private[snowflake] object SnowflakeRDD {
   private final val AMZ_IV: String      = "x-amz-iv"
   private final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
   private final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
+  private final val FILES_PER_PARTITION = 2
 
   /**
     * A small helper for extracting bucket name and path from stage location.
@@ -80,7 +88,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     with DataUnloader {
   import SnowflakeRDD._
 
-  @transient override val log = LoggerFactory.getLogger(getClass)
+  @transient override val log      = LoggerFactory.getLogger(getClass)
   @transient private val tempStage = TEMP_STAGE_LOCATION
   @transient private val GET_COMMAND =
     s"GET @$tempStage $DUMMY_LOCATION"
@@ -122,23 +130,22 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
 
-    val partitions = new Array[Partition](encryptionMaterials.size())
-    val it         = encryptionMaterials.entrySet().iterator()
+    val encryptionMaterialsGrouped =
+      encryptionMaterials.asScala.toList.map {
+        case (k, v) =>
+          (k,
+           if (v != null) v.getQueryId else null,
+           if (v != null) v.getSmkId else null)
+      }.grouped(FILES_PER_PARTITION).toList
+
+    val partitions = new Array[Partition](encryptionMaterialsGrouped.length)
 
     var i = 0
 
     // TODO: Split file list for partitions evenly instead of one each.
-    while (it.hasNext) {
-      val next  = it.next
-      val key   = next.getKey
-      val value = next.getValue
-      partitions(i) = new SnowflakeRDDPartition(
-        List(
-          (key,
-           if (value != null) value.getQueryId else null,
-           if (value != null) value.getSmkId else null)),
-        id,
-        i)
+    while (i < encryptionMaterialsGrouped.length) {
+      partitions(i) =
+        new SnowflakeRDDPartition(encryptionMaterialsGrouped(i), id, i)
       i = i + 1
     }
     partitions
@@ -152,8 +159,6 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     val mats       = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
     val decodedKey = Base64.decode(masterKey)
     val reader     = new SnowflakeRecordReader
-
-    reader.setCompressionType(compress)
 
     val awsCredentials =
       if (awsToken != null)
@@ -180,6 +185,8 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
       case (file, queryId, smkId) =>
         if (queryId != null) {
           var amazonClient: AmazonS3Client = null
+          var stream: InputStream          = null
+
           if (encryptionKeySize == 256) {
             val encryptionMaterials =
               new EncryptionMaterials(queryStageMasterKey)
@@ -209,30 +216,39 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
           }
 
           val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-          val metaData   = dataObject.getObjectMetadata.getUserMetadata
-          val (key, iv)  = (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
+          stream = dataObject.getObjectContent
 
-          if (key == null || iv == null)
-            throw new SnowflakeSQLException(
-              SqlState.INTERNAL_ERROR,
-              ErrorCode.INTERNAL_ERROR.getMessageCode,
-              "File " +
-                "metadata incomplete")
+          if (encryptionKeySize == 128) {
+            val metaData  = dataObject.getObjectMetadata.getUserMetadata
+            val (key, iv) = (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
 
-          val keyBytes: Array[Byte] = Base64.decode(key)
-          val ivBytes: Array[Byte]  = Base64.decode(iv)
+            if (key == null || iv == null)
+              throw new SnowflakeSQLException(
+                SqlState.INTERNAL_ERROR,
+                ErrorCode.INTERNAL_ERROR.getMessageCode,
+                "File " + "metadata incomplete")
 
-          val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes) // NB: we assume qsmk
-          // .length == fileKey.length
-          //     (fileKeyBytes.length may be bigger due to padding)
-          val fileKey =
-            new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+            val keyBytes: Array[Byte] = Base64.decode(key)
+            val ivBytes: Array[Byte]  = Base64.decode(iv)
 
-          val dataCipher: Cipher   = Cipher.getInstance(DATA_CIPHER)
-          val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
-          dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
+            val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes) // NB: we assume qsmk
+            // .length == fileKey.length
+            //     (fileKeyBytes.length may be bigger due to padding)
+            val fileKey =
+              new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
 
-          reader.addStreamWithCipher(dataObject.getObjectContent, dataCipher)
+            val dataCipher           = Cipher.getInstance(DATA_CIPHER)
+            val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
+            dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
+            stream = new CipherInputStream(stream, dataCipher)
+          }
+
+          stream = compress match {
+            case "gzip" => new GZIPInputStream(stream)
+            case _      => stream
+          }
+
+          reader.addStream(stream)
         }
     }
 

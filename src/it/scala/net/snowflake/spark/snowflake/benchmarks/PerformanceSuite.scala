@@ -39,6 +39,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     "s3-csv",
     "snowflake-all-with-stage",
     "snowflake-all",
+    "snowflake-stage",
     "snowflake-with-pushdown",
     "snowflake-partial-pushdown")
 
@@ -107,7 +108,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       if (outputFormat == "csv" || outputFormat == "both") prepareCSV()
     }
 
-    internalStage = Set("all", "snowflake-all-with-stage") contains runOption
+    internalStage = Set("all", "snowflake-all-with-stage", "snowflake-stage") contains runOption
     partialPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-partial-pushdown") contains runOption
     fullPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-with-pushdown") contains runOption
     jdbcSource = Set("all", "jdbc-source") contains runOption
@@ -271,13 +272,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     if (currentSource != "snowflake") {
       dataSources.foreach {
-        case (tableName: String, sources: Map[String, DataFrame]) => {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             "snowflake",
             fail(
               "Snowflake datasource missing for snowflake performance test."))
           df.createOrReplaceTempView(tableName)
-        }
       }
       currentSource = "snowflake"
     }
@@ -294,13 +294,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     if (currentSource != "snowflake-stage") {
       dataSources.foreach {
-        case (tableName: String, sources: Map[String, DataFrame]) => {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             "snowflake-stage",
             fail(
               "Snowflake-Stage datasource missing for snowflake performance test."))
           df.createOrReplaceTempView(tableName)
-        }
       }
       currentSource = "snowflake-stage"
     }
@@ -331,13 +330,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     if (currentSource != format) {
       dataSources.foreach {
-        case (tableName: String, sources: Map[String, DataFrame]) => {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             format,
             fail(
               s"$format datasource missing for snowflake performance test."))
           df.createOrReplaceTempView(tableName)
-        }
       }
       currentSource = format
     }

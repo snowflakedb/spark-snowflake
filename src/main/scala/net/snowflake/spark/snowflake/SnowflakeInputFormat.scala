@@ -20,8 +20,6 @@ package net.snowflake.spark.snowflake
 import java.io.{BufferedInputStream, InputStream}
 import java.lang.{Long => JavaLong}
 import java.nio.charset.Charset
-import java.util.zip.GZIPInputStream
-import javax.crypto.{Cipher, CipherInputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
@@ -103,10 +101,6 @@ private[snowflake] class SnowflakeRecordReader
 
   private var started: Boolean = false
 
-  private var ciphers: Seq[Cipher] = _
-
-  private var compressionType: String = _
-
   private var delimiter: Byte                          = _
   @inline private[this] final val escapeChar: Byte     = '\\'
   @inline private[this] final val quoteChar: Byte      = '"'
@@ -174,15 +168,9 @@ private[snowflake] class SnowflakeRecordReader
     }
   }
 
-  def addStreamWithCipher(stream: InputStream, cipher: Cipher): Unit = {
+  def addStream(stream: InputStream): Unit = {
     inputStreams =
       if (inputStreams == null) Seq(stream) else inputStreams :+ stream
-
-    ciphers = if (ciphers == null) Seq(cipher) else ciphers :+ cipher
-  }
-
-  def setCompressionType(compression: String): Unit = {
-    compressionType = compression
   }
 
   override def getProgress: Float = {
@@ -227,21 +215,6 @@ private[snowflake] class SnowflakeRecordReader
       if (codec != null) {
         reader = new BufferedInputStream(codec.createInputStream(reader),
                                          codecBufferSize)
-      }
-      if (ciphers != null) {
-        if (currentStream >= ciphers.length)
-          throw new SnowflakeConnectorException(
-            "Ciphers for decryption not properly set by the code. (Possibly a bug)")
-        val cipher = ciphers(currentStream)
-        if (cipher != null) reader = new CipherInputStream(reader, cipher)
-        if (compressionType != null) {
-          reader = compressionType match {
-            case "gzip" =>
-              new GZIPInputStream(reader)
-
-            case _ => reader
-          }
-        }
       }
 
       currentStream += 1
