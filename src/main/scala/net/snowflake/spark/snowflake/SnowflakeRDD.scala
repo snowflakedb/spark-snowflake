@@ -110,7 +110,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     connection.getSfSession,
     new SFStatement(connection.getSfSession))
 
-  @transient private val encryptionMaterials = sfAgent.getEncryptionMaterials
+  @transient private val encryptionMaterials = sfAgent.getSrcToMaterialsMap
   @transient private val stageCredentials    = sfAgent.getStageCredentials
 
   private val stageLocation = sfAgent.getStageLocation
