@@ -41,12 +41,12 @@ private[snowflake] class SnowflakeRDDPartition(
 }
 
 private[snowflake] object SnowflakeRDD {
-  private final val DUMMY_LOCATION =
+  private[snowflake] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
   private final val AES                 = "AES"
   private final val DEFAULT_PARALLELISM = 10
   private final val S3_MAX_RETRIES      = 3
-  private final val CREATE_TEMP_STAGE_STMT =
+  private[snowflake] final val CREATE_TEMP_STAGE_STMT =
     s"""CREATE OR REPLACE TEMP STAGE """
   private final val AMZ_KEY: String     = "x-amz-key"
   private final val AMZ_IV: String      = "x-amz-iv"
@@ -60,7 +60,7 @@ private[snowflake] object SnowflakeRDD {
     * @param stageLocation stage location
     * @return s3 location
     */
-  private final def extractBucketNameAndPath(
+  private[snowflake] final def extractBucketNameAndPath(
       stageLocation: String): (String, String) = {
     var bucketName = stageLocation
     var s3path     = ""
@@ -74,7 +74,7 @@ private[snowflake] object SnowflakeRDD {
     (bucketName, s3path)
   }
 
-  private final def TEMP_STAGE_LOCATION: String =
+  private[snowflake] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
 }
 

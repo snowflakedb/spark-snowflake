@@ -16,7 +16,7 @@ private[snowflake] trait DataUnloader {
   val sqlContext: SQLContext
 
   @transient def setup(preStatements: Seq[String] = Seq.empty, sql: String, conn: Connection, keepOpen: Boolean = false)
-    : Int = {
+    : Long = {
     try {
       // Prologue
       val prologueSql = Utils.genPrologueSql(params)
@@ -39,7 +39,7 @@ private[snowflake] trait DataUnloader {
       assert(sch.getColumnTypeName(1) == "NUMBER") // First record must be in
       val first = res.next()
       assert(first)
-      val numRows = res.getInt(1) // There can be no more records
+      val numRows = res.getLong(1) // There can be no more records
       val second  = res.next()
       assert(!second)
 

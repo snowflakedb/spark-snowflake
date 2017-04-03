@@ -17,12 +17,18 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.{ByteArrayInputStream, SequenceInputStream}
 import java.net.URI
 import java.sql.{Connection, Date, SQLException, Timestamp}
 
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
-import org.apache.hadoop.fs.{Path, FileSystem}
+import net.snowflake.client.core.SFStatement
+import net.snowflake.client.jdbc.{
+  SnowflakeConnectionV1,
+  SnowflakeFileTransferAgent
+}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.TaskContext
 import org.slf4j.LoggerFactory
@@ -30,50 +36,52 @@ import org.slf4j.LoggerFactory
 import scala.collection.mutable
 import scala.util.Random
 import scala.util.control.NonFatal
-
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 import org.apache.spark.sql.types._
 
-/**
- * Functions to write data to Snowflake.
- *
- * At a high level, writing data back to Snowflake involves the following steps:
- *
- *   - Use an RDD to save DataFrame content as strings, using customized
- *     formatting functions from Conversions
+import scala.collection.JavaConverters._
 
- *   - Use JDBC to issue any CREATE TABLE commands, if required.
- *
- *   - If there is data to be written (i.e. not all partitions were empty),
- *     copy all the files sharing the prefix we exported to into Snowflake.
- *
- *     This is done by issuing a COPY command over JDBC that
- *     instructs Snowflake to load the CSV data into the appropriate table.
- *
- *     If the Overwrite SaveMode is being used, then by default the data
- *     will be loaded into a temporary staging table,
- *     which later will atomically replace the original table using SWAP.
- */
+/**
+  * Functions to write data to Snowflake.
+  *
+  * At a high level, writing data back to Snowflake involves the following steps:
+  *
+  *   - Use an RDD to save DataFrame content as strings, using customized
+  *     formatting functions from Conversions
+
+  *   - Use JDBC to issue any CREATE TABLE commands, if required.
+  *
+  *   - If there is data to be written (i.e. not all partitions were empty),
+  *     copy all the files sharing the prefix we exported to into Snowflake.
+  *
+  *     This is done by issuing a COPY command over JDBC that
+  *     instructs Snowflake to load the CSV data into the appropriate table.
+  *
+  *     If the Overwrite SaveMode is being used, then by default the data
+  *     will be loaded into a temporary staging table,
+  *     which later will atomically replace the original table using SWAP.
+  */
 private[snowflake] class SnowflakeWriter(
     jdbcWrapper: JDBCWrapper,
     s3ClientFactory: AWSCredentials => AmazonS3Client) {
+  import SnowflakeRDD.{DUMMY_LOCATION, TEMP_STAGE_LOCATION, CREATE_TEMP_STAGE_STMT}
 
   private val log = LoggerFactory.getLogger(getClass)
 
   // Execute a given string, logging it
-  def sql(conn : Connection, query : String): Boolean = {
+  def sql(conn: Connection, query: String): Boolean = {
     log.debug(query)
     jdbcWrapper.executeInterruptibly(conn, query)
   }
 
   /**
-   * Generate CREATE TABLE statement for Snowflake
-   */
+    * Generate CREATE TABLE statement for Snowflake
+    */
   // Visible for testing.
-  private[snowflake] def createTableSql(data: DataFrame, params: MergedParameters): String = {
+  private[snowflake] def createTableSql(data: DataFrame,
+                                        params: MergedParameters): String = {
     val schemaSql = jdbcWrapper.schemaString(data.schema)
     // snowflake-todo: for now, we completely ignore
     // params.distStyle and params.distKey
@@ -82,18 +90,18 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-   * Generate the COPY SQL command
-   */
-  private def copySql(
-      sqlContext: SQLContext,
-      params: MergedParameters,
-      filesToCopy: (String, String)): String = {
-    val credsString = AWSCredentialsUtils.getSnowflakeCredentialsString(
-        sqlContext, params)
-    var fixedUrl = filesToCopy._1
-    var fromString : String = null
+    * Generate the COPY SQL command
+    */
+  private def copySql(sqlContext: SQLContext,
+                      params: MergedParameters,
+                      filesToCopy: (String, String)): String = {
+    val credsString =
+      AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
+    var fixedUrl           = filesToCopy._1
+    var fromString: String = null
     if (fixedUrl.startsWith("file://")) {
-      fromString = s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
+      fromString =
+        s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
     } else {
       fixedUrl = Utils.fixS3Url(fixedUrl)
       fromString = s"FROM '$fixedUrl${filesToCopy._2}'"
@@ -115,16 +123,16 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-   * Sets up a staging table then runs the given action, passing the temporary table name
-   * as a parameter.
-   */
-  private def withStagingTable(
-      conn: Connection,
-      table: TableName,
-      action: (String) => Unit) {
+    * Sets up a staging table then runs the given action, passing the temporary table name
+    * as a parameter.
+    */
+  private def withStagingTable(conn: Connection,
+                               table: TableName,
+                               action: (String) => Unit) {
     val randomSuffix = Math.abs(Random.nextInt()).toString
-    val tempTable = new TableName(s"${table.name}_staging_$randomSuffix")
-    log.info(s"Loading new data for Snowflake table '$table' using temporary table '$tempTable'")
+    val tempTable    = new TableName(s"${table.name}_staging_$randomSuffix")
+    log.info(
+      s"Loading new data for Snowflake table '$table' using temporary table '$tempTable'")
 
     try {
       action(tempTable.toString)
@@ -143,15 +151,14 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-   * Perform the Snowflake load, including deletion of existing data in the case of an overwrite,
-   * and creating the table if it doesn't already exist.
-   */
-  private def doSnowflakeLoad(
-      conn: Connection,
-      data: DataFrame,
-      saveMode: SaveMode,
-      params: MergedParameters,
-      filesToCopy: Option[(String, String)]): Unit = {
+    * Perform the Snowflake load, including deletion of existing data in the case of an overwrite,
+    * and creating the table if it doesn't already exist.
+    */
+  private def doSnowflakeLoad(conn: Connection,
+                              data: DataFrame,
+                              saveMode: SaveMode,
+                              params: MergedParameters,
+                              filesToCopy: Option[(String, String)]): Unit = {
 
     // Overwrites must drop the table, in case there has been a schema update
     if (saveMode == SaveMode.Overwrite) {
@@ -171,8 +178,7 @@ private[snowflake] class SnowflakeWriter(
     // Perform the load if there were files loaded
     if (filesToCopy.isDefined) {
       // Load the temporary data into the new file
-      val copyStatement = copySql(data.sqlContext, params,
-                                  filesToCopy.get)
+      val copyStatement = copySql(data.sqlContext, params, filesToCopy.get)
       log.debug(Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
@@ -189,30 +195,39 @@ private[snowflake] class SnowflakeWriter(
   }
 
   // Prepare a set of conversion functions, based on the schema
-  def genConversionFunctions(schema: StructType): Array[Any => Any] = schema.fields.map { field =>
-    field.dataType match {
-      case DateType => (v: Any) => v match {
-        case null => ""
-        case t: Timestamp => Conversions.formatTimestamp(t)
-        case d: Date => Conversions.formatDate(d)
+  def genConversionFunctions(schema: StructType): Array[Any => Any] =
+    schema.fields.map { field =>
+      field.dataType match {
+        case DateType =>
+          (v: Any) =>
+            v match {
+              case null         => ""
+              case t: Timestamp => Conversions.formatTimestamp(t)
+              case d: Date      => Conversions.formatDate(d)
+            }
+        case TimestampType =>
+          (v: Any) =>
+            {
+              if (v == null) ""
+              else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+            }
+        case StringType =>
+          (v: Any) =>
+            {
+              if (v == null) ""
+              else Conversions.formatString(v.asInstanceOf[String])
+            }
+        case _ =>
+          (v: Any) =>
+            Conversions.formatAny(v)
       }
-      case TimestampType => (v: Any) => {
-        if (v == null) ""
-        else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
-      }
-      case StringType => (v: Any) => {
-        if (v == null) ""
-        else Conversions.formatString(v.asInstanceOf[String])
-      }
-      case _ => (v: Any) => Conversions.formatAny(v)
     }
-  }
 
   // Format a row using provided conversion functions
-  def formatRow(conversionFunctions: Array[Any => Any], row: Row) : String = {
+  def formatRow(conversionFunctions: Array[Any => Any], row: Row): String = {
     // Build a simple pipe-delimited string
     var str = new mutable.StringBuilder
-    var i = 0
+    var i   = 0
     while (i < conversionFunctions.length) {
       if (i > 0)
         str.append('|')
@@ -223,18 +238,17 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-   * Serialize temporary data to S3, ready for Snowflake COPY
-   *
-   * @return the pair (URL, prefix) of the files that should be loaded,
-   *         usually (tempDir, "part"),
-   *         if at least one record was written,
-   *         and None otherwise.
-   */
-  private def unloadData(
-      sqlContext: SQLContext,
-      data: DataFrame,
-      params: MergedParameters,
-      tempDir: String): Option[(String, String)] = {
+    * Serialize temporary data to S3, ready for Snowflake COPY
+    *
+    * @return the pair (URL, prefix) of the files that should be loaded,
+    *         usually (tempDir, "part"),
+    *         if at least one record was written,
+    *         and None otherwise.
+    */
+  private def unloadData(sqlContext: SQLContext,
+                         data: DataFrame,
+                         params: MergedParameters,
+                         tempDir: String): Option[(String, String)] = {
 
     // Prepare the set of conversion functions
     val conversionFunctions = genConversionFunctions(data.schema)
@@ -244,77 +258,127 @@ private[snowflake] class SnowflakeWriter(
       sqlContext.sparkContext.accumulableCollection(mutable.HashSet.empty[Int])
 
     // Create RDD that will be saved as strings
-    val strRDD = data.rdd.mapPartitionsWithIndex { case (index, iter) =>
-      new Iterator[String] {
-        override def hasNext: Boolean = iter.hasNext
+    val strRDD = data.rdd.mapPartitionsWithIndex {
+      case (index, iter) =>
+        new Iterator[String] {
+          override def hasNext: Boolean = iter.hasNext
 
-        override def next(): String = {
-          nonEmptyPartitions += TaskContext.get().partitionId()
+          override def next(): String = {
+            nonEmptyPartitions += TaskContext.get().partitionId()
 
-          if (iter.nonEmpty) {
-            val row = iter.next()
-            // Snowflake-todo: unify it with formatRow(), it's the same code
-            // Build a simple pipe-delimited string
-            var str = new mutable.StringBuilder
-            var i = 0
-            while (i < conversionFunctions.length) {
-              if (i > 0)
-                str.append('|')
-              str.append(conversionFunctions(i)(row(i)))
-              i += 1
+            if (iter.nonEmpty) {
+              val row = iter.next()
+              // Snowflake-todo: unify it with formatRow(), it's the same code
+              // Build a simple pipe-delimited string
+              var str = new mutable.StringBuilder
+              var i   = 0
+              while (i < conversionFunctions.length) {
+                if (i > 0)
+                  str.append('|')
+                str.append(conversionFunctions(i)(row(i)))
+                i += 1
+              }
+              if (iter.hasNext) str.append(s"""\n""")
+              str.toString()
+            } else {
+              ""
             }
-            str.toString()
-          } else {
-            ""
           }
         }
-      }
-    }
-    // Save, possibly with compression. Always use Gzip for now
-    if (params.sfCompress) {
-      strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])
-    } else {
-      strRDD.saveAsTextFile(tempDir)
     }
 
-    if (nonEmptyPartitions.value.isEmpty) {
-      None
+    if (!params.rootTempDir.isEmpty) {
+      // Save, possibly with compression. Always use Gzip for now
+      if (params.sfCompress) {
+        strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])
+      } else {
+        strRDD.saveAsTextFile(tempDir)
+      }
+
+      if (nonEmptyPartitions.value.isEmpty) {
+        None
+      } else {
+        // Verify there was at least one file created.
+        // The saved filenames are going to be of the form part*
+        val fs = FileSystem.get(URI.create(tempDir),
+                                sqlContext.sparkContext.hadoopConfiguration)
+        val firstFile = fs
+          .listStatus(new Path(tempDir))
+          .iterator
+          .map(_.getPath.getName)
+          .filter(_.startsWith("part"))
+          .take(1)
+          .toSeq
+          .headOption
+          .getOrElse(throw new Exception("No part files were written!"))
+        // Note - temp dir already has "/", no need to add it
+        Some(tempDir, "part")
+      }
     } else {
-      // Verify there was at least one file created.
-      // The saved filenames are going to be of the form part*
-      val fs = FileSystem.get(URI.create(tempDir), sqlContext.sparkContext.hadoopConfiguration)
-      val firstFile = fs.listStatus(new Path(tempDir))
-        .iterator
-        .map(_.getPath.getName)
-        .filter(_.startsWith("part"))
-        .take(1)
-        .toSeq
-        .headOption.getOrElse(throw new Exception("No part files were written!"))
-      // Note - temp dir already has "/", no need to add it
-      Some(tempDir, "part")
+      try {
+
+        val jdbcWrapper = DefaultJDBCWrapper
+        val connection =
+          jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
+
+        val tempStage     = TEMP_STAGE_LOCATION
+        val dummyLocation = DUMMY_LOCATION
+        val PUT_COMMAND   = s"PUT $dummyLocation @$tempStage"
+
+        jdbcWrapper.executeQueryInterruptibly(connection, CREATE_TEMP_STAGE_STMT + tempStage)
+
+        @transient val sfAgent = new SnowflakeFileTransferAgent(
+          PUT_COMMAND,
+          connection.getSfSession,
+          new SFStatement(connection.getSfSession))
+
+        @transient val encryptionMaterials = sfAgent.getEncryptionMaterial
+        @transient val stageCredentials    = sfAgent.getStageCredentials
+
+        val stageLocation = sfAgent.getStageLocation
+
+        val awsID    = stageCredentials.get("AWS_ID").toString
+        val awsKey   = stageCredentials.get("AWS_KEY").toString
+        val awsToken = stageCredentials.get("AWS_TOKEN").toString
+
+        strRDD.foreachPartition(rows => {
+          val javaStream = new SequenceInputStream({
+            val stream = rows map { s =>
+              new ByteArrayInputStream(s.getBytes("UTF-8"))
+            }
+            stream.asJavaEnumeration
+          })
+
+        })
+
+      }
+
+      Some("asdf", "asdf")
+
     }
   }
 
   /**
-   * Write a DataFrame to a Snowflake table, using S3 and CSV serialization
-   */
-  def saveToSnowflake(
-      sqlContext: SQLContext,
-      data: DataFrame,
-      saveMode: SaveMode,
-      params: MergedParameters) : Unit = {
+    * Write a DataFrame to a Snowflake table, using S3 and CSV serialization
+    */
+  def saveToSnowflake(sqlContext: SQLContext,
+                      data: DataFrame,
+                      saveMode: SaveMode,
+                      params: MergedParameters): Unit = {
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
         "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
     }
 
     Utils.assertThatFileSystemIsNotS3BlockFileSystem(
-      new URI(params.rootTempDir), sqlContext.sparkContext.hadoopConfiguration)
+      new URI(params.rootTempDir),
+      sqlContext.sparkContext.hadoopConfiguration)
 
     val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
     if (params.checkBucketConfiguration) {
-      Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir,
-          s3ClientFactory(creds))
+      Utils.checkThatBucketHasObjectLifecycleConfiguration(
+        params.rootTempDir,
+        s3ClientFactory(creds))
     }
 
     val conn = jdbcWrapper.getConnector(params)
@@ -325,11 +389,12 @@ private[snowflake] class SnowflakeWriter(
     jdbcWrapper.executeInterruptibly(conn, prologueSql)
 
     try {
-      val tempDir = params.createPerQueryTempDir()
+      val tempDir     = params.createPerQueryTempDir()
       val filesToCopy = unloadData(sqlContext, data, params, tempDir)
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         withStagingTable(conn, params.table.get, stagingTable => {
-          val updatedParams = MergedParameters(params.parameters.updated("dbtable", stagingTable))
+          val updatedParams = MergedParameters(
+            params.parameters.updated("dbtable", stagingTable))
           doSnowflakeLoad(conn, data, saveMode, updatedParams, filesToCopy)
         })
       } else {
@@ -341,6 +406,7 @@ private[snowflake] class SnowflakeWriter(
   }
 }
 
-object DefaultSnowflakeWriter extends SnowflakeWriter(
-  DefaultJDBCWrapper,
-  awsCredentials => new AmazonS3Client(awsCredentials))
+object DefaultSnowflakeWriter
+    extends SnowflakeWriter(
+      DefaultJDBCWrapper,
+      awsCredentials => new AmazonS3Client(awsCredentials))
