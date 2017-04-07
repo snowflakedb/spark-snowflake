@@ -147,7 +147,7 @@ private[snowflake] case class SnowflakeRelation(
       case None => jdbcWrapper.getConnector(params)
     }
 
-    var numRows = 0
+    var numRows = 0L // Initialize as Long
     try {
       // Prologue
       val prologueSql = Utils.genPrologueSql(params)
@@ -168,7 +168,7 @@ private[snowflake] case class SnowflakeRelation(
       // First record must be in
       val first = res.next()
       assert(first)
-      numRows = res.getInt(1)
+      numRows = res.getLong(1) // getLong() instead of getInt()
       // There can be no more records
       val second = res.next()
       assert(!second)
