@@ -67,6 +67,7 @@ class MockSF(
           md
         })
         when(mockResult.getInt(anyInt())).thenReturn(4)
+        when(mockResult.getLong(anyInt())).thenReturn(4L)
         // Return exactly 1 record
         when(mockResult.next()).thenAnswer(new Answer[Boolean] {
           private var count : Int = 0
