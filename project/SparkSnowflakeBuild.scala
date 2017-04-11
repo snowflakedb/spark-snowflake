@@ -145,7 +145,7 @@ object SparkSnowflakeBuild extends Build {
           </developer>
         </developers>,
 
-      bintrayReleaseOnPublish in ThisBuild := false,
+      bintrayReleaseOnPublish in ThisBuild := true,
       bintrayOrganization := Some("snowflakedb"),
       bintrayCredentialsFile := {
         val user = Properties.envOrNone("JENKINS_BINTRAY_USER")
