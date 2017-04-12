@@ -24,6 +24,7 @@ import sbtrelease.ReleasePlugin.autoImport._
 import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations._
 import com.typesafe.sbt.pgp._
 import bintray.BintrayPlugin.autoImport._
+import scala.util.Properties
 
 object SparkSnowflakeBuild extends Build {
   val testSparkVersion = settingKey[String]("Spark version to test against")
@@ -116,6 +117,8 @@ object SparkSnowflakeBuild extends Build {
       /********************
        * Release settings *
        ********************/
+      com.typesafe.sbt.SbtPgp.autoImportImpl.usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
+      com.typesafe.sbt.pgp.PgpKeys.pgpPassphrase in Global := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(pw => pw.toCharArray),
 
       publishMavenStyle := true,
       releaseCrossBuild := true,
@@ -141,8 +144,15 @@ object SparkSnowflakeBuild extends Build {
           </developer>
         </developers>,
 
-      bintrayReleaseOnPublish in ThisBuild := false,
+      bintrayReleaseOnPublish in ThisBuild := true,
       bintrayOrganization := Some("snowflakedb"),
+      bintrayCredentialsFile := {
+        val user = Properties.envOrNone("JENKINS_BINTRAY_USER")
+        if (user.isDefined) {
+          val workspace = Properties.envOrElse("WORKSPACE", ".")
+          new File(s"""$workspace/.bintray""")
+        } else bintrayCredentialsFile.value
+      },
 
       // Add publishing to spark packages as another step.
       releaseProcess := Seq[ReleaseStep](

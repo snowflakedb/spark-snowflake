@@ -1,6 +1,17 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BinaryOperator, Expression, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{
+  And,
+  Attribute,
+  BinaryOperator,
+  BitwiseAnd,
+  BitwiseNot,
+  BitwiseOr,
+  BitwiseXor,
+  Expression,
+  Literal,
+  Or
+}
 import org.apache.spark.sql.types.{DateType, StringType}
 
 /**
@@ -32,16 +43,31 @@ private[querygeneration] object BasicExpression {
         block(
           convertExpression(left, fields) + " OR " +
             convertExpression(right, fields))
+
+      case BitwiseAnd(left, right) =>
+        "BITAND" + block(convertExpressions(fields, left, right))
+      case BitwiseOr(left, right) =>
+        "BITOR" + block(convertExpressions(fields, left, right))
+      case BitwiseXor(left, right) =>
+        "BITXOR" + block(convertExpressions(fields, left, right))
+      case BitwiseNot(child) =>
+        "BITNOT" + block(convertExpression(child, fields))
+
       case b: BinaryOperator =>
         block(
           convertExpression(b.left, fields) + s" ${b.symbol} " +
             convertExpression(b.right, fields)
         )
+
       case l: Literal =>
         l.dataType match {
-          case StringType => "'" + l.toString() + "'"
-          case DateType =>  s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
-          case _          => l.toString()
+          case StringType => {
+            val str = l.toString()
+            if (str == "null") str.toUpperCase
+            else "'" + str + "'"
+          }
+          case DateType => s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
+          case _        => l.toString()
         }
 
       case _ => null

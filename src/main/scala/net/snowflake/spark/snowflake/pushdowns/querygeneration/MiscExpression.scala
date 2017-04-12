@@ -1,23 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Ascending,
-  Attribute,
-  CaseWhenCodegen,
-  Cast,
-  Descending,
-  Expression,
-  Floor,
-  If,
-  In,
-  InSet,
-  MakeDecimal,
-  ScalarSubquery,
-  SortOrder,
-  UnscaledValue
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhenCodegen, Cast, Descending, Expression, Floor, If, In, InSet, Literal, MakeDecimal, RangeFrame, RowFrame, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, SpecifiedWindowFrame, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.PartitionSpecContext
 import org.apache.spark.sql.types.{Decimal, _}
+import org.datanucleus.store.rdbms.sql.expression.NullLiteral
 
 /** Extractors for everything else. */
 private[querygeneration] object MiscExpression {
@@ -67,9 +53,19 @@ private[querygeneration] object MiscExpression {
             convertExpressions(fields, list: _*)))
       }
 
+      case InSet(child, hset) => {
+        convertExpression(In(child, setToExpr(hset)), fields)
+      }
+
       case MakeDecimal(child, precision, scale) =>
         "TO_DECIMAL " + block(block(
           convertExpression(child, fields) + "/ POW(10, " + scale + ")") + s", $precision, $scale")
+
+      case ShiftLeft(col, num) =>
+        "BITSHIFTLEFT" + block(convertExpressions(fields, col, num))
+
+      case ShiftRight(col, num) =>
+        "BITSHIFTRIGHT" + block(convertExpressions(fields, col, num))
 
       case SortOrder(child, Ascending, _) =>
         block(convertExpression(child, fields)) + " ASC"
@@ -89,8 +85,55 @@ private[querygeneration] object MiscExpression {
         }
       }
 
+      case WindowExpression(func, spec) =>
+        convertExpression(func, fields) + " OVER " + windowBlock(spec, fields)
+
       case _ => null
     })
+  }
+
+  private final def windowBlock(spec: WindowSpecDefinition,
+                                fields: Seq[Attribute]) = {
+    val partitionBy =
+      if (spec.partitionSpec.isEmpty) ""
+      else
+        "PARTITION BY " + spec.partitionSpec
+          .map(expr => convertExpression(expr, fields))
+          .mkString(", ")
+
+    val orderBy =
+      if (spec.orderSpec.isEmpty) ""
+      else
+        " ORDER BY " + spec.orderSpec
+          .map(expr => convertExpression(expr, fields))
+          .mkString(", ")
+
+    val fromTo =
+      if (spec.orderSpec.isEmpty) ""
+      else " " + spec.frameSpecification.toString
+
+    /*
+    val fromTo = spec.frameSpecification match {
+      case SpecifiedWindowFrame(frameType, frameStart, frameEnd) => {
+        frameType match {
+          case RowFrame => " ROWS "
+          case RangeFrame => " RANGE "
+        }
+      }
+    }
+     */
+
+    block(partitionBy + orderBy + fromTo)
+  }
+
+  private final def setToExpr(set: Set[Any]): Seq[Expression] = {
+    set.map { item =>
+      item match {
+        case d: Decimal    => Literal(d, DecimalType(d.precision, d.scale))
+        case s: String     => Literal(s, StringType)
+        case e: Expression => e
+      }
+    }.toSeq
   }
 
   /** Attempts a best effort conversion from a SparkType
