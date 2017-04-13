@@ -80,7 +80,7 @@ object SparkSnowflakeBuild extends Build {
         //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
         // },
 
-        "net.snowflake" % "snowflake-jdbc" % "2.8.0" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-3.0.13.jar",
+        "net.snowflake" % "snowflake-jdbc" % "2.8.0" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-3.0.16.jar",
         "net.snowflake" % "snowflake-jdbc-sources" % "2.8.0" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-sources.jar",
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
