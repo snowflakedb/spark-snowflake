@@ -83,45 +83,52 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     val mats   = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
     val reader = new SnowflakeRecordReader
 
-    mats.foreach {
-      case (file, queryId, smkId) =>
-        if (queryId != null) {
-          var stream: InputStream = null
+    try {
+      mats.foreach {
+        case (file, queryId, smkId) =>
+          if (queryId != null) {
+            var stream: InputStream = null
 
-          val amazonClient =
-            createS3Client(is256,
-                           masterKey,
-                           queryId,
-                           smkId,
-                           awsID,
-                           awsKey,
-                           awsToken)
+            val amazonClient =
+              createS3Client(is256,
+                             masterKey,
+                             queryId,
+                             smkId,
+                             awsID,
+                             awsKey,
+                             awsToken)
 
-          val (bucketName, stagePath) = extractBucketNameAndPath(stageLocation)
+            val (bucketName, stagePath) =
+              extractBucketNameAndPath(stageLocation)
 
-          var stageFilePath = file
+            var stageFilePath = file
 
-          if (!stagePath.isEmpty) {
-            stageFilePath =
-              SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
+            if (!stagePath.isEmpty) {
+              stageFilePath =
+                SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
+            }
+
+            val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+            stream = dataObject.getObjectContent
+
+            if (!is256) {
+              stream = getDecryptedStream(stream,
+                                          masterKey,
+                                          dataObject.getObjectMetadata)
+            }
+
+            stream = compress match {
+              case "gzip" => new GZIPInputStream(stream)
+              case _      => stream
+            }
+
+            reader.addStream(stream)
           }
-
-          val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-          stream = dataObject.getObjectContent
-
-          if (!is256) {
-            stream = getDecryptedStream(stream,
-                                        masterKey,
-                                        dataObject.getObjectMetadata)
-          }
-
-          stream = compress match {
-            case "gzip" => new GZIPInputStream(stream)
-            case _      => stream
-          }
-
-          reader.addStream(stream)
-        }
+      }
+    } catch {
+      case ex: Exception =>
+        reader.closeAll()
+        SnowflakeConnectorUtils.handleS3Exception(ex)
     }
 
     new InterruptibleIterator(context, new Iterator[T] {

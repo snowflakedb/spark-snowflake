@@ -465,22 +465,29 @@ private[snowflake] class SnowflakeWriter(
 
         meta.addUserMetadata("sfc-digest", digest)
 
-        val amazonClient = createS3Client(is256,
-                                          masterKey,
-                                          queryId,
-                                          smkId,
-                                          awsID,
-                                          awsKey,
-                                          awsToken)
+        try {
+          val amazonClient = createS3Client(is256,
+                                            masterKey,
+                                            queryId,
+                                            smkId,
+                                            awsID,
+                                            awsKey,
+                                            awsToken)
 
-        val tx =
-          new TransferManager(amazonClient,
-                              SnowflakeUtil.createDefaultExecutorService(
-                                "s3-transfer-manager-uploader-",
-                                DEFAULT_PARALLELISM))
+          val tx =
+            new TransferManager(amazonClient,
+                                SnowflakeUtil.createDefaultExecutorService(
+                                  "s3-transfer-manager-uploader-",
+                                  DEFAULT_PARALLELISM))
 
-        val upload = tx.upload(bucketName, pathFileName, stream, meta)
-        upload.waitForCompletion()
+          val upload = tx.upload(bucketName, pathFileName, stream, meta)
+          upload.waitForCompletion()
+        } catch {
+          case ex: Exception =>
+            SnowflakeConnectorUtils.handleS3Exception(ex)
+        } finally {
+          stream.close()
+        }
       })
 
       Some("s3n://" + stageLocation, "")

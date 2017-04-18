@@ -223,6 +223,15 @@ private[snowflake] class SnowflakeRecordReader
     } else false
   }
 
+  def closeAll(): Unit = {
+    if (inputStreams != null) {
+      inputStreams.foreach { stream =>
+        if (stream != null)
+          stream.close()
+      }
+    }
+  }
+
   override def getCurrentValue: Array[String] = value
 
   override def getCurrentKey: JavaLong = key

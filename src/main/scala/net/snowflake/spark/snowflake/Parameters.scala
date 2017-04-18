@@ -18,7 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
-import net.snowflake.client.jdbc.internal.org.slf4j.LoggerFactory
+import org.slf4j.LoggerFactory
 
 /**
  * All user-specifiable parameters for spark-snowflake, along with their validation rules and
