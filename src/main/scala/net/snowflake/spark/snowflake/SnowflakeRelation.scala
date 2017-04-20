@@ -85,7 +85,7 @@ private[snowflake] case class SnowflakeRelation(
   // SparkPlan's doExecute().
   def buildScanFromSQL[T: ClassTag](sql: String,
                                     schema: Option[StructType]): RDD[T] = {
-    if (params.checkBucketConfiguration) {
+    if (params.checkBucketConfiguration && params.usingExternalStage) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
         s3ClientFactory(creds))
@@ -107,7 +107,7 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
-    if (params.checkBucketConfiguration) {
+    if (params.checkBucketConfiguration && params.usingExternalStage) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
         s3ClientFactory(creds))
@@ -156,7 +156,7 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
 
-    if (!params.rootTempDir.isEmpty) {
+    if (params.usingExternalStage) {
       val tempDir = params.createPerQueryTempDir()
 
       val numRows = setup(

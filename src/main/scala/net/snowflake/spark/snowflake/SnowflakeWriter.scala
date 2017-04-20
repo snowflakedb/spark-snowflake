@@ -95,12 +95,10 @@ private[snowflake] class SnowflakeWriter(
         "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
     }
 
-    val externalStage = !params.rootTempDir.isEmpty
-
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(prologueSql)
 
-    if (externalStage) {
+    if (params.usingExternalStage) {
 
       val conn = jdbcWrapper.getConnector(params)
 
@@ -112,7 +110,7 @@ private[snowflake] class SnowflakeWriter(
           sqlContext.sparkContext.hadoopConfiguration)
 
         val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
-        if (params.checkBucketConfiguration) {
+        if (params.checkBucketConfiguration && params.usingExternalStage) {
           Utils.checkThatBucketHasObjectLifecycleConfiguration(
             params.rootTempDir,
             s3ClientFactory(creds))
@@ -347,8 +345,6 @@ private[snowflake] class SnowflakeWriter(
     val nonEmptyPartitions =
       sqlContext.sparkContext.accumulableCollection(mutable.HashSet.empty[Int])
 
-    val externalStage = !params.rootTempDir.isEmpty
-
     val tempDir = temp.getOrElse("")
 
     // Create RDD that will be saved as strings
@@ -372,7 +368,7 @@ private[snowflake] class SnowflakeWriter(
                 str.append(conversionFunctions(i)(row(i)))
                 i += 1
               }
-              if (!externalStage) str.append(s"""\n""")
+              if (!params.usingExternalStage) str.append(s"""\n""")
               str.toString()
             } else {
               ""
@@ -381,7 +377,7 @@ private[snowflake] class SnowflakeWriter(
         }
     }
 
-    if (externalStage) {
+    if (params.usingExternalStage) {
       // Save, possibly with compression. Always use Gzip for now
       if (params.sfCompress) {
         strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])

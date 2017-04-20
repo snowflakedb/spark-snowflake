@@ -188,6 +188,8 @@ object Parameters {
       res
     }
 
+    lazy val usingExternalStage: Boolean = !rootTempDir.isEmpty
+
     /**
      * A root directory to be used for intermediate data exchange,
      * expected to be on S3, or somewhere that can be written to
@@ -299,7 +301,7 @@ object Parameters {
 
     /** Returns true if bucket lifecycle configuration should be checked */
     def checkBucketConfiguration: Boolean = isTrue(
-        parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "on"))
+        parameters.getOrElse(PARAM_CHECK_BUCKET_CONFIGURATION, "off"))
 
     /**
      * Max file size used to move data out from Snowflake
