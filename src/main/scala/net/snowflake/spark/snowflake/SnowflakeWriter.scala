@@ -304,7 +304,8 @@ private[snowflake] class SnowflakeWriter(
         s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
     } else {
       fixedUrl = Utils.fixS3Url(fixedUrl)
-      val source = tempStage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
+      val stage  = tempStage map (s => s + s"/${filesToCopy._2}")
+      val source = stage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
       fromString = s"FROM $source"
     }
     s"""
@@ -432,9 +433,9 @@ private[snowflake] class SnowflakeWriter(
 
         val (bucketName, path) = extractBucketNameAndPath(stageLocation)
 
-        var pathFileName = path + { if (!path.endsWith("/")) "/" else "" } + {
-          Random.alphanumeric take 10 mkString ""
-        } + ".csv"
+        val randFileName = Random.alphanumeric take 10 mkString ""
+
+        var tempFileName = path + { if (!path.endsWith("/")) "/" else "" } + randFileName + ".csv"
 
         val meta = new ObjectMetadata
 
@@ -442,7 +443,7 @@ private[snowflake] class SnowflakeWriter(
           if (params.sfCompress) {
             val outStream = new ByteArrayOutputStream
             meta.setContentEncoding("GZIP")
-            pathFileName = pathFileName + ".gz"
+            tempFileName = tempFileName + ".gz"
             val gzipStream = new GZIPOutputStream(outStream)
             gzipStream.write(bytes)
             gzipStream.close()
@@ -476,8 +477,17 @@ private[snowflake] class SnowflakeWriter(
                                   "s3-transfer-manager-uploader-",
                                   DEFAULT_PARALLELISM))
 
-          val upload = tx.upload(bucketName, pathFileName, stream, meta)
+          val upload = tx.upload(bucketName, tempFileName, stream, meta)
           upload.waitForCompletion()
+
+          val pathFileName = path + { if (!path.endsWith("/")) "/" else "" } + "complete-" + randFileName + ".csv" + {
+            if (params.sfCompress) ".gz" else ""
+          }
+
+          // Only successful and completed transfers should be loaded, which avoids duplicate rows
+          amazonClient
+            .copyObject(bucketName, tempFileName, bucketName, pathFileName)
+
         } catch {
           case ex: Exception =>
             SnowflakeConnectorUtils.handleS3Exception(ex)
@@ -486,7 +496,7 @@ private[snowflake] class SnowflakeWriter(
         }
       })
 
-      Some("s3n://" + stageLocation, "")
+      Some("s3n://" + stageLocation, "complete")
     }
   }
 
