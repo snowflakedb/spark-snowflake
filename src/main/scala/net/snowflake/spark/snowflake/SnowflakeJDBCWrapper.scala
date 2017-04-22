@@ -138,12 +138,12 @@ private[snowflake] class JDBCWrapper {
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options
-    jdbcProperties.put("client_session_keep_alive", new java.lang.Boolean(true))
+    jdbcProperties.put("client_session_keep_alive", "true")
 
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
     for ((k: String, v: Object) <- extraOptions) {
-      jdbcProperties.put(k.toLowerCase, v)
+      jdbcProperties.put(k.toLowerCase, v.toString())
     }
 
     // Set info on the system level
