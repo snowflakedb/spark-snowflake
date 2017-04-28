@@ -208,7 +208,7 @@ private[snowflake] class SnowflakeRecordReader
   def getNextStream: Boolean = {
     close()
 
-    if (currentStream < inputStreams.length) {
+    if (inputStreams != null && currentStream < inputStreams.length) {
       reader =
         new BufferedInputStream(inputStreams(currentStream), inputBufferSize)
       if (codec != null) {
