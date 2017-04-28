@@ -47,7 +47,7 @@ private[snowflake] case class SnowflakeRelation(
   private lazy val creds = AWSCredentialsUtils
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
 
-  if (sqlContext != null) {
+  if (sqlContext != null && params.usingExternalStage) {
     Utils.assertThatFileSystemIsNotS3BlockFileSystem(
       new URI(params.rootTempDir),
       sqlContext.sparkContext.hadoopConfiguration)

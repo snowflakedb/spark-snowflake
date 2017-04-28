@@ -125,7 +125,6 @@ private[snowflake] class SnowflakeRecordReader
     val fs = file.getFileSystem(conf)
 
     size = fs.getFileStatus(file).getLen
-    codec.createCompressor()
 
     // Note, for Snowflake, we do not support splitting the file.
     // This is because it is in general not possible to find the record boundary

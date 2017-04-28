@@ -100,21 +100,22 @@ private[snowflake] class SnowflakeWriter(
 
     if (params.usingExternalStage) {
 
+      Utils.assertThatFileSystemIsNotS3BlockFileSystem(
+        new URI(params.rootTempDir),
+        sqlContext.sparkContext.hadoopConfiguration)
+
+      val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
+
+      if (params.checkBucketConfiguration) {
+        Utils.checkThatBucketHasObjectLifecycleConfiguration(
+          params.rootTempDir,
+          s3ClientFactory(creds))
+      }
+
       val conn = jdbcWrapper.getConnector(params)
 
       try {
         jdbcWrapper.executeInterruptibly(conn, prologueSql)
-
-        Utils.assertThatFileSystemIsNotS3BlockFileSystem(
-          new URI(params.rootTempDir),
-          sqlContext.sparkContext.hadoopConfiguration)
-
-        val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
-        if (params.checkBucketConfiguration && params.usingExternalStage) {
-          Utils.checkThatBucketHasObjectLifecycleConfiguration(
-            params.rootTempDir,
-            s3ClientFactory(creds))
-        }
 
         val filesToCopy =
           unloadData(sqlContext,
@@ -453,6 +454,8 @@ private[snowflake] class SnowflakeWriter(
         var stream: InputStream = new ByteArrayInputStream(processedBytes)
 
         meta.setContentLength(processedBytes.length)
+        SnowflakeConnectorUtils.log.debug(
+          s"Using filename: $tempFileName, whose size is ${processedBytes.length} bytes.")
 
         if (!is256)
           stream = getEncryptedStream(stream, masterKey, queryId, smkId, meta)
@@ -462,27 +465,32 @@ private[snowflake] class SnowflakeWriter(
 
         meta.addUserMetadata("sfc-digest", digest)
 
-        try {
-          val amazonClient = createS3Client(is256,
-                                            masterKey,
-                                            queryId,
-                                            smkId,
-                                            awsID,
-                                            awsKey,
-                                            awsToken)
+        val amazonClient = createS3Client(is256,
+                                          masterKey,
+                                          queryId,
+                                          smkId,
+                                          awsID,
+                                          awsKey,
+                                          awsToken)
 
-          val tx =
-            new TransferManager(amazonClient,
-                                SnowflakeUtil.createDefaultExecutorService(
-                                  "s3-transfer-manager-uploader-",
-                                  DEFAULT_PARALLELISM))
+        val tx =
+          new TransferManager(amazonClient,
+                              SnowflakeUtil.createDefaultExecutorService(
+                                "s3-transfer-manager-uploader-",
+                                DEFAULT_PARALLELISM))
+
+        try {
 
           val upload = tx.upload(bucketName, tempFileName, stream, meta)
+
           upload.waitForCompletion()
 
           val pathFileName = path + { if (!path.endsWith("/")) "/" else "" } + "complete-" + randFileName + ".csv" + {
             if (params.sfCompress) ".gz" else ""
           }
+
+          SnowflakeConnectorUtils.log.debug(
+            s"Completed upload. Renaming file from $tempFileName to $pathFileName.")
 
           // Only successful and completed transfers should be loaded, which avoids duplicate rows
           amazonClient
@@ -492,6 +500,7 @@ private[snowflake] class SnowflakeWriter(
           case ex: Exception =>
             SnowflakeConnectorUtils.handleS3Exception(ex)
         } finally {
+          tx.shutdownNow(true)
           stream.close()
         }
       })

@@ -360,16 +360,10 @@ class SnowflakeSourceSuite extends BaseTest {
   test("Public Scala API rejects invalid parameter maps") {
     val invalidParams = Map("dbtable" -> "foo") // missing tempdir and url
 
-    val e1 = intercept[IllegalArgumentException] {
+    val e = intercept[IllegalArgumentException] {
       expectedDataDF.write.format(SNOWFLAKE_SOURCE_NAME).options(invalidParams).save();
     }
-    assert(e1.getMessage.contains("tempdir"))
-
-    val e2 = intercept[IllegalArgumentException] {
-      expectedDataDF.write.format(SNOWFLAKE_SOURCE_NAME).options(invalidParams).save();
-
-    }
-    assert(e2.getMessage.contains("tempdir"))
+    assert(e.getMessage.contains("sfurl"))
   }
 
   test("DefaultSource has default constructor, required by Data Source API") {
