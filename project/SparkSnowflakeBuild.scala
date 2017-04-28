@@ -58,6 +58,7 @@ object SparkSnowflakeBuild extends Build {
         "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       libraryDependencies ++= Seq(
         "org.slf4j" % "slf4j-api" % "1.7.5",
+        "net.snowflake" % "snowflake-jdbc" % "[3.0.17,)",
         // These Amazon SDK depdencies are marked as 'provided' in order to reduce the risk of
         // dependency conflicts with other user libraries. In many environments, such as EMR and
         // Databricks, the Amazon SDK will already be on the classpath. In other cases, the SDK is
@@ -79,9 +80,6 @@ object SparkSnowflakeBuild extends Build {
         // } else {
         //   "org.apache.avro" % "avro-mapred" % "1.7.7" % "provided" classifier "hadoop2" exclude("org.mortbay.jetty", "servlet-api")
         // },
-
-        "net.snowflake" % "snowflake-jdbc" % "2.8.0" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-3.0.16.jar",
-        "net.snowflake" % "snowflake-jdbc-sources" % "2.8.0" from "file:///home/ema/spark-snowflake/lib/snowflake-jdbc-sources.jar",
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "2.2.1" % "test",
