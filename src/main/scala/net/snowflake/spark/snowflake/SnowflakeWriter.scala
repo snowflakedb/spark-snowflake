@@ -21,6 +21,7 @@ import java.io._
 import java.net.URI
 import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.util.zip.GZIPOutputStream
+import javax.crypto.{Cipher, CipherOutputStream}
 
 import alex.mojaki.s3upload.StreamTransferManager
 import com.amazonaws.auth.AWSCredentials
@@ -28,7 +29,6 @@ import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model._
 import net.snowflake.spark.snowflake.ConnectorSFStageManager._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.sql.types._
@@ -409,141 +409,75 @@ private[snowflake] class SnowflakeWriter(
       val stageLocation = stageManager.stageLocation
 
       strRDD.foreachPartition(rows => {
-        val inputStream: java.io.InputStream = new InputStream {
-
-          var byteBuffer: Array[Byte] = _
-          var rowSize                 = 0
-          var bytesRead               = 0
-
-          override def read(): Int = {
-            while (bytesRead >= rowSize) {
-              if (rows.hasNext) {
-                byteBuffer = rows.next.getBytes("UTF-8")
-                bytesRead = 0
-                rowSize = byteBuffer.length
-              } else bytesRead = -1
-            }
-
-            val value: Int =
-              if (bytesRead != -1) {
-                bytesRead += 1
-                byteBuffer(bytesRead - 1)
-              } else bytesRead
-
-            value
-          }
-
-          // TODO: Implement to read and buffer entire rows to improve efficiency
-          /*
-          override def read(bytes: Array[Byte], off: Int, len: Int): Int = {
-          }
-           */
-
-          override def markSupported(): Boolean = false
-        }
 
         val (bucketName, path) = extractBucketNameAndPath(stageLocation)
+        val randStr            = Random.alphanumeric take 10 mkString ""
+        var fileName           = path + { if (!path.endsWith("/")) "/" else "" } + randStr + ".csv"
 
-        val randFileName = Random.alphanumeric take 10 mkString ""
-        var tempFileName = path + { if (!path.endsWith("/")) "/" else "" } + randFileName + ".csv"
+        val amazonClient = createS3Client(is256,
+                                          masterKey,
+                                          queryId,
+                                          smkId,
+                                          awsID,
+                                          awsKey,
+                                          awsToken)
 
-        val meta = new ObjectMetadata
+        val (fileCipher: Cipher, meta: ObjectMetadata) =
+          if (!is256)
+            getCipherAndMetadata(masterKey, queryId, smkId)
+          else (_: Cipher, new ObjectMetadata())
 
-        SnowflakeConnectorUtils.log.debug(
-          "Starting count and compress process...")
-
-        var stream: InputStream = new PipedInputStream()
-        val pipedOS =
-          new PipedOutputStream(stream.asInstanceOf[PipedInputStream])
-
-        var os: OutputStream = pipedOS
-
-        if (params.sfCompress) {
+        if (params.sfCompress)
           meta.setContentEncoding("GZIP")
-          tempFileName = tempFileName + ".gz"
-          os = new GZIPOutputStream(pipedOS)
+
+        val streamManager = new StreamTransferManager(
+          bucketName,
+          fileName,
+          amazonClient,
+          1, //numStreams
+          3, //numUploadThreads
+          5, //queueCapacity
+          50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
+        {
+          override def customiseInitiateRequest(
+              request: InitiateMultipartUploadRequest): Unit = {
+            request.setObjectMetadata(meta)
+          }
         }
 
-        val uploadThread = new Thread(new Runnable {
+        try {
+          // TODO: Can we parallelize this write? Currently we don't because the Row Iterator is not thread safe.
 
-          override def run(): Unit = {
-            if (!is256)
-              stream =
-                getEncryptedStream(stream, masterKey, queryId, smkId, meta)
+          val uploadOutStream         = streamManager.getMultiPartOutputStreams.get(0)
+          var outStream: OutputStream = uploadOutStream
 
-            val amazonClient = createS3Client(is256,
-                                              masterKey,
-                                              queryId,
-                                              smkId,
-                                              awsID,
-                                              awsKey,
-                                              awsToken)
+          if (!is256)
+            outStream = new CipherOutputStream(outStream, fileCipher)
 
-            val partSize = 50 //Max 10000 parts, 50MB * 10K = 500GB per partition limit
-
-            // TODO: possibly improve by parallelizing uploads based on record breaks
-            // Note: Since we cannot guarantee record breaks after compression, and encryption, parts need to be uploaded
-            // in the same order of processing.
-            val streamManager = new StreamTransferManager(
-              bucketName,
-              tempFileName,
-              amazonClient,
-              1, //numStreams
-              1, //numUploadThreads -- keeping at 1 ensures correct ordering of chunks with our counter
-              5, //queueCapacity
-              partSize) //partSize
-            {
-              var partNumber: Int = 0
-
-              override def customiseInitiateRequest(
-                  request: InitiateMultipartUploadRequest): Unit = {
-                request.setObjectMetadata(meta)
-              }
-
-              override def customiseUploadPartRequest(
-                  request: UploadPartRequest): Unit = {
-                partNumber += 1
-                request.withPartNumber(partNumber)
-              }
-            }
-
-            SnowflakeConnectorUtils.log.debug("Begin upload...")
-
-            try {
-
-              val outStream           = streamManager.getMultiPartOutputStreams.get(0)
-              val chunkSize           = partSize * 1024 * 1024
-              val buffer: Array[Byte] = new Array[Byte](chunkSize)
-              var bytesRead           = stream.read(buffer)
-
-              while (bytesRead > 0) {
-                outStream.write(buffer, 0, bytesRead)
-                outStream.checkSize()
-                bytesRead = stream.read(buffer)
-              }
-
-              outStream.close()
-
-              SnowflakeConnectorUtils.log.debug(
-                "Completed S3 upload for this partition.")
-
-            } catch {
-              case ex: Exception =>
-                streamManager.abort()
-                SnowflakeConnectorUtils.handleS3Exception(ex)
-            } finally {
-              streamManager.complete()
-              stream.close()
-            }
+          if (params.sfCompress) {
+            fileName = fileName + ".gz"
+            outStream = new GZIPOutputStream(outStream)
           }
-        })
 
-        uploadThread.start()
+          SnowflakeConnectorUtils.log.debug("Begin upload...")
 
-        IOUtils.copy(inputStream, os)
-        os.close()
+          while (rows.hasNext) {
+            outStream.write(rows.next.getBytes("UTF-8"))
+            uploadOutStream.checkSize()
+          }
 
-        uploadThread.join()
+          outStream.close()
+
+          SnowflakeConnectorUtils.log.debug(
+            "Completed S3 upload for this partition.")
+
+        } catch {
+          case ex: Exception =>
+            streamManager.abort()
+            SnowflakeConnectorUtils.handleS3Exception(ex)
+        } finally {
+          streamManager.complete()
+        }
       })
 
       Some("s3n://" + stageLocation, "")

@@ -1,10 +1,10 @@
 package net.snowflake.spark.snowflake
 
-import java.io.InputStream
+import java.io.{InputStream, OutputStream}
 import java.security.SecureRandom
 import java.sql.Connection
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import javax.crypto.{Cipher, CipherInputStream, SecretKey}
+import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
@@ -135,12 +135,10 @@ private[snowflake] object ConnectorSFStageManager {
     new CipherInputStream(stream, dataCipher)
   }
 
-  private[snowflake] final def getEncryptedStream(
-      is: InputStream,
+  private[snowflake] final def getCipherAndMetadata(
       masterKey: String,
       queryId: String,
-      smkId: String,
-      meta: ObjectMetadata): InputStream = {
+      smkId: String): (Cipher, ObjectMetadata) = {
 
     val decodedKey   = Base64.decode(masterKey)
     val keySize      = decodedKey.length
@@ -169,15 +167,15 @@ private[snowflake] object ConnectorSFStageManager {
 
     val matDesc =
       new MatDesc(smkId.toLong, queryId, keySize * 8)
+
+    val meta = new ObjectMetadata()
+
     meta.addUserMetadata(AMZ_MATDESC, matDesc.toString)
     meta.addUserMetadata(AMZ_KEY, Base64.encodeAsString(encKeK: _*))
     meta.addUserMetadata(AMZ_IV, Base64.encodeAsString(ivData: _*))
-  //  meta.setContentLength(
-  //    ((meta.getContentLength + blockSz) / blockSz) * blockSz)
 
-    new CipherInputStream(is, fileCipher)
+    (fileCipher, meta)
   }
-
 }
 
 private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
