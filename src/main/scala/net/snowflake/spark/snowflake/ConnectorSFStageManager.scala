@@ -172,8 +172,8 @@ private[snowflake] object ConnectorSFStageManager {
     meta.addUserMetadata(AMZ_MATDESC, matDesc.toString)
     meta.addUserMetadata(AMZ_KEY, Base64.encodeAsString(encKeK: _*))
     meta.addUserMetadata(AMZ_IV, Base64.encodeAsString(ivData: _*))
-    meta.setContentLength(
-      ((meta.getContentLength + blockSz) / blockSz) * blockSz)
+  //  meta.setContentLength(
+  //    ((meta.getContentLength + blockSz) / blockSz) * blockSz)
 
     new CipherInputStream(is, fileCipher)
   }
