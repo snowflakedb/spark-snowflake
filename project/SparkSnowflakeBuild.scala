@@ -58,7 +58,6 @@ object SparkSnowflakeBuild extends Build {
         "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       libraryDependencies ++= Seq(
         "org.slf4j" % "slf4j-api" % "1.7.5",
-        "com.github.alexmojaki" % "s3-stream-upload" % "1.0.1" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "net.snowflake" % "snowflake-jdbc" % "[3.0.17,)",
         // These Amazon SDK depdencies are marked as 'provided' in order to reduce the risk of
         // dependency conflicts with other user libraries. In many environments, such as EMR and

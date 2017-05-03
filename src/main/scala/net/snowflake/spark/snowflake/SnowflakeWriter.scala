@@ -23,12 +23,12 @@ import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.util.zip.GZIPOutputStream
 import javax.crypto.{Cipher, CipherOutputStream}
 
-import alex.mojaki.s3upload.StreamTransferManager
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model._
 import net.snowflake.spark.snowflake.ConnectorSFStageManager._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.sql.types._
@@ -434,16 +434,11 @@ private[snowflake] class SnowflakeWriter(
           bucketName,
           fileName,
           amazonClient,
+          meta,
           1, //numStreams
-          3, //numUploadThreads
+          1, //numUploadThreads. Keep at 1 to ensure upload part boundaries concatenate validly.
           5, //queueCapacity
           50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
-        {
-          override def customiseInitiateRequest(
-              request: InitiateMultipartUploadRequest): Unit = {
-            request.setObjectMetadata(meta)
-          }
-        }
 
         try {
           // TODO: Can we parallelize this write? Currently we don't because the Row Iterator is not thread safe.
@@ -459,7 +454,7 @@ private[snowflake] class SnowflakeWriter(
             outStream = new GZIPOutputStream(outStream)
           }
 
-          SnowflakeConnectorUtils.log.debug("Begin upload...")
+          SnowflakeConnectorUtils.log.debug("Begin upload.")
 
           while (rows.hasNext) {
             outStream.write(rows.next.getBytes("UTF-8"))
@@ -469,7 +464,7 @@ private[snowflake] class SnowflakeWriter(
           outStream.close()
 
           SnowflakeConnectorUtils.log.debug(
-            "Completed S3 upload for this partition.")
+            "Completed S3 upload for partition.")
 
         } catch {
           case ex: Exception =>
