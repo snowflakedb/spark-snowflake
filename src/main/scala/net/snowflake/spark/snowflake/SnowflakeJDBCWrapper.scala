@@ -105,7 +105,7 @@ private[snowflake] class JDBCWrapper {
     */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
-    val driverClassName = params.jdbcDriver.getOrElse("com.snowflake.client.jdbc.SnowflakeDriver")
+    val driverClassName = params.jdbcDriver.getOrElse("net.snowflake.client.jdbc.SnowflakeDriver")
     try {
       val driverClass = Utils.classForName(driverClassName)
       DriverRegistry.register(driverClass.getCanonicalName)
@@ -138,12 +138,12 @@ private[snowflake] class JDBCWrapper {
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options
-    jdbcProperties.put("client_session_keep_alive", new java.lang.Boolean(true))
+    jdbcProperties.put("client_session_keep_alive", "true")
 
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
     for ((k: String, v: Object) <- extraOptions) {
-      jdbcProperties.put(k.toLowerCase, v)
+      jdbcProperties.put(k.toLowerCase, v.toString())
     }
 
     // Set info on the system level

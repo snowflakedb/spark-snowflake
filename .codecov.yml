@@ -9,14 +9,14 @@ coverage:
   precision: 2
   range:
   - 40.0
-  - 70.0
+  - 60.0
   round: down
   status:
     changes: false
     patch: false
     project:
       default:
-        target: 70
+        target: 50
 parsers:
   gcov:
     branch_detection:

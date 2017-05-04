@@ -33,15 +33,14 @@ import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.slf4j.LoggerFactory
 
-
 /**
- * Base class for writing integration tests which run against a real Snowflake cluster.
- */
+  * Base class for writing integration tests which run against a real Snowflake cluster.
+  */
 trait IntegrationSuiteBase
-  extends QueryTest
-  with Matchers
-  with BeforeAndAfterAll
-  with BeforeAndAfterEach {
+    extends QueryTest
+    with Matchers
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -55,41 +54,43 @@ trait IntegrationSuiteBase
     Utils.readMapFromFile(sc, fname)
   }
 
-  protected var connectorOptions: Map[String, String] = _
+  protected var connectorOptions: Map[String, String]        = _
   protected var connectorOptionsNoTable: Map[String, String] = _
 
   // Options encoded as a Spark-sql string - no dbtable
-  protected var connectorOptionsString : String = _
+  protected var connectorOptionsString: String = _
 
-  protected var params : MergedParameters = _
+  protected var params: MergedParameters = _
 
-  protected def getConfigValue(name : String): String = {
+  protected def getConfigValue(name: String,
+                               required: Boolean = true): String = {
     connectorOptions.getOrElse(name.toLowerCase, {
-      fail(s"Config file needs to contain $name value")
+      if (required) fail(s"Config file needs to contain $name value")
+      else null
     })
   }
 
   // AWS access variables
-  protected var AWS_ACCESS_KEY_ID: String = _
+  protected var AWS_ACCESS_KEY_ID: String     = _
   protected var AWS_SECRET_ACCESS_KEY: String = _
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
   private var AWS_S3_SCRATCH_SPACE: String = _
 
   /**
-   * Random suffix appended appended to table and directory names in order to avoid collisions
-   * between separate Travis builds.
-   */
+    * Random suffix appended appended to table and directory names in order to avoid collisions
+    * between separate Travis builds.
+    */
   protected val randomSuffix: String = Math.abs(Random.nextLong()).toString
 
   protected var tempDir: String = _
 
   /**
-   * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
-   * no-matter what temp directory was generated and requested.
-   */
-  protected var sc: SparkContext = _
+    * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
+    * no-matter what temp directory was generated and requested.
+    */
+  protected var sc: SparkContext       = _
   protected var sqlContext: SQLContext = _
-  protected var conn: Connection = _
+  protected var conn: Connection       = _
 
   protected var sparkSession: SparkSession = _
 
@@ -116,20 +117,27 @@ trait IntegrationSuiteBase
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
-    connectorOptionsString = connectorOptionsNoTable.map{ case (key, value) => s"""$key "$value"""" }.mkString(" , ")
+    connectorOptionsString = connectorOptionsNoTable.map {
+      case (key, value) => s"""$key "$value""""
+    }.mkString(" , ")
 
-    AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey")
-    AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey")
-    AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir")
-    require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE.startsWith("file://"),
-      "must use s3n:// or file:// URL")
-    tempDir = params.rootTempDir + randomSuffix + "/"
+    AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey", false)
+    AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey", false)
+    AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir", false)
+
+    if (AWS_S3_SCRATCH_SPACE != null) {
+      require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE
+                .startsWith("file://"),
+              "must use s3n:// or file:// URL")
+      tempDir = params.rootTempDir + randomSuffix + "/"
+    }
 
     // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
     sc.hadoopConfiguration.setBoolean("fs.s3.impl.disable.cache", true)
     sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
-    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+    sc.hadoopConfiguration
+      .set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
     conn = DefaultJDBCWrapper.getConnector(params)
 
     // Force UTC also on the JDBC connection
@@ -145,15 +153,18 @@ trait IntegrationSuiteBase
 
   override def afterAll(): Unit = {
     try {
-      val conf = new Configuration(false)
-      conf.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
-      conf.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
-      // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
-      conf.setBoolean("fs.s3.impl.disable.cache", true)
-      conf.setBoolean("fs.s3n.impl.disable.cache", true)
-      val fs = FileSystem.get(URI.create(tempDir), conf)
-      fs.delete(new Path(tempDir), true)
-      fs.close()
+      if (AWS_ACCESS_KEY_ID != null && AWS_SECRET_ACCESS_KEY != null && tempDir != null) {
+        val conf = new Configuration(false)
+        conf.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
+        conf.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+        // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
+
+        conf.setBoolean("fs.s3.impl.disable.cache", true)
+        conf.setBoolean("fs.s3n.impl.disable.cache", true)
+        val fs = FileSystem.get(URI.create(tempDir), conf)
+        fs.delete(new Path(tempDir), true)
+        fs.close()
+      }
     } finally {
       try {
         conn.close()
@@ -171,15 +182,14 @@ trait IntegrationSuiteBase
     super.beforeEach()
   }
 
-
   /**
     * Verify that the pushdown was done by looking at the generated SQL,
     * and check the results are as expected
     */
   def testPushdown(reference: String,
-    result: DataFrame,
-    expectedAnswer: Seq[Row],
-    bypass: Boolean = false): Unit = {
+                   result: DataFrame,
+                   expectedAnswer: Seq[Row],
+                   bypass: Boolean = false): Unit = {
 
     // Verify the query issued is what we expect
     checkAnswer(result, expectedAnswer)
@@ -191,18 +201,17 @@ trait IntegrationSuiteBase
     }
   }
 
-
   /**
-   * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check
-   * that the returned DataFrame matches the one that we saved.
-   *
-   * @param tableName the table name to use
-   * @param df the DataFrame to save
-   * @param expectedSchemaAfterLoad if specified, the expected schema after loading the data back
-   *                                from Snowflake. This should be used in cases where you expect
-   *                                the schema to differ due to reasons like case-sensitivity.
-   * @param saveMode the [[SaveMode]] to use when writing data back to Snowflake
-   */
+    * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check
+    * that the returned DataFrame matches the one that we saved.
+    *
+    * @param tableName the table name to use
+    * @param df the DataFrame to save
+    * @param expectedSchemaAfterLoad if specified, the expected schema after loading the data back
+    *                                from Snowflake. This should be used in cases where you expect
+    *                                the schema to differ due to reasons like case-sensitivity.
+    * @param saveMode the [[SaveMode]] to use when writing data back to Snowflake
+    */
   def testRoundtripSaveAndLoad(
       tableName: String,
       df: DataFrame,
