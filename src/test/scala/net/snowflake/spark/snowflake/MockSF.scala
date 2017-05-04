@@ -57,7 +57,7 @@ class MockSF(
 
       // Prepare mockResult depending on the query
       var mockResult = mock(classOf[ResultSet], RETURNS_SMART_NULLS)
-      if (query.startsWith("COPY INTO '")) {
+      if (query.startsWith("COPY INTO ")) {
         // It's a SF->S3 query, SnowflakeRelation checks the schema
         when(mockResult.getMetaData()).thenReturn({
           var md = new RowSetMetaDataImpl

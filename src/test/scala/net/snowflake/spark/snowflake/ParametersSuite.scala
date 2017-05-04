@@ -62,9 +62,11 @@ class ParametersSuite extends FunSuite with Matchers {
       }
     }
 
+    val minParamsStage = minParams.filterNot(x => x._1 == "tempdir")
+
     // Check that removing any of the parameters causes a failure
-    for ((k, v) <- minParams) {
-      val params = collection.mutable.Map() ++= minParams
+    for ((k, v) <- minParamsStage) {
+      val params = collection.mutable.Map() ++= minParamsStage
       params.remove(k)
       checkMerge(params.toMap)
     }

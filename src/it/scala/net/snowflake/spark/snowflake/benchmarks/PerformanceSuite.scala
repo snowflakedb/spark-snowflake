@@ -37,12 +37,15 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     "s3-all",
     "s3-parquet",
     "s3-csv",
+    "snowflake-all-with-stage",
     "snowflake-all",
+    "snowflake-stage",
     "snowflake-with-pushdown",
     "snowflake-partial-pushdown")
 
   protected final var fullPushdown: Boolean    = false
   protected final var partialPushdown: Boolean = false
+  protected final var internalStage: Boolean   = false
   protected final var s3CSV: Boolean           = false
   protected final var s3Parquet: Boolean       = false
   protected final var jdbcSource: Boolean      = false
@@ -105,8 +108,9 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       if (outputFormat == "csv" || outputFormat == "both") prepareCSV()
     }
 
-    partialPushdown = Set("all", "snowflake-all", "snowflake-partial-pushdown") contains runOption
-    fullPushdown = Set("all", "snowflake-all", "snowflake-with-pushdown") contains runOption
+    internalStage = Set("all", "snowflake-all-with-stage", "snowflake-stage") contains runOption
+    partialPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-partial-pushdown") contains runOption
+    fullPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-with-pushdown") contains runOption
     jdbcSource = Set("all", "jdbc-source") contains runOption
     s3Parquet = Set("all", "s3-all", "s3-parquet") contains runOption
     s3CSV = Set("all", "s3-all", "s3-csv") contains runOption
@@ -192,6 +196,14 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       outputHeaders += s"""With full pushdowns"""
     }
 
+    if (internalStage) {
+      columnWriters += runWithSnowflakeStage(pushdown = false)
+      outputHeaders += s"""Only filter/proj pushdowns, internal stage"""
+
+      columnWriters += runWithSnowflakeStage(pushdown = true)
+      outputHeaders += s"""With full pushdowns, internal stage"""
+    }
+
     if (jdbcSource) {
       columnWriters += runWithoutSnowflake(format = "jdbc")
       outputHeaders += s"""Using Spark JDBC Source"""
@@ -260,15 +272,36 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     if (currentSource != "snowflake") {
       dataSources.foreach {
-        case (tableName: String, sources: Map[String, DataFrame]) => {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             "snowflake",
             fail(
               "Snowflake datasource missing for snowflake performance test."))
           df.createOrReplaceTempView(tableName)
-        }
       }
       currentSource = "snowflake"
+    }
+
+    val state = sessionStatus
+    SnowflakeConnectorUtils.setPushdownSession(sparkSession, pushdown)
+    val result = executeSqlBenchmarkStatement(sql, name)
+    SnowflakeConnectorUtils.setPushdownSession(sparkSession, state)
+    result
+  }
+
+  protected final def runWithSnowflakeStage(
+      pushdown: Boolean)(sql: String, name: String): Option[String] = {
+
+    if (currentSource != "snowflake-stage") {
+      dataSources.foreach {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
+          val df: DataFrame = sources.getOrElse(
+            "snowflake-stage",
+            fail(
+              "Snowflake-Stage datasource missing for snowflake performance test."))
+          df.createOrReplaceTempView(tableName)
+      }
+      currentSource = "snowflake-stage"
     }
 
     val state = sessionStatus
@@ -297,13 +330,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     if (currentSource != format) {
       dataSources.foreach {
-        case (tableName: String, sources: Map[String, DataFrame]) => {
+        case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             format,
             fail(
               s"$format datasource missing for snowflake performance test."))
           df.createOrReplaceTempView(tableName)
-        }
       }
       currentSource = format
     }
