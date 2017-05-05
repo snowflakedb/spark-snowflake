@@ -185,7 +185,11 @@ private[snowflake] case class SnowflakeRelation(
         }
       }
     } else {
-      new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+      val sfRDD =
+        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+
+      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
+      else sfRDD
     }
   }
 

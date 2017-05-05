@@ -44,12 +44,14 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
   private val compress = if (params.sfCompress) "gzip" else "none"
 
-  stageManager.executeWithConnection({ c =>
-    setup(preStatements = Seq.empty,
-          sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
-          conn = c,
-          keepOpen = true)
-  })
+  private[snowflake] val rowCount = stageManager
+    .executeWithConnection({ c =>
+      setup(preStatements = Seq.empty,
+            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
+            conn = c,
+            keepOpen = true)
+    })
+    .asInstanceOf[Long]
 
   private val stageLocation = stageManager.stageLocation
   private val awsID         = stageManager.awsId
