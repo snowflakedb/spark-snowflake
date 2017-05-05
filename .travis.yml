@@ -30,4 +30,4 @@ after_success:
   - bash <(curl -s https://codecov.io/bash)
 
 before_install:
-  - openssl aes-256-cbc -K $encrypted_d012194b3dc9_key -iv $encrypted_d012194b3dc9_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
+  - openssl aes-256-cbc -K $encrypted_332205430f72_key -iv $encrypted_332205430f72_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d

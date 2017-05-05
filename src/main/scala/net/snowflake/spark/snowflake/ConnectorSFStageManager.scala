@@ -1,10 +1,10 @@
 package net.snowflake.spark.snowflake
 
-import java.io.{InputStream, OutputStream}
+import java.io.InputStream
 import java.security.SecureRandom
 import java.sql.Connection
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
+import javax.crypto.{Cipher, CipherInputStream, SecretKey}
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
@@ -201,9 +201,7 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
   private lazy val encMat =
     if (encryptionMaterials.size() > 0) {
       encryptionMaterials.get(0)
-    } else
-      throw new SnowflakeConnectorException(
-        "No encryption materials received from GS.")
+    } else null
 
   private[snowflake] lazy val awsId: String =
     stageCredentials.get("AWS_ID").toString
@@ -230,11 +228,12 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
   }
 
   private[snowflake] lazy val masterKey =
-    encMat.getQueryStageMasterKey
-  private[snowflake] lazy val decodedKey = Base64.decode(masterKey)
+    if (encMat != null) encMat.getQueryStageMasterKey else null
+  private[snowflake] lazy val decodedKey =
+    if (masterKey != null) Base64.decode(masterKey) else null
 
   private[snowflake] lazy val is256Encryption: Boolean = {
-    val length = decodedKey.length * 8
+    val length = if (decodedKey != null) decodedKey.length * 8 else 128
     if (length == 256)
       true
     else if (length == 128)

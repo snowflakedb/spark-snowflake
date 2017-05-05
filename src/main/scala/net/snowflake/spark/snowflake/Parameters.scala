@@ -196,7 +196,7 @@ object Parameters {
      * and read from by Snowflake.
      * Make sure that AWS credentials are available for S3.
      */
-    def rootTempDir: String = parameters.getOrElse("tempdir", "")
+    def rootTempDir: String = Option(parameters.getOrElse("tempdir", "")).getOrElse("")
 
     /**
      * Creates a per-query subdirectory in the [[rootTempDir]], with a random UUID.

@@ -135,9 +135,12 @@ trait IntegrationSuiteBase
     // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
     sc.hadoopConfiguration.setBoolean("fs.s3.impl.disable.cache", true)
     sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
-    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
-    sc.hadoopConfiguration
-      .set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+
+    if (AWS_SECRET_ACCESS_KEY != null && AWS_ACCESS_KEY_ID != null) {
+      sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
+      sc.hadoopConfiguration
+        .set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+    }
     conn = DefaultJDBCWrapper.getConnector(params)
 
     // Force UTC also on the JDBC connection
