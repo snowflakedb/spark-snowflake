@@ -33,7 +33,7 @@ class FilterPushdownSuite extends FunSuite {
     // scalastyle:off
     val whereClause = buildWhereClause(testSchema, Seq(EqualTo("test_string", "Unicode's樂趣")))
     // Here, the apostrophe in the string needs to be replaced with two single quotes, ''
-    assert(whereClause === """WHERE "test_string" = 'Unicode''s樂趣'""")
+    assert(whereClause === """WHERE test_string = 'Unicode''s樂趣'""")
     // scalastyle:on
   }
 
@@ -56,16 +56,16 @@ class FilterPushdownSuite extends FunSuite {
     // scalastyle:off
     val expectedWhereClause =
       """
-        |WHERE "test_bool" = true
-        |AND "test_string" = 'Unicode是樂趣'
-        |AND "test_double" > 1000.0
-        |AND "test_double" < 1.7976931348623157E308
-        |AND "test_float" >= 1.0
-        |AND "test_int" <= 43
-        |AND STARTSWITH("test_string", 'prefix')
-        |AND ENDSWITH("test_string", 'suffix')
-        |AND CONTAINS("test_string", 'infix')
-        |AND ("test_int" IN (2, 3, 4))
+        |WHERE test_bool = true
+        |AND test_string = 'Unicode是樂趣'
+        |AND test_double > 1000.0
+        |AND test_double < 1.7976931348623157E308
+        |AND test_float >= 1.0
+        |AND test_int <= 43
+        |AND STARTSWITH(test_string, 'prefix')
+        |AND ENDSWITH(test_string, 'suffix')
+        |AND CONTAINS(test_string, 'infix')
+        |AND (test_int IN (2, 3, 4))
         |""".stripMargin.lines.mkString(" ").trim
     // scalastyle:on
     assert(whereClause === expectedWhereClause)
@@ -88,14 +88,14 @@ class FilterPushdownSuite extends FunSuite {
     // scalastyle:off
     val expectedWhereClause =
     """
-      |WHERE "test_bool" = true
-      |AND "test_string" = 'Unicode是樂趣'
-      |AND "test_double" = 1000.0
-      |AND "test_float" = 1.0
-      |AND "test_int" = 43
-      |AND "test_date" = '2013-04-05'::DATE
-      |AND "test_timestamp" = '2013-04-05 12:01:02.987'::TIMESTAMP(3)
-      |AND STARTSWITH("test_timestamp", '2013-04-05')
+      |WHERE test_bool = true
+      |AND test_string = 'Unicode是樂趣'
+      |AND test_double = 1000.0
+      |AND test_float = 1.0
+      |AND test_int = 43
+      |AND test_date = '2013-04-05'::DATE
+      |AND test_timestamp = '2013-04-05 12:01:02.987'::TIMESTAMP(3)
+      |AND STARTSWITH(test_timestamp, '2013-04-05')
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
     assert(whereClause === expectedWhereClause)
@@ -111,8 +111,8 @@ class FilterPushdownSuite extends FunSuite {
     // scalastyle:off
     val expectedWhereClause =
     """
-      |WHERE "test_bool" = true
-      |AND "test_int" = 7
+      |WHERE test_bool = true
+      |AND test_int = 7
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
     assert(whereClause === expectedWhereClause)
@@ -136,9 +136,9 @@ class FilterPushdownSuite extends FunSuite {
     // scalastyle:off
     val expectedWhereClause =
     """
-      |WHERE (("test_bool" = true) OR ("test_int" = 7))
-      |AND (((NOT (("test_int" IS NULL)))) OR (("test_float" IS NOT NULL)))
-      |AND (("test_bool" = true) OR ((("test_float" = 3.13) AND ((NOT ("test_int" = 7))))))
+      |WHERE ((test_bool = true) OR (test_int = 7))
+      |AND (((NOT ((test_int IS NULL)))) OR ((test_float IS NOT NULL)))
+      |AND ((test_bool = true) OR (((test_float = 3.13) AND ((NOT (test_int = 7))))))
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
     assert(whereClause === expectedWhereClause)
