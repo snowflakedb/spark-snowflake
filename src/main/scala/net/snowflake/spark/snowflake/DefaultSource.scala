@@ -72,11 +72,8 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
   override def createRelation(
       sqlContext: SQLContext,
       saveMode: SaveMode,
-      rawParameters: Map[String, String],
+      parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-
-    // Need to lowercase parameter keys, as it might be nicer to the user
-    val parameters = rawParameters.map { case(key, value) => (key.toLowerCase, value)}
 
     val params = Parameters.mergeParameters(parameters)
     val table = params.table.getOrElse {
