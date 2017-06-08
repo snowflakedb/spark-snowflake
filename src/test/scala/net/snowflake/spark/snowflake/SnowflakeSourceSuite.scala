@@ -321,8 +321,22 @@ class SnowflakeSourceSuite extends BaseTest {
     val createTableCommand =
       DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
     val expectedCreateTableCommand =
-      """CREATE TABLE IF NOT EXISTS test_table (long_str VARCHAR(512),""" +
-        """ short_str VARCHAR(10), default_str STRING)"""
+      """CREATE TABLE IF NOT EXISTS test_table ("long_str" VARCHAR(512),""" +
+        """ "short_str" VARCHAR(10), "default_str" STRING)"""
+    assert(createTableCommand === expectedCreateTableCommand)
+  }
+
+    test("ensuring default double quoting on columns") {
+    val schema = StructType(
+      StructField("test_str", StringType) ::
+      StructField("test_str_2", StringType) ::
+      Nil)
+    val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
+    val createTableCommand =
+      DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
+    val expectedCreateTableCommand =
+      """CREATE TABLE IF NOT EXISTS test_table ("test_str" STRING,""" +
+        """ "test_str_2" STRING)""" 
     assert(createTableCommand === expectedCreateTableCommand)
   }
 
