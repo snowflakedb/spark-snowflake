@@ -182,6 +182,7 @@ private[snowflake] class JDBCWrapper {
     schema.fields.foreach { field =>
       {
         val name = field.name
+        name = if (isQuoted(name)) name else "\"" + name.toUpperCase + "\""
         val typ: String = field.dataType match {
           case IntegerType => "INTEGER"
           case LongType => "INTEGER"
@@ -208,6 +209,10 @@ private[snowflake] class JDBCWrapper {
       }
     }
     if (sb.length < 2) "" else sb.substring(2)
+  }
+
+  private def isQuoted(name: String): Boolean = {
+    name.startsWith("\"") && name.endsWith("\"") 
   }
 
   /**
