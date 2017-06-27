@@ -182,6 +182,7 @@ private[snowflake] class JDBCWrapper {
     schema.fields.foreach { field =>
       {
         val name = field.name
+        val formattedName = if (isQuoted(name)) name else quotedName(name)
         val typ: String = field.dataType match {
           case IntegerType => "INTEGER"
           case LongType => "INTEGER"
@@ -204,10 +205,22 @@ private[snowflake] class JDBCWrapper {
             throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
         }
         val nullable = if (field.nullable) "" else "NOT NULL"
-        sb.append(s""", ${name.replace("\"", "\\\"")} $typ $nullable""".trim)
+        sb.append(s""", ${formattedName.replace("\"", "\\\"")} $typ $nullable""".trim)
       }
     }
     if (sb.length < 2) "" else sb.substring(2)
+  }
+
+  private def isQuoted(name: String): Boolean = {
+    name.startsWith("\"") && name.endsWith("\"") 
+  }
+  private def quotedName(name: String): String = {
+    // Name legality check going from spark => SF. 
+    // If the input identifier is legal, uppercase before wrapping it with double quotes.
+      if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*"))
+        "\"" + name.toUpperCase + "\""
+      else
+        "\"" + name + "\""
   }
 
   /**
