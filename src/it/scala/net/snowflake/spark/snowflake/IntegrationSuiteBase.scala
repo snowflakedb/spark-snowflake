@@ -101,7 +101,7 @@ trait IntegrationSuiteBase
 
   def jdbcUpdate(query: String): Unit = {
     log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
-    conn.createStatement.executeUpdate(query)
+    val _ = conn.createStatement.executeQuery(query)
   }
 
   override def beforeAll(): Unit = {
