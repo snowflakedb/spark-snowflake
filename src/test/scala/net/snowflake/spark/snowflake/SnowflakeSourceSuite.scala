@@ -321,8 +321,8 @@ class SnowflakeSourceSuite extends BaseTest {
     val createTableCommand =
       DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
     val expectedCreateTableCommand =
-      """CREATE TABLE IF NOT EXISTS test_table (\"LONG_STR\" VARCHAR(512),""" +
-        """ \"SHORT_STR\" VARCHAR(10), \"DEFAULT_STR\" STRING)"""
+      """CREATE TABLE IF NOT EXISTS test_table ("LONG_STR" VARCHAR(512),""" +
+        """ "SHORT_STR" VARCHAR(10), "DEFAULT_STR" STRING)"""
     assert(createTableCommand === expectedCreateTableCommand)
   }
 
@@ -335,7 +335,7 @@ class SnowflakeSourceSuite extends BaseTest {
       val createTableCommand =
         DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
       val expectedCreateTableCommand =
-        """CREATE TABLE IF NOT EXISTS test_table (\"DEFAULT_STR\" STRING, \"quoted_str\" STRING)"""
+        """CREATE TABLE IF NOT EXISTS test_table ("DEFAULT_STR" STRING, "quoted_str" STRING)"""
       assert(createTableCommand === expectedCreateTableCommand)
   }
 
