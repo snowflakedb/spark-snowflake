@@ -164,42 +164,6 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     )
   }
 
-  test("Column names can be reserved keywords if quoted.") {
-    // For saving into SF, use reserved names to see if they work (should be auto-quoted)
-    // Fix for (https://github.com/snowflakedb/spark-snowflake/issues/12)
-    val st1 = new StructType(
-      Array(StructField("id", IntegerType, nullable = true),
-            StructField("order", IntegerType, nullable = true),
-            StructField("sort", StringType, nullable = true),
-            StructField("select", BooleanType, nullable = true),
-            StructField("randLong", LongType, nullable = true)))
-
-    val tt: String = s"tt_$randomSuffix"
-
-    try {
-      sqlContext
-        .createDataFrame(sc.parallelize(1 to 100)
-                           .map[Row](value => {
-                             val rand = new Random(System.nanoTime())
-                             Row(value,
-                                 rand.nextInt(),
-                                 rand.nextString(10),
-                                 rand.nextBoolean(),
-                                 rand.nextLong())
-                           }),
-                         st1)
-        .write
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptions)
-        .option("dbtable", tt)
-        .mode(SaveMode.Overwrite)
-        .save()
-
-    } finally {
-      jdbcUpdate(s"drop table if exists $tt")
-    }
-  }
-
   test("Quoted column names work") {
     val df = sqlContext.read
       .format(SNOWFLAKE_SOURCE_NAME)
