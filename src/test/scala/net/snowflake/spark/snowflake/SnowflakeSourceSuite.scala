@@ -321,9 +321,22 @@ class SnowflakeSourceSuite extends BaseTest {
     val createTableCommand =
       DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
     val expectedCreateTableCommand =
-      """CREATE TABLE IF NOT EXISTS test_table (long_str VARCHAR(512),""" +
-        """ short_str VARCHAR(10), default_str STRING)"""
+      """CREATE TABLE IF NOT EXISTS test_table ("LONG_STR" VARCHAR(512),""" +
+        """ "SHORT_STR" VARCHAR(10), "DEFAULT_STR" STRING)"""
     assert(createTableCommand === expectedCreateTableCommand)
+  }
+
+    test("ensuring explictly quoted inputs are not uppercased") {
+      val schema = StructType(
+        StructField("default_str", StringType) ::
+        StructField("\"quoted_str\"", StringType) ::
+        Nil)
+      val df = testSqlContext.createDataFrame(sc.emptyRDD[Row], schema)
+      val createTableCommand =
+        DefaultSnowflakeWriter.createTableSql(df, MergedParameters.apply(defaultParams)).trim
+      val expectedCreateTableCommand =
+        """CREATE TABLE IF NOT EXISTS test_table ("DEFAULT_STR" STRING, "quoted_str" STRING)"""
+      assert(createTableCommand === expectedCreateTableCommand)
   }
 
   test("Respect SaveMode.ErrorIfExists when table exists") {

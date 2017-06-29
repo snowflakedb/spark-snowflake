@@ -147,10 +147,13 @@ private[snowflake] object Conversions {
     }
 
     val converted = fields.zip(schema).map {
-      case (data, field) =>
+      case (input, field) =>
+        // If the column is not nullable, use an empty string instead.
+        val data = if (input == null && !field.nullable) "" else input
         // Input values that are null produce nulls
-        if (data == null) null
-        else
+        if (data == null) {
+          null
+        } else
           field.dataType match {
             case ByteType        => data.toByte
             case BooleanType     => parseBoolean(data)

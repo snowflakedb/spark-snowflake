@@ -21,15 +21,16 @@ import java.sql.SQLException
 
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext, SaveMode}
 import org.apache.spark.sql.types._
-
 import Utils.SNOWFLAKE_SOURCE_NAME
 
+import scala.util.Random
+
 /**
- * End-to-end tests which run against a real Snowflake cluster.
- */
+  * End-to-end tests which run against a real Snowflake cluster.
+  */
 class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
-  private val test_table: String = s"test_table_$randomSuffix"
+  private val test_table: String  = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
   private val test_table3: String = s"test_table3_$randomSuffix"
 
@@ -100,9 +101,15 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   override def afterAll(): Unit = {
     try {
-      conn.prepareStatement(s"drop table if exists $test_table").executeUpdate()
-      conn.prepareStatement(s"drop table if exists $test_table2").executeUpdate()
-      conn.prepareStatement(s"drop table if exists $test_table3").executeUpdate()
+      conn
+        .prepareStatement(s"drop table if exists $test_table")
+        .executeUpdate()
+      conn
+        .prepareStatement(s"drop table if exists $test_table2")
+        .executeUpdate()
+      conn
+        .prepareStatement(s"drop table if exists $test_table3")
+        .executeUpdate()
       conn.commit()
     } finally {
       super.afterAll()
@@ -164,14 +171,14 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .option("dbtable", s"$test_table3")
       .load()
 
-    checkAnswer(df.select("\"testint1\"","\"!#TES#STRI?NG\"","testint2"),
-      Seq(Row(1,"Unicode",42), Row(2,"Mario",3), Row(3,"Luigi",42)))
+    checkAnswer(
+      df.select("\"testint1\"", "\"!#TES#STRI?NG\"", "testint2"),
+      Seq(Row(1, "Unicode", 42), Row(2, "Mario", 3), Row(3, "Luigi", 42)))
   }
 
   test("DefaultSource can load Snowflake COPY unload output to a DataFrame") {
-    checkAnswer(
-      sqlContext.sql("select * from test_table"),
-      TestUtils.expectedData)
+    checkAnswer(sqlContext.sql("select * from test_table"),
+                TestUtils.expectedData)
   }
 
   test("count() on DataFrame created from a Snowflake table") {
@@ -186,7 +193,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       // scalastyle:off
-      .option("query", s"select * from $test_table where teststring = 'Unicode''s樂趣'")
+      .option("query",
+              s"select * from $test_table where teststring = 'Unicode''s樂趣'")
       // scalastyle:on
       .load()
     checkAnswer(
@@ -233,31 +241,26 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     val loadedDf = sqlContext.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("query", s"select mod(testbyte, 2) m, count(*) from $test_table group by 1 order by 1")
+      .option(
+        "query",
+        s"select mod(testbyte, 2) m, count(*) from $test_table group by 1 order by 1")
       .load()
     checkAnswer(loadedDf, Seq(Row(0, 1), Row(1, 2), Row(null, 1)))
   }
 
   test("DefaultSource supports simple column filtering") {
-    checkAnswer(
-      sqlContext.sql("select testbyte, testfloat from test_table"),
-      Seq(
-        Row(1, 1.0),
-        Row(2, 3),
-        Row(3, -3),
-        Row(null, null)))
+    checkAnswer(sqlContext.sql("select testbyte, testfloat from test_table"),
+                Seq(Row(1, 1.0), Row(2, 3), Row(3, -3), Row(null, null)))
   }
 
   test("query with pruned and filtered scans") {
     // scalastyle:off
-    checkAnswer(
-      sqlContext.sql(
-        """
+    checkAnswer(sqlContext.sql("""
           |select testbyte, testdouble, testint
           |from test_table
           |where testfloat = 3.0
         """.stripMargin),
-      Seq(Row(2, 2, 4.0)))
+                Seq(Row(2, 2, 4.0)))
     // scalastyle:on
   }
 
@@ -265,7 +268,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     // This test can be simplified once #98 is fixed.
     val tableName = s"roundtrip_save_and_load_$randomSuffix"
     try {
-      sqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
+      sqlContext
+        .createDataFrame(sc.parallelize(TestUtils.expectedData),
+                         TestUtils.testSchema)
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -292,7 +297,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       // scalastyle:off
-      .option("query", s"select * from $test_table where contains(teststring, ';') or contains(teststring, 'Unicode');")
+      .option(
+        "query",
+        s"select * from $test_table where contains(teststring, ';') or contains(teststring, 'Unicode');")
       // scalastyle:on
       .load()
     checkAnswer(
@@ -303,7 +310,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   test("Ability to query a UDF") {
     try {
-      Utils.runQuery(connectorOptionsNoTable, s"""
+      Utils.runQuery(connectorOptionsNoTable,
+                     s"""
           |CREATE OR REPLACE FUNCTION testudf(a number, b number)
           |RETURNS number
           |AS 'a * b'
@@ -321,11 +329,10 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         loadedDf.selectExpr("twelve"),
         Seq(Row(12))
       )
-    }
-    finally {
+    } finally {
       // Clean up the UDF
       Utils.runQuery(connectorOptionsNoTable,
-        "DROP FUNCTION IF EXISTS testudf(number, number)")
+                     "DROP FUNCTION IF EXISTS testudf(number, number)")
     }
   }
 
@@ -333,35 +340,43 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ignore("roundtrip save and load with uppercase column names") {
     testRoundtripSaveAndLoad(
       s"roundtrip_write_and_read_with_uppercase_column_names_$randomSuffix",
-      sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
+      sqlContext.createDataFrame(
+        sc.parallelize(Seq(Row(1))),
         StructType(StructField("A", IntegerType) :: Nil)),
-      expectedSchemaAfterLoad = Some(StructType(StructField("a", IntegerType) :: Nil)))
+      expectedSchemaAfterLoad =
+        Some(StructType(StructField("a", IntegerType) :: Nil)))
   }
 
   ignore("save with column names that are reserved words") {
     testRoundtripSaveAndLoad(
       s"save_with_column_names_that_are_reserved_words_$randomSuffix",
-      sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
+      sqlContext.createDataFrame(
+        sc.parallelize(Seq(Row(1))),
         StructType(StructField("table", IntegerType) :: Nil)))
   }
 
   ignore("save with one empty partition (regression test for #96)") {
-    val df = sqlContext.createDataFrame(sc.parallelize(Seq(Row(1)), 2),
+    val df = sqlContext.createDataFrame(
+      sc.parallelize(Seq(Row(1)), 2),
       StructType(StructField("foo", IntegerType) :: Nil))
     assert(df.rdd.glom.collect() === Array(Array.empty[Row], Array(Row(1))))
-    testRoundtripSaveAndLoad(s"save_with_one_empty_partition_$randomSuffix", df)
+    testRoundtripSaveAndLoad(s"save_with_one_empty_partition_$randomSuffix",
+                             df)
   }
 
   ignore("save with all empty partitions (regression test for #96)") {
-    val df = sqlContext.createDataFrame(sc.parallelize(Seq.empty[Row], 2),
+    val df = sqlContext.createDataFrame(
+      sc.parallelize(Seq.empty[Row], 2),
       StructType(StructField("foo", IntegerType) :: Nil))
     assert(df.rdd.glom.collect() === Array(Array.empty[Row], Array.empty[Row]))
-    testRoundtripSaveAndLoad(s"save_with_all_empty_partitions_$randomSuffix", df)
+    testRoundtripSaveAndLoad(s"save_with_all_empty_partitions_$randomSuffix",
+                             df)
     // Now try overwriting that table. Although the new table is empty, it should still overwrite
     // the existing table.
     val df2 = df.withColumnRenamed("foo", "bar")
-    testRoundtripSaveAndLoad(
-      s"save_with_all_empty_partitions_$randomSuffix", df2, saveMode = SaveMode.Overwrite)
+    testRoundtripSaveAndLoad(s"save_with_all_empty_partitions_$randomSuffix",
+                             df2,
+                             saveMode = SaveMode.Overwrite)
   }
 
   ignore("multiple scans on same table") {
@@ -379,9 +394,11 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     val tableName = s"configuring_maxlength_on_string_column_$randomSuffix"
     try {
       val metadata = new MetadataBuilder().putLong("maxlength", 512).build()
-      val schema = StructType(
-        StructField("x", StringType, metadata = metadata) :: Nil)
-      sqlContext.createDataFrame(sc.parallelize(Seq(Row("a" * 512))), schema).write
+      val schema =
+        StructType(StructField("x", StringType, metadata = metadata) :: Nil)
+      sqlContext
+        .createDataFrame(sc.parallelize(Seq(Row("a" * 512))), schema)
+        .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)
@@ -396,7 +413,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       checkAnswer(loadedDf, Seq(Row("a" * 512)))
       // This append should fail due to the string being longer than the maxlength
       intercept[SQLException] {
-        sqlContext.createDataFrame(sc.parallelize(Seq(Row("a" * 513))), schema).write
+        sqlContext
+          .createDataFrame(sc.parallelize(Seq(Row("a" * 513))), schema)
+          .write
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(connectorOptions)
           .option("dbtable", tableName)
@@ -409,10 +428,12 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
-  ignore("informative error message when saving a table with string that is longer than max length") {
+  ignore(
+    "informative error message when saving a table with string that is longer than max length") {
     val tableName = s"error_message_when_string_too_long_$randomSuffix"
     try {
-      val df = sqlContext.createDataFrame(sc.parallelize(Seq(Row("a" * 512))),
+      val df = sqlContext.createDataFrame(
+        sc.parallelize(Seq(Row("a" * 512))),
         StructType(StructField("A", StringType) :: Nil))
       val e = intercept[SQLException] {
         df.write
@@ -431,7 +452,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("SaveMode.Overwrite with schema-qualified table name (#97)") {
     val tableName = s"overwrite_schema_qualified_table_name$randomSuffix"
-    val df = sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
+    val df = sqlContext.createDataFrame(
+      sc.parallelize(Seq(Row(1))),
       StructType(StructField("a", IntegerType) :: Nil))
     try {
       // Ensure that the table exists:
@@ -458,7 +480,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ignore("SaveMode.Overwrite with non-existent table") {
     testRoundtripSaveAndLoad(
       s"overwrite_non_existent_table$randomSuffix",
-      sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
+      sqlContext.createDataFrame(
+        sc.parallelize(Seq(Row(1))),
         StructType(StructField("a", IntegerType) :: Nil)),
       saveMode = SaveMode.Overwrite)
   }
@@ -467,8 +490,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     val tableName = s"overwrite_existing_table$randomSuffix"
     try {
       // Create a table to overwrite
-      sqlContext.createDataFrame(sc.parallelize(Seq(Row(1))),
-        StructType(StructField("a", IntegerType) :: Nil))
+      sqlContext
+        .createDataFrame(sc.parallelize(Seq(Row(1))),
+                         StructType(StructField("a", IntegerType) :: Nil))
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -477,7 +501,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
 
-      sqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
+      sqlContext
+        .createDataFrame(sc.parallelize(TestUtils.expectedData),
+                         TestUtils.testSchema)
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -502,24 +528,33 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("Append SaveMode doesn't destroy existing data") {
     val extraData = Seq(
-      Row(2.toByte, false, null, -1234152.12312498, 100000.0f, null, 1239012341823719L,
-        24.toShort, "___|_123", null))
+      Row(2.toByte,
+          false,
+          null,
+          -1234152.12312498,
+          100000.0f,
+          null,
+          1239012341823719L,
+          24.toShort,
+          "___|_123",
+          null))
 
-    sqlContext.createDataFrame(sc.parallelize(extraData), TestUtils.testSchema).write
+    sqlContext
+      .createDataFrame(sc.parallelize(extraData), TestUtils.testSchema)
+      .write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptions)
       .option("dbtable", test_table2)
       .mode(SaveMode.Append)
       .saveAsTable(test_table2)
 
-    checkAnswer(
-      sqlContext.sql("select * from test_table2"),
-      TestUtils.expectedData ++ extraData)
+    checkAnswer(sqlContext.sql("select * from test_table2"),
+                TestUtils.expectedData ++ extraData)
   }
 
   ignore("Respect SaveMode.ErrorIfExists when table exists") {
     val rdd = sc.parallelize(TestUtils.expectedData)
-    val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
+    val df  = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
     df.createOrReplaceTempView(test_table) // to ensure that the table already exists
 
     // Check that SaveMode.ErrorIfExists throws an exception
@@ -535,7 +570,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("Do nothing when table exists if SaveMode = Ignore") {
     val rdd = sc.parallelize(TestUtils.expectedData.drop(1))
-    val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
+    val df  = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptions)
@@ -544,8 +579,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .saveAsTable(test_table)
 
     // Check that SaveMode.Ignore does nothing
-    checkAnswer(
-      sqlContext.sql("select * from test_table"),
-      TestUtils.expectedData)
+    checkAnswer(sqlContext.sql("select * from test_table"),
+                TestUtils.expectedData)
   }
 }
