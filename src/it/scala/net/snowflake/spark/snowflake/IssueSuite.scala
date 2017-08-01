@@ -110,6 +110,49 @@ class IssueSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("Analyze should not show sensitive data.") {
+    val numRows = 100
+
+    val st1 = new StructType(
+      Array(StructField("str", StringType, nullable = false),
+        StructField("randLong", LongType, nullable = true)))
+
+    val tt: String = s"tt_$randomSuffix"
+
+    try {
+
+      def getString(rand: Random, value: Int): String = {
+        if (value % 3 == 2) ""
+        else rand.nextString(10)
+      }
+
+      sqlContext
+        .createDataFrame(sc.parallelize(1 to numRows)
+          .map[Row](value => {
+          val rand = new Random(System.nanoTime())
+          Row(getString(rand, value), rand.nextLong())
+        }),
+          st1)
+        .write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val loadedDf = sqlContext.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", tt)
+        .load()
+
+      loadedDf.explain()
+
+    } finally {
+      jdbcUpdate(s"drop table if exists $tt")
+    }
+  }
+
   override def afterAll(): Unit = {
     super.afterAll()
   }
