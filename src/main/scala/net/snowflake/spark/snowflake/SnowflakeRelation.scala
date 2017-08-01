@@ -42,6 +42,10 @@ private[snowflake] case class SnowflakeRelation(
     with DataUnloader {
   import SnowflakeRelation._
 
+  override def toString: String = {
+    "SnowflakeRelation"
+  }
+
   override val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
   private lazy val creds = AWSCredentialsUtils

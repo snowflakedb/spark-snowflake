@@ -175,6 +175,10 @@ object Parameters {
     */
   case class MergedParameters(parameters: Map[String, String]) {
 
+    override def toString: String = {
+      "Snowflake Data Source"
+    }
+
     // Simple conversion from string to an object of type
     // String, Boolean or Integer, depending on the value
     private def stringToObject(s: String): Object = {
