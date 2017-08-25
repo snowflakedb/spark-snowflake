@@ -52,7 +52,7 @@ private[snowflake] case class SnowflakeRelation(
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
 
   if (sqlContext != null && params.usingExternalStage) {
-    Utils.assertThatFileSystemIsNotS3BlockFileSystem(
+    Utils.getAndCheckFileSystem(
       new URI(params.rootTempDir),
       sqlContext.sparkContext.hadoopConfiguration)
   }
@@ -166,7 +166,7 @@ private[snowflake] case class SnowflakeRelation(
       val numRows = setup(
         sql = buildUnloadStmt(
           query = sql,
-          location = Utils.fixS3Url(tempDir),
+          location = Utils.fixUrlForCopyCommand(tempDir),
           compression = if (params.sfCompress) "gzip" else "none",
           credentialsString = Some(
             AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext,

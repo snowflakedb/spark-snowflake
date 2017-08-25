@@ -95,23 +95,32 @@ private[snowflake] class SnowflakeWriter(
     log.debug(prologueSql)
 
     if (params.usingExternalStage) {
+      log.info("AZINFO Starting save to SF")
 
-      Utils.assertThatFileSystemIsNotS3BlockFileSystem(
-        new URI(params.rootTempDir),
-        sqlContext.sparkContext.hadoopConfiguration)
+      val fs = Utils.getAndCheckFileSystem(
+                  new URI(params.rootTempDir),
+                  sqlContext.sparkContext.hadoopConfiguration)
 
-      val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
+      if (fs.getClass.getCanonicalName !=
+          "org.apache.hadoop.fs.azure.NativeAzureFileSystem") {
+        // For now it is only needed for AWS, so put the following under the
+        // check. We might need to come back and implement the cred access
+        // for azure anyways later.
+        val creds = AWSCredentialsUtils.getAWSCreds(sqlContext, params)
 
-      if (params.checkBucketConfiguration) {
-        Utils.checkThatBucketHasObjectLifecycleConfiguration(
-          params.rootTempDir,
-          s3ClientFactory(creds))
+        if (params.checkBucketConfiguration) {
+          Utils.checkThatBucketHasObjectLifecycleConfiguration(
+            params.rootTempDir,
+            s3ClientFactory(creds))
+        }
       }
 
       val conn = jdbcWrapper.getConnector(params)
 
       try {
         jdbcWrapper.executeInterruptibly(conn, prologueSql)
+
+        log.info("AZINFO before unloadData")
 
         val filesToCopy =
           unloadData(sqlContext,
@@ -256,6 +265,8 @@ private[snowflake] class SnowflakeWriter(
       val copyStatement =
         copySql(data.sqlContext, params, filesToCopy.get, tempStage)
       log.debug(Utils.sanitizeQueryText(copyStatement))
+      log.info("AZINFO original stmt=" + copyStatement)
+      log.info("AZINFO sanitized stmt=" + Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
       } catch {
@@ -294,13 +305,14 @@ private[snowflake] class SnowflakeWriter(
       if (tempStage.isEmpty)
         AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
       else ""
+
     var fixedUrl           = filesToCopy._1
     var fromString: String = null
     if (fixedUrl.startsWith("file://")) {
       fromString =
         s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
     } else {
-      fixedUrl = Utils.fixS3Url(fixedUrl)
+      fixedUrl = Utils.fixUrlForCopyCommand(fixedUrl)
       val stage  = tempStage map (s => s + s"/${filesToCopy._2}")
       val source = stage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
       fromString = s"FROM $source"
@@ -322,7 +334,8 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-    * Serialize temporary data to S3, ready for Snowflake COPY
+    * Serialize temporary data to cloud storage (S3 or Azure), ready for
+    * Snowflake COPY
     *
     * @return the pair (URL, prefix) of the files that should be loaded,
     *         usually (tempDir, "part"),

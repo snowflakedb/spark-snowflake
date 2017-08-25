@@ -26,14 +26,14 @@ class AWSCredentialsUtilsSuite extends FunSuite {
 
   test("credentialsString with regular keys") {
     val creds = new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
-    val result = AWSCredentialsUtils.getSnowflakeCredentialsString(creds).replaceAll("\\s+", " ")
+    val result = AWSCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).replaceAll("\\s+", " ")
     assert( result ===
       "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY/WITH/SLASHES' )")
   }
 
   test("credentialsString with STS temporary keys") {
     val creds = new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
-    val result = AWSCredentialsUtils.getSnowflakeCredentialsString(creds).replaceAll("\\s+", " ")
+    val result = AWSCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).replaceAll("\\s+", " ")
     assert(result ===
       "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY' AWS_TOKEN='SESSION/Token' )")
   }

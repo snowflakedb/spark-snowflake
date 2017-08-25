@@ -70,6 +70,19 @@ object Utils {
     url.replaceAll("s3[an]://", "s3://")
   }
 
+  def fixUrlForCopyCommand(url: String): String = {
+    if (url.startsWith("wasb://") ||
+      url.startsWith("wasbs://")) {
+      // in spark, the azure storage path is defined as wasb://CONTAINER@STORAGE_ACCOUNT.HOSTNAME/PATH
+      // while in snowflake, the path will be azure://STORAGE_ACCOUNT.HOSTNAME/CONTAINER/PATH
+
+      val pathUri = URI.create(url)
+
+      "azure://" + pathUri.getHost + "/" + pathUri.getUserInfo + pathUri.getPath
+    } else {
+      fixS3Url(url)
+    }
+  }
   /**
    * Returns a copy of the given URI with the user credentials removed.
    */
@@ -131,8 +144,10 @@ object Utils {
    * `spark-snowflakedb` cannot use this FileSystem because the files written to it will not be
    * readable by Snowflake (and vice versa).
    */
-  def assertThatFileSystemIsNotS3BlockFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
+  def getAndCheckFileSystem(uri: URI, hadoopConfig: Configuration): FileSystem = {
     val fs = FileSystem.get(uri, hadoopConfig)
+    log.info("AZINFO fs=" + fs.getClass.getCanonicalName)
+
     // Note that we do not want to use isInstanceOf here, since we're only interested in detecting
     // exact matches. We compare the class names as strings in order to avoid introducing a binary
     // dependency on classes which belong to the `hadoop-aws` JAR, as that artifact is not present
@@ -142,6 +157,8 @@ object Utils {
         "spark-snowflakedb does not support the S3 Block FileSystem. Please reconfigure `tempdir` to" +
         "use a s3n:// or s3a:// scheme.")
     }
+
+    fs
   }
 
   // Reads a Map from a file using the format
@@ -301,7 +318,7 @@ object Utils {
   /** Removes (hopefully :)) sensitive content from a query string */
   def sanitizeQueryText(q: String) : String = {
     "<SANITIZED> " + q
-        .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY)='[^']+'", "$1='❄☃❄☺❄☃❄'")
+        .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY|AZURE_SAS_TOKEN)='[^']+'", "$1='❄☃❄☺❄☃❄'")
         .replaceAll("(sfaccount|sfurl|sfuser|sfpassword|sfwarehouse|sfdatabase|sfschema|sfrole|awsaccesskey|awssecretkey) \"[^\"]+\"", "$1 \"❄☃❄☺❄☃❄\"")
   }
 }

@@ -18,6 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import org.slf4j.LoggerFactory
 
 /**
@@ -46,7 +47,7 @@ object Parameters {
   val PARAM_SF_ROLE            = knownParam("sfrole")
   val PARAM_SF_COMPRESS        = knownParam("sfcompress")
   val PARAM_SF_SSL             = knownParam("sfssl")
-  val PARAM_S3_TEMPDIR         = knownParam("tempdir")
+  val PARAM_TEMPDIR         = knownParam("tempdir")
   val PARAM_SF_DBTABLE         = knownParam("dbtable")
   val PARAM_SF_QUERY           = knownParam("query")
   val PARAM_SF_TIMEZONE        = knownParam("sftimezone")
@@ -57,6 +58,7 @@ object Parameters {
   val PARAM_TEMP_SESSION_TOKEN = knownParam("temporary_aws_session_token")
   val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam(
     "check_bucket_configuration")
+  val PARAM_TEMP_SAS_TOKEN     = knownParam("temporary_azure_sas_token")
   val PARAM_PREACTIONS         = knownParam("preactions")
   val PARAM_POSTACTIONS        = knownParam("postactions")
   val PARAM_AWS_SECRET_KEY     = knownParam("awssecretkey")
@@ -105,7 +107,7 @@ object Parameters {
       case (key, value) => (key.toLowerCase, value)
     }
 
-    if (userParameters.contains(PARAM_S3_TEMPDIR)) {
+    if (userParameters.contains(PARAM_TEMPDIR)) {
       log.warn(
         "Use of an external S3 bucket for staging is deprecated and will be removed in a future version. " +
           "Unset your 'tempDir' parameter to use the Snowflake internal stage instead.")
@@ -209,12 +211,12 @@ object Parameters {
 
     /**
       * A root directory to be used for intermediate data exchange,
-      * expected to be on S3, or somewhere that can be written to
-      * and read from by Snowflake.
-      * Make sure that AWS credentials are available for S3.
+      * expected to be on cloud storage (S3 or Azure storage), or somewhere
+      * that can be written to and read from by Snowflake.
+      * Make sure that credentials are available for this cloud provider.
       */
     def rootTempDir: String =
-      Option(parameters.getOrElse(PARAM_S3_TEMPDIR, "")).getOrElse("")
+      Option(parameters.getOrElse(PARAM_TEMPDIR, "")).getOrElse("")
 
     /**
       * Creates a per-query subdirectory in the [[rootTempDir]], with a random UUID.
@@ -414,6 +416,18 @@ object Parameters {
            sessionToken    <- parameters.get(PARAM_TEMP_SESSION_TOKEN))
         yield
           new BasicSessionCredentials(accessKey, secretAccessKey, sessionToken)
+    }
+
+    /**
+      * SAS Token to be passed to Snowflake to access data in Azure storage.
+      * We currently don't support full storage account key so this has to be
+      * provided if customer would like to load data through their storage
+      * account directly.
+      */
+    def temporaryAzureStorageCredentials: Option[StorageCredentialsSharedAccessSignature] = {
+      for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
+        yield
+          new StorageCredentialsSharedAccessSignature(sas)
     }
   }
 }
