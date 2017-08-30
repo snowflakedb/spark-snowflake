@@ -52,7 +52,7 @@ private[snowflake] case class SnowflakeRelation(
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
 
   if (sqlContext != null && params.usingExternalStage) {
-    Utils.getAndCheckFileSystem(
+    Utils.checkFileSystem(
       new URI(params.rootTempDir),
       sqlContext.sparkContext.hadoopConfiguration)
   }
@@ -171,6 +171,7 @@ private[snowflake] case class SnowflakeRelation(
           credentialsString = Some(
             CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
                                                               params))),
+
         conn = jdbcWrapper.getConnector(params))
 
       if (numRows == 0) {

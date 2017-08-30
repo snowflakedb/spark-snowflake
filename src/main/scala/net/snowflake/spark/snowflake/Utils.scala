@@ -70,6 +70,13 @@ object Utils {
     url.replaceAll("s3[an]://", "s3://")
   }
 
+  /**
+    * Converts url for the copy command. For S3, convert s3a|s3n to s3. For
+    * Azure, convert the wasb: url to azure: url.
+    *
+    * @param url the url to be used in hadoop/spark
+    * @return the url to be used in Snowflake
+    */
   def fixUrlForCopyCommand(url: String): String = {
     if (url.startsWith("wasb://") ||
       url.startsWith("wasbs://")) {
@@ -83,6 +90,7 @@ object Utils {
       fixS3Url(url)
     }
   }
+
   /**
    * Returns a copy of the given URI with the user credentials removed.
    */
@@ -110,7 +118,9 @@ object Utils {
   def checkThatBucketHasObjectLifecycleConfiguration(
       tempDir: String,
       s3Client: AmazonS3Client): Unit = {
-    if (tempDir.startsWith("file://")) {
+    if (tempDir.startsWith("file://") ||
+        tempDir.startsWith("wasb://") ||
+        tempDir.startsWith("wasbs://")) {
       // Do nothing for file:
       return
     }
@@ -144,9 +154,8 @@ object Utils {
    * `spark-snowflakedb` cannot use this FileSystem because the files written to it will not be
    * readable by Snowflake (and vice versa).
    */
-  def getAndCheckFileSystem(uri: URI, hadoopConfig: Configuration): FileSystem = {
+  def checkFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
     val fs = FileSystem.get(uri, hadoopConfig)
-    log.info("AZINFO fs=" + fs.getClass.getCanonicalName)
 
     // Note that we do not want to use isInstanceOf here, since we're only interested in detecting
     // exact matches. We compare the class names as strings in order to avoid introducing a binary
@@ -157,8 +166,6 @@ object Utils {
         "spark-snowflakedb does not support the S3 Block FileSystem. Please reconfigure `tempdir` to" +
         "use a s3n:// or s3a:// scheme.")
     }
-
-    fs
   }
 
   // Reads a Map from a file using the format

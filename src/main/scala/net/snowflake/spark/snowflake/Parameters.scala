@@ -47,7 +47,7 @@ object Parameters {
   val PARAM_SF_ROLE            = knownParam("sfrole")
   val PARAM_SF_COMPRESS        = knownParam("sfcompress")
   val PARAM_SF_SSL             = knownParam("sfssl")
-  val PARAM_TEMPDIR         = knownParam("tempdir")
+  val PARAM_TEMPDIR            = knownParam("tempdir")
   val PARAM_SF_DBTABLE         = knownParam("dbtable")
   val PARAM_SF_QUERY           = knownParam("query")
   val PARAM_SF_TIMEZONE        = knownParam("sftimezone")

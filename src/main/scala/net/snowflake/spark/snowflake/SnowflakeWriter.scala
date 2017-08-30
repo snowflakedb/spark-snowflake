@@ -95,32 +95,24 @@ private[snowflake] class SnowflakeWriter(
     log.debug(prologueSql)
 
     if (params.usingExternalStage) {
-      log.info("AZINFO Starting save to SF")
-
-      val fs = Utils.getAndCheckFileSystem(
+      Utils.checkFileSystem(
                   new URI(params.rootTempDir),
                   sqlContext.sparkContext.hadoopConfiguration)
 
-      if (fs.getClass.getCanonicalName !=
-          "org.apache.hadoop.fs.azure.NativeAzureFileSystem") {
+      if (params.checkBucketConfiguration) {
         // For now it is only needed for AWS, so put the following under the
-        // check. We might need to come back and implement the cred access
-        // for azure anyways later.
+        // check. checkBucketConfiguration implies we are using S3.
         val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
 
-        if (params.checkBucketConfiguration) {
-          Utils.checkThatBucketHasObjectLifecycleConfiguration(
-            params.rootTempDir,
-            s3ClientFactory(creds))
-        }
+        Utils.checkThatBucketHasObjectLifecycleConfiguration(
+          params.rootTempDir,
+          s3ClientFactory(creds))
       }
 
       val conn = jdbcWrapper.getConnector(params)
 
       try {
         jdbcWrapper.executeInterruptibly(conn, prologueSql)
-
-        log.info("AZINFO before unloadData")
 
         val filesToCopy =
           unloadData(sqlContext,
@@ -265,8 +257,6 @@ private[snowflake] class SnowflakeWriter(
       val copyStatement =
         copySql(data.sqlContext, params, filesToCopy.get, tempStage)
       log.debug(Utils.sanitizeQueryText(copyStatement))
-      log.info("AZINFO original stmt=" + copyStatement)
-      log.info("AZINFO sanitized stmt=" + Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
       } catch {

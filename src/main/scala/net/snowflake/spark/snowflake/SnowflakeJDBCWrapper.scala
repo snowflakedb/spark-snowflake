@@ -274,7 +274,6 @@ private[snowflake] class JDBCWrapper {
   private def executeInterruptibly[T](statement: PreparedStatement, op: PreparedStatement => T): T = {
     try {
       log.debug(s"Running statement $statement")
-      log.info(s"AZINFO Running statement = $statement")
       val future = Future[T](op(statement))(ec)
       Await.result(future, Duration.Inf)
     } catch {
