@@ -106,7 +106,7 @@ private[snowflake] class SnowflakeWriter(
         // For now it is only needed for AWS, so put the following under the
         // check. We might need to come back and implement the cred access
         // for azure anyways later.
-        val creds = AWSCredentialsUtils.getAWSCreds(sqlContext, params)
+        val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
 
         if (params.checkBucketConfiguration) {
           Utils.checkThatBucketHasObjectLifecycleConfiguration(
@@ -303,7 +303,7 @@ private[snowflake] class SnowflakeWriter(
                       tempStage: Option[String]): String = {
     val credsString =
       if (tempStage.isEmpty)
-        AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
+        CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
       else ""
 
     var fixedUrl           = filesToCopy._1

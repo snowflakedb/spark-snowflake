@@ -48,7 +48,7 @@ private[snowflake] case class SnowflakeRelation(
 
   override val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
-  private lazy val creds = AWSCredentialsUtils
+  private lazy val creds = CloudCredentialsUtils
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
 
   if (sqlContext != null && params.usingExternalStage) {
@@ -169,7 +169,7 @@ private[snowflake] case class SnowflakeRelation(
           location = Utils.fixUrlForCopyCommand(tempDir),
           compression = if (params.sfCompress) "gzip" else "none",
           credentialsString = Some(
-            AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
+            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
                                                               params))),
         conn = jdbcWrapper.getConnector(params))
 

@@ -25,7 +25,7 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.SQLContext
 
-private[snowflake] object AWSCredentialsUtils {
+private[snowflake] object CloudCredentialsUtils {
   /**
    * Generates a credentials string for use in Snowflake COPY in-out statements.
    */
@@ -76,7 +76,7 @@ private[snowflake] object AWSCredentialsUtils {
       null
     } else {
       params.temporaryAWSCredentials.getOrElse(
-        AWSCredentialsUtils.load(params.rootTempDir,
+        CloudCredentialsUtils.load(params.rootTempDir,
           sqlContext.sparkContext.hadoopConfiguration))
     }
   }
