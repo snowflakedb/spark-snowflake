@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 
 import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory
 
 /**
@@ -208,6 +209,25 @@ object Parameters {
     }
 
     lazy val usingExternalStage: Boolean = !rootTempDir.isEmpty
+
+    lazy val rootTempDirStorageType: FSType = {
+      if (rootTempDir.isEmpty) {
+        FSType.Unknown
+      } else {
+        val lsTempDir = rootTempDir.toLowerCase
+
+        if (lsTempDir.startsWith("file://")) {
+          FSType.LocalFile
+        } else if (lsTempDir.startsWith("wasb://") ||
+                   lsTempDir.startsWith("wasbs://")) {
+          FSType.Azure
+        } else if (lsTempDir.startsWith("s3")) {
+          FSType.S3
+        } else {
+          FSType.Unknown
+        }
+      }
+    }
 
     /**
       * A root directory to be used for intermediate data exchange,
@@ -430,4 +450,9 @@ object Parameters {
           new StorageCredentialsSharedAccessSignature(sas)
     }
   }
+}
+
+object FSType extends Enumeration {
+  type FSType = Value
+  val LocalFile, S3, Azure, Unknown = Value
 }

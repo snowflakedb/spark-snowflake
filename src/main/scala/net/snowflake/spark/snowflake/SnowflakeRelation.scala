@@ -92,6 +92,7 @@ private[snowflake] case class SnowflakeRelation(
     if (params.checkBucketConfiguration && params.usingExternalStage) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
+        params.rootTempDirStorageType,
         s3ClientFactory(creds))
     }
 
@@ -114,6 +115,7 @@ private[snowflake] case class SnowflakeRelation(
     if (params.checkBucketConfiguration && params.usingExternalStage) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
+        params.rootTempDirStorageType,
         s3ClientFactory(creds))
     }
     if (requiredColumns.isEmpty) {

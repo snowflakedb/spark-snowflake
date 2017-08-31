@@ -106,6 +106,7 @@ private[snowflake] class SnowflakeWriter(
 
         Utils.checkThatBucketHasObjectLifecycleConfiguration(
           params.rootTempDir,
+          params.rootTempDirStorageType,
           s3ClientFactory(creds))
       }
 

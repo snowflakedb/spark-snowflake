@@ -30,16 +30,18 @@ private[snowflake] object CloudCredentialsUtils {
    * Generates a credentials string for use in Snowflake COPY in-out statements.
    */
   def getSnowflakeCredentialsString(sqlContext: SQLContext,
-                                          params: MergedParameters): String = {
-    if (params.rootTempDir.startsWith("file://")) {
-      "-- file URL, no creds needed"
-    } else if (params.rootTempDir.startsWith("wasb://") ||
-               params.rootTempDir.startsWith("wasbs://")) {
-      val creds = getAzureStorageCreds(params)
-      getSnowflakeCredentialsStringForAzure(creds)
-    } else {
-      val creds = getAWSCreds(sqlContext, params)
-      getSnowflakeCredentialsStringForAWS(creds)
+                                    params: MergedParameters): String = {
+    params.rootTempDirStorageType match {
+      case FSType.LocalFile =>
+        "-- file URL, no creds needed"
+      case FSType.Azure =>
+        val creds = getAzureCreds(params)
+        getSnowflakeCredentialsStringForAzure(creds)
+      case FSType.S3 =>
+        val creds = getAWSCreds(sqlContext, params)
+        getSnowflakeCredentialsStringForAWS(creds)
+      case _ =>
+        ""
     }
   }
 
@@ -72,21 +74,21 @@ private[snowflake] object CloudCredentialsUtils {
 
   def getAWSCreds(sqlContext: SQLContext,
                   params : MergedParameters) : AWSCredentials = {
-    if (params.rootTempDir.startsWith("file://")) {
-      null
-    } else {
+    if (params.rootTempDirStorageType == FSType.S3) {
       params.temporaryAWSCredentials.getOrElse(
         CloudCredentialsUtils.load(params.rootTempDir,
           sqlContext.sparkContext.hadoopConfiguration))
+    } else {
+      null
     }
   }
 
-  def getAzureStorageCreds(params : MergedParameters)
+  def getAzureCreds(params : MergedParameters)
       : StorageCredentialsSharedAccessSignature = {
-    if (params.rootTempDir.startsWith("file://")) {
-      null
-    } else {
+    if (params.rootTempDirStorageType == FSType.Azure) {
       params.temporaryAzureStorageCredentials.getOrElse(null)
+    } else {
+      null
     }
   }
 
