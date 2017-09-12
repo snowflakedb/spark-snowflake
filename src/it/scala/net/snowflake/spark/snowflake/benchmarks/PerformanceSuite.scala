@@ -92,7 +92,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
 
     } catch {
       case t: TestFailedException =>
-        if (t.getMessage contains "Config file needs to contain") {
+        if (t.getMessage contains MISSING_PARAM_ERROR) {
           runTests = false
           val reqParams = requiredParams.keySet.mkString(", ")
           println(
