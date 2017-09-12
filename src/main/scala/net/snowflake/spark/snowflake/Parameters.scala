@@ -28,7 +28,7 @@ object Parameters {
 
   val log = LoggerFactory.getLogger(getClass)
 
-  private val KNOWN_PARAMETERS = new scala.collection.mutable.HashSet[String]()
+  private[snowflake] val KNOWN_PARAMETERS = new scala.collection.mutable.HashSet[String]()
 
   private def knownParam(param: String): String = {
     KNOWN_PARAMETERS += param

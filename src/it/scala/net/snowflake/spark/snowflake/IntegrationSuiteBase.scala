@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.slf4j.LoggerFactory
 
+import scala.collection.mutable
+
 /**
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
@@ -47,11 +49,34 @@ trait IntegrationSuiteBase
   /** We read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
 
-  protected def loadConfig(): Map[String, String] = {
+  protected lazy val configsFromEnv: Map[String, String] = {
+    var settingsMap = new mutable.HashMap[String, String]
+    Parameters.KNOWN_PARAMETERS foreach { param =>
+      val opt = readConfigValueFromEnv(param)
+      if (opt.isDefined)
+        settingsMap += (param -> opt.get)
+    }
+    settingsMap.toMap
+  }
+
+  protected lazy val configsFromFile: Map[String, String] = {
     val fname = System.getenv(CONFIG_FILE_VARIABLE)
-    if (fname == null)
-      fail(s"Must set $CONFIG_FILE_VARIABLE environment variable")
-    Utils.readMapFromFile(sc, fname)
+    if (fname != null) {
+      Utils.readMapFromFile(sc, fname)
+    } else scala.collection.Map.empty[String, String]
+  }
+
+  // Merges maps, preferring file values over env ones
+  protected def loadConfig(): Map[String, String] = {
+    (configsFromFile.keySet ++ configsFromEnv.keySet) map { key =>
+      (key -> configsFromFile.getOrElse(key,
+                                        configsFromEnv.getOrElse(key, "")))
+    } toMap
+  }
+
+  // Used for internal integration testing in SF env.
+  protected def readConfigValueFromEnv(name: String): Option[String] = {
+    scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
   }
 
   protected var connectorOptions: Map[String, String]        = _
@@ -64,8 +89,10 @@ trait IntegrationSuiteBase
 
   protected def getConfigValue(name: String,
                                required: Boolean = true): String = {
+
     connectorOptions.getOrElse(name.toLowerCase, {
-      if (required) fail(s"Config file needs to contain $name value")
+      if (required)
+        fail(s"Config file or ENV variable needs to contain $name value")
       else null
     })
   }
