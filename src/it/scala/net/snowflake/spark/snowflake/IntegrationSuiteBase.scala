@@ -48,6 +48,7 @@ trait IntegrationSuiteBase
 
   /** We read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
+  protected final val MISSING_PARAM_ERROR = "Missing required configuration value: "
 
   protected lazy val configsFromEnv: Map[String, String] = {
     var settingsMap = new mutable.HashMap[String, String]
@@ -92,7 +93,7 @@ trait IntegrationSuiteBase
 
     connectorOptions.getOrElse(name.toLowerCase, {
       if (required)
-        fail(s"Config file or ENV variable needs to contain $name value")
+        fail(s"$MISSING_PARAM_ERROR $name")
       else null
     })
   }
