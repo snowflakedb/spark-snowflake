@@ -26,7 +26,7 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
@@ -138,7 +138,11 @@ trait IntegrationSuiteBase
     // Always run in UTC
     System.setProperty("user.timezone", "GMT")
 
-    sc = new SparkContext("local", "SnowflakeSourceSuite")
+    val conf = new SparkConf()
+    conf.setMaster("local")
+    conf.setAppName("SnowflakeSourceSuite")
+
+    sc = SparkContext.getOrCreate(conf)
 
     // Initialize variables
     connectorOptions = loadConfig()
