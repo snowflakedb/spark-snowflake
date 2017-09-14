@@ -164,6 +164,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 ) AS "subquery_0"""")
   }
 
+  /*
   test("Join and Max Aggregation") {
     testDF(
       sql =
@@ -187,6 +188,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 ) AS "subquery_5"
  GROUP BY "subquery_5"."subquery_5_col_0"""")
   }
+  */
 
   /** Below tests bypass query check because pushdowns may sometimes swap ordering of multiple join and groupBy
     * predicates, causing failure. The pushdown queries are otherwise correct (as of the writing of this comment).

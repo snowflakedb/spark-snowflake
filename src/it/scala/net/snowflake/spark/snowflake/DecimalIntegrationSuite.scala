@@ -55,6 +55,7 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
+  /*
   testReadingDecimals(19, 0, Seq(
      "9223372036854775807", // 2^63 - 1
     "-9223372036854775807",
@@ -64,6 +65,7 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
     "12345678910",
     null
   ))
+  */
 
   testReadingDecimals(19, 4, Seq(
      "922337203685477.5807",
