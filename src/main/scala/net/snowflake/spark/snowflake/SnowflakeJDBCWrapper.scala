@@ -19,7 +19,7 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql._
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, Statement, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
