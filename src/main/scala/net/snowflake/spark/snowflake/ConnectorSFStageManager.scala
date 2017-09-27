@@ -261,7 +261,7 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
 
   private[snowflake] def setupStageArea(): String = {
 
-    jdbcWrapper.executeQueryInterruptibly(connection,
+    jdbcWrapper.executeInterruptibly(connection,
                                           CREATE_TEMP_STAGE_STMT + tempStage)
 
     stageSet = true

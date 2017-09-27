@@ -28,7 +28,7 @@ private[snowflake] trait DataUnloader {
       // Run the unload query
       log.debug(Utils.sanitizeQueryText(sql))
       preStatements.foreach { stmt =>
-        jdbcWrapper.executeQueryInterruptibly(conn, stmt)
+        jdbcWrapper.executeInterruptibly(conn, stmt)
       }
       val res = jdbcWrapper.executeQueryInterruptibly(conn, sql)
 

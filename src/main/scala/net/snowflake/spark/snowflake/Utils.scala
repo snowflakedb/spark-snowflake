@@ -252,7 +252,7 @@ object Utils {
       if (action != null && !action.trim.isEmpty) {
         val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
         log.info("Executing preAction: " + actionSql)
-        jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
+        jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }
     }
   }
@@ -265,7 +265,7 @@ object Utils {
       if (action != null && !action.trim.isEmpty) {
         val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
         log.info("Executing postAction: " + actionSql)
-        jdbcWrapper.executeInterruptibly(conn.prepareStatement(actionSql))
+        jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }
     }
   }
