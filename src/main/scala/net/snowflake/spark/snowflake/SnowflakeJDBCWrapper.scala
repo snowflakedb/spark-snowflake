@@ -19,7 +19,7 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, Statement, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
@@ -69,7 +69,7 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table contains an unsupported type.
     */
   def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = executeQueryInterruptibly(conn, s"SELECT * FROM ($table) as sf_connector_query_alias WHERE 1=0")
+    val rs = executePreparedQueryInterruptibly(conn, s"SELECT * FROM ($table) as sf_connector_query_alias WHERE 1=0")
     try {
       val rsmd = rs.getMetaData
       val ncols = rsmd.getColumnCount
@@ -215,10 +215,10 @@ private[snowflake] class JDBCWrapper {
   }
 
   private def isQuoted(name: String): Boolean = {
-    name.startsWith("\"") && name.endsWith("\"") 
+    name.startsWith("\"") && name.endsWith("\"")
   }
   private def quotedName(name: String): String = {
-    // Name legality check going from spark => SF. 
+    // Name legality check going from spark => SF.
     // If the input identifier is legal, uppercase before wrapping it with double quotes.
       if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*"))
         "\"" + name.toUpperCase + "\""
@@ -233,48 +233,61 @@ private[snowflake] class JDBCWrapper {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems, considering "table" could also include the database name.
     Try {
-      executeQueryInterruptibly(conn, s"SELECT 1 FROM $table LIMIT 1").next()
+      executePreparedQueryInterruptibly(conn, s"SELECT 1 FROM $table LIMIT 1").next()
     }.isSuccess
   }
 
-  /**
-    * Execute the given SQL statement while supporting interruption.
-    * If InterruptedException is caught, then the statement will be cancelled if it is running.
-    *
-    * @return <code>true</code> if the first result is a <code>ResultSet</code>
-    *         object; <code>false</code> if the first result is an update
-    *         count or there is no result
-    */
-  def executeInterruptibly(statement: PreparedStatement): Boolean = {
-    executeInterruptibly(statement, _.execute())
+  def executePreparedInterruptibly(statement: PreparedStatement): Boolean = {
+    executeInterruptibly(statement,
+      {
+        stmt: Statement =>
+        val prepStmt = stmt.asInstanceOf[PreparedStatement]
+        prepStmt.execute()
+      })
   }
 
-  /**
-    * A version of <code>executeInterruptibly</code> accepting a string
-    */
-  def executeInterruptibly(conn: Connection, sql: String): Boolean = {
-    executeInterruptibly(conn.prepareStatement(sql))
+  def executePreparedInterruptibly(conn: Connection, sql: String): Boolean = {
+    executePreparedInterruptibly(conn.prepareStatement(sql))
   }
 
-  /**
-    * Execute the given SQL statement while supporting interruption.
-    * If InterruptedException is caught, then the statement will be cancelled if it is running.
-    *
-    * @return a <code>ResultSet</code> object that contains the data produced by the
-    *         query; never <code>null</code>
-    */
-  def executeQueryInterruptibly(statement: PreparedStatement): ResultSet = {
-    executeInterruptibly(statement, _.executeQuery())
+  def executePreparedQueryInterruptibly(statement: PreparedStatement): ResultSet = {
+    executeInterruptibly(statement,
+      {
+        stmt: Statement =>
+        val prepStmt = stmt.asInstanceOf[PreparedStatement]
+        prepStmt.executeQuery()
+      })
+  }
+
+  def executePreparedQueryInterruptibly(conn: Connection, sql: String): ResultSet = {
+    executePreparedQueryInterruptibly(conn.prepareStatement(sql))
+  }
+
+  def executeQueryInterruptibly(statement: Statement, str: String): ResultSet = {
+    executeInterruptibly(statement, _.executeQuery(str))
+  }
+
+  def executeInterruptibly(statement: Statement, str: String): Boolean = {
+    executeInterruptibly(statement, _.execute(str))
   }
 
   /**
     * A version of <code>executeQueryInterruptibly</code> accepting a string
     */
   def executeQueryInterruptibly(conn: Connection, sql: String): ResultSet = {
-    executeQueryInterruptibly(conn.prepareStatement(sql))
+    val stmt = conn.createStatement
+    executeQueryInterruptibly(stmt, sql)
   }
 
-  private def executeInterruptibly[T](statement: PreparedStatement, op: PreparedStatement => T): T = {
+  /**
+    * A version of <code>executeQueryInterruptibly</code> accepting a string
+    */
+  def executeInterruptibly(conn: Connection, sql: String): Boolean = {
+    val stmt = conn.createStatement
+    executeInterruptibly(stmt, sql)
+  }
+
+  private def executeInterruptibly[T](statement: Statement, op: Statement => T): T = {
     try {
       log.debug(s"Running statement $statement")
       val future = Future[T](op(statement))(ec)
