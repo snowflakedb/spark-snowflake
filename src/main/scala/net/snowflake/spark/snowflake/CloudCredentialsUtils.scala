@@ -19,26 +19,33 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 
-import com.amazonaws.auth.{BasicAWSCredentials, AWSCredentials, AWSSessionCredentials, InstanceProfileCredentialsProvider}
+import com.amazonaws.auth.{AWSCredentials, AWSSessionCredentials, BasicAWSCredentials, InstanceProfileCredentialsProvider}
+import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.SQLContext
 
-private[snowflake] object AWSCredentialsUtils {
+private[snowflake] object CloudCredentialsUtils {
   /**
    * Generates a credentials string for use in Snowflake COPY in-out statements.
    */
   def getSnowflakeCredentialsString(sqlContext: SQLContext,
                                     params: MergedParameters): String = {
-    if (params.rootTempDir.startsWith("file://")) {
-      "-- file URL, no creds needed"
-    } else {
-      val creds = getCreds(sqlContext, params)
-      getSnowflakeCredentialsString(creds)
+    params.rootTempDirStorageType match {
+      case FSType.LocalFile =>
+        "-- file URL, no creds needed"
+      case FSType.Azure =>
+        val creds = getAzureCreds(params)
+        getSnowflakeCredentialsStringForAzure(creds)
+      case FSType.S3 =>
+        val creds = getAWSCreds(sqlContext, params)
+        getSnowflakeCredentialsStringForAWS(creds)
+      case _ =>
+        ""
     }
   }
 
-  def getSnowflakeCredentialsString(creds : AWSCredentials): String = {
+  def getSnowflakeCredentialsStringForAWS(creds : AWSCredentials) : String = {
     val awsAccessKey = creds.getAWSAccessKeyId
     val awsSecretKey = creds.getAWSSecretKey
     var tokenString = creds match {
@@ -55,14 +62,33 @@ private[snowflake] object AWSCredentialsUtils {
        |""".stripMargin.trim
   }
 
-  def getCreds(sqlContext: SQLContext,
-               params : MergedParameters) : AWSCredentials = {
-    if (params.rootTempDir.startsWith("file://")) {
-      null
-    } else {
+  def getSnowflakeCredentialsStringForAzure(
+        creds : StorageCredentialsSharedAccessSignature) : String = {
+    val sasToken = creds.getToken()
+    s"""
+       |CREDENTIALS = (
+       |    AZURE_SAS_TOKEN='$sasToken'
+       |)
+       |""".stripMargin.trim
+  }
+
+  def getAWSCreds(sqlContext: SQLContext,
+                  params : MergedParameters) : AWSCredentials = {
+    if (params.rootTempDirStorageType == FSType.S3) {
       params.temporaryAWSCredentials.getOrElse(
-        AWSCredentialsUtils.load(params.rootTempDir,
+        CloudCredentialsUtils.load(params.rootTempDir,
           sqlContext.sparkContext.hadoopConfiguration))
+    } else {
+      null
+    }
+  }
+
+  def getAzureCreds(params : MergedParameters)
+      : StorageCredentialsSharedAccessSignature = {
+    if (params.rootTempDirStorageType == FSType.Azure) {
+      params.temporaryAzureStorageCredentials.getOrElse(null)
+    } else {
+      null
     }
   }
 

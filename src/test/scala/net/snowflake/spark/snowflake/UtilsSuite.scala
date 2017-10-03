@@ -39,6 +39,13 @@ class UtilsSuite extends FunSuite with Matchers {
     Utils.fixS3Url("s3n://foo/bar/baz") shouldBe "s3://foo/bar/baz"
   }
 
+  test("fixUrlForCopyCommand produces Snowflake-compatible equivalents") {
+    Utils.fixUrlForCopyCommand("s3a://foo/bar/12345") shouldBe "s3://foo/bar/12345"
+    Utils.fixUrlForCopyCommand("s3n://foo/bar/baz") shouldBe "s3://foo/bar/baz"
+    Utils.fixUrlForCopyCommand("wasb://container@test.azure.com/path") shouldBe "azure://test.azure.com/container/path"
+    Utils.fixUrlForCopyCommand("wasbs://container@test.azure.com/path") shouldBe "azure://test.azure.com/container/path"
+  }
+
   test("temp paths are random subdirectories of root") {
     val root = "s3n://temp/"
     val firstTempPath = Utils.makeTempPath(root)

@@ -95,16 +95,18 @@ private[snowflake] class SnowflakeWriter(
     log.debug(prologueSql)
 
     if (params.usingExternalStage) {
-
-      Utils.assertThatFileSystemIsNotS3BlockFileSystem(
-        new URI(params.rootTempDir),
-        sqlContext.sparkContext.hadoopConfiguration)
-
-      val creds = AWSCredentialsUtils.getCreds(sqlContext, params)
+      Utils.checkFileSystem(
+                  new URI(params.rootTempDir),
+                  sqlContext.sparkContext.hadoopConfiguration)
 
       if (params.checkBucketConfiguration) {
+        // For now it is only needed for AWS, so put the following under the
+        // check. checkBucketConfiguration implies we are using S3.
+        val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
+
         Utils.checkThatBucketHasObjectLifecycleConfiguration(
           params.rootTempDir,
+          params.rootTempDirStorageType,
           s3ClientFactory(creds))
       }
 
@@ -292,15 +294,16 @@ private[snowflake] class SnowflakeWriter(
                       tempStage: Option[String]): String = {
     val credsString =
       if (tempStage.isEmpty)
-        AWSCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
+        CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
       else ""
+
     var fixedUrl           = filesToCopy._1
     var fromString: String = null
     if (fixedUrl.startsWith("file://")) {
       fromString =
         s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
     } else {
-      fixedUrl = Utils.fixS3Url(fixedUrl)
+      fixedUrl = Utils.fixUrlForCopyCommand(fixedUrl)
       val stage  = tempStage map (s => s + s"/${filesToCopy._2}")
       val source = stage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
       fromString = s"FROM $source"
@@ -322,7 +325,8 @@ private[snowflake] class SnowflakeWriter(
   }
 
   /**
-    * Serialize temporary data to S3, ready for Snowflake COPY
+    * Serialize temporary data to cloud storage (S3 or Azure), ready for
+    * Snowflake COPY
     *
     * @return the pair (URL, prefix) of the files that should be loaded,
     *         usually (tempDir, "part"),

@@ -72,6 +72,7 @@ object SparkSnowflakeBuild extends Build {
         "com.amazonaws" % "aws-java-sdk-core" % "1.10.22" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "com.amazonaws" % "aws-java-sdk-s3" % "1.10.22" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "com.amazonaws" % "aws-java-sdk-sts" % "1.10.22" % "test" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+        "com.microsoft.azure" % "azure-storage" % "5.0.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         // We require spark-avro, but avro-mapred must be provided to match Hadoop version.
         // In most cases, avro-mapred will be provided as part of the Spark assembly JAR.
         // "com.databricks" %% "spark-avro" % "2.0.1",

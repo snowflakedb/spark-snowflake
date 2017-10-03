@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 import scala.io._
 import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.slf4j.LoggerFactory
@@ -71,6 +72,27 @@ object Utils {
   }
 
   /**
+    * Converts url for the copy command. For S3, convert s3a|s3n to s3. For
+    * Azure, convert the wasb: url to azure: url.
+    *
+    * @param url the url to be used in hadoop/spark
+    * @return the url to be used in Snowflake
+    */
+  def fixUrlForCopyCommand(url: String): String = {
+    if (url.startsWith("wasb://") ||
+      url.startsWith("wasbs://")) {
+      // in spark, the azure storage path is defined as wasb://CONTAINER@STORAGE_ACCOUNT.HOSTNAME/PATH
+      // while in snowflake, the path will be azure://STORAGE_ACCOUNT.HOSTNAME/CONTAINER/PATH
+
+      val pathUri = URI.create(url)
+
+      "azure://" + pathUri.getHost + "/" + pathUri.getUserInfo + pathUri.getPath
+    } else {
+      fixS3Url(url)
+    }
+  }
+
+  /**
    * Returns a copy of the given URI with the user credentials removed.
    */
   def removeCredentialsFromURI(uri: URI): URI = {
@@ -96,33 +118,35 @@ object Utils {
    */
   def checkThatBucketHasObjectLifecycleConfiguration(
       tempDir: String,
+      tempDirStorageType: FSType,
       s3Client: AmazonS3Client): Unit = {
-    if (tempDir.startsWith("file://")) {
-      // Do nothing for file:
-      return
-    }
 
-    try {
-      val s3URI = new AmazonS3URI(Utils.fixS3Url(tempDir))
-      val bucket = s3URI.getBucket
-      val bucketLifecycleConfiguration = s3Client.getBucketLifecycleConfiguration(bucket)
-      val key = Option(s3URI.getKey).getOrElse("")
-      val someRuleMatchesTempDir = bucketLifecycleConfiguration.getRules.asScala.exists { rule =>
-        // Note: this only checks that there is an active rule which matches the temp directory;
-        // it does not actually check that the rule will delete the files. This check is still
-        // better than nothing, though, and we can always improve it later.
-        rule.getStatus == BucketLifecycleConfiguration.ENABLED && key.startsWith(rule.getPrefix)
-      }
-      if (!someRuleMatchesTempDir) {
-        log.warn(s"The S3 bucket $bucket does not have an object lifecycle configuration to " +
-          "ensure cleanup of temporary files. Consider configuring `tempdir` to point to a " +
-          "bucket with an object lifecycle policy that automatically deletes files after an " +
-          "expiration period. For more information, see " +
-          "https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html")
-      }
-    } catch {
-      case NonFatal(e) =>
-        log.warn("An error occurred while trying to read the S3 bucket lifecycle configuration", e)
+    tempDirStorageType match {
+      case FSType.S3 =>
+        try {
+          val s3URI = new AmazonS3URI(Utils.fixS3Url(tempDir))
+          val bucket = s3URI.getBucket
+          val bucketLifecycleConfiguration = s3Client.getBucketLifecycleConfiguration(bucket)
+          val key = Option(s3URI.getKey).getOrElse("")
+          val someRuleMatchesTempDir = bucketLifecycleConfiguration.getRules.asScala.exists { rule =>
+            // Note: this only checks that there is an active rule which matches the temp directory;
+            // it does not actually check that the rule will delete the files. This check is still
+            // better than nothing, though, and we can always improve it later.
+            rule.getStatus == BucketLifecycleConfiguration.ENABLED && key.startsWith(rule.getPrefix)
+          }
+          if (!someRuleMatchesTempDir) {
+            log.warn(s"The S3 bucket $bucket does not have an object lifecycle configuration to " +
+              "ensure cleanup of temporary files. Consider configuring `tempdir` to point to a " +
+              "bucket with an object lifecycle policy that automatically deletes files after an " +
+              "expiration period. For more information, see " +
+              "https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html")
+          }
+        } catch {
+          case NonFatal(e) =>
+            log.warn("An error occurred while trying to read the S3 bucket lifecycle configuration", e)
+        }
+      case _ =>
+        Unit
     }
   }
 
@@ -131,8 +155,9 @@ object Utils {
    * `spark-snowflakedb` cannot use this FileSystem because the files written to it will not be
    * readable by Snowflake (and vice versa).
    */
-  def assertThatFileSystemIsNotS3BlockFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
+  def checkFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
     val fs = FileSystem.get(uri, hadoopConfig)
+
     // Note that we do not want to use isInstanceOf here, since we're only interested in detecting
     // exact matches. We compare the class names as strings in order to avoid introducing a binary
     // dependency on classes which belong to the `hadoop-aws` JAR, as that artifact is not present
@@ -301,7 +326,7 @@ object Utils {
   /** Removes (hopefully :)) sensitive content from a query string */
   def sanitizeQueryText(q: String) : String = {
     "<SANITIZED> " + q
-        .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY)='[^']+'", "$1='❄☃❄☺❄☃❄'")
+        .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY|AZURE_SAS_TOKEN)='[^']+'", "$1='❄☃❄☺❄☃❄'")
         .replaceAll("(sfaccount|sfurl|sfuser|sfpassword|sfwarehouse|sfdatabase|sfschema|sfrole|awsaccesskey|awssecretkey) \"[^\"]+\"", "$1 \"❄☃❄☺❄☃❄\"")
   }
 }
