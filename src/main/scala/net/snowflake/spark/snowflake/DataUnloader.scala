@@ -27,6 +27,7 @@ private[snowflake] trait DataUnloader {
 
       // Run the unload query
       log.debug(Utils.sanitizeQueryText(sql))
+
       preStatements.foreach { stmt =>
         jdbcWrapper.executeInterruptibly(conn, stmt)
       }
@@ -62,7 +63,7 @@ private[snowflake] trait DataUnloader {
     Utils.setLastSelect(query)
 
     s"""
-       |COPY INTO $location
+       |COPY INTO '$location'
        |FROM ($query)
        |$credentials
        |FILE_FORMAT = (
