@@ -49,7 +49,7 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
         checkAnswer(loadedDf, expectedRows)
         checkAnswer(loadedDf.selectExpr("x + 0"), expectedRows)
       } finally {
-        conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+        conn.createStatement().execute(s"drop table if exists $tableName")
         conn.commit()
       }
     }
