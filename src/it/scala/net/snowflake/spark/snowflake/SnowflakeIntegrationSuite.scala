@@ -37,8 +37,8 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    conn.prepareStatement("drop table if exists test_table").executeUpdate()
-    conn.prepareStatement("drop table if exists test_table2").executeUpdate()
+    conn.createStatement.executeUpdate("drop table if exists test_table")
+    conn.createStatement.executeUpdate("drop table if exists test_table2")
     conn.commit()
 
     def createTable(tableName: String): Unit = {
@@ -102,14 +102,11 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   override def afterAll(): Unit = {
     try {
       conn
-        .prepareStatement(s"drop table if exists $test_table")
-        .executeUpdate()
+        .createStatement.executeUpdate(s"drop table if exists $test_table")
       conn
-        .prepareStatement(s"drop table if exists $test_table2")
-        .executeUpdate()
+        .createStatement.executeUpdate(s"drop table if exists $test_table2")
       conn
-        .prepareStatement(s"drop table if exists $test_table3")
-        .executeUpdate()
+        .createStatement.executeUpdate(s"drop table if exists $test_table3")
       conn.commit()
     } finally {
       super.afterAll()
@@ -287,7 +284,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .load()
       checkAnswer(loadedDf, TestUtils.expectedData)
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }
@@ -423,7 +420,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
           .save()
       }
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }
@@ -445,7 +442,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       }
       assert(e.getMessage.contains("while loading data into Snowflake"))
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }
@@ -472,7 +469,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }
@@ -519,7 +516,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .load()
       checkAnswer(loadedDf, TestUtils.expectedData)
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }

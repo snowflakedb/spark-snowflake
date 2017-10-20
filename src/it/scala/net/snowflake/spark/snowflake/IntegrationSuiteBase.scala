@@ -268,7 +268,7 @@ trait IntegrationSuiteBase
       assert(loadedDf.schema === expectedSchemaAfterLoad.getOrElse(df.schema))
       checkAnswer(loadedDf, df.collect())
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }

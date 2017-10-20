@@ -81,7 +81,7 @@ class STSIntegrationSuite extends IntegrationSuiteBase {
       assert(loadedDf.columns === Seq("a"))
       checkAnswer(loadedDf, Seq(Row(1)))
     } finally {
-      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
     }
   }
