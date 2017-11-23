@@ -187,6 +187,9 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
     jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
 
   private lazy val sfAgent = {
+    Utils.setLastPutCommand(command)
+    Utils.setLastGetCommand(command)
+
     if (!stageSet) setupStageArea()
     new SnowflakeFileTransferAgent(command,
                                    connection.getSfSession,
@@ -245,11 +248,19 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
   private val tempStage     = TEMP_STAGE_LOCATION
   private val dummyLocation = DUMMY_LOCATION
 
-  private val command =
-    if (isWrite)
-      s"PUT $dummyLocation @$tempStage"
+  private val command = {
+    val comm =
+      if (isWrite)
+        s"PUT $dummyLocation @$tempStage"
+      else
+        s"GET @$tempStage $dummyLocation"
+
+    if (params.parallelism.isDefined) {
+      comm + s" PARALLEL=${params.parallelism.get}"
+    }
     else
-      s"GET @$tempStage $dummyLocation"
+      comm
+  }
 
   private var stageSet: Boolean = false
 

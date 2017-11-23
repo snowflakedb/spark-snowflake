@@ -60,6 +60,7 @@ object Parameters {
   val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam(
     "check_bucket_configuration")
   val PARAM_TEMP_SAS_TOKEN     = knownParam("temporary_azure_sas_token")
+  val PARAM_PARALLELISM        = knownParam("parallelism")
   val PARAM_PREACTIONS         = knownParam("preactions")
   val PARAM_POSTACTIONS        = knownParam("postactions")
   val PARAM_AWS_SECRET_KEY     = knownParam("awssecretkey")
@@ -228,6 +229,11 @@ object Parameters {
         }
       }
     }
+
+    /**
+      * Number of threads used for PUT/GET.
+      */
+    lazy val parallelism: Option[Int] = parameters.get(PARAM_PARALLELISM).map(p => p.toInt)
 
     /**
       * A root directory to be used for intermediate data exchange,
