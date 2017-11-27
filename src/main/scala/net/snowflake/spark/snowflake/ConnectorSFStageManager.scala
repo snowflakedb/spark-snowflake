@@ -66,7 +66,10 @@ private[snowflake] object ConnectorSFStageManager {
       smkId: String,
       awsId: String,
       awsKey: String,
-      awsToken: String): AmazonS3Client = {
+      awsToken: String,
+      parallel: Option[Int] = None): AmazonS3Client = {
+
+    val parallelism = parallel.getOrElse(DEFAULT_PARALLELISM)
 
     val decodedKey = Base64.decode(masterKey)
     val queryStageMasterKey: SecretKey =
@@ -78,7 +81,7 @@ private[snowflake] object ConnectorSFStageManager {
       else new BasicAWSCredentials(awsId, awsKey)
 
     val clientConfig = new ClientConfiguration
-    clientConfig.setMaxConnections(DEFAULT_PARALLELISM)
+    clientConfig.setMaxConnections(parallelism)
     clientConfig.setMaxErrorRetry(S3_MAX_RETRIES)
 
     if (is256) {

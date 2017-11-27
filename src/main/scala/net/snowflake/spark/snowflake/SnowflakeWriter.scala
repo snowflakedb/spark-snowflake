@@ -434,14 +434,16 @@ private[snowflake] class SnowflakeWriter(
         if (params.sfCompress)
           meta.setContentEncoding("GZIP")
 
+        val parallelism = params.parallelism.getOrElse(1)
+
         val streamManager = new StreamTransferManager(
           bucketName,
           fileName,
           amazonClient,
           meta,
           1, //numStreams
-          1, //numUploadThreads. Keep at 1 to ensure upload part boundaries concatenate validly.
-          5, //queueCapacity
+          parallelism, //numUploadThreads.
+          5 * parallelism, //queueCapacity
           50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
 
         try {

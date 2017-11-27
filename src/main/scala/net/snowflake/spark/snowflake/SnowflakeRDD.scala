@@ -43,6 +43,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   @transient private val FILES_PER_PARTITION = 2
 
   private val compress = if (params.sfCompress) "gzip" else "none"
+  private val parallel = params.parallelism
 
   private[snowflake] val rowCount = stageManager
     .executeWithConnection({ c =>
@@ -98,7 +99,8 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
                              smkId,
                              awsID,
                              awsKey,
-                             awsToken)
+                             awsToken,
+                             parallel)
 
             val (bucketName, stagePath) =
               extractBucketNameAndPath(stageLocation)
