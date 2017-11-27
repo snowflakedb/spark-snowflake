@@ -212,6 +212,8 @@ object Utils {
 
   // Stores the last generated Select query
   private var lastSelect : String = _
+  private var lastPutCommand : String = _
+  private var lastGetCommand : String = _
 
   private[snowflake] def setLastSelect(select: String): Unit = {
     lastSelect = select
@@ -219,6 +221,22 @@ object Utils {
 
   def getLastSelect : String = {
     lastSelect
+  }
+
+  private[snowflake] def setLastPutCommand(set: String): Unit = {
+    lastPutCommand = set
+  }
+
+  def getLastPutCommand : String = {
+    lastPutCommand
+  }
+
+  private[snowflake] def setLastGetCommand(get: String): Unit = {
+    lastGetCommand = get
+  }
+
+  def getLastGetCommand : String = {
+    lastGetCommand
   }
 
   // Issues a set of configuration changes at the beginning of the session.

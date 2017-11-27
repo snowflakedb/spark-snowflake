@@ -66,7 +66,10 @@ private[snowflake] object ConnectorSFStageManager {
       smkId: String,
       awsId: String,
       awsKey: String,
-      awsToken: String): AmazonS3Client = {
+      awsToken: String,
+      parallel: Option[Int] = None): AmazonS3Client = {
+
+    val parallelism = parallel.getOrElse(DEFAULT_PARALLELISM)
 
     val decodedKey = Base64.decode(masterKey)
     val queryStageMasterKey: SecretKey =
@@ -78,7 +81,7 @@ private[snowflake] object ConnectorSFStageManager {
       else new BasicAWSCredentials(awsId, awsKey)
 
     val clientConfig = new ClientConfiguration
-    clientConfig.setMaxConnections(DEFAULT_PARALLELISM)
+    clientConfig.setMaxConnections(parallelism)
     clientConfig.setMaxErrorRetry(S3_MAX_RETRIES)
 
     if (is256) {
@@ -187,6 +190,9 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
     jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
 
   private lazy val sfAgent = {
+    Utils.setLastPutCommand(command)
+    Utils.setLastGetCommand(command)
+
     if (!stageSet) setupStageArea()
     new SnowflakeFileTransferAgent(command,
                                    connection.getSfSession,
@@ -245,11 +251,19 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
   private val tempStage     = TEMP_STAGE_LOCATION
   private val dummyLocation = DUMMY_LOCATION
 
-  private val command =
-    if (isWrite)
-      s"PUT $dummyLocation @$tempStage"
+  private val command = {
+    val comm =
+      if (isWrite)
+        s"PUT $dummyLocation @$tempStage"
+      else
+        s"GET @$tempStage $dummyLocation"
+
+    if (params.parallelism.isDefined) {
+      comm + s" PARALLEL=${params.parallelism.get}"
+    }
     else
-      s"GET @$tempStage $dummyLocation"
+      comm
+  }
 
   private var stageSet: Boolean = false
 
