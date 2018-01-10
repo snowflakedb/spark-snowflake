@@ -67,9 +67,9 @@ private[querygeneration] object MiscExpression {
       case ShiftRight(col, num) =>
         "BITSHIFTRIGHT" + block(convertExpressions(fields, col, num))
 
-      case SortOrder(child, Ascending, _) =>
+      case SortOrder(child, Ascending, _, _) =>
         block(convertExpression(child, fields)) + " ASC"
-      case SortOrder(child, Descending, _) =>
+      case SortOrder(child, Descending, _, _) =>
         block(convertExpression(child, fields)) + " DESC"
 
       case ScalarSubquery(subquery, _, _) =>
