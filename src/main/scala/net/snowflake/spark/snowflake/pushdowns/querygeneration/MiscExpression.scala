@@ -37,7 +37,7 @@ private[querygeneration] object MiscExpression {
           block(
             cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
         else block(cases + " END")
-      case Cast(child, t) =>
+      case Cast(child, t, _) =>
         getCastType(t) match {
           case None =>
             convertExpression(child, fields)
