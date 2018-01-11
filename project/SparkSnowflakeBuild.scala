@@ -47,7 +47,7 @@ object SparkSnowflakeBuild extends Build {
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := "2.2.0",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.2.0"),
+      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.0"),
       javacOptions ++= Seq("-source", "1.6", "-target", "1.6"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
@@ -95,7 +95,8 @@ object SparkSnowflakeBuild extends Build {
         Seq(
           "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
-          "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force()
+          "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
+          "org.apache.hadoop" % "hadoop-aws" % testHadoopVersion.value % "test" force()
         )
       }),
       libraryDependencies ++= Seq(
