@@ -118,7 +118,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
     runSql(
       s"""
-         | create temporary table test_table(
+         | create or replace temporary view test_table(
          |   testbyte int,
          |   testdate date,
          |   testdec152 decimal(15,2),
@@ -140,7 +140,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
     runSql(
       s"""
-         | create temporary table test_table2(
+         | create or replace temporary view test_table2(
          |   testbyte int,
          |   testdate date,
          |   testdec152 decimal,
