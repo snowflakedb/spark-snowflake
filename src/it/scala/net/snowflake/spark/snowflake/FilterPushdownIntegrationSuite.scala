@@ -67,23 +67,6 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
     testFilter("i IN (2, 3)", s"""(I IN (2, 3))""", Seq(row2, row3))
   }
 
-//  override def beforeEach(): Unit = {
-//    super.beforeEach()
-//    runSql(
-//      s"""
-//         | create temporary table test_table(
-//         |   i int,
-//         |   s string
-//         | )
-//         | using net.snowflake.spark.snowflake
-//         | options(
-//         |   $connectorOptionsString
-//         |   , dbtable \"$test_table\"
-//         | )
-//       """.stripMargin
-//    )
-//  }
-
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table")
