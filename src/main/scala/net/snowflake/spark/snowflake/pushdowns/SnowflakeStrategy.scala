@@ -18,8 +18,8 @@ class SnowflakeStrategy extends Strategy {
   def apply(plan: LogicalPlan): Seq[SparkPlan] =
     try {
       buildQueryRDD(plan.transform({
-        case Project(Nil, child)        => child
-        case SubqueryAlias(_, child, _) => child
+        case Project(Nil, child)     => child
+        case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
       case _: Exception => Nil
