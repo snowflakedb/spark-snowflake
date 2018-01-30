@@ -10,13 +10,13 @@ cache:
 matrix:
   include:
     # Scala 2.10 tests:
-    - jdk: openjdk7
+    - jdk: openjdk8
       scala: 2.10.5
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="2.0.0"
+      env: HADOOP_VERSION="2.6.0" SPARK_VERSION="2.2.0"
     # Scala 2.11 tests:
-    - jdk: openjdk7
+    - jdk: openjdk8
       scala: 2.11.7
-      env: HADOOP_VERSION="2.2.0" SPARK_VERSION="2.0.0" INTEGRATION_TESTS="true"
+      env: HADOOP_VERSION="2.6.0" SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true"
 
 #env:
 #  global:
