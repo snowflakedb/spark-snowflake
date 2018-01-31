@@ -212,10 +212,13 @@ object Parameters {
     lazy val usingExternalStage: Boolean = !rootTempDir.isEmpty
 
     lazy val rootTempDirStorageType: FSType = {
-      if (rootTempDir.isEmpty) {
+      val tempDir = Option(parameters.getOrElse(PARAM_TEMPDIR, "")).
+        getOrElse("")
+
+      if (tempDir.isEmpty) {
         FSType.Unknown
       } else {
-        val lsTempDir = rootTempDir.toLowerCase
+        val lsTempDir = tempDir.toLowerCase
 
         if (lsTempDir.startsWith("file://")) {
           FSType.LocalFile
@@ -225,7 +228,8 @@ object Parameters {
         } else if (lsTempDir.startsWith("s3")) {
           FSType.S3
         } else {
-          FSType.Unknown
+          throw new SnowflakeConnectorException("Parameter 'tempDir' must have a " +
+            "file, wasb, wasbs, s3a, or s3n schema.")
         }
       }
     }
@@ -241,8 +245,10 @@ object Parameters {
       * that can be written to and read from by Snowflake.
       * Make sure that credentials are available for this cloud provider.
       */
-    def rootTempDir: String =
+    lazy val rootTempDir: String = {
+      rootTempDirStorageType
       Option(parameters.getOrElse(PARAM_TEMPDIR, "")).getOrElse("")
+    }
 
     /**
       * Creates a per-query subdirectory in the [[rootTempDir]], with a random UUID.
