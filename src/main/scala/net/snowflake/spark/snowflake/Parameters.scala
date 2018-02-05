@@ -47,6 +47,7 @@ object Parameters {
   val PARAM_SF_SCHEMA          = knownParam("sfschema")
   val PARAM_SF_ROLE            = knownParam("sfrole")
   val PARAM_SF_COMPRESS        = knownParam("sfcompress")
+  val PARAM_SF_FILE_TYPE       = knownParam("sffiletype")
   val PARAM_SF_SSL             = knownParam("sfssl")
   val PARAM_TEMPDIR            = knownParam("tempdir")
   val PARAM_SF_DBTABLE         = knownParam("dbtable")
@@ -338,6 +339,11 @@ object Parameters {
       */
     def sfCompress: Boolean =
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
+
+    /**
+      * Snowflake intermediate file type
+      */
+    def sfFileType: Option[String] = parameters.get(PARAM_SF_FILE_TYPE)
 
     /**
       * Snowflake role - optional
