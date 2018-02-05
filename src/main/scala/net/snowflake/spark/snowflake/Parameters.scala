@@ -84,6 +84,8 @@ object Parameters {
   val BOOLEAN_VALUES_FALSE = Set("off", "no", "false", "0", "disabled")
   // scalastyle: on
 
+  val FILE_TYPES = Set("csv", "parquet")
+
   /**
     * Helper method to check if a given string represents some form
     * of "true" value, see BOOLEAN_VALUES_TRUE
@@ -98,7 +100,8 @@ object Parameters {
     "diststyle"       -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
-    PARAM_POSTACTIONS -> ""
+    PARAM_POSTACTIONS -> "",
+    PARAM_SF_FILE_TYPE -> "csv"
   )
 
   /**
@@ -138,6 +141,11 @@ object Parameters {
           PARAM_SF_QUERY)) {
       throw new IllegalArgumentException(
         "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY + "' parameters at the same time.")
+    }
+    if (userParameters.contains(PARAM_SF_FILE_TYPE) && !FILE_TYPES.contains(userParameters.get(PARAM_SF_FILE_TYPE).get)){
+      throw new UnsupportedOperationException(
+        s"Unsupported file type ${userParameters.get(PARAM_SF_FILE_TYPE)}"
+      )
     }
 
     // Check temp keys

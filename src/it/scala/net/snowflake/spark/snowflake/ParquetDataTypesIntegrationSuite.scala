@@ -26,6 +26,7 @@ class ParquetDataTypesIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_$randomSuffix"
 
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))

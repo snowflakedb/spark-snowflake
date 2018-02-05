@@ -146,6 +146,7 @@ trait IntegrationSuiteBase
 
     // Initialize variables
     connectorOptions = loadConfig()
+
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options

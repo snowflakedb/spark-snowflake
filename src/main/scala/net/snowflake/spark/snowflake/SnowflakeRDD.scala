@@ -49,7 +49,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   private[snowflake] val rowCount = stageManager
     .executeWithConnection({ c =>
       setup(preStatements = Seq.empty,
-            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, None),
+            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, params.sfFileType),
             conn = c,
             keepOpen = true)
     })

@@ -63,6 +63,7 @@ private[snowflake] trait DataUnloader {
     // Save the last SELECT so it can be inspected
     Utils.setLastSelect(query)
 
+
     fileType.getOrElse("csv") match {
       case "csv" =>
         s"""
