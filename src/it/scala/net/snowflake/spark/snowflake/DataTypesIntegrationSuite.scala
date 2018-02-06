@@ -61,13 +61,15 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Test TIMESTAMP_NTZ") {
+    if(params.sfFileType.getOrElse("csv")=="parquet")
+      java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
     timestampHelper("timestamp_ntz", 12, 18)
   }
   test("Test TIMESTAMP_LTZ") {
-    timestampHelper("timestamp_ltz", 14, 16)
+    if(params.sfFileType.getOrElse("csv")!="parquet") timestampHelper("timestamp_ltz", 14, 16)
   }
   test("Test TIMESTAMP_TZ") {
-    timestampHelper("timestamp_tz", 14, 16)
+    if(params.sfFileType.getOrElse("csv")!="parquet") timestampHelper("timestamp_tz", 14, 16)
   }
 
   test("Test DATE") {
