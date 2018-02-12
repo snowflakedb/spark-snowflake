@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.Row
 
 /**
-  * Created by mzukowski on 8/12/16.
+  * Created by Bing Li on 2/5/2018.
   */
 class ParquetDataTypesIntegrationSuite extends IntegrationSuiteBase {
 
