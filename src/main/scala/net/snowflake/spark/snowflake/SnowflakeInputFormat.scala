@@ -247,10 +247,6 @@ private[snowflake] class SnowflakeParquetRecordReader
       curRow = 0
       reader.close()
 
-      //      val t1 = System.nanoTime()
-      //
-      //      println(s"---------------->read one stream ${(t1-t0)/1000000000.0}<----------------------")
-
       true
     } else false
   }

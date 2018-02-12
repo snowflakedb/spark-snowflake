@@ -90,11 +90,13 @@ private[snowflake] object ParquetConversions {
           case BooleanType => fields.get.getBoolean(index, 0)
           case DateType => parseDate(fields.get.getInteger(index, 0), isInternalRow)
           case TimestampType => parseTimestamp(fields.get.getLong(index, 0), isInternalRow)
-          case _ => {
-            println(s"${fields.get.getType.getType(index).toString}===>${types(index).dataType}")
-            null
-          }
-          //removed ByteType, FloatType, IntegerType, LongType, ShortType
+          case LongType => fields.get.getLong(index, 0)
+          case IntegerType => BigInt(fields.get.getBinary(index, 0).getBytes).toInt
+          case FloatType => fields.get.getDouble(index, 0).toFloat
+          case ShortType => BigInt(fields.get.getBinary(index, 0).getBytes).toShort
+          case ByteType => fields.get.getBinary(index, 0).getBytes()(0)
+          case _ =>
+            throw new UnsupportedOperationException(s"${fields.get.getType.getType(index).toString} ===> ${types(index).dataType}")
         }
       }
 
