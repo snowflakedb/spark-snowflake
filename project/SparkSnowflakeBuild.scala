@@ -96,7 +96,7 @@ object SparkSnowflakeBuild extends Build {
           "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" force()
+          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) force()
         )
       }),
       libraryDependencies ++= Seq(
