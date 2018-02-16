@@ -37,7 +37,7 @@ private[querygeneration] object MiscExpression {
           block(
             cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
         else block(cases + " END")
-      case Cast(child, t, _) =>
+      case Cast(child, t) =>
         getCastType(t) match {
           case None =>
             convertExpression(child, fields)
@@ -66,9 +66,9 @@ private[querygeneration] object MiscExpression {
       case ShiftRight(col, num) =>
         "BITSHIFTRIGHT" + block(convertExpressions(fields, col, num))
 
-      case SortOrder(child, Ascending) =>
+      case SortOrder(child, Ascending, _) =>
         block(convertExpression(child, fields)) + " ASC"
-      case SortOrder(child, Descending) =>
+      case SortOrder(child, Descending, _) =>
         block(convertExpression(child, fields)) + " DESC"
 
       case ScalarSubquery(subquery, _, _) =>
