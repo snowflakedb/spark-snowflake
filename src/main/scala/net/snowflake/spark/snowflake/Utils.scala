@@ -210,6 +210,11 @@ object Utils {
     wrapper.getConnector(mergedParams)
   }
 
+  def getJDBCConnection(params: java.util.Map[String, String]): Connection = {
+    val m2: Map[String, String] = params.asScala.toMap
+    getJDBCConnection(m2)
+  }
+
   // Stores the last generated Select query
   private var lastSelect : String = _
   private var lastPutCommand : String = _
@@ -314,6 +319,12 @@ object Utils {
   }
 
   def runQuery(params: Map[String, String], query: String): ResultSet = {
+    val conn = getJDBCConnection(params)
+    conn.createStatement().executeQuery(query)
+  }
+
+  // Java version
+  def runQuery(params: java.util.Map[String, String], query: String): ResultSet = {
     val conn = getJDBCConnection(params)
     conn.createStatement().executeQuery(query)
   }
