@@ -46,10 +46,9 @@ object SparkSnowflakeBuild extends Build {
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.7"),
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
       sparkVersion := "2.1.0",
-      testSparkVersion := sparkVersion.value,
-      //testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.0"),
-      javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+      testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
+      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.2.0"),
+      javacOptions ++= Seq("-source", "1.7", "-target", "1.7"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
       spIgnoreProvided := true,
@@ -102,7 +101,9 @@ object SparkSnowflakeBuild extends Build {
       }),
       libraryDependencies ++= Seq(
         "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
-        "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
+        "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") excludeAll (ExclusionRule(organization = "org.apache.parquet")) force(),
+        "org.apache.parquet" % "parquet-column" % "1.8.2" force(),
+        "org.apache.parquet" % "parquet-hadoop" % "1.8.2" force(),
         "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()
       ),
       ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := {
