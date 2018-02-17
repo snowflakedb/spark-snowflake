@@ -43,12 +43,13 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   @transient private val FILES_PER_PARTITION = 2
 
   private val compress = if (params.sfCompress) "gzip" else "none"
+  private val fileType = params.sfFileType.getOrElse("csv")
   private val parallel = params.parallelism
 
   private[snowflake] val rowCount = stageManager
     .executeWithConnection({ c =>
       setup(preStatements = Seq.empty,
-            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
+            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, params.sfFileType),
             conn = c,
             keepOpen = true)
     })
@@ -81,88 +82,182 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   override def compute(thePartition: Partition,
                        context: TaskContext): Iterator[T] = {
 
-    val converter = Conversions.createRowConverter[T](resultSchema)
-
     val mats   = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
-    val reader = new SnowflakeRecordReader
 
-    try {
-      mats.foreach {
-        case (file, queryId, smkId) =>
-          if (queryId != null) {
-            var stream: InputStream = null
+    fileType match {
+      case "csv" => {
+        val reader = new SnowflakeRecordReader
+        val converter = Conversions.createRowConverter[T](resultSchema)
 
-            val amazonClient =
-              createS3Client(is256,
-                             masterKey,
-                             queryId,
-                             smkId,
-                             awsID,
-                             awsKey,
-                             awsToken,
-                             parallel)
+        try {
+          mats.foreach {
+            case (file, queryId, smkId) =>
+              if (queryId != null) {
+                var stream: InputStream = null
 
-            val (bucketName, stagePath) =
-              extractBucketNameAndPath(stageLocation)
+                val amazonClient =
+                  createS3Client(is256,
+                    masterKey,
+                    queryId,
+                    smkId,
+                    awsID,
+                    awsKey,
+                    awsToken,
+                    parallel)
 
-            var stageFilePath = file
+                val (bucketName, stagePath) =
+                  extractBucketNameAndPath(stageLocation)
 
-            if (!stagePath.isEmpty) {
-              stageFilePath =
-                SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
-            }
+                var stageFilePath = file
 
-            val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-            stream = dataObject.getObjectContent
+                if (!stagePath.isEmpty) {
+                  stageFilePath =
+                    SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
+                }
 
-            if (!is256) {
-              stream = getDecryptedStream(stream,
-                                          masterKey,
-                                          dataObject.getObjectMetadata)
-            }
+                val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+                stream = dataObject.getObjectContent
 
-            stream = compress match {
-              case "gzip" => new GZIPInputStream(stream)
-              case _      => stream
-            }
+                if (!is256) {
+                  stream = getDecryptedStream(stream,
+                    masterKey,
+                    dataObject.getObjectMetadata)
+                }
 
-            reader.addStream(stream)
+                stream = compress match {
+                  case "gzip" => new GZIPInputStream(stream)
+                  case _      => stream
+                }
+
+                reader.addStream(stream)
+              }
           }
+        } catch {
+          case ex: Exception =>
+            reader.closeAll()
+            SnowflakeConnectorUtils.handleS3Exception(ex)
+        }
+
+        new InterruptibleIterator(context, new Iterator[T] {
+
+          private var finished = false
+          private var havePair = false
+
+          override def hasNext: Boolean = {
+            if (!finished && !havePair) {
+              try {
+                finished = !reader.nextKeyValue
+              } catch {
+                case e: IOException =>
+                  finished = true
+              }
+
+              havePair = !finished
+            }
+            !finished
+          }
+
+          override def next(): T = {
+            if (!hasNext) {
+              throw new java.util.NoSuchElementException("End of stream")
+            }
+            havePair = false
+
+            converter(reader.getCurrentValue)
+          }
+        })
       }
-    } catch {
-      case ex: Exception =>
-        reader.closeAll()
-        SnowflakeConnectorUtils.handleS3Exception(ex)
+      case "parquet" => {
+        val reader = new SnowflakeParquetRecordReader
+        val converter = ParquetConversions.createRowConverter[T](resultSchema)
+
+        try {
+          mats.foreach {
+            case (file, queryId, smkId) =>
+              if (queryId != null) {
+                var stream: InputStream = null
+
+                val amazonClient =
+                  createS3Client(is256,
+                    masterKey,
+                    queryId,
+                    smkId,
+                    awsID,
+                    awsKey,
+                    awsToken,
+                    parallel)
+
+                val (bucketName, stagePath) =
+                  extractBucketNameAndPath(stageLocation)
+
+                var stageFilePath = file
+
+                if (!stagePath.isEmpty) {
+                  stageFilePath =
+                    SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
+                }
+
+                val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+                stream = dataObject.getObjectContent
+
+                val inputStreamLength = dataObject.getObjectMetadata.getContentLength // size before decryption
+
+
+                if (!is256) {
+                  stream = getDecryptedStream(stream,
+                    masterKey,
+                    dataObject.getObjectMetadata)
+                }
+
+                stream = compress match {
+                  // case "snappy" => new SnappyInputStream(stream)
+                  case _      => stream
+                }
+                reader.addStream(stream, inputStreamLength)
+              }
+          }
+        } catch {
+          case ex: Exception =>
+            reader.closeAll()
+            SnowflakeConnectorUtils.handleS3Exception(ex)
+        }
+
+        new InterruptibleIterator(context, new Iterator[T] {
+
+          var times = 0
+          var totalTime: Long = 0l
+
+          private var finished = false
+          private var havePair = false
+
+          override def hasNext: Boolean = {
+            if (!finished && !havePair) {
+              try {
+                finished = !reader.nextKeyValue
+              } catch {
+                case e: IOException =>
+                  finished = true
+              }
+
+              havePair = !finished
+            }
+            !finished
+          }
+
+          override def next(): T = {
+            if (!hasNext) {
+              throw new java.util.NoSuchElementException("End of stream")
+            }
+            havePair = false
+
+            val result = converter(reader.getCurrentValue)
+
+            result
+          }
+        })
+      }
     }
 
-    new InterruptibleIterator(context, new Iterator[T] {
-
-      private var finished = false
-      private var havePair = false
-
-      override def hasNext: Boolean = {
-        if (!finished && !havePair) {
-          try {
-            finished = !reader.nextKeyValue
-          } catch {
-            case e: IOException =>
-              finished = true
-          }
-
-          havePair = !finished
-        }
-        !finished
-      }
-
-      override def next(): T = {
-        if (!hasNext) {
-          throw new java.util.NoSuchElementException("End of stream")
-        }
-        havePair = false
-
-        converter(reader.getCurrentValue)
-      }
-    })
   }
 
   override def finalize(): Unit = {

@@ -34,6 +34,15 @@ import org.apache.hadoop.mapreduce.{
   TaskAttemptContext
 }
 
+import org.apache.parquet.column.page.PageReadStore
+import org.apache.parquet.hadoop.metadata.ParquetMetadata
+import org.apache.parquet.io.{ColumnIOFactory, InputFile}
+import org.apache.parquet.schema.MessageType
+import org.apache.parquet.example.data.Group
+import org.apache.parquet.example.data.simple.convert.GroupRecordConverter
+
+import net.snowflake.spark.snowflake.parquet.{FileFromStream, ParquetStreamReader}
+
 /** Input format for text records saved with in-record delimiter and newline characters escaped.
   *
   * Note, Snowflake exports fields where
@@ -69,6 +78,216 @@ object SnowflakeInputFormat {
     } else {
       c.charAt(0)
     }
+  }
+}
+
+private[snowflake] class SnowflakeParquetRecordReader
+  extends RecordReader[JavaLong, Option[Group]] {
+
+  /** Source stream we're reading from */
+  private var inputStreams: Seq[(InputStream,Long)] = _
+
+  private var currentStream: Int = 0
+
+  /** Effective stream, including compression */
+  private var curRow: Int = 0
+  private var rows: Array[Group] = _
+
+  private var key: JavaLong        = _
+  private var value: Option[Group] = _
+
+  /** Start index when reading. 0 if we're reading, size if we skip this file */
+  private var start: Long = _
+
+  /** The size of the underlying file */
+  private var size: Long = _
+
+  /** Position in the reader - note, not in the input stream */
+  private var cur: Long = _
+
+  private var eof: Boolean = false
+
+  private var codec: CompressionCodec = _
+
+  private var started: Boolean = false
+
+  private var delimiter: Byte                          = _
+  @inline private[this] final val escapeChar: Byte     = '\\'
+  @inline private[this] final val quoteChar: Byte      = '"'
+  @inline private[this] final val lineFeed: Byte       = '\n'
+  @inline private[this] final val carriageReturn: Byte = '\r'
+
+  @inline private[this] final val inputBufferSize = 1024 * 1024
+  @inline private[this] final val codecBufferSize = 64 * 1024
+
+
+  override def initialize(inputSplit: InputSplit,
+                          context: TaskAttemptContext): Unit = {
+    val split               = inputSplit.asInstanceOf[FileSplit]
+    val file                = split.getPath
+    val conf: Configuration = context.getConfiguration
+
+    initializeDelimiter(conf)
+
+    val compressionCodecs = new CompressionCodecFactory(conf)
+    codec = compressionCodecs.getCodec(file)
+    val fs = file.getFileSystem(conf)
+
+    size = fs.getFileStatus(file).getLen
+
+    // Note, for Snowflake, we do not support splitting the file.
+    // This is because it is in general not possible to find the record boundary
+    // with 100% precision.
+    // This is because we use quoted strings, and we never know if we are in
+    // the middle of a quoted string. We can scan e.g. 16MB ahead, but it's
+    // pointless.
+    // This is not a problem, as we only generate small files anyway.
+    if (split.getStart > 0) {
+      // Never read anything
+      eof = true
+      start = size
+    } else {
+      initializeWithStreams(Seq(fs.open(file)))
+    }
+  }
+
+  private def initializeDelimiter(conf: Configuration = null): Unit = {
+    delimiter =
+      SnowflakeInputFormat.getDelimiterOrDefault(conf).asInstanceOf[Byte]
+    require(
+      delimiter != escapeChar,
+      s"The delimiter and the escape char cannot be the same but found $delimiter.")
+    require(delimiter != lineFeed,
+      "The delimiter cannot be the lineFeed character.")
+    require(delimiter != carriageReturn,
+      "The delimiter cannot be the carriage return.")
+  }
+
+  def initializeWithStreams(streams: Seq[InputStream]): Unit = {
+    // Only the 0-split reads, and reads everything.
+    start = 0
+    cur = 0
+
+    inputStreams = streams.map(x=>(x,x.available().toLong))
+
+    if (inputStreams.isEmpty) {
+      eof = true
+      start = size
+    }
+  }
+
+  def addStream(stream: InputStream, size: Long): Unit = {
+    inputStreams =
+      if (inputStreams == null) Seq((stream, size)) else inputStreams :+ (stream, size)
+  }
+
+  override def getProgress: Float = {
+    if (eof) {
+      1.0f
+    } else {
+      math.min(cur.toFloat / size, 1.0f)
+    }
+  }
+
+  override def nextKeyValue(): Boolean = {
+    if (!started) {
+      initializeDelimiter()
+      getNextStream
+      started = true
+    }
+    if (size >= 0 && !eof) {
+      key = cur
+      value = nextValue()
+      if (eof) {
+        if (!getNextStream) {
+          key = null
+          value = None
+          false
+        } else nextKeyValue()
+      } else {
+        true
+      }
+    } else {
+      key = null
+      value = None
+      false
+    }
+  }
+
+  def getNextStream: Boolean = {
+    close()
+
+    if (inputStreams != null && currentStream < inputStreams.length) {
+
+      //      val t0 = System.nanoTime()
+
+      val file:InputFile = new FileFromStream(inputStreams(currentStream)._1, inputStreams(currentStream)._2.toInt)
+
+      val footer: ParquetMetadata = ParquetStreamReader.readFooter(file)
+      val reader = new ParquetStreamReader(file, footer)
+      val schema: MessageType = footer.getFileMetaData.getSchema
+      currentStream += 1
+      eof = false
+
+      val rowBuf = ArrayBuffer.empty[Group]
+      var page:PageReadStore = reader.readNextRowGroup()
+
+
+      while(page!=null){
+        val rows:Long = page.getRowCount
+        val columnIO = new ColumnIOFactory().getColumnIO(schema)
+        val recordReader = columnIO.getRecordReader(page, new GroupRecordConverter(schema))
+
+        (0l until rows).foreach(_=>{
+          rowBuf.append(recordReader.read())
+
+        })
+
+        page = reader.readNextRowGroup()
+      }
+      rows = rowBuf.toArray
+      curRow = 0
+      reader.close()
+
+      true
+    } else false
+  }
+
+  def closeAll(): Unit = {
+    if (inputStreams != null) {
+      inputStreams.foreach { stream =>
+        if (stream != null)
+          stream._1.close()
+      }
+    }
+  }
+
+  override def getCurrentValue: Option[Group] = value
+
+  override def getCurrentKey: JavaLong = key
+
+  override def close(): Unit = {
+
+  }
+
+  /** Read the next record.
+    * Note - special return format:
+    * - input non-quoted fields are returned as they are
+    * - input quoted fields are returned *without* quotes
+    * --- if there was a double quote inside, it's converted to a single quote
+    * - input empty fields are returned as NULLs
+    */
+  private def nextValue(): Option[Group] = {
+
+    if (curRow == rows.length) {
+      eof = true
+      None
+    }else{
+      curRow+=1
+      cur+=1
+      Some(rows(curRow-1))
+    }
+
   }
 }
 
