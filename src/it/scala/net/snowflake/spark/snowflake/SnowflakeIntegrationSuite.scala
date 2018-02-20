@@ -37,7 +37,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    if(params.sfFileType.getOrElse("csv")!="parquet") java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+    if(params.sfFileType != "parquet") java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
 
     conn.createStatement.executeUpdate("drop table if exists test_table")
     conn.createStatement.executeUpdate("drop table if exists test_table2")

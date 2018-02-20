@@ -357,7 +357,7 @@ object Parameters {
     /**
       * Snowflake intermediate file type
       */
-    def sfFileType: Option[String] = parameters.get(PARAM_SF_FILE_TYPE)
+    def sfFileType: String = parameters.get(PARAM_SF_FILE_TYPE).getOrElse("csv")
 
     /**
       * Snowflake role - optional

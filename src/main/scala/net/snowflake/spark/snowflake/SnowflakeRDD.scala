@@ -43,7 +43,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   @transient private val FILES_PER_PARTITION = 2
 
   private val compress = if (params.sfCompress) "gzip" else "none"
-  private val fileType = params.sfFileType.getOrElse("csv")
+  private val fileType = params.sfFileType
   private val parallel = params.parallelism
 
   private[snowflake] val rowCount = stageManager

@@ -162,7 +162,7 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
 
-    params.sfFileType.getOrElse("csv") match {
+    params.sfFileType match {
       case "csv" => {
         if (params.usingExternalStage) {
           val tempDir = params.createPerQueryTempDir()
