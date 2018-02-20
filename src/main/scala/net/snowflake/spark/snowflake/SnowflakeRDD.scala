@@ -2,10 +2,12 @@ package net.snowflake.spark.snowflake
 
 import java.io.{IOException, InputStream}
 import java.util.zip.GZIPInputStream
-
+import java.lang.{Long => JavaLong}
 import net.snowflake.client.jdbc._
 import net.snowflake.spark.snowflake.ConnectorSFStageManager._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import org.apache.hadoop.mapreduce.RecordReader
+import org.apache.parquet.example.data.Group
 import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SQLContext
@@ -42,7 +44,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
   @transient private val FILES_PER_PARTITION = 2
 
-  private val compress = if (params.sfCompress) "gzip" else "none"
+  private val compress = if (params.sfCompress && params.sfFileType=="csv") "gzip" else "none"
   private val fileType = params.sfFileType
   private val parallel = params.parallelism
 
@@ -82,6 +84,82 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
   override def compute(thePartition: Partition,
                        context: TaskContext): Iterator[T] = {
 
+    class ResultIterator[A](reader: RecordReader[JavaLong,A], converter: (A)=>T) extends Iterator[T] {
+      var times = 0
+      var totalTime: Long = 0l
+
+      private var finished = false
+      private var havePair = false
+
+      override def hasNext: Boolean = {
+        if (!finished && !havePair) {
+          try {
+            finished = !reader.nextKeyValue
+          } catch {
+            case e: IOException =>
+              finished = true
+          }
+
+          havePair = !finished
+        }
+        !finished
+      }
+
+      override def next(): T = {
+        if (!hasNext) {
+          throw new java.util.NoSuchElementException("End of stream")
+        }
+        havePair = false
+        converter(reader.getCurrentValue)
+      }
+    }
+
+    def getStreamAndLength(file: String, queryId: String, smkId: String): (InputStream, Long) = {
+      var stream: InputStream = null
+      var inputStreamLength: Long = 0
+
+      if (queryId != null) {
+        val amazonClient =
+          createS3Client(is256,
+            masterKey,
+            queryId,
+            smkId,
+            awsID,
+            awsKey,
+            awsToken,
+            parallel)
+
+        val (bucketName, stagePath) =
+          extractBucketNameAndPath(stageLocation)
+
+        var stageFilePath = file
+
+        if (!stagePath.isEmpty) {
+          stageFilePath =
+            SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
+        }
+
+        val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+        stream = dataObject.getObjectContent
+
+        inputStreamLength = dataObject.getObjectMetadata.getContentLength // size before decryption
+
+
+
+        if (!is256) {
+          stream = getDecryptedStream(stream,
+            masterKey,
+            dataObject.getObjectMetadata)
+        }
+
+        stream = compress match {
+          case "gzip" => new GZIPInputStream(stream)
+          // case "snappy" => new SnappyInputStream(stream)
+          case _      => stream
+        }
+      }
+      (stream, inputStreamLength)
+    }
 
 
     val mats   = thePartition.asInstanceOf[SnowflakeRDDPartition].srcFiles
@@ -94,46 +172,10 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
         try {
           mats.foreach {
-            case (file, queryId, smkId) =>
-              if (queryId != null) {
-                var stream: InputStream = null
-
-                val amazonClient =
-                  createS3Client(is256,
-                    masterKey,
-                    queryId,
-                    smkId,
-                    awsID,
-                    awsKey,
-                    awsToken,
-                    parallel)
-
-                val (bucketName, stagePath) =
-                  extractBucketNameAndPath(stageLocation)
-
-                var stageFilePath = file
-
-                if (!stagePath.isEmpty) {
-                  stageFilePath =
-                    SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
-                }
-
-                val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-                stream = dataObject.getObjectContent
-
-                if (!is256) {
-                  stream = getDecryptedStream(stream,
-                    masterKey,
-                    dataObject.getObjectMetadata)
-                }
-
-                stream = compress match {
-                  case "gzip" => new GZIPInputStream(stream)
-                  case _      => stream
-                }
-
-                reader.addStream(stream)
-              }
+            case (file, queryId, smkId) =>{
+              val (stream, streamLength) = getStreamAndLength(file,queryId,smkId)
+              reader.addStream(stream)
+            }
           }
         } catch {
           case ex: Exception =>
@@ -141,34 +183,11 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
             SnowflakeConnectorUtils.handleS3Exception(ex)
         }
 
-        new InterruptibleIterator(context, new Iterator[T] {
-
-          private var finished = false
-          private var havePair = false
-
-          override def hasNext: Boolean = {
-            if (!finished && !havePair) {
-              try {
-                finished = !reader.nextKeyValue
-              } catch {
-                case e: IOException =>
-                  finished = true
-              }
-
-              havePair = !finished
-            }
-            !finished
-          }
-
-          override def next(): T = {
-            if (!hasNext) {
-              throw new java.util.NoSuchElementException("End of stream")
-            }
-            havePair = false
-
-            converter(reader.getCurrentValue)
-          }
-        })
+        new InterruptibleIterator(
+          context,
+          new ResultIterator[Array[String]](
+            reader.asInstanceOf[RecordReader[JavaLong, Array[String]]],
+            converter))
       }
       case "parquet" => {
         val reader = new SnowflakeParquetRecordReader
@@ -176,48 +195,10 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
 
         try {
           mats.foreach {
-            case (file, queryId, smkId) =>
-              if (queryId != null) {
-                var stream: InputStream = null
-
-                val amazonClient =
-                  createS3Client(is256,
-                    masterKey,
-                    queryId,
-                    smkId,
-                    awsID,
-                    awsKey,
-                    awsToken,
-                    parallel)
-
-                val (bucketName, stagePath) =
-                  extractBucketNameAndPath(stageLocation)
-
-                var stageFilePath = file
-
-                if (!stagePath.isEmpty) {
-                  stageFilePath =
-                    SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
-                }
-
-                val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-                stream = dataObject.getObjectContent
-
-                val inputStreamLength = dataObject.getObjectMetadata.getContentLength // size before decryption
-
-
-                if (!is256) {
-                  stream = getDecryptedStream(stream,
-                    masterKey,
-                    dataObject.getObjectMetadata)
-                }
-
-                stream = compress match {
-                  // case "snappy" => new SnappyInputStream(stream)
-                  case _      => stream
-                }
-                reader.addStream(stream, inputStreamLength)
-              }
+            case (file, queryId, smkId) => {
+              val (stream, streamLength) = getStreamAndLength(file,queryId,smkId)
+              reader.addStream(stream, streamLength)
+            }
           }
         } catch {
           case ex: Exception =>
@@ -225,42 +206,13 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
             SnowflakeConnectorUtils.handleS3Exception(ex)
         }
 
-        new InterruptibleIterator(context, new Iterator[T] {
-
-          var times = 0
-          var totalTime: Long = 0l
-
-          private var finished = false
-          private var havePair = false
-
-          override def hasNext: Boolean = {
-            if (!finished && !havePair) {
-              try {
-                finished = !reader.nextKeyValue
-              } catch {
-                case e: IOException =>
-                  finished = true
-              }
-
-              havePair = !finished
-            }
-            !finished
-          }
-
-          override def next(): T = {
-            if (!hasNext) {
-              throw new java.util.NoSuchElementException("End of stream")
-            }
-            havePair = false
-
-            val result = converter(reader.getCurrentValue)
-
-            result
-          }
-        })
+        new InterruptibleIterator(
+          context,
+          new ResultIterator[Option[Group]](
+            reader.asInstanceOf[RecordReader[JavaLong, Option[Group]]],
+            converter))
       }
     }
-
 
   }
 
@@ -268,4 +220,7 @@ private[snowflake] class SnowflakeRDD[T: ClassTag](
     stageManager.closeConnection()
     super.finalize()
   }
+
+
 }
+
