@@ -56,14 +56,14 @@ private[snowflake] trait DataUnloader {
                       location: String,
                       compression: String,
                       credentialsString: Option[String],
-                      fileType: Option[String]): String = {
+                      fileType: String): String = {
 
     val credentials = credentialsString.getOrElse("")
 
     // Save the last SELECT so it can be inspected
     Utils.setLastSelect(query)
 
-    fileType.getOrElse("csv") match {
+    fileType match {
       case "csv" =>
         s"""
            |COPY INTO '$location'
