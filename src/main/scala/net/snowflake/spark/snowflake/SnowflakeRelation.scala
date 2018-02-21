@@ -161,42 +161,78 @@ private[snowflake] case class SnowflakeRelation(
   // without first executing it.
   private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
+    params.sfFileType match {
+      case "csv" => {
+        if (params.usingExternalStage) {
+          val tempDir = params.createPerQueryTempDir()
 
-    if (params.usingExternalStage) {
-      val tempDir = params.createPerQueryTempDir()
+          val numRows = setup(
+            sql = buildUnloadStmt(
+              query = sql,
+              location = Utils.fixUrlForCopyCommand(tempDir),
+              compression = if (params.sfCompress) "gzip" else "none",
+              credentialsString = Some(
+                CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
+                  params)),
+              fileType = params.sfFileType),
 
-      val numRows = setup(
-        sql = buildUnloadStmt(
-          query = sql,
-          location = Utils.fixUrlForCopyCommand(tempDir),
-          compression = if (params.sfCompress) "gzip" else "none",
-          credentialsString = Some(
-            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
-                                                              params))),
+            conn = jdbcWrapper.getConnector(params))
 
-        conn = jdbcWrapper.getConnector(params))
+          if (numRows == 0) {
+            // For no records, create an empty RDD
+            sqlContext.sparkContext.emptyRDD[T]
+          } else {
+            val rdd = sqlContext.sparkContext.newAPIHadoopFile(
+              tempDir,
+              classOf[SnowflakeInputFormat],
+              classOf[java.lang.Long],
+              classOf[Array[String]])
+            rdd.values.mapPartitions { iter =>
+              val converter: Array[String] => T =
+                Conversions.createRowConverter[T](resultSchema)
+              iter.map(converter)
+            }
+          }
+        } else {
+          val sfRDD =
+            new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
 
-      if (numRows == 0) {
-        // For no records, create an empty RDD
-        sqlContext.sparkContext.emptyRDD[T]
-      } else {
-        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-          tempDir,
-          classOf[SnowflakeInputFormat],
-          classOf[java.lang.Long],
-          classOf[Array[String]])
-        rdd.values.mapPartitions { iter =>
-          val converter: Array[String] => T =
-            Conversions.createRowConverter[T](resultSchema)
-          iter.map(converter)
+          if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
+          else sfRDD
         }
       }
-    } else {
-      val sfRDD =
-        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+      case "parquet" => {
+        if (params.usingExternalStage) {
+          val tempDir = params.createPerQueryTempDir()
 
-      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
-      else sfRDD
+          val numRows = setup(
+            sql = buildUnloadStmt(
+              query = sql,
+              location = Utils.fixUrlForCopyCommand(tempDir),
+              compression = if (params.sfCompress) "snappy" else "none",
+              credentialsString = Some(
+                CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
+                  params)),
+              fileType = params.sfFileType),
+
+            conn = jdbcWrapper.getConnector(params))
+
+          if (numRows == 0) {
+            // For no records, create an empty RDD
+            sqlContext.sparkContext.emptyRDD[T]
+          } else {
+            sqlContext.read.parquet(tempDir).rdd.asInstanceOf[RDD[T]]
+          }
+        } else {
+          val sfRDD =
+            new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+
+          if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
+          else sfRDD
+        }
+      }
+      case t:String =>
+        throw new UnsupportedOperationException(s"Unsupported file type: $t")
     }
   }
 

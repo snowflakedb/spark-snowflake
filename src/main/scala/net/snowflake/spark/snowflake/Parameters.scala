@@ -47,6 +47,7 @@ object Parameters {
   val PARAM_SF_SCHEMA          = knownParam("sfschema")
   val PARAM_SF_ROLE            = knownParam("sfrole")
   val PARAM_SF_COMPRESS        = knownParam("sfcompress")
+  val PARAM_SF_FILE_TYPE       = knownParam("sffiletype")
   val PARAM_SF_SSL             = knownParam("sfssl")
   val PARAM_TEMPDIR            = knownParam("tempdir")
   val PARAM_SF_DBTABLE         = knownParam("dbtable")
@@ -83,6 +84,8 @@ object Parameters {
   val BOOLEAN_VALUES_FALSE = Set("off", "no", "false", "0", "disabled")
   // scalastyle: on
 
+  val FILE_TYPES = Set("csv", "parquet")
+
   /**
     * Helper method to check if a given string represents some form
     * of "true" value, see BOOLEAN_VALUES_TRUE
@@ -97,7 +100,8 @@ object Parameters {
     "diststyle"       -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
-    PARAM_POSTACTIONS -> ""
+    PARAM_POSTACTIONS -> "",
+    PARAM_SF_FILE_TYPE -> "csv"
   )
 
   /**
@@ -137,6 +141,11 @@ object Parameters {
           PARAM_SF_QUERY)) {
       throw new IllegalArgumentException(
         "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY + "' parameters at the same time.")
+    }
+    if (userParameters.contains(PARAM_SF_FILE_TYPE) && !FILE_TYPES.contains(userParameters.get(PARAM_SF_FILE_TYPE).get)){
+      throw new UnsupportedOperationException(
+        s"Unsupported file type ${userParameters.get(PARAM_SF_FILE_TYPE)}"
+      )
     }
 
     // Check temp keys
@@ -344,6 +353,12 @@ object Parameters {
       */
     def sfCompress: Boolean =
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
+
+    /**
+      * Snowflake intermediate file type
+      */
+    def sfFileType: String = parameters.get(PARAM_SF_FILE_TYPE).getOrElse("csv")
+
 
     /**
       * Snowflake role - optional
