@@ -58,8 +58,7 @@ object Parameters {
   val PARAM_TEMP_KEY_ID        = knownParam("temporary_aws_access_key_id")
   val PARAM_TEMP_KEY_SECRET    = knownParam("temporary_aws_secret_access_key")
   val PARAM_TEMP_SESSION_TOKEN = knownParam("temporary_aws_session_token")
-  val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam(
-    "check_bucket_configuration")
+  val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam("check_bucket_configuration")
   val PARAM_TEMP_SAS_TOKEN     = knownParam("temporary_azure_sas_token")
   val PARAM_PARALLELISM        = knownParam("parallelism")
   val PARAM_PREACTIONS         = knownParam("preactions")
@@ -68,6 +67,7 @@ object Parameters {
   val PARAM_AWS_ACCESS_KEY     = knownParam("awsaccesskey")
   val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
+  val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -101,7 +101,8 @@ object Parameters {
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
-    PARAM_SF_FILE_TYPE -> "csv"
+    PARAM_SF_FILE_TYPE -> "csv",
+    PARAM_AUTO_PUSHDOWN -> "on"
   )
 
   /**
@@ -358,6 +359,11 @@ object Parameters {
       * Snowflake intermediate file type
       */
     def sfFileType: String = parameters.get(PARAM_SF_FILE_TYPE).getOrElse("csv")
+
+    /**
+      * Snowflake automatically enable/disable pushdown function
+      */
+    def autoPushdown: Boolean = isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
 
     /**
       * Snowflake role - optional

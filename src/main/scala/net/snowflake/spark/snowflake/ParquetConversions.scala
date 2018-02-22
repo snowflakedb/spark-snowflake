@@ -77,7 +77,7 @@ private[snowflake] object ParquetConversions {
               case PrimitiveTypeName.INT32 => parseDecimal(BigDecimal(fields.get.getInteger(index, 0), dt.scale), isInternalRow)
               case PrimitiveTypeName.INT64 => parseDecimal(BigDecimal(fields.get.getLong(index, 0), dt.scale), isInternalRow)
               case _ => {
-                println(s"${fields.get.getType.getType(index).asPrimitiveType().getPrimitiveTypeName}")
+                println(s"${fields.get.getType.getType(index).asPrimitiveType().getPrimitiveTypeName} -> Decimal")
                 null
               }
             }
@@ -90,7 +90,17 @@ private[snowflake] object ParquetConversions {
           case BooleanType => fields.get.getBoolean(index, 0)
           case DateType => parseDate(fields.get.getInteger(index, 0), isInternalRow)
           case TimestampType => parseTimestamp(fields.get.getLong(index, 0), isInternalRow)
-          case LongType => fields.get.getLong(index, 0)
+          case LongType =>  {
+            fields.get.getType.getType(index).asPrimitiveType().getPrimitiveTypeName match {
+              case PrimitiveTypeName.INT64 => fields.get.getLong(index,0)
+              case PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => BigInt(fields.get.getBinary(index,0).getBytes).toLong
+              case _ => {
+                println(s"${fields.get.getType.getType(index).asPrimitiveType().getPrimitiveTypeName} -> Long")
+                null
+              }
+            }
+           // fields.get.getLong(index, 0)
+          }
           case IntegerType => BigInt(fields.get.getBinary(index, 0).getBytes).toInt
           case FloatType => fields.get.getDouble(index, 0).toFloat
           case ShortType => BigInt(fields.get.getBinary(index, 0).getBytes).toShort
