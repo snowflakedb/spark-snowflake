@@ -67,6 +67,10 @@ object Parameters {
   val PARAM_AWS_ACCESS_KEY     = knownParam("awsaccesskey")
   val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
+  val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
+  val PARAM_COLUMN_MAP         = knownParam("columnmap")
+
+
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -97,7 +101,9 @@ object Parameters {
     "diststyle"       -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
-    PARAM_POSTACTIONS -> ""
+    PARAM_POSTACTIONS -> "",
+    PARAM_AUTO_PUSHDOWN -> "on"
+
   )
 
   /**
@@ -346,6 +352,12 @@ object Parameters {
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
 
     /**
+      * Snowflake automatically enable/disable pushdown function
+      */
+    def autoPushdown: Boolean = isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
+
+
+    /**
       * Snowflake role - optional
       */
     def sfRole: Option[String] = parameters.get(PARAM_SF_ROLE)
@@ -354,6 +366,19 @@ object Parameters {
       * Snowflake timezone- optional
       */
     def sfTimezone: Option[String] = parameters.get(PARAM_SF_TIMEZONE)
+
+
+    /**
+      * Retrieve Column mapping data.
+      * None if empty
+      */
+    def columnMap: Option[Map[String,String]] = {
+      parameters.get(PARAM_COLUMN_MAP) match {
+        case None => None
+        case Some(source: String) => Some(Utils.parseMap(source))
+      }
+    }
+
 
     /**
       * The JDBC driver class name. This is used to make sure the driver is registered before
