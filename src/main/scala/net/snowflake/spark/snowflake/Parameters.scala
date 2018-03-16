@@ -68,6 +68,7 @@ object Parameters {
   val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
   val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
+  val PARAM_COLUMN_MAP         = knownParam("columnmap")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -480,6 +481,17 @@ object Parameters {
       for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
         yield
           new StorageCredentialsSharedAccessSignature(sas)
+    }
+
+    /**
+      * Retrieve Column mapping data.
+      * None if empty
+      */
+    def columnMap: Option[Map[String,String]] = {
+      parameters.get(PARAM_COLUMN_MAP) match {
+        case None => None
+        case Some(source: String) => Some(Utils.parseMap(source))
+      }
     }
   }
 }

@@ -358,4 +358,16 @@ object Utils {
         .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY|AZURE_SAS_TOKEN)='[^']+'", "$1='❄☃❄☺❄☃❄'")
         .replaceAll("(sfaccount|sfurl|sfuser|sfpassword|sfwarehouse|sfdatabase|sfschema|sfrole|awsaccesskey|awssecretkey) \"[^\"]+\"", "$1 \"❄☃❄☺❄☃❄\"")
   }
+
+  def parseMap(source: String): Map[String,String] = {
+    if(source == null || source.length < 5 || !(source.startsWith("Map(") && source.endsWith(")"))) throw new UnsupportedOperationException("input map format is incorrect!")
+    source
+      .substring(4,source.length-1)
+      .split(",")
+      .map(x=>{
+        val names = x.split("->").map(_.trim)
+        names(0)->names(1)
+      })
+      .toMap
+  }
 }
