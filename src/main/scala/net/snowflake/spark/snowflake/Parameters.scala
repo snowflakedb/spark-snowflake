@@ -47,6 +47,7 @@ object Parameters {
   val PARAM_SF_SCHEMA          = knownParam("sfschema")
   val PARAM_SF_ROLE            = knownParam("sfrole")
   val PARAM_SF_COMPRESS        = knownParam("sfcompress")
+  val PARAM_SF_FILE_TYPE       = knownParam("sffiletype")
   val PARAM_SF_SSL             = knownParam("sfssl")
   val PARAM_TEMPDIR            = knownParam("tempdir")
   val PARAM_SF_DBTABLE         = knownParam("dbtable")
@@ -57,8 +58,7 @@ object Parameters {
   val PARAM_TEMP_KEY_ID        = knownParam("temporary_aws_access_key_id")
   val PARAM_TEMP_KEY_SECRET    = knownParam("temporary_aws_secret_access_key")
   val PARAM_TEMP_SESSION_TOKEN = knownParam("temporary_aws_session_token")
-  val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam(
-    "check_bucket_configuration")
+  val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam("check_bucket_configuration")
   val PARAM_TEMP_SAS_TOKEN     = knownParam("temporary_azure_sas_token")
   val PARAM_PARALLELISM        = knownParam("parallelism")
   val PARAM_PREACTIONS         = knownParam("preactions")
@@ -67,6 +67,8 @@ object Parameters {
   val PARAM_AWS_ACCESS_KEY     = knownParam("awsaccesskey")
   val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
+  val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
+  val PARAM_COLUMN_MAP         = knownParam("columnmap")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -83,6 +85,8 @@ object Parameters {
   val BOOLEAN_VALUES_FALSE = Set("off", "no", "false", "0", "disabled")
   // scalastyle: on
 
+  val FILE_TYPES = Set("csv", "parquet")
+
   /**
     * Helper method to check if a given string represents some form
     * of "true" value, see BOOLEAN_VALUES_TRUE
@@ -97,7 +101,9 @@ object Parameters {
     "diststyle"       -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
-    PARAM_POSTACTIONS -> ""
+    PARAM_POSTACTIONS -> "",
+    PARAM_SF_FILE_TYPE -> "csv",
+    PARAM_AUTO_PUSHDOWN -> "on"
   )
 
   /**
@@ -137,6 +143,11 @@ object Parameters {
           PARAM_SF_QUERY)) {
       throw new IllegalArgumentException(
         "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY + "' parameters at the same time.")
+    }
+    if (userParameters.contains(PARAM_SF_FILE_TYPE) && !FILE_TYPES.contains(userParameters.get(PARAM_SF_FILE_TYPE).get)){
+      throw new UnsupportedOperationException(
+        s"Unsupported file type ${userParameters.get(PARAM_SF_FILE_TYPE)}"
+      )
     }
 
     // Check temp keys
@@ -346,6 +357,16 @@ object Parameters {
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
 
     /**
+      * Snowflake intermediate file type
+      */
+    def sfFileType: String = parameters.get(PARAM_SF_FILE_TYPE).getOrElse("csv")
+
+    /**
+      * Snowflake automatically enable/disable pushdown function
+      */
+    def autoPushdown: Boolean = isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
+
+    /**
       * Snowflake role - optional
       */
     def sfRole: Option[String] = parameters.get(PARAM_SF_ROLE)
@@ -460,6 +481,17 @@ object Parameters {
       for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
         yield
           new StorageCredentialsSharedAccessSignature(sas)
+    }
+
+    /**
+      * Retrieve Column mapping data.
+      * None if empty
+      */
+    def columnMap: Option[Map[String,String]] = {
+      parameters.get(PARAM_COLUMN_MAP) match {
+        case None => None
+        case Some(source: String) => Some(Utils.parseMap(source))
+      }
     }
   }
 }

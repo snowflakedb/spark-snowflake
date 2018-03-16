@@ -55,27 +55,48 @@ private[snowflake] trait DataUnloader {
   def buildUnloadStmt(query: String,
                       location: String,
                       compression: String,
-                      credentialsString: Option[String]): String = {
+                      credentialsString: Option[String],
+                      fileType: String): String = {
 
     val credentials = credentialsString.getOrElse("")
 
     // Save the last SELECT so it can be inspected
     Utils.setLastSelect(query)
 
-    s"""
-       |COPY INTO '$location'
-       |FROM ($query)
-       |$credentials
-       |FILE_FORMAT = (
-       |    TYPE=CSV
-       |    COMPRESSION='$compression'
-       |    FIELD_DELIMITER='|'
-       |    /*ESCAPE='\\\\'*/
-       |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
-       |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    NULL_IF= ()
-       |  )
-       |MAX_FILE_SIZE = ${params.s3maxfilesize}
-       |""".stripMargin.trim
+
+    fileType match {
+      case "csv" =>
+        s"""
+           |COPY INTO '$location'
+           |FROM ($query)
+           |$credentials
+           |FILE_FORMAT = (
+           |    TYPE=CSV
+           |    COMPRESSION='$compression'
+           |    FIELD_DELIMITER='|'
+           |    /*ESCAPE='\\\\'*/
+           |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
+           |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+           |    NULL_IF= ()
+           |  )
+           |MAX_FILE_SIZE = ${params.s3maxfilesize}
+           |""".stripMargin.trim
+      case "parquet" =>
+        s"""
+           |COPY INTO '$location'
+           |FROM ($query)
+           |$credentials
+           |FILE_FORMAT = (
+           |    TYPE=PARQUET
+           |    SNAPPY_COMPRESSION = ${if(compression=="snappy") "TRUE" else "FALSE"}
+           |  )
+           |MAX_FILE_SIZE = ${params.s3maxfilesize}
+           |""".stripMargin.trim
+      case t: String =>
+        throw new UnsupportedOperationException(s"Unsupported file type: $t")
+
+    }
+
+
   }
 }

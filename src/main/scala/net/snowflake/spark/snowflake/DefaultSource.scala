@@ -52,6 +52,9 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
+    //check spark version for push down
+    if(parameters.getOrElse("autopushdown","on")=="on")
+      SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
   }
 
@@ -63,6 +66,9 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
+    //check spark version for push down
+    if(parameters.getOrElse("autopushdown","on")=="on")
+      SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
   }
 
