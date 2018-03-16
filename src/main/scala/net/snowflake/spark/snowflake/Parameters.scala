@@ -67,6 +67,8 @@ object Parameters {
   val PARAM_AWS_ACCESS_KEY     = knownParam("awsaccesskey")
   val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
+  val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
+
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -97,7 +99,9 @@ object Parameters {
     "diststyle"       -> "EVEN",
     "usestagingtable" -> "true",
     PARAM_PREACTIONS  -> "",
-    PARAM_POSTACTIONS -> ""
+    PARAM_POSTACTIONS -> "",
+    PARAM_AUTO_PUSHDOWN -> "on"
+
   )
 
   /**
@@ -344,6 +348,12 @@ object Parameters {
       */
     def sfCompress: Boolean =
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
+
+    /**
+      * Snowflake automatically enable/disable pushdown function
+      */
+    def autoPushdown: Boolean = isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
+
 
     /**
       * Snowflake role - optional

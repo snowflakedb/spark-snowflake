@@ -84,6 +84,7 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", s"$test_table")
+      .option("autopushdown","off")
       .load().filter(filter).sort("i")
     checkAnswer(loadedDf, expectedAnswer)
     // Verify the query issued is what we expect
