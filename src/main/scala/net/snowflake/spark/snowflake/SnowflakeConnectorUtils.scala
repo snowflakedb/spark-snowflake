@@ -12,6 +12,23 @@ object SnowflakeConnectorUtils {
 
   @transient lazy val log = LoggerFactory.getLogger(getClass.getName)
 
+
+  /**
+    * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown, otherwise disable it.
+    */
+  private val SUPPORT_SPARK_VERSION = "2.2"
+
+  def checkSparkVersion(session: SparkSession): Boolean =
+    if(session.version.startsWith(SUPPORT_SPARK_VERSION)){
+      enablePushdownSession(session)
+      true
+    }else{
+      disablePushdownSession(session)
+      false
+    }
+
+
+
   /** Enable more advanced query pushdowns to Snowflake.
     *
     * @param session The SparkSession for which pushdowns are to be enabled.
