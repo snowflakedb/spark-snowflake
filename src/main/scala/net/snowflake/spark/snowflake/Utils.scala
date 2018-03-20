@@ -374,4 +374,29 @@ object Utils {
       .toMap
   }
 
+  /**
+    * ensure a name wrapped with double quotes
+    */
+  def ensureQuoted(name: String): String =
+    if(isQuoted(name)) name else quotedName(name)
+
+  /**
+    * check whether a name is quoted
+    */
+  def isQuoted(name: String): Boolean = {
+    name.startsWith("\"") && name.endsWith("\"")
+  }
+
+  /**
+    * wrap a name with double quotes
+    */
+  def quotedName(name: String): String = {
+    // Name legality check going from spark => SF.
+    // If the input identifier is legal, uppercase before wrapping it with double quotes.
+    if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*"))
+      "\"" + name.toUpperCase + "\""
+    else
+      "\"" + name + "\""
+  }
+
 }

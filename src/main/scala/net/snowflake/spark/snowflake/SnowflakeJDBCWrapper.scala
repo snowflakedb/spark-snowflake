@@ -185,7 +185,7 @@ private[snowflake] class JDBCWrapper {
     schema.fields.foreach { field =>
       {
         val name = field.name
-        val formattedName = if (isQuoted(name)) name else quotedName(name)
+        val formattedName = Utils.ensureQuoted(name)
         val typ: String = field.dataType match {
           case IntegerType => "INTEGER"
           case LongType => "INTEGER"
@@ -214,17 +214,7 @@ private[snowflake] class JDBCWrapper {
     if (sb.length < 2) "" else sb.substring(2)
   }
 
-  private def isQuoted(name: String): Boolean = {
-    name.startsWith("\"") && name.endsWith("\"")
-  }
-  private def quotedName(name: String): String = {
-    // Name legality check going from spark => SF.
-    // If the input identifier is legal, uppercase before wrapping it with double quotes.
-      if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*"))
-        "\"" + name.toUpperCase + "\""
-      else
-        "\"" + name + "\""
-  }
+
 
   /**
     * Returns true if the table already exists in the JDBC database.

@@ -303,10 +303,10 @@ private[snowflake] class SnowflakeWriter(
         val map = list.get
         val buffer: mutable.StringBuilder = new mutable.StringBuilder()
         buffer.append("(")
-        buffer.append(map.head._2)
+        buffer.append(Utils.ensureQuoted(map.head._2))
         (1 until map.size).foreach(i => {
           buffer.append(", ")
-          buffer.append(map(i)._2)
+          buffer.append(Utils.ensureQuoted(map(i)._2))
         })
         buffer.append(")")
         buffer.toString()
