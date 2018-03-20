@@ -58,6 +58,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         Row(3, null, null, 7, null))
     )
 
+    // throw exception because only suppert SavaMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
@@ -65,12 +66,15 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite).save()
     }
 
+    // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
       df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
         .mode(SaveMode.Append).save()
     }
+    
+    // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
       df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
