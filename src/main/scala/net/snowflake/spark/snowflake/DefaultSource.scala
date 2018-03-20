@@ -54,7 +54,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
     if(params.autoPushdown)
-      SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
   }
 
@@ -68,7 +68,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
     if(params.autoPushdown)
-      SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
   }
 
@@ -84,7 +84,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
     if(params.autoPushdown)
-      SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
         "For save operations you must specify a Snowfake table name with the 'dbtable' parameter")

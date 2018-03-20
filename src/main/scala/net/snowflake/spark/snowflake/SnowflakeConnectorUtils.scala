@@ -18,7 +18,7 @@ object SnowflakeConnectorUtils {
     */
   private val SUPPORT_SPARK_VERSION = "2.2"
 
-  def checkSparkVersion(session: SparkSession): Boolean =
+  def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
     if(session.version.startsWith(SUPPORT_SPARK_VERSION)){
       enablePushdownSession(session)
       true
