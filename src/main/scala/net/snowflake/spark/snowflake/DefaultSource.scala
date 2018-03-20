@@ -53,7 +53,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(parameters.getOrElse("autopushdown","on")=="on")
+    if(params.autoPushdown)
       SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
   }
@@ -67,7 +67,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(parameters.getOrElse("autopushdown","on")=="on")
+    if(params.autoPushdown)
       SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
   }
@@ -83,7 +83,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
 
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(parameters.getOrElse("autopushdown","on")=="on")
+    if(params.autoPushdown)
       SnowflakeConnectorUtils.checkSparkVersion(sqlContext.sparkSession)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
