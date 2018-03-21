@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, DateAdd, Expression, Month, Quarter, ToDate, Year}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DateAdd, Expression, Month, Quarter, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateExpression {
@@ -25,7 +25,7 @@ private[querygeneration] object DateExpression {
           "DATEADD(day, " + convertExpression(days, fields) + ", " +
             convertExpression(startDate, fields) + ")"
 
-        case _: Month | _: Quarter | _: Year | _: ToDate =>
+        case _: Month | _: Quarter | _: Year  =>
           expr.prettyName.toUpperCase + block(
             convertExpressions(fields, expr.children: _*))
 
