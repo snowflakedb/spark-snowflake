@@ -256,7 +256,7 @@ private[snowflake] class SnowflakeWriter(
     if (filesToCopy.isDefined) {
       // Load the temporary data into the new file
       val copyStatement =
-        copySql(data.sqlContext, params, filesToCopy.get, tempStage)
+        copySql(data,saveMode, params, filesToCopy.get, tempStage)
       log.debug(Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
@@ -288,10 +288,29 @@ private[snowflake] class SnowflakeWriter(
   /**
     * Generate the COPY SQL command
     */
-  private def copySql(sqlContext: SQLContext,
+  private def copySql(data: DataFrame,
+                      saveMode: SaveMode,
                       params: MergedParameters,
                       filesToCopy: (String, String),
                       tempStage: Option[String]): String = {
+
+    if (saveMode != SaveMode.Append && params.columnMap.isDefined)
+      throw new UnsupportedOperationException("The column mapping only works in append mode.")
+
+    def getMappingToString(list: Option[List[(Int, String)]]): String = {
+      if (list.isEmpty || list.get.isEmpty) ""
+      else
+        s"(${list.get.map(x=>Utils.ensureQuoted(x._2)).mkString(", ")})"
+    }
+
+    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
+      if (list.isEmpty || list.get.isEmpty) from
+      else
+        s"from (select ${list.get.map(x=>"tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
+
+    }
+
+    val sqlContext = data.sqlContext
     val credsString =
       if (tempStage.isEmpty)
         CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
@@ -308,9 +327,33 @@ private[snowflake] class SnowflakeWriter(
       val source = stage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
       fromString = s"FROM $source"
     }
+
+    val mappingList: Option[List[(Int, String)]] = params.columnMap match {
+      case Some(map) =>
+        Some(map.toList.map {
+          case (key, value) =>
+            try {
+              (data.schema.fieldIndex(key) + 1, value)
+            } catch {
+              case e: Exception => {
+                log.error("Error occurred while column mapping: " + e)
+                throw e
+              }
+            }
+        })
+
+      case None => None
+    }
+
+    val mappingToString = getMappingToString(mappingList)
+
+    val mappingFromString = getMappingFromString(mappingList, fromString)
+
+
     s"""
-       |COPY INTO ${params.table.get}
-       |$fromString
+       |COPY INTO ${params.table.get} $mappingToString
+       |$mappingFromString
+       |
        |$credsString
        |FILE_FORMAT = (
        |    TYPE=CSV

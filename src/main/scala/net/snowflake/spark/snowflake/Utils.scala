@@ -358,4 +358,45 @@ object Utils {
         .replaceAll("(AWS_KEY_ID|AWS_SECRET_KEY|AZURE_SAS_TOKEN)='[^']+'", "$1='❄☃❄☺❄☃❄'")
         .replaceAll("(sfaccount|sfurl|sfuser|sfpassword|sfwarehouse|sfdatabase|sfschema|sfrole|awsaccesskey|awssecretkey) \"[^\"]+\"", "$1 \"❄☃❄☺❄☃❄\"")
   }
+
+  /**
+    * create a map from string for column mapping
+    */
+  def parseMap(source: String): Map[String,String] = {
+    if(source == null || source.length < 5 || !(source.startsWith("Map(") && source.endsWith(")"))) throw new UnsupportedOperationException("input map format is incorrect!")
+    source
+      .substring(4,source.length-1)
+      .split(",")
+      .map(x=>{
+        val names = x.split("->").map(_.trim)
+        names(0)->names(1)
+      })
+      .toMap
+  }
+
+  /**
+    * ensure a name wrapped with double quotes
+    */
+  def ensureQuoted(name: String): String =
+    if(isQuoted(name)) name else quotedName(name)
+
+  /**
+    * check whether a name is quoted
+    */
+  def isQuoted(name: String): Boolean = {
+    name.startsWith("\"") && name.endsWith("\"")
+  }
+
+  /**
+    * wrap a name with double quotes
+    */
+  def quotedName(name: String): String = {
+    // Name legality check going from spark => SF.
+    // If the input identifier is legal, uppercase before wrapping it with double quotes.
+    if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*"))
+      "\"" + name.toUpperCase + "\""
+    else
+      "\"" + name + "\""
+  }
+
 }
