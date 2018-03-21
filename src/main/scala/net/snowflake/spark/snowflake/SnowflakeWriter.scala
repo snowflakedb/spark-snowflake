@@ -299,38 +299,15 @@ private[snowflake] class SnowflakeWriter(
 
     def getMappingToString(list: Option[List[(Int, String)]]): String = {
       if (list.isEmpty || list.get.isEmpty) ""
-      else {
-        val map = list.get
-        val buffer: mutable.StringBuilder = new mutable.StringBuilder()
-        buffer.append("(")
-        buffer.append(Utils.ensureQuoted(map.head._2))
-        (1 until map.size).foreach(i => {
-          buffer.append(", ")
-          buffer.append(Utils.ensureQuoted(map(i)._2))
-        })
-        buffer.append(")")
-        buffer.toString()
-      }
+      else
+        s"(${list.get.map(x=>Utils.ensureQuoted(x._2)).mkString(", ")})"
     }
 
     def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
       if (list.isEmpty || list.get.isEmpty) from
-      else {
-        val map = list.get
-        val buffer = new mutable.StringBuilder()
-        buffer.append("from (select ")
-        (0 until map.size - 1).foreach(i => {
-          buffer.append("tmp.$")
-          buffer.append(map(i)._1)
-          buffer.append(", ")
-        })
-        buffer.append("tmp.$")
-        buffer.append(map.last._1)
-        buffer.append(" ")
-        buffer.append(from)
-        buffer.append(" tmp)")
-        buffer.toString()
-      }
+      else
+        s"from (select ${list.get.map(x=>"tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
+
     }
 
     val sqlContext = data.sqlContext
