@@ -84,7 +84,7 @@ object SparkSnowflakeBuild extends Build {
         // },
 
         "com.google.guava" % "guava" % "14.0.1" % "test",
-        "org.scalatest" %% "scalatest" % "2.2.1" % "test",
+        "org.scalatest" %% "scalatest" % "3.0.5" % Test,
         "org.mockito" % "mockito-core" % "1.10.19" % "test"
       ),
       libraryDependencies ++= (if (testHadoopVersion.value.startsWith("1")) {
