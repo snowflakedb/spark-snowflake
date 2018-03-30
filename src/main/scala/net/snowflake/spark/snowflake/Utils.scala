@@ -399,14 +399,4 @@ object Utils {
       "\"" + name + "\""
   }
 
-  /**
-    * Create an external stage for giving s3 bucket
-    * @param conn snowflake jdbc connection
-    * @param path the path to s3 bucket
-    * @param aws_access_key aws access key
-    * @param aws_secret_key aws secret key
-    * @return external stage name
-    */
-  private[snowflake] def createExternalStageForS3Bucket(conn: Connection, path: String, aws_access_key: String, aws_secret_key: String): String = ""
-
 }
