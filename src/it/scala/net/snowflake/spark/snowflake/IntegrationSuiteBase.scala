@@ -148,7 +148,7 @@ trait IntegrationSuiteBase
     // Initialize variables
     connectorOptions = loadConfig()
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
-    connectorOptionsNoTableNoS3 = connectorOptionsNoTable.filter(_ != "tempdir")
+    connectorOptionsNoTableNoS3 = connectorOptionsNoTable.filterKeys(_ != "tempdir")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
     connectorOptionsString = connectorOptionsNoTable.map {
