@@ -47,7 +47,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"create or replace table $dbtable (ONE int, TWO int, THREE int, FOUR int, FIVE int)")
 
 
-    df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
+    df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTableNoS3)
       .option("dbtable", dbtable)
       .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
       .mode(SaveMode.Append).save()
@@ -60,7 +60,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // throw exception because only suppert SavaMode.Append
     assertThrows[UnsupportedOperationException] {
-      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
+      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTableNoS3)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
         .mode(SaveMode.Overwrite).save()
@@ -68,7 +68,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
-      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
+      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTableNoS3)
         .option("dbtable", dbtable)
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
         .mode(SaveMode.Append).save()
@@ -76,7 +76,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
-      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
+      df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTableNoS3)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "AAA", "five" -> "FOUR").toString())
         .mode(SaveMode.Append).save()

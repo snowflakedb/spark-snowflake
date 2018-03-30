@@ -373,6 +373,9 @@ object Parameters {
       * None if empty
       */
     def columnMap: Option[Map[String,String]] = {
+      if(parameters.get(PARAM_COLUMN_MAP).isDefined && parameters.get(PARAM_TEMPDIR).isDefined){
+        throw new IllegalArgumentException("Column Mapping function only supports internal stage")
+      }
       parameters.get(PARAM_COLUMN_MAP) match {
         case None => None
         case Some(source: String) => Some(Utils.parseMap(source))
