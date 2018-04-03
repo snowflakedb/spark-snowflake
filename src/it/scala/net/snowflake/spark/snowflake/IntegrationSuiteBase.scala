@@ -82,6 +82,7 @@ trait IntegrationSuiteBase
 
   protected var connectorOptions: Map[String, String]        = _
   protected var connectorOptionsNoTable: Map[String, String] = _
+  protected var connectorOptionsNoTableNoS3: Map[String, String] = _
 
   // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString: String = _
@@ -147,6 +148,7 @@ trait IntegrationSuiteBase
     // Initialize variables
     connectorOptions = loadConfig()
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
+    connectorOptionsNoTableNoS3 = connectorOptionsNoTable.filterKeys(_ != "tempdir")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
     connectorOptionsString = connectorOptionsNoTable.map {
