@@ -45,9 +45,9 @@ object SparkSnowflakeBuild extends Build {
       organization := "net.snowflake",
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.7"),
       crossScalaVersions := Seq("2.10.5", "2.11.7"),
-      sparkVersion := "2.2.0",
+      sparkVersion := "2.3.0",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.0"),
+      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.5"),
       javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
@@ -69,9 +69,9 @@ object SparkSnowflakeBuild extends Build {
         // conflicts for a majority of users while adding a minor inconvienece (adding one extra
         // depenendecy by hand) for a smaller set of users.
         // We exclude jackson-databind to avoid a conflict with Spark's version (see #104).
-        "com.amazonaws" % "aws-java-sdk-core" % "1.10.22" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
-        "com.amazonaws" % "aws-java-sdk-s3" % "1.10.22" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
-        "com.amazonaws" % "aws-java-sdk-sts" % "1.10.22" % "test" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+        "com.amazonaws" % "aws-java-sdk-core" % "1.11.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+        "com.amazonaws" % "aws-java-sdk-s3" % "1.11.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+        "com.amazonaws" % "aws-java-sdk-sts" % "1.11.0" % "test" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "com.microsoft.azure" % "azure-storage" % "5.0.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         // We require spark-avro, but avro-mapred must be provided to match Hadoop version.
         // In most cases, avro-mapred will be provided as part of the Spark assembly JAR.
@@ -96,7 +96,7 @@ object SparkSnowflakeBuild extends Build {
           "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) force()
+          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force()
         )
       }),
       libraryDependencies ++= Seq(
