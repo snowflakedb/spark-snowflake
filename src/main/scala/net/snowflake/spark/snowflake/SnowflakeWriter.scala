@@ -260,6 +260,7 @@ private[snowflake] class SnowflakeWriter(
       log.debug(Utils.sanitizeQueryText(copyStatement))
       try {
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
+        Utils.setLastCopyLoad(copyStatement)
       } catch {
         case e: SQLException =>
           // snowflake-todo: try to provide more error information,
@@ -349,6 +350,14 @@ private[snowflake] class SnowflakeWriter(
 
     val mappingFromString = getMappingFromString(mappingList, fromString)
 
+    val truncateCol =
+      if (params.truncateColumns())
+        "TRUNCATECOLUMNS = TRUE"
+      else
+        ""
+
+    /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
+    function to individually set each file_format and copy option. */
 
     s"""
        |COPY INTO ${params.table.get} $mappingToString
@@ -364,6 +373,7 @@ private[snowflake] class SnowflakeWriter(
        |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
        |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
        |  )
+       |  $truncateCol
     """.stripMargin.trim
   }
 

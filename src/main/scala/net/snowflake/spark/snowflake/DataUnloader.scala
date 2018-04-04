@@ -60,7 +60,10 @@ private[snowflake] trait DataUnloader {
     val credentials = credentialsString.getOrElse("")
 
     // Save the last SELECT so it can be inspected
-    Utils.setLastSelect(query)
+    Utils.setLastCopyUnload(query)
+
+    /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
+    function to individually set each file_format and copy option. */
 
     s"""
        |COPY INTO '$location'

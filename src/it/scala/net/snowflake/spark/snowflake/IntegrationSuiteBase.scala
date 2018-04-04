@@ -233,7 +233,7 @@ trait IntegrationSuiteBase
 
     if (!bypass) {
       assert(
-        Utils.getLastSelect.replaceAll("\\s+", "") == reference.trim
+        Utils.getLastCopyUnload.replaceAll("\\s+", "") == reference.trim
           .replaceAll("\\s+", ""))
     }
   }
