@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhenCodegen, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
@@ -23,6 +23,18 @@ private[querygeneration] object MiscExpression {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         block(convertExpression(child, fields), name)
+      case CaseWhenCodegen(branches, elseValue) =>
+        val cases = "CASE " + branches
+          .map(
+            b =>
+              "WHEN " + convertExpression(b._1, fields) + " THEN " + convertExpression(
+                b._2,
+                fields))
+          .mkString(" ")
+        if (elseValue.isDefined)
+          block(
+            cases + " ELSE " + convertExpression(elseValue.get, fields) + " END")
+        else block(cases + " END")
       case Cast(child, t, _) =>
         getCastType(t) match {
           case None =>
