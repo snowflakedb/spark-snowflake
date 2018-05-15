@@ -1,14 +1,14 @@
-package net.snowflake.spark.snowflake
+package net.snowflake.spark.snowflake.io
 
 import java.sql.Connection
 
+import net.snowflake.spark.snowflake.{JDBCWrapper, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.sql.SQLContext
 
 /**
   * Created by ema on 3/28/17.
   */
-@Deprecated
 private[snowflake] trait DataUnloader {
 
   val log: org.slf4j.Logger
