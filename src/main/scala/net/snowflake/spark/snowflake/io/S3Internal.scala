@@ -1,11 +1,11 @@
-package net.snowflake.spark.snowflake
+package net.snowflake.spark.snowflake.io
 
 import java.io.InputStream
 import java.security.SecureRandom
 import java.sql.Connection
+
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import javax.crypto.{Cipher, CipherInputStream, SecretKey}
-
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
 import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
@@ -14,6 +14,7 @@ import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.client.jdbc._
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorException, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
 import scala.collection.JavaConverters._
@@ -22,8 +23,7 @@ import scala.util.Random
 /**
   * Created by ema on 4/14/17.
   */
-@Deprecated
-private[snowflake] object ConnectorSFStageManager {
+private[snowflake] object S3Internal {
   private[snowflake] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
   private[snowflake] final val AES                 = "AES"
@@ -44,18 +44,23 @@ private[snowflake] object ConnectorSFStageManager {
     * @return s3 location
     */
   private[snowflake] final def extractBucketNameAndPath(
-      stageLocation: String): (String, String) = {
-    var bucketName = stageLocation
-    var s3path     = ""
-
-    // split stage location as bucket name and path
-    if (stageLocation.contains("/")) {
-      bucketName = stageLocation.substring(0, stageLocation.indexOf("/"))
-      s3path = stageLocation.substring(stageLocation.indexOf("/") + 1)
-    }
-
-    (bucketName, s3path)
-  }
+      stageLocation: String): (String, String) =
+    if(stageLocation.contains("/"))
+      (stageLocation.substring(0,stageLocation.indexOf("/")),
+      stageLocation.substring(stageLocation.indexOf("/") + 1))
+    else (stageLocation, "")
+//  {
+//    var bucketName = stageLocation
+//    var s3path     = ""
+//
+//    // split stage location as bucket name and path
+//    if (stageLocation.contains("/")) {
+//      bucketName = stageLocation.substring(0, stageLocation.indexOf("/"))
+//      s3path = stageLocation.substring(stageLocation.indexOf("/") + 1)
+//    }
+//
+//    (bucketName, s3path)
+//  }
 
   private[snowflake] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
@@ -181,11 +186,12 @@ private[snowflake] object ConnectorSFStageManager {
     (fileCipher, meta)
   }
 }
-@Deprecated
-private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
+
+private[snowflake] class S3Internal(isWrite: Boolean,
                                                  jdbcWrapper: JDBCWrapper,
                                                  params: MergedParameters) {
-  import ConnectorSFStageManager._
+
+  import S3Internal._
 
   private lazy val connection: SnowflakeConnectionV1 =
     jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]

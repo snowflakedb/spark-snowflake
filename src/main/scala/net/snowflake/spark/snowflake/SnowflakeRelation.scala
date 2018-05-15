@@ -162,42 +162,51 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDDFromS3[T: ClassTag](sql: String,
                                         resultSchema: StructType): RDD[T] = {
 
-    if (params.usingExternalStage) {
-      val tempDir = params.createPerQueryTempDir()
+    val rdd: RDD[String] = io.readRDD(sqlContext,params,sql)
 
-      val numRows = setup(
-        sql = buildUnloadStmt(
-          query = sql,
-          location = Utils.fixUrlForCopyCommand(tempDir),
-          compression = if (params.sfCompress) "gzip" else "none",
-          credentialsString = Some(
-            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
-                                                              params))),
 
-        conn = jdbcWrapper.getConnector(params))
+    rdd.collect().foreach(println)
 
-      if (numRows == 0) {
-        // For no records, create an empty RDD
-        sqlContext.sparkContext.emptyRDD[T]
-      } else {
-        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-          tempDir,
-          classOf[SnowflakeInputFormat],
-          classOf[java.lang.Long],
-          classOf[Array[String]])
-        rdd.values.mapPartitions { iter =>
-          val converter: Array[String] => T =
-            Conversions.createRowConverter[T](resultSchema)
-          iter.map(converter)
-        }
-      }
-    } else {
-      val sfRDD =
-        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+    println("XXXXXXXXXXXXXXXXXXX")
 
-      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
-      else sfRDD
-    }
+    sqlContext.sparkContext.emptyRDD[T]
+
+//    if (params.usingExternalStage) {
+//      val tempDir = params.createPerQueryTempDir()
+//
+//      val numRows = setup(
+//        sql = buildUnloadStmt(
+//          query = sql,
+//          location = Utils.fixUrlForCopyCommand(tempDir),
+//          compression = if (params.sfCompress) "gzip" else "none",
+//          credentialsString = Some(
+//            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
+//                                                              params))),
+//
+//        conn = jdbcWrapper.getConnector(params))
+//
+//      if (numRows == 0) {
+//        // For no records, create an empty RDD
+//        sqlContext.sparkContext.emptyRDD[T]
+//      } else {
+//        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
+//          tempDir,
+//          classOf[SnowflakeInputFormat],
+//          classOf[java.lang.Long],
+//          classOf[Array[String]])
+//        rdd.values.mapPartitions { iter =>
+//          val converter: Array[String] => T =
+//            Conversions.createRowConverter[T](resultSchema)
+//          iter.map(converter)
+//        }
+//      }
+//    } else {
+//      val sfRDD =
+//        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
+//
+//      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
+//      else sfRDD
+//    }
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
