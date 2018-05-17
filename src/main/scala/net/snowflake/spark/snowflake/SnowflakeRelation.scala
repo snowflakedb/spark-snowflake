@@ -27,7 +27,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.io.SupportedSource
+import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 /** Data Source API implementation for Amazon Snowflake database tables */
@@ -105,7 +108,7 @@ private[snowflake] case class SnowflakeRelation(
       conn.close()
     })
 
-    getRDDFromS3[T](sql, resultSchema)
+    getRDD[T](sql, resultSchema)
   }
 
   // Build RDD result from PrunedFilteredScan interface. Maintain this here for backwards compatibility and for
@@ -152,62 +155,57 @@ private[snowflake] case class SnowflakeRelation(
       //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
-      getRDDFromS3[Row](standardQuery(requiredColumns, filters), prunedSchema)
+      getRDD[Row](standardQuery(requiredColumns, filters), prunedSchema)
     }
   }
 
   // Get an RDD from an unload statement. Provide result schema because
   // when a custom SQL statement is used, this means that we cannot know the results
   // without first executing it.
-  private def getRDDFromS3[T: ClassTag](sql: String,
-                                        resultSchema: StructType): RDD[T] = {
+  private def getRDD[T: ClassTag](
+                                   sql: String,
+                                   resultSchema: StructType,
+                                   source: SupportedSource = SupportedSource.S3INTERNAL
+                                 ): RDD[T] =
 
-    val rdd: RDD[String] = io.readRDD(sqlContext,params,sql)
+    source match {
+      case SupportedSource.S3INTERNAL =>
+        val converter = Conversions.createRowConverter[T](resultSchema)
+        val rdd: RDD[String] = io.readRDD(sqlContext,params,sql)
 
+        val delimiter = '|'
+        val quoteChar = '"'
 
-    rdd.collect().foreach(println)
+        rdd.map(s=>{
+          println(s"input:$s")
+          val fields = ArrayBuffer.empty[String]
+          var buff = new StringBuilder
 
-    println("XXXXXXXXXXXXXXXXXXX")
+          def addField(): Unit = {
+            val field = buff.toString()
+            buff = new StringBuilder
+            if(field.startsWith(quoteChar.toString))
+              fields.append(field.substring(1, field.length-1))
+            else fields.append(field)
+          }
 
-    sqlContext.sparkContext.emptyRDD[T]
+          var quoteNum = 0
 
-//    if (params.usingExternalStage) {
-//      val tempDir = params.createPerQueryTempDir()
-//
-//      val numRows = setup(
-//        sql = buildUnloadStmt(
-//          query = sql,
-//          location = Utils.fixUrlForCopyCommand(tempDir),
-//          compression = if (params.sfCompress) "gzip" else "none",
-//          credentialsString = Some(
-//            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
-//                                                              params))),
-//
-//        conn = jdbcWrapper.getConnector(params))
-//
-//      if (numRows == 0) {
-//        // For no records, create an empty RDD
-//        sqlContext.sparkContext.emptyRDD[T]
-//      } else {
-//        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-//          tempDir,
-//          classOf[SnowflakeInputFormat],
-//          classOf[java.lang.Long],
-//          classOf[Array[String]])
-//        rdd.values.mapPartitions { iter =>
-//          val converter: Array[String] => T =
-//            Conversions.createRowConverter[T](resultSchema)
-//          iter.map(converter)
-//        }
-//      }
-//    } else {
-//      val sfRDD =
-//        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
-//
-//      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
-//      else sfRDD
-//    }
-  }
+          s.foreach(c=>{
+            if(c == quoteChar) quoteNum += 1
+            if(c == delimiter && quoteNum % 2 == 0) addField()
+            else buff.append(c)
+          })
+
+          addField()
+
+          converter(fields.toArray)
+        })
+      case SupportedSource.S3EXTERNAL =>
+        //todo
+        sqlContext.sparkContext.emptyRDD[T]
+    }
+
 
   // Build a query out of required columns and filters. (Used by buildScan)
   private def standardQuery(requiredColumns: Array[String],

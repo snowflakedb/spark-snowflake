@@ -5,8 +5,9 @@ import java.util.zip.GZIPInputStream
 
 import net.snowflake.client.jdbc._
 import net.snowflake.spark.snowflake.ConnectorSFStageManager._
-import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, JDBCWrapper, SnowflakeConnectorUtils, SnowflakeRecordReader}
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SQLContext
@@ -28,7 +29,8 @@ private[snowflake] class S3InternalRDD(
                                         @transient val sqlContext: SQLContext,
                                         @transient val params: MergedParameters,
                                         @transient val sql: String,
-                                        @transient val jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper
+                                        @transient val jdbcWrapper: JDBCWrapper,
+                                        val format: SupportedFormat = SupportedFormat.CSV
 ) extends RDD[String](sqlContext.sparkContext, Nil) with DataUnloader {
 
   @transient override val log = LoggerFactory.getLogger(getClass)
@@ -78,12 +80,8 @@ private[snowflake] class S3InternalRDD(
   override def compute(thePartition: Partition,
                        context: TaskContext): Iterator[String] = {
 
-    //val converter = Conversions.createRowConverter[T](resultSchema)
-
     val mats   = thePartition.asInstanceOf[S3InternalPartition].srcFiles
-    //val reader = new SnowflakeRecordReader
-
-    val stringIterator = new StringIterator()
+    val stringIterator = new StringIterator(format)
 
     try {
       mats.foreach {
@@ -125,46 +123,17 @@ private[snowflake] class S3InternalRDD(
               case _      => stream
             }
 
-            //reader.addStream(stream)
             stringIterator.addStream(stream)
           }
       }
     } catch {
       case ex: Exception =>
-        //reader.closeAll()
         stringIterator.closeAll()
         SnowflakeConnectorUtils.handleS3Exception(ex)
     }
     new InterruptibleIterator[String](context, stringIterator)
 
-//    new InterruptibleIterator(context, new Iterator[String] {
-//
-//      private var finished = false
-//      private var havePair = false
-//
-//      override def hasNext: Boolean = {
-//        if (!finished && !havePair) {
-//          try {
-//            finished = !reader.nextKeyValue
-//          } catch {
-//            case e: IOException =>
-//              finished = true
-//          }
-//
-//          havePair = !finished
-//        }
-//        !finished
-//      }
-//
-//      override def next(): String = {
-//        if (!hasNext) {
-//          throw new java.util.NoSuchElementException("End of stream")
-//        }
-//        havePair = false
-//
-//        converter(reader.getCurrentValue)
-//      }
-//    })
+
   }
 
   override def finalize(): Unit = {
