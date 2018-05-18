@@ -195,8 +195,8 @@ private[snowflake] case class SnowflakeRelation(
           var index = 0
 
           while(index < s.length){
+            escaped = false
             if(s(index) == quoteChar){
-              escaped = false
               index += 1
               while(index < s.length && !(escaped && s(index) == delimiter)){
                 if(escaped){
@@ -208,7 +208,6 @@ private[snowflake] case class SnowflakeRelation(
                 index += 1
               }
               addField()
-              index += 1
             }
             else{
               while(index < s.length && s(index) != delimiter){
@@ -216,24 +215,9 @@ private[snowflake] case class SnowflakeRelation(
                 index += 1
               }
               addField()
-              index += 1
             }
+            index += 1
           }
-
-//          s.foreach {
-//            case `quoteChar` =>
-//              if (!escaped) escaped = true
-//              else {
-//                escaped = false
-//                buff.append(quoteChar)
-//              }
-//            case `delimiter` =>
-//              if (escaped) addField()
-//              else buff.append(delimiter)
-//            case c =>
-//              escaped = false
-//              buff.append(c)
-//          }
 
           addField()
 
