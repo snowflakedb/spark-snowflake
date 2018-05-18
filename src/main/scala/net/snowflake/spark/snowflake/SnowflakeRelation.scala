@@ -35,14 +35,15 @@ import scala.reflect.ClassTag
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
-    jdbcWrapper: JDBCWrapper,
-    s3ClientFactory: AWSCredentials => AmazonS3Client,
-    params: MergedParameters,
-    userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
-    extends BaseRelation
+                                                 jdbcWrapper: JDBCWrapper,
+                                                 s3ClientFactory: AWSCredentials => AmazonS3Client,
+                                                 params: MergedParameters,
+                                                 userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
+  extends BaseRelation
     with PrunedFilteredScan
     with InsertableRelation
     with DataUnloader {
+
   import SnowflakeRelation._
 
   override def toString: String = {
@@ -171,31 +172,68 @@ private[snowflake] case class SnowflakeRelation(
     source match {
       case SupportedSource.S3INTERNAL =>
         val converter = Conversions.createRowConverter[T](resultSchema)
-        val rdd: RDD[String] = io.readRDD(sqlContext,params,sql)
+        val rdd: RDD[String] = io.readRDD(sqlContext, params, sql)
 
         val delimiter = '|'
         val quoteChar = '"'
 
-        rdd.map(s=>{
-          println(s"input:$s")
+        rdd.map(s => {
+          //println(s"input:$s")
           val fields = ArrayBuffer.empty[String]
           var buff = new StringBuilder
 
           def addField(): Unit = {
-            val field = buff.toString()
-            buff = new StringBuilder
-            if(field.startsWith(quoteChar.toString))
-              fields.append(field.substring(1, field.length-1))
-            else fields.append(field)
+            if (buff.isEmpty) fields.append(null)
+            else {
+              val field = buff.toString()
+              buff = new StringBuilder
+              fields.append(field)
+            }
           }
 
-          var quoteNum = 0
+          var escaped = false
+          var index = 0
 
-          s.foreach(c=>{
-            if(c == quoteChar) quoteNum += 1
-            if(c == delimiter && quoteNum % 2 == 0) addField()
-            else buff.append(c)
-          })
+          while(index < s.length){
+            if(s(index) == quoteChar){
+              escaped = false
+              index += 1
+              while(index < s.length && !(escaped && s(index) == delimiter)){
+                if(escaped){
+                  escaped = false
+                  buff.append(s(index))
+                }
+                else if (s(index) == quoteChar) escaped = true
+                else buff.append(s(index))
+                index += 1
+              }
+              addField()
+              index += 1
+            }
+            else{
+              while(index < s.length && s(index) != delimiter){
+                buff.append(s(index))
+                index += 1
+              }
+              addField()
+              index += 1
+            }
+          }
+
+//          s.foreach {
+//            case `quoteChar` =>
+//              if (!escaped) escaped = true
+//              else {
+//                escaped = false
+//                buff.append(quoteChar)
+//              }
+//            case `delimiter` =>
+//              if (escaped) addField()
+//              else buff.append(delimiter)
+//            case c =>
+//              escaped = false
+//              buff.append(c)
+//          }
 
           addField()
 

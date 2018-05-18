@@ -49,18 +49,6 @@ private[snowflake] object S3Internal {
       (stageLocation.substring(0,stageLocation.indexOf("/")),
       stageLocation.substring(stageLocation.indexOf("/") + 1))
     else (stageLocation, "")
-//  {
-//    var bucketName = stageLocation
-//    var s3path     = ""
-//
-//    // split stage location as bucket name and path
-//    if (stageLocation.contains("/")) {
-//      bucketName = stageLocation.substring(0, stageLocation.indexOf("/"))
-//      s3path = stageLocation.substring(stageLocation.indexOf("/") + 1)
-//    }
-//
-//    (bucketName, s3path)
-//  }
 
   private[snowflake] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
