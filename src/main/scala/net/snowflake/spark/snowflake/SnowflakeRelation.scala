@@ -81,7 +81,7 @@ private[snowflake] case class SnowflakeRelation(
       SaveMode.Append
     }
     val writer = new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
-    writer.saveToSnowflake(sqlContext, data, saveMode, params)
+    writer.save(sqlContext, data, saveMode, params)
   }
 
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
@@ -169,7 +169,7 @@ private[snowflake] case class SnowflakeRelation(
                                    format: SupportedFormat = SupportedFormat.CSV
                                  ): RDD[T] = {
     val source: SupportedSource =
-      if(params.usingExternalStage) SupportedSource.S3EXTERNAL
+      if (params.usingExternalStage) SupportedSource.S3EXTERNAL
       else SupportedSource.S3INTERNAL
 
     val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
@@ -197,12 +197,12 @@ private[snowflake] case class SnowflakeRelation(
           var escaped = false
           var index = 0
 
-          while(index < s.length){
+          while (index < s.length) {
             escaped = false
-            if(s(index) == quoteChar){
+            if (s(index) == quoteChar) {
               index += 1
-              while(index < s.length && !(escaped && s(index) == delimiter)){
-                if(escaped){
+              while (index < s.length && !(escaped && s(index) == delimiter)) {
+                if (escaped) {
                   escaped = false
                   buff.append(s(index))
                 }
@@ -212,8 +212,8 @@ private[snowflake] case class SnowflakeRelation(
               }
               addField()
             }
-            else{
-              while(index < s.length && s(index) != delimiter){
+            else {
+              while (index < s.length && s(index) != delimiter) {
                 buff.append(s(index))
                 index += 1
               }
@@ -231,8 +231,6 @@ private[snowflake] case class SnowflakeRelation(
     }
 
   }
-
-
 
 
   // Build a query out of required columns and filters. (Used by buildScan)
