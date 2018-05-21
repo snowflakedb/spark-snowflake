@@ -27,7 +27,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.io.SupportedSource
+import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 
 import scala.collection.mutable.ArrayBuffer
@@ -41,8 +42,7 @@ private[snowflake] case class SnowflakeRelation(
                                                  userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
   extends BaseRelation
     with PrunedFilteredScan
-    with InsertableRelation
-    with DataUnloader {
+    with InsertableRelation {
 
   import SnowflakeRelation._
 
@@ -50,7 +50,7 @@ private[snowflake] case class SnowflakeRelation(
     "SnowflakeRelation"
   }
 
-  override val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
+  val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
   private lazy val creds = CloudCredentialsUtils
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
@@ -166,19 +166,22 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDD[T: ClassTag](
                                    sql: String,
                                    resultSchema: StructType,
-                                   source: SupportedSource = SupportedSource.S3INTERNAL
-                                 ): RDD[T] =
+                                   format: SupportedFormat = SupportedFormat.CSV
+                                 ): RDD[T] = {
+    val source: SupportedSource =
+      if(params.usingExternalStage) SupportedSource.S3EXTERNAL
+      else SupportedSource.S3INTERNAL
 
-    source match {
-      case SupportedSource.S3INTERNAL =>
+    val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
+
+    format match {
+      case SupportedFormat.CSV =>
         val converter = Conversions.createRowConverter[T](resultSchema)
-        val rdd: RDD[String] = io.readRDD(sqlContext, params, sql)
-
         val delimiter = '|'
         val quoteChar = '"'
 
         rdd.map(s => {
-          //println(s"input:$s")
+          println(s"input:$s")
           val fields = ArrayBuffer.empty[String]
           var buff = new StringBuilder
 
@@ -223,10 +226,13 @@ private[snowflake] case class SnowflakeRelation(
 
           converter(fields.toArray)
         })
-      case SupportedSource.S3EXTERNAL =>
-        //todo
+      case SupportedFormat.JSON =>
         sqlContext.sparkContext.emptyRDD[T]
     }
+
+  }
+
+
 
 
   // Build a query out of required columns and filters. (Used by buildScan)

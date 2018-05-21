@@ -20,9 +20,9 @@ package object io {
 
     source match {
       case SupportedSource.S3INTERNAL =>
-        new S3InternalRDD(sqlContext, params, sql, jdbcWrapper)
+        new S3InternalRDD(sqlContext, params, sql, jdbcWrapper, format)
       case SupportedSource.S3EXTERNAL =>
-        null
+        new S3External(sqlContext, params, sql, jdbcWrapper, format).getRDD()
     }
   }
 
