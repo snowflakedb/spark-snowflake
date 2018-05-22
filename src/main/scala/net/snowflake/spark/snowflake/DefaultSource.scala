@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
