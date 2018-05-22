@@ -1,3 +1,18 @@
+/*
+ * Copyright 2018 Snowflake Computing
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package net.snowflake.spark.snowflake.io
 
 import net.snowflake.spark.snowflake.{CloudCredentialsUtils, JDBCWrapper, Utils}
@@ -8,7 +23,7 @@ import org.apache.spark.sql.SQLContext
 import org.slf4j.{Logger, LoggerFactory}
 
 
-class S3External(
+private[io] class S3External(
                   val sqlContext: SQLContext,
                   val params: MergedParameters,
                   val sql: String,
@@ -45,6 +60,8 @@ class S3External(
             classOf[String]
           ).map(_._2)
         case SupportedFormat.JSON =>
+          throw new UnsupportedOperationException("Not support JSON in current version")
+          //todo
           sqlContext.sparkContext.emptyRDD[String]
       }
     }

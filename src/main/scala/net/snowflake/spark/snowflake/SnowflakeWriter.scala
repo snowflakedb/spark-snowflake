@@ -80,7 +80,8 @@ private[snowflake] class SnowflakeWriter(
       params,
       strRDD,
       output.schema,
-      saveMode
+      saveMode,
+      s3ClientFactory = Some(s3ClientFactory)
     )
   }
 
