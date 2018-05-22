@@ -65,7 +65,7 @@ private[io] object S3Writer {
 
 
     source match {
-      case SupportedSource.S3INTERNAL =>
+      case SupportedSource.S3EXTERNAL =>
         Utils.checkFileSystem(
           new URI(params.rootTempDir),
           sqlContext.sparkContext.hadoopConfiguration)
@@ -121,7 +121,7 @@ private[io] object S3Writer {
         } finally {
           conn.close()
         }
-      case SupportedSource.S3EXTERNAL =>
+      case SupportedSource.S3INTERNAL =>
         val stageManager = new S3Internal(true, jdbcWrapper, params)
 
         try {
@@ -484,7 +484,6 @@ private[io] object S3Writer {
 
       case SupportedSource.S3EXTERNAL =>
         val tempDir = params.createPerQueryTempDir()
-        println(s"tmp path:------------------>$tempDir")
         // Save, possibly with compression. Always use Gzip for now
         if (params.sfCompress) {
           data.saveAsTextFile(tempDir, classOf[GzipCodec])

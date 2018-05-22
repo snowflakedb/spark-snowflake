@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -181,7 +181,6 @@ private[snowflake] case class SnowflakeRelation(
         val quoteChar = '"'
 
         rdd.map(s => {
-          println(s"input:$s")
           val fields = ArrayBuffer.empty[String]
           var buff = new StringBuilder
 
