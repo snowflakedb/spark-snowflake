@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,26 +27,30 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
+import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
-    jdbcWrapper: JDBCWrapper,
-    s3ClientFactory: AWSCredentials => AmazonS3Client,
-    params: MergedParameters,
-    userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
-    extends BaseRelation
+                                                 jdbcWrapper: JDBCWrapper,
+                                                 s3ClientFactory: AWSCredentials => AmazonS3Client,
+                                                 params: MergedParameters,
+                                                 userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
+  extends BaseRelation
     with PrunedFilteredScan
-    with InsertableRelation
-    with DataUnloader {
+    with InsertableRelation {
+
   import SnowflakeRelation._
 
   override def toString: String = {
     "SnowflakeRelation"
   }
 
-  override val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
+  val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
   private lazy val creds = CloudCredentialsUtils
     .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
@@ -77,7 +81,7 @@ private[snowflake] case class SnowflakeRelation(
       SaveMode.Append
     }
     val writer = new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
-    writer.saveToSnowflake(sqlContext, data, saveMode, params)
+    writer.save(sqlContext, data, saveMode, params)
   }
 
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
@@ -105,7 +109,7 @@ private[snowflake] case class SnowflakeRelation(
       conn.close()
     })
 
-    getRDDFromS3[T](sql, resultSchema)
+    getRDD[T](sql, resultSchema)
   }
 
   // Build RDD result from PrunedFilteredScan interface. Maintain this here for backwards compatibility and for
@@ -152,53 +156,82 @@ private[snowflake] case class SnowflakeRelation(
       //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
-      getRDDFromS3[Row](standardQuery(requiredColumns, filters), prunedSchema)
+      getRDD[Row](standardQuery(requiredColumns, filters), prunedSchema)
     }
   }
 
   // Get an RDD from an unload statement. Provide result schema because
   // when a custom SQL statement is used, this means that we cannot know the results
   // without first executing it.
-  private def getRDDFromS3[T: ClassTag](sql: String,
-                                        resultSchema: StructType): RDD[T] = {
+  private def getRDD[T: ClassTag](
+                                   sql: String,
+                                   resultSchema: StructType,
+                                   format: SupportedFormat = SupportedFormat.CSV
+                                 ): RDD[T] = {
+    val source: SupportedSource =
+      if (params.usingExternalStage) SupportedSource.S3EXTERNAL
+      else SupportedSource.S3INTERNAL
 
-    if (params.usingExternalStage) {
-      val tempDir = params.createPerQueryTempDir()
+    val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
 
-      val numRows = setup(
-        sql = buildUnloadStmt(
-          query = sql,
-          location = Utils.fixUrlForCopyCommand(tempDir),
-          compression = if (params.sfCompress) "gzip" else "none",
-          credentialsString = Some(
-            CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
-                                                              params))),
+    format match {
+      case SupportedFormat.CSV =>
+        val converter = Conversions.createRowConverter[T](resultSchema)
+        val delimiter = '|'
+        val quoteChar = '"'
 
-        conn = jdbcWrapper.getConnector(params))
+        rdd.map(s => {
+          val fields = ArrayBuffer.empty[String]
+          var buff = new StringBuilder
 
-      if (numRows == 0) {
-        // For no records, create an empty RDD
+          def addField(): Unit = {
+            if (buff.isEmpty) fields.append(null)
+            else {
+              val field = buff.toString()
+              buff = new StringBuilder
+              fields.append(field)
+            }
+          }
+
+          var escaped = false
+          var index = 0
+
+          while (index < s.length) {
+            escaped = false
+            if (s(index) == quoteChar) {
+              index += 1
+              while (index < s.length && !(escaped && s(index) == delimiter)) {
+                if (escaped) {
+                  escaped = false
+                  buff.append(s(index))
+                }
+                else if (s(index) == quoteChar) escaped = true
+                else buff.append(s(index))
+                index += 1
+              }
+              addField()
+            }
+            else {
+              while (index < s.length && s(index) != delimiter) {
+                buff.append(s(index))
+                index += 1
+              }
+              addField()
+            }
+            index += 1
+          }
+
+          addField()
+
+          converter(fields.toArray)
+        })
+      case SupportedFormat.JSON =>
+        //todo
         sqlContext.sparkContext.emptyRDD[T]
-      } else {
-        val rdd = sqlContext.sparkContext.newAPIHadoopFile(
-          tempDir,
-          classOf[SnowflakeInputFormat],
-          classOf[java.lang.Long],
-          classOf[Array[String]])
-        rdd.values.mapPartitions { iter =>
-          val converter: Array[String] => T =
-            Conversions.createRowConverter[T](resultSchema)
-          iter.map(converter)
-        }
-      }
-    } else {
-      val sfRDD =
-        new SnowflakeRDD[T](sqlContext, jdbcWrapper, params, sql, resultSchema)
-
-      if (sfRDD.rowCount == 0) sqlContext.sparkContext.emptyRDD[T]
-      else sfRDD
     }
+
   }
+
 
   // Build a query out of required columns and filters. (Used by buildScan)
   private def standardQuery(requiredColumns: Array[String],

@@ -1,11 +1,28 @@
-package net.snowflake.spark.snowflake
+/*
+ * Copyright 2017 - 2018 Snowflake Computing
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package net.snowflake.spark.snowflake.io
+
 
 import java.io.InputStream
 import java.security.SecureRandom
 import java.sql.Connection
+
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import javax.crypto.{Cipher, CipherInputStream, SecretKey}
-
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
 import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
@@ -14,6 +31,7 @@ import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.client.jdbc._
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorException, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
 import scala.collection.JavaConverters._
@@ -22,19 +40,19 @@ import scala.util.Random
 /**
   * Created by ema on 4/14/17.
   */
-private[snowflake] object ConnectorSFStageManager {
-  private[snowflake] final val DUMMY_LOCATION =
+private[io] object S3Internal {
+  private[io] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
-  private[snowflake] final val AES                 = "AES"
-  private[snowflake] final val DEFAULT_PARALLELISM = 10
-  private[snowflake] final val S3_MAX_RETRIES      = 3
-  private[snowflake] final val CREATE_TEMP_STAGE_STMT =
+  private[io] final val AES                 = "AES"
+  private[io] final val DEFAULT_PARALLELISM = 10
+  private[io] final val S3_MAX_RETRIES      = 3
+  private[io] final val CREATE_TEMP_STAGE_STMT =
     s"""CREATE OR REPLACE TEMP STAGE """
-  private[snowflake] final val AMZ_KEY: String     = "x-amz-key"
-  private[snowflake] final val AMZ_IV: String      = "x-amz-iv"
-  private[snowflake] final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
-  private[snowflake] final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
-  private[snowflake] final val AMZ_MATDESC         = "x-amz-matdesc"
+  private[io] final val AMZ_KEY: String     = "x-amz-key"
+  private[io] final val AMZ_IV: String      = "x-amz-iv"
+  private[io] final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
+  private[io] final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
+  private[io] final val AMZ_MATDESC         = "x-amz-matdesc"
 
   /**
     * A small helper for extracting bucket name and path from stage location.
@@ -42,24 +60,17 @@ private[snowflake] object ConnectorSFStageManager {
     * @param stageLocation stage location
     * @return s3 location
     */
-  private[snowflake] final def extractBucketNameAndPath(
-      stageLocation: String): (String, String) = {
-    var bucketName = stageLocation
-    var s3path     = ""
+  private[io] final def extractBucketNameAndPath(
+      stageLocation: String): (String, String) =
+    if(stageLocation.contains("/"))
+      (stageLocation.substring(0,stageLocation.indexOf("/")),
+      stageLocation.substring(stageLocation.indexOf("/") + 1))
+    else (stageLocation, "")
 
-    // split stage location as bucket name and path
-    if (stageLocation.contains("/")) {
-      bucketName = stageLocation.substring(0, stageLocation.indexOf("/"))
-      s3path = stageLocation.substring(stageLocation.indexOf("/") + 1)
-    }
-
-    (bucketName, s3path)
-  }
-
-  private[snowflake] final def TEMP_STAGE_LOCATION: String =
+  private[io] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
 
-  private[snowflake] final def createS3Client(
+  private[io] final def createS3Client(
       is256: Boolean,
       masterKey: String,
       queryId: String,
@@ -103,7 +114,7 @@ private[snowflake] object ConnectorSFStageManager {
     }
   }
 
-  private[snowflake] final def getDecryptedStream(
+  private[io] final def getDecryptedStream(
       stream: InputStream,
       masterKey: String,
       meta: ObjectMetadata): InputStream = {
@@ -138,7 +149,7 @@ private[snowflake] object ConnectorSFStageManager {
     new CipherInputStream(stream, dataCipher)
   }
 
-  private[snowflake] final def getCipherAndMetadata(
+  private[io] final def getCipherAndMetadata(
       masterKey: String,
       queryId: String,
       smkId: String): (Cipher, ObjectMetadata) = {
@@ -181,10 +192,11 @@ private[snowflake] object ConnectorSFStageManager {
   }
 }
 
-private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
+private[io] class S3Internal(isWrite: Boolean,
                                                  jdbcWrapper: JDBCWrapper,
                                                  params: MergedParameters) {
-  import ConnectorSFStageManager._
+
+  import S3Internal._
 
   private lazy val connection: SnowflakeConnectionV1 =
     jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
@@ -209,16 +221,16 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
       encryptionMaterials.get(0)
     } else null
 
-  private[snowflake] lazy val awsId: String =
+  private[io] lazy val awsId: String =
     stageCredentials.get("AWS_ID").toString
-  private[snowflake] lazy val awsKey: String =
+  private[io] lazy val awsKey: String =
     stageCredentials.get("AWS_KEY").toString
-  private[snowflake] lazy val awsToken: String =
+  private[io] lazy val awsToken: String =
     stageCredentials.get("AWS_TOKEN").toString
-  private[snowflake] lazy val stageLocation: String =
+  private[io] lazy val stageLocation: String =
     sfAgent.getStageLocation
 
-  private[snowflake] lazy val getKeyIds: Seq[(String, String, String)] = {
+  private[io] lazy val getKeyIds: Seq[(String, String, String)] = {
     if (srcMaterialsMap != null) {
       srcMaterialsMap.asScala.toList.map {
         case (k, v) =>
@@ -233,12 +245,12 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
     }
   }
 
-  private[snowflake] lazy val masterKey =
+  private[io] lazy val masterKey =
     if (encMat != null) encMat.getQueryStageMasterKey else null
-  private[snowflake] lazy val decodedKey =
+  private[io] lazy val decodedKey =
     if (masterKey != null) Base64.decode(masterKey) else null
 
-  private[snowflake] lazy val is256Encryption: Boolean = {
+  private[io] lazy val is256Encryption: Boolean = {
     val length = if (decodedKey != null) decodedKey.length * 8 else 128
     if (length == 256)
       true
@@ -267,13 +279,13 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
 
   private var stageSet: Boolean = false
 
-  private[snowflake] def closeConnection(): Unit = {
+  private[io] def closeConnection(): Unit = {
     connection.close()
   }
 
-  private[snowflake] def getEncryptionMaterials = encryptionMaterials
+  private[io] def getEncryptionMaterials = encryptionMaterials
 
-  private[snowflake] def setupStageArea(): String = {
+  private[io] def setupStageArea(): String = {
 
     jdbcWrapper.executeInterruptibly(connection,
                                           CREATE_TEMP_STAGE_STMT + tempStage)
@@ -282,7 +294,7 @@ private[snowflake] class ConnectorSFStageManager(isWrite: Boolean,
     tempStage
   }
 
-  private[snowflake] def executeWithConnection(
+  private[io] def executeWithConnection(
       connectionFunc: (Connection => Any)) = {
     connectionFunc(connection)
   }

@@ -74,14 +74,6 @@ object TestUtils {
       case other => other
     })
   }
-  /**
-   * The same as `expectedData`, but formatted as single-line strings, in the
-   * same format as what we export to CSV.
-   */
-  val expectedDataAsSingleStrings: Seq[Row] = {
-    val conversionFunctions = DefaultSnowflakeWriter.genConversionFunctions(testSchema)
-    expectedData.map { row => Row.fromSeq(Seq(DefaultSnowflakeWriter.formatRow(conversionFunctions, row))) }
-  }
 
   /**
    * Convert date components to a millisecond timestamp

@@ -1,6 +1,5 @@
 /*
- * Copyright 2015-2018 Snowflake Computing
- * Copyright 2015 Databricks
+ * Copyright 2018 Snowflake Computing
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +14,15 @@
  * limitations under the License.
  */
 
-package net.snowflake.spark.snowflake
+package net.snowflake.spark.snowflake.io
 
-/**
- * Wrapper class for representing the name of a Snowflake table.
- *
- * Note, we don't do any escaping/unescaping for Snowflake tables,
- * we expect the user to do it.
- */
-private[snowflake] case class TableName(name: String) {
-  override def toString: String = name
+object SupportedSource extends Enumeration {
+  type SupportedSource = Value
+  val S3INTERNAL, S3EXTERNAL = Value
+
+}
+
+object SupportedFormat extends Enumeration {
+  type SupportedFormat = Value
+  val CSV, JSON = Value
 }

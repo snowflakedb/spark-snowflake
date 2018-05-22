@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,65 +25,65 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
 /**
- * Snowflake Source implementation for Spark SQL
- * Major TODO points:
- *   - Add support for compression Snowflake->Spark
- *   - Add support for using Snowflake Stage files, so the user doesn't need
- *       to provide AWS passwords
- *   - Add support for VARIANT
- */
+  * Snowflake Source implementation for Spark SQL
+  * Major TODO points:
+  *   - Add support for compression Snowflake->Spark
+  *   - Add support for using Snowflake Stage files, so the user doesn't need
+  * to provide AWS passwords
+  *   - Add support for VARIANT
+  */
 class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials => AmazonS3Client)
   extends RelationProvider
-  with SchemaRelationProvider
-  with CreatableRelationProvider {
+    with SchemaRelationProvider
+    with CreatableRelationProvider {
 
   private val log = LoggerFactory.getLogger(getClass)
 
   /**
-   * Default constructor required by Data Source API
-   */
+    * Default constructor required by Data Source API
+    */
   def this() = this(DefaultJDBCWrapper, awsCredentials => new AmazonS3Client(awsCredentials))
 
   /**
-   * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL. Resolves the schema
-   * using JDBC connection over provided URL, which must contain credentials.
-   */
+    * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL. Resolves the schema
+    * using JDBC connection over provided URL, which must contain credentials.
+    */
   override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+                               sqlContext: SQLContext,
+                               parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(params.autoPushdown)
+    if (params.autoPushdown)
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
   }
 
   /**
-   * Load a `SnowflakeRelation` using user-provided schema, so no inference over JDBC will be used.
-   */
+    * Load a `SnowflakeRelation` using user-provided schema, so no inference over JDBC will be used.
+    */
   override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: StructType): BaseRelation = {
+                               sqlContext: SQLContext,
+                               parameters: Map[String, String],
+                               schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(params.autoPushdown)
+    if (params.autoPushdown)
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
   }
 
   /**
-   * Creates a Relation instance by first writing the contents of the given DataFrame to Snowflake
-   */
+    * Creates a Relation instance by first writing the contents of the given DataFrame to Snowflake
+    */
   override def createRelation(
-      sqlContext: SQLContext,
-      saveMode: SaveMode,
-      parameters: Map[String, String],
-      data: DataFrame): BaseRelation = {
+                               sqlContext: SQLContext,
+                               saveMode: SaveMode,
+                               parameters: Map[String, String],
+                               data: DataFrame): BaseRelation = {
 
     val params = Parameters.mergeParameters(parameters)
     //check spark version for push down
-    if(params.autoPushdown)
+    if (params.autoPushdown)
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
@@ -119,8 +119,9 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
 
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
-      new SnowflakeWriter(jdbcWrapper, s3ClientFactory).saveToSnowflake(
-        sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
+      new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
+        .save(sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
+
     }
 
     createRelation(sqlContext, parameters)
