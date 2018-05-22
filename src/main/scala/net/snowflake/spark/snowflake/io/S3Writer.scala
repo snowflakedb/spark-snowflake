@@ -1,3 +1,18 @@
+/*
+ * Copyright 2018 Snowflake Computing
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package net.snowflake.spark.snowflake.io
 
 import java.io.OutputStream
@@ -6,8 +21,10 @@ import java.sql.{Connection, SQLException}
 import java.util.zip.GZIPOutputStream
 
 import com.amazonaws.services.s3.model.ObjectMetadata
+import com.amazonaws.auth.AWSCredentials
+import com.amazonaws.services.s3.AmazonS3Client
 import javax.crypto.{Cipher, CipherOutputStream}
-import net.snowflake.spark.snowflake.ConnectorSFStageManager.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
+import net.snowflake.spark.snowflake.io.S3Internal.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
@@ -16,25 +33,29 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
-import scala.collection.mutable
 import scala.util.Random
 
 private[io] object S3Writer {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  def writeToS3Internal(
-                         rdd: RDD[String],
-                         schema: StructType,
-                         sqlContext: SQLContext,
-                         saveMode: SaveMode,
-                         params: MergedParameters,
-                         jdbcWrapper: JDBCWrapper,
-                         source: SupportedSource = SupportedSource.S3INTERNAL
-                       ): Unit = {
+  def writeToS3(
+                 rdd: RDD[String],
+                 schema: StructType,
+                 sqlContext: SQLContext,
+                 saveMode: SaveMode,
+                 params: MergedParameters,
+                 jdbcWrapper: JDBCWrapper,
+                 s3ClientFactory: AWSCredentials => AmazonS3Client
+               ): Unit = {
+
+    val source: SupportedSource =
+      if (params.usingExternalStage) SupportedSource.S3EXTERNAL
+      else SupportedSource.S3INTERNAL
+
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
         "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
@@ -42,24 +63,35 @@ private[io] object S3Writer {
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(prologueSql)
 
-    val stageManager = new S3Internal(true, jdbcWrapper, params)
 
-    try {
+    source match {
+      case SupportedSource.S3INTERNAL =>
+        Utils.checkFileSystem(
+          new URI(params.rootTempDir),
+          sqlContext.sparkContext.hadoopConfiguration)
 
-      stageManager.executeWithConnection(conn =>
-        jdbcWrapper.executeInterruptibly(conn, prologueSql))
+        if (params.checkBucketConfiguration) {
+          // For now it is only needed for AWS, so put the following under the
+          // check. checkBucketConfiguration implies we are using S3.
+          val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
 
-      val tempStage = Some("@" + stageManager.setupStageArea())
+          Utils.checkThatBucketHasObjectLifecycleConfiguration(
+            params.rootTempDir,
+            params.rootTempDirStorageType,
+            s3ClientFactory(creds))
+        }
 
-      val filesToCopy =
-        unloadData(sqlContext, rdd, params, source, Some(stageManager), None)
+        val conn = jdbcWrapper.getConnector(params)
 
-      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        stageManager.executeWithConnection({ conn => {
+        try {
+          jdbcWrapper.executeInterruptibly(conn, prologueSql)
+
+          val filesToCopy =
+            unloadData(sqlContext, rdd, params, source, None)
+
           val action = (stagingTable: String) => {
             val updatedParams = MergedParameters(
               params.parameters.updated("dbtable", stagingTable))
-
             doSnowflakeLoad(
               sqlContext,
               conn,
@@ -69,30 +101,80 @@ private[io] object S3Writer {
               updatedParams,
               jdbcWrapper,
               filesToCopy,
-              tempStage)
+              None)
           }
-          withStagingTable(conn, jdbcWrapper, params.table.get, action)
-        }
-        })
-      } else {
-        stageManager.executeWithConnection({ conn => {
-          doSnowflakeLoad(
-            sqlContext,
-            conn,
-            rdd,
-            schema,
-            saveMode,
-            params,
-            jdbcWrapper,
-            filesToCopy,
-            tempStage)
-        }
-        })
 
-      }
-    } finally {
-      stageManager.closeConnection()
+          if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+            withStagingTable(conn, jdbcWrapper, params.table.get, action)
+          } else {
+            doSnowflakeLoad(
+              sqlContext,
+              conn,
+              rdd,
+              schema,
+              saveMode,
+              params,
+              jdbcWrapper,
+              filesToCopy,
+              None)
+          }
+        } finally {
+          conn.close()
+        }
+      case SupportedSource.S3EXTERNAL =>
+        val stageManager = new S3Internal(true, jdbcWrapper, params)
+
+        try {
+          stageManager.executeWithConnection(conn =>
+            jdbcWrapper.executeInterruptibly(conn, prologueSql))
+
+          val tempStage = Some("@" + stageManager.setupStageArea())
+
+          val filesToCopy =
+            unloadData(sqlContext, rdd, params, source, Some(stageManager))
+
+          if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+            stageManager.executeWithConnection({ conn => {
+              val action = (stagingTable: String) => {
+                val updatedParams = MergedParameters(
+                  params.parameters.updated("dbtable", stagingTable))
+
+                doSnowflakeLoad(
+                  sqlContext,
+                  conn,
+                  rdd,
+                  schema,
+                  saveMode,
+                  updatedParams,
+                  jdbcWrapper,
+                  filesToCopy,
+                  tempStage)
+              }
+              withStagingTable(conn, jdbcWrapper, params.table.get, action)
+            }
+            })
+          } else {
+            stageManager.executeWithConnection({ conn => {
+              doSnowflakeLoad(
+                sqlContext,
+                conn,
+                rdd,
+                schema,
+                saveMode,
+                params,
+                jdbcWrapper,
+                filesToCopy,
+                tempStage)
+            }
+            })
+
+          }
+        } finally {
+          stageManager.closeConnection()
+        }
     }
+
+
   }
 
   /**
@@ -308,12 +390,10 @@ private[io] object S3Writer {
                          data: RDD[String],
                          params: MergedParameters,
                          source: SupportedSource,
-                         stageMngr: Option[S3Internal],
-                         temp: Option[String]): Option[(String, String)] = {
+                         stageMngr: Option[S3Internal]
+                        ): Option[(String, String)] = {
 
     @transient val stageManager = stageMngr.orNull
-
-    val tempDir = temp.getOrElse("")
 
     source match {
       case SupportedSource.S3INTERNAL =>
@@ -403,34 +483,30 @@ private[io] object S3Writer {
         Some("s3n://" + stageLocation, "")
 
       case SupportedSource.S3EXTERNAL =>
+        val tempDir = params.createPerQueryTempDir()
+        println(s"tmp path:------------------>$tempDir")
+        // Save, possibly with compression. Always use Gzip for now
+        if (params.sfCompress) {
+          data.saveAsTextFile(tempDir, classOf[GzipCodec])
+        } else {
+          data.saveAsTextFile(tempDir)
+        }
 
-        //    if (params.usingExternalStage) {
-        //      // Save, possibly with compression. Always use Gzip for now
-        //      if (params.sfCompress) {
-        //        strRDD.saveAsTextFile(tempDir, classOf[GzipCodec])
-        //      } else {
-        //        strRDD.saveAsTextFile(tempDir)
-        //      }
-        //
-        //      // Verify there was at least one file created.
-        //      // The saved filenames are going to be of the form part*
-        //      val fs = FileSystem
-        //        .get(URI.create(tempDir), sqlContext.sparkContext.hadoopConfiguration)
-        //      fs.listStatus(new Path(tempDir))
-        //        .iterator
-        //        .map(_.getPath.getName)
-        //        .filter(_.startsWith("part"))
-        //        .take(1)
-        //        .toSeq
-        //        .headOption
-        //        .getOrElse(throw new Exception("No part files were written!"))
-        //      // Note - temp dir already has "/", no need to add it
-        //      Some(tempDir, "part")
-        //
-        //    } else {
+        // Verify there was at least one file created.
+        // The saved filenames are going to be of the form part*
+        val fs = FileSystem
+          .get(URI.create(tempDir), sqlContext.sparkContext.hadoopConfiguration)
+        fs.listStatus(new Path(tempDir))
+          .iterator
+          .map(_.getPath.getName)
+          .filter(_.startsWith("part"))
+          .take(1)
+          .toSeq
+          .headOption
+          .getOrElse(throw new Exception("No part files were written!"))
+        // Note - temp dir already has "/", no need to add it
+        Some(tempDir, "part")
 
-
-        None
     }
 
 

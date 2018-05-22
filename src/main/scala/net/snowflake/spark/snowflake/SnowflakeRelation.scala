@@ -227,6 +227,7 @@ private[snowflake] case class SnowflakeRelation(
           converter(fields.toArray)
         })
       case SupportedFormat.JSON =>
+        //todo
         sqlContext.sparkContext.emptyRDD[T]
     }
 

@@ -1,10 +1,26 @@
+/*
+ * Copyright 2018 Snowflake Computing
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package net.snowflake.spark.snowflake.io
 
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
 
 import net.snowflake.client.jdbc._
-import net.snowflake.spark.snowflake.ConnectorSFStageManager._
+import net.snowflake.spark.snowflake.io.S3Internal._
 import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -14,7 +30,7 @@ import org.apache.spark.sql.SQLContext
 import org.slf4j.LoggerFactory
 
 
-private[snowflake] class S3InternalPartition(
+private[io] class S3InternalPartition(
     val srcFiles: Seq[(java.lang.String, java.lang.String, java.lang.String)],
     val rddId: Int,
     val index: Int)
@@ -25,7 +41,7 @@ private[snowflake] class S3InternalPartition(
   override def equals(other: Any): Boolean = super.equals(other)
 }
 
-private[snowflake] class S3InternalRDD(
+private[io] class S3InternalRDD(
                                         @transient val sqlContext: SQLContext,
                                         @transient val params: MergedParameters,
                                         @transient val sql: String,
@@ -44,7 +60,7 @@ private[snowflake] class S3InternalRDD(
   private val compress = if (params.sfCompress) "gzip" else "none"
   private val parallel = params.parallelism
 
-  private[snowflake] val rowCount = stageManager
+  private[io] val rowCount = stageManager
     .executeWithConnection({ c =>
       setup(preStatements = Seq.empty,
             sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
