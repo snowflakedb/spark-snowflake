@@ -47,7 +47,7 @@ object SparkSnowflakeBuild extends Build {
       crossScalaVersions := Seq("2.11.7"),
       sparkVersion := "2.3.0",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.5"),
+      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.8.0"),
       javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
@@ -72,7 +72,7 @@ object SparkSnowflakeBuild extends Build {
         "com.amazonaws" % "aws-java-sdk-core" % "1.11.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "com.amazonaws" % "aws-java-sdk-s3" % "1.11.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         "com.amazonaws" % "aws-java-sdk-sts" % "1.11.0" % "test" exclude("com.fasterxml.jackson.core", "jackson-databind"),
-        "com.microsoft.azure" % "azure-storage" % "5.0.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+        //"com.microsoft.azure" % "azure-storage" % "5.0.0" % "provided" exclude("com.fasterxml.jackson.core", "jackson-databind"),
         // We require spark-avro, but avro-mapred must be provided to match Hadoop version.
         // In most cases, avro-mapred will be provided as part of the Spark assembly JAR.
         // "com.databricks" %% "spark-avro" % "2.0.1",
@@ -96,7 +96,8 @@ object SparkSnowflakeBuild extends Build {
           "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
           "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force()
+          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
+          "org.apache.hadoop" % "hadoop-azure" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force()
         )
       }),
       libraryDependencies ++= Seq(

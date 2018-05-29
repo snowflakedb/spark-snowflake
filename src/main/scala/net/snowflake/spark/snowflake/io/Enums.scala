@@ -18,7 +18,7 @@ package net.snowflake.spark.snowflake.io
 
 object SupportedSource extends Enumeration {
   type SupportedSource = Value
-  val S3INTERNAL, S3EXTERNAL = Value
+  val EXTERNAL, INTERNAL = Value
 
 }
 

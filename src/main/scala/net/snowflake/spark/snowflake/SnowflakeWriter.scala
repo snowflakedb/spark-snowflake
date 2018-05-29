@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.io.SupportedFormat
+import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
@@ -75,12 +75,15 @@ private[snowflake] class SnowflakeWriter(
         //todo
         sqlContext.sparkContext.emptyRDD[String]
     }
+    val source = if(params.usingExternalStage) SupportedSource.EXTERNAL
+      else SupportedSource.INTERNAL
     io.writeRDD(
       sqlContext,
       params,
       strRDD,
       output.schema,
       saveMode,
+      source = source,
       s3ClientFactory = Some(s3ClientFactory)
     )
   }

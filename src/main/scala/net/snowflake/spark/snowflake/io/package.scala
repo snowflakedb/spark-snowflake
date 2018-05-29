@@ -37,14 +37,14 @@ package object io {
                params: MergedParameters,
                sql: String,
                jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper,
-               source: SupportedSource = SupportedSource.S3INTERNAL,
+               source: SupportedSource = SupportedSource.INTERNAL,
                format: SupportedFormat = SupportedFormat.CSV
              ): RDD[String] =
     source match {
-      case SupportedSource.S3INTERNAL =>
+      case SupportedSource.INTERNAL =>
         new S3InternalRDD(sqlContext, params, sql, jdbcWrapper, format)
-      case SupportedSource.S3EXTERNAL =>
-        new S3External(sqlContext, params, sql, jdbcWrapper, format).getRDD()
+      case SupportedSource.EXTERNAL =>
+        new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format).getRDD()
     }
 
 
@@ -59,23 +59,22 @@ package object io {
                 saveMode: SaveMode,
                 mapper: Option[Map[String, String]] = None,
                 jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper,
-                source: SupportedSource = SupportedSource.S3INTERNAL,
+                source: SupportedSource = SupportedSource.INTERNAL,
                 s3ClientFactory: Option[AWSCredentials => AmazonS3Client] = None
-              ): Unit =
-    source match {
-      case SupportedSource.S3INTERNAL | SupportedSource.S3EXTERNAL =>
-        if(s3ClientFactory.isEmpty) throw new IllegalArgumentException("s3ClientFactory should be provided when using s3 stage")
+              ): Unit = {
 
-        S3Writer.writeToS3(
-          rdd,
-          schema,
-          sqlContext,
-          saveMode,
-          params,
-          jdbcWrapper,
-          s3ClientFactory.get
-        )
-      case _ =>
-    }
+    if (source == SupportedSource.INTERNAL) throw new IllegalArgumentException("s3ClientFactory should be provided when using s3 stage")
+
+    StageWriter.writeToStage(
+      rdd,
+      schema,
+      sqlContext,
+      saveMode,
+      params,
+      jdbcWrapper,
+      s3ClientFactory.get
+    )
+
+  }
 
 }

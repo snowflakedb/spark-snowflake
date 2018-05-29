@@ -169,8 +169,8 @@ private[snowflake] case class SnowflakeRelation(
                                    format: SupportedFormat = SupportedFormat.CSV
                                  ): RDD[T] = {
     val source: SupportedSource =
-      if (params.usingExternalStage) SupportedSource.S3EXTERNAL
-      else SupportedSource.S3INTERNAL
+      if (params.usingExternalStage) SupportedSource.EXTERNAL
+      else SupportedSource.INTERNAL
 
     val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
 

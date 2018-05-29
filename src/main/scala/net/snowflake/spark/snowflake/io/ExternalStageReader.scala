@@ -23,7 +23,7 @@ import org.apache.spark.sql.SQLContext
 import org.slf4j.{Logger, LoggerFactory}
 
 
-private[io] class S3External(
+private[io] class ExternalStageReader(
                   val sqlContext: SQLContext,
                   val params: MergedParameters,
                   val sql: String,

@@ -38,11 +38,11 @@ import org.slf4j.LoggerFactory
 
 import scala.util.Random
 
-private[io] object S3Writer {
+private[io] object StageWriter {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  def writeToS3(
+  def writeToStage(
                  rdd: RDD[String],
                  schema: StructType,
                  sqlContext: SQLContext,
@@ -53,8 +53,8 @@ private[io] object S3Writer {
                ): Unit = {
 
     val source: SupportedSource =
-      if (params.usingExternalStage) SupportedSource.S3EXTERNAL
-      else SupportedSource.S3INTERNAL
+      if (params.usingExternalStage) SupportedSource.EXTERNAL
+      else SupportedSource.INTERNAL
 
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
@@ -65,7 +65,7 @@ private[io] object S3Writer {
 
 
     source match {
-      case SupportedSource.S3EXTERNAL =>
+      case SupportedSource.EXTERNAL =>
         Utils.checkFileSystem(
           new URI(params.rootTempDir),
           sqlContext.sparkContext.hadoopConfiguration)
@@ -121,7 +121,7 @@ private[io] object S3Writer {
         } finally {
           conn.close()
         }
-      case SupportedSource.S3INTERNAL =>
+      case SupportedSource.INTERNAL =>
         val stageManager = new S3Internal(true, jdbcWrapper, params)
 
         try {
@@ -396,7 +396,7 @@ private[io] object S3Writer {
     @transient val stageManager = stageMngr.orNull
 
     source match {
-      case SupportedSource.S3INTERNAL =>
+      case SupportedSource.INTERNAL =>
         @transient val keyIds = stageManager.getKeyIds
 
         val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
@@ -482,7 +482,7 @@ private[io] object S3Writer {
 
         Some("s3n://" + stageLocation, "")
 
-      case SupportedSource.S3EXTERNAL =>
+      case SupportedSource.EXTERNAL =>
         val tempDir = params.createPerQueryTempDir()
         // Save, possibly with compression. Always use Gzip for now
         if (params.sfCompress) {

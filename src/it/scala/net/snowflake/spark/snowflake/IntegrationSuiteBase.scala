@@ -105,6 +105,8 @@ trait IntegrationSuiteBase
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
   private var AWS_S3_SCRATCH_SPACE: String = _
 
+  protected var AZURE_SAS: String = _
+
   /**
     * Random suffix appended appended to table and directory names in order to avoid collisions
     * between separate Travis builds.
@@ -159,10 +161,12 @@ trait IntegrationSuiteBase
     AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey", false)
     AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir", false)
 
+    AZURE_SAS = getConfigValue("temporary_azure_sas_token", false)
+
     if (AWS_S3_SCRATCH_SPACE != null) {
       require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE
-                .startsWith("file://"),
-              "must use s3n:// or file:// URL")
+                .startsWith("file://") || AWS_S3_SCRATCH_SPACE.startsWith("wasb://"),
+              "must use s3n://, file://, or wasb:// URL")
       tempDir = params.rootTempDir + randomSuffix + "/"
     }
 
@@ -175,6 +179,15 @@ trait IntegrationSuiteBase
       sc.hadoopConfiguration
         .set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
     }
+
+    if (AZURE_SAS != null) {
+      sc.hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      sc.hadoopConfiguration.set("fs.AbstractFileSystem.wasb.impl", "org.apache.hadoop.fs.azure.Wasb")
+      sc.hadoopConfiguration.set(getAzureURL(getConfigValue("tempdir")), AZURE_SAS)
+
+    }
+
+
     conn = DefaultJDBCWrapper.getConnector(params)
 
     // Force UTC also on the JDBC connection
@@ -217,6 +230,15 @@ trait IntegrationSuiteBase
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
+  }
+
+  def getAzureURL(input: String): String = {
+    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.blob\\.core\\.windows\\.net/(.+)?".r
+    input match {
+      case azure_url(container, account, path) =>
+        s"fs.azure.sas.$container.$account.blob.core.windows.net"
+      case _ => throw new IllegalArgumentException(s"invalid wasd url: $input")
+    }
   }
 
   /**
