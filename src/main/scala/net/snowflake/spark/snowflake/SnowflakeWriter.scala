@@ -524,13 +524,11 @@ private[snowflake] class SnowflakeWriter(
 
           SnowflakeConnectorUtils.log.debug(
             "Completed S3 upload for partition.")
-
+          streamManager.complete()
         } catch {
           case ex: Exception =>
             streamManager.abort()
             SnowflakeConnectorUtils.handleS3Exception(ex)
-        } finally {
-          streamManager.complete()
         }
       })
 
