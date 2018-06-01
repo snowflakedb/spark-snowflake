@@ -138,6 +138,12 @@ private[snowflake] class SnowflakeWriter(
         } else {
           doSnowflakeLoad(conn, data, saveMode, params, filesToCopy, None)
         }
+
+        //purge files after loading
+        if(params.purge()){
+          val fs = FileSystem.get(URI.create(filesToCopy.get._1), sqlContext.sparkContext.hadoopConfiguration)
+          fs.delete(new Path(filesToCopy.get._1), true)
+        }
       } finally {
         conn.close()
       }
@@ -356,6 +362,8 @@ private[snowflake] class SnowflakeWriter(
       else
         ""
 
+    val purge = if (params.purge()) "PURGE = TRUE" else ""
+
     /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
     function to individually set each file_format and copy option. */
 
@@ -374,6 +382,7 @@ private[snowflake] class SnowflakeWriter(
        |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
        |  )
        |  $truncateCol
+       |  $purge
     """.stripMargin.trim
   }
 
