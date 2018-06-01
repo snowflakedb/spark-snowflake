@@ -24,7 +24,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import javax.crypto.{Cipher, CipherOutputStream}
-import net.snowflake.spark.snowflake.io.S3Internal.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
+import net.snowflake.spark.snowflake.io.SFInternalStage.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
@@ -122,7 +122,7 @@ private[io] object StageWriter {
           conn.close()
         }
       case SupportedSource.INTERNAL =>
-        val stageManager = new S3Internal(true, jdbcWrapper, params)
+        val stageManager = new SFInternalStage(true, jdbcWrapper, params)
 
         try {
           stageManager.executeWithConnection(conn =>
@@ -390,7 +390,7 @@ private[io] object StageWriter {
                          data: RDD[String],
                          params: MergedParameters,
                          source: SupportedSource,
-                         stageMngr: Option[S3Internal]
+                         stageMngr: Option[SFInternalStage]
                         ): Option[(String, String)] = {
 
     @transient val stageManager = stageMngr.orNull
@@ -420,9 +420,9 @@ private[io] object StageWriter {
             masterKey,
             queryId,
             smkId,
-            awsID,
-            awsKey,
-            awsToken)
+            awsID.get,
+            awsKey.get,
+            awsToken.get)
 
           val (fileCipher: Cipher, meta: ObjectMetadata) =
             if (!is256)

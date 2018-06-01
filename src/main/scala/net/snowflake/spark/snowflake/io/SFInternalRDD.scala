@@ -16,11 +16,14 @@
 
 package net.snowflake.spark.snowflake.io
 
-import java.io.InputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
+import java.util
 import java.util.zip.GZIPInputStream
 
 import net.snowflake.client.jdbc._
-import net.snowflake.spark.snowflake.io.S3Internal._
+import net.snowflake.client.jdbc.cloud.storage.{EncryptionProvider, StageInfo}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlob, CloudBlobClient, CloudBlobContainer}
+import net.snowflake.spark.snowflake.io.SFInternalStage._
 import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -30,7 +33,7 @@ import org.apache.spark.sql.SQLContext
 import org.slf4j.LoggerFactory
 
 
-private[io] class S3InternalPartition(
+private[io] class SFInternalPartition(
     val srcFiles: Seq[(java.lang.String, java.lang.String, java.lang.String)],
     val rddId: Int,
     val index: Int)
@@ -41,7 +44,7 @@ private[io] class S3InternalPartition(
   override def equals(other: Any): Boolean = super.equals(other)
 }
 
-private[io] class S3InternalRDD(
+private[io] class SFInternalRDD(
                                         @transient val sqlContext: SQLContext,
                                         @transient val params: MergedParameters,
                                         @transient val sql: String,
@@ -51,7 +54,7 @@ private[io] class S3InternalRDD(
 
   @transient override val log = LoggerFactory.getLogger(getClass)
   @transient private val stageManager =
-    new S3Internal(false, jdbcWrapper, params)
+    new SFInternalStage(false, jdbcWrapper, params)
 
   @transient val tempStage = stageManager.setupStageArea()
 
@@ -76,6 +79,14 @@ private[io] class S3InternalRDD(
   private val masterKey     = stageManager.masterKey
   private val is256         = stageManager.is256Encryption
 
+  private val azureSAS      = stageManager.azureSAS
+  private val azureAccount  = stageManager.azureAccountName
+  private val azureEndpoint = stageManager.azureEndpoint
+
+  private val stageType: StageInfo.StageType = stageManager.stageType
+
+  println(s"xxxxxxxxxxxxxxx${stageType.toString}xxxxxxxxxxxxxxxxxxxx")
+
   override def getPartitions: Array[Partition] = {
 
     val encryptionMaterialsGrouped =
@@ -87,7 +98,7 @@ private[io] class S3InternalRDD(
 
     while (i < encryptionMaterialsGrouped.length) {
       partitions(i) =
-        new S3InternalPartition(encryptionMaterialsGrouped(i), id, i)
+        new SFInternalPartition(encryptionMaterialsGrouped(i), id, i)
       i = i + 1
     }
     partitions
@@ -96,7 +107,7 @@ private[io] class S3InternalRDD(
   override def compute(thePartition: Partition,
                        context: TaskContext): Iterator[String] = {
 
-    val mats   = thePartition.asInstanceOf[S3InternalPartition].srcFiles
+    val mats   = thePartition.asInstanceOf[SFInternalPartition].srcFiles
     val stringIterator = new StringIterator(format)
 
     try {
@@ -104,35 +115,67 @@ private[io] class S3InternalRDD(
         case (file, queryId, smkId) =>
           if (queryId != null) {
             var stream: InputStream = null
-
-            val amazonClient =
-              createS3Client(is256,
-                             masterKey,
-                             queryId,
-                             smkId,
-                             awsID,
-                             awsKey,
-                             awsToken,
-                             parallel)
-
             val (bucketName, stagePath) =
               extractBucketNameAndPath(stageLocation)
-
             var stageFilePath = file
-
             if (!stagePath.isEmpty) {
               stageFilePath =
                 SnowflakeUtil.concatFilePathNames(stagePath, file, "/")
             }
 
-            val dataObject = amazonClient.getObject(bucketName, stageFilePath)
-            stream = dataObject.getObjectContent
 
-            if (!is256) {
-              stream = getDecryptedStream(stream,
-                                          masterKey,
-                                          dataObject.getObjectMetadata)
+            stageType match {
+              case StageInfo.StageType.S3 =>
+                val amazonClient =
+                  createS3Client(is256,
+                    masterKey,
+                    queryId,
+                    smkId,
+                    awsID.get,
+                    awsKey.get,
+                    awsToken.get,
+                    parallel)
+
+                val dataObject = amazonClient.getObject(bucketName, stageFilePath)
+                stream = dataObject.getObjectContent
+                if (!is256) {
+                  stream = getDecryptedStream(stream,
+                    masterKey,
+                    dataObject.getObjectMetadata.getUserMetadata,
+                    stageType)
+                }
+
+                println("-------------->this is s3 <----------------------")
+              case StageInfo.StageType.AZURE =>
+
+                val azureClient: CloudBlobClient =
+                  createAzureClient(
+                    azureAccount.get,
+                    azureEndpoint.get,
+                    azureSAS
+                  )
+
+                val container: CloudBlobContainer = azureClient.getContainerReference(bucketName)
+                val blob: CloudBlob = container.getBlockBlobReference(stageFilePath)
+                val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
+                blob.download(azureStream)
+                blob.downloadAttributes()
+
+                stream = new ByteArrayInputStream(azureStream.toByteArray)
+                if (!is256) {
+                  stream = getDecryptedStream(stream,
+                    masterKey,
+                    blob.getMetadata,
+                    stageType)
+                }
+
+                println("------------->this is azure <--------------------")
+
+              case _ =>
+                throw new UnsupportedOperationException(
+                  s"Only support S3 or Azure stage, stage type: $stageType ")
             }
+
 
             stream = compress match {
               case "gzip" => new GZIPInputStream(stream)

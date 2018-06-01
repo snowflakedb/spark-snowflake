@@ -18,8 +18,11 @@ package net.snowflake.spark.snowflake.io
 
 
 import java.io.InputStream
+import java.net.URI
 import java.security.SecureRandom
 import java.sql.Connection
+import java.util
+import java.util.AbstractMap.SimpleEntry
 
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import javax.crypto.{Cipher, CipherInputStream, SecretKey}
@@ -29,8 +32,14 @@ import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
 import com.amazonaws.services.s3.model._
 import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
-import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
+import net.snowflake.client.jdbc.internal.snowflake.common.core.{RemoteStoreFileEncryptionMaterial, SqlState}
 import net.snowflake.client.jdbc._
+import net.snowflake.client.jdbc.cloud.storage.StageInfo
+import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonFactory
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorException, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
@@ -40,7 +49,7 @@ import scala.util.Random
 /**
   * Created by ema on 4/14/17.
   */
-private[io] object S3Internal {
+private[io] object SFInternalStage {
   private[io] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
   private[io] final val AES                 = "AES"
@@ -54,6 +63,8 @@ private[io] object S3Internal {
   private[io] final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
   private[io] final val AMZ_MATDESC         = "x-amz-matdesc"
 
+
+  private[io] final val AZ_ENCRYPTIONDATAPROP = "encryptiondata"
   /**
     * A small helper for extracting bucket name and path from stage location.
     *
@@ -69,6 +80,24 @@ private[io] object S3Internal {
 
   private[io] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
+
+  private[io] final def createAzureClient(
+                                         storageAccount: String,
+                                         endpoint: String,
+                                         sas: Option[String] = None
+                                         ): CloudBlobClient = {
+    val storageEndpoint: URI =
+      new URI("https",
+        s"$storageAccount.$endpoint/",null,null)
+    val azCreds =
+      if(sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
+      else StorageCredentialsAnonymous.ANONYMOUS
+
+
+    new CloudBlobClient(storageEndpoint, azCreds)
+  }
+
+
 
   private[io] final def createS3Client(
       is256: Boolean,
@@ -114,14 +143,39 @@ private[io] object S3Internal {
     }
   }
 
-  private[io] final def getDecryptedStream(
-      stream: InputStream,
-      masterKey: String,
-      meta: ObjectMetadata): InputStream = {
+  private[io] final def parseEncryptionData(jsonEncryptionData: String):
+  (String, String) =
+  {
+    val mapper: ObjectMapper  = new ObjectMapper()
+    val encryptionDataNode: JsonNode = mapper.readTree(jsonEncryptionData)
+    val iv: String = encryptionDataNode.findValue("ContentEncryptionIV").asText()
+    val key: String = encryptionDataNode
+      .findValue("WrappedContentKey").findValue("EncryptedKey").asText()
+    (key, iv)
+  }
 
-    val metaData   = meta.getUserMetadata
+  private[io] final def getDecryptedStream(
+                                            stream: InputStream,
+                                            masterKey: String,
+                                            metaData: util.Map[String, String],
+                                            stageType: StageType
+      //meta: ObjectMetadata
+                                          ): InputStream = {
+
     val decodedKey = Base64.decode(masterKey)
-    val (key, iv)  = (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
+    val (key, iv)  =
+      stageType match {
+        case StageType.S3 =>
+          (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
+        case StageType.AZURE =>
+          parseEncryptionData(metaData.get(AZ_ENCRYPTIONDATAPROP))
+        case _ =>
+          throw new
+              UnsupportedOperationException(
+                s"Only support s3 or azure stage. Stage Type: $stageType")
+      }
+
+
 
     if (key == null || iv == null)
       throw new SnowflakeSQLException(SqlState.INTERNAL_ERROR,
@@ -148,6 +202,7 @@ private[io] object S3Internal {
     dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
     new CipherInputStream(stream, dataCipher)
   }
+
 
   private[io] final def getCipherAndMetadata(
       masterKey: String,
@@ -192,11 +247,11 @@ private[io] object S3Internal {
   }
 }
 
-private[io] class S3Internal(isWrite: Boolean,
-                                                 jdbcWrapper: JDBCWrapper,
-                                                 params: MergedParameters) {
+private[io] class SFInternalStage(isWrite: Boolean,
+                                  jdbcWrapper: JDBCWrapper,
+                                  params: MergedParameters) {
 
-  import S3Internal._
+  import SFInternalStage._
 
   private lazy val connection: SnowflakeConnectionV1 =
     jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
@@ -216,17 +271,51 @@ private[io] class S3Internal(isWrite: Boolean,
     if (!isWrite) sfAgent.getSrcToMaterialsMap else null
   private lazy val stageCredentials = sfAgent.getStageCredentials
 
+  private lazy val stageInfo: StageInfo = sfAgent.getStageInfo
+
   private lazy val encMat =
     if (encryptionMaterials.size() > 0) {
       encryptionMaterials.get(0)
     } else null
 
-  private[io] lazy val awsId: String =
-    stageCredentials.get("AWS_ID").toString
-  private[io] lazy val awsKey: String =
-    stageCredentials.get("AWS_KEY").toString
-  private[io] lazy val awsToken: String =
-    stageCredentials.get("AWS_TOKEN").toString
+  private[io] lazy val stageType: StageInfo.StageType =
+    stageInfo.getStageType
+
+  //try get aws credentials
+  private[io] lazy val awsId: Option[String] =
+    if(stageType == StageInfo.StageType.S3)
+      Option(stageCredentials.get("AWS_ID").toString)
+    else None
+
+  private[io] lazy val awsKey: Option[String] =
+    if(stageType == StageInfo.StageType.S3)
+      Option(stageCredentials.get("AWS_KEY").toString)
+    else None
+
+  private[io] lazy val awsToken: Option[String] =
+    if(stageType == StageInfo.StageType.S3)
+      Option(stageCredentials.get("AWS_TOKEN").toString)
+    else None
+
+  //try get azure credentials
+
+  private[io] lazy val azureSAS: Option[String] =
+    if(stageType == StageInfo.StageType.AZURE)
+      Option(stageCredentials.get("AZURE_SAS_TOKEN").toString)
+    else None
+
+  private[io] lazy val azureEndpoint: Option[String] =
+    if(stageType == StageInfo.StageType.AZURE)
+      Option(stageInfo.getEndPoint)
+    else None
+
+  private[io] lazy val azureAccountName: Option[String] =
+    if(stageType == StageInfo.StageType.AZURE)
+      Option(stageInfo.getStorageAccount)
+    else None
+
+  stageInfo.getLocation
+
   private[io] lazy val stageLocation: String =
     sfAgent.getStageLocation
 
@@ -259,6 +348,7 @@ private[io] class S3Internal(isWrite: Boolean,
     else
       throw new SnowflakeConnectorException(s"Unsupported Key Size: $length")
   }
+
 
   private val tempStage     = TEMP_STAGE_LOCATION
   private val dummyLocation = DUMMY_LOCATION

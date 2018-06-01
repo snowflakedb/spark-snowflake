@@ -26,3 +26,8 @@ object SupportedFormat extends Enumeration {
   type SupportedFormat = Value
   val CSV, JSON = Value
 }
+
+object CloudStorageType extends Enumeration {
+  type CloudStorageType = Value
+  val S3, AZURE = Value
+}

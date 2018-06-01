@@ -42,7 +42,7 @@ package object io {
              ): RDD[String] =
     source match {
       case SupportedSource.INTERNAL =>
-        new S3InternalRDD(sqlContext, params, sql, jdbcWrapper, format)
+        new SFInternalRDD(sqlContext, params, sql, jdbcWrapper, format)
       case SupportedSource.EXTERNAL =>
         new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format).getRDD()
     }
