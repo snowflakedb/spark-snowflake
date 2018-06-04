@@ -37,7 +37,6 @@ import scala.reflect.ClassTag
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
                                                  jdbcWrapper: JDBCWrapper,
-                                                 s3ClientFactory: AWSCredentials => AmazonS3Client,
                                                  params: MergedParameters,
                                                  userSchema: Option[StructType])(@transient val sqlContext: SQLContext)
   extends BaseRelation
@@ -80,7 +79,7 @@ private[snowflake] case class SnowflakeRelation(
     } else {
       SaveMode.Append
     }
-    val writer = new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
+    val writer = new SnowflakeWriter(jdbcWrapper)
     writer.save(sqlContext, data, saveMode, params)
   }
 
@@ -97,7 +96,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
         params.rootTempDirStorageType,
-        s3ClientFactory(creds))
+        new AmazonS3Client(creds))
     }
 
     log.debug(Utils.sanitizeQueryText(sql))
@@ -120,7 +119,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
         params.rootTempDirStorageType,
-        s3ClientFactory(creds))
+        new AmazonS3Client(creds))
     }
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Snowflake

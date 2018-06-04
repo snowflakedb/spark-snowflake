@@ -48,13 +48,13 @@ private[io] object StageWriter {
                  sqlContext: SQLContext,
                  saveMode: SaveMode,
                  params: MergedParameters,
-                 jdbcWrapper: JDBCWrapper,
-                 s3ClientFactory: AWSCredentials => AmazonS3Client
+                 jdbcWrapper: JDBCWrapper
                ): Unit = {
 
     val source: SupportedSource =
       if (params.usingExternalStage) SupportedSource.EXTERNAL
       else SupportedSource.INTERNAL
+
 
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
@@ -74,6 +74,9 @@ private[io] object StageWriter {
           // For now it is only needed for AWS, so put the following under the
           // check. checkBucketConfiguration implies we are using S3.
           val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
+
+          val s3ClientFactory: AWSCredentials => AmazonS3Client
+          = awsCredentials => new AmazonS3Client(awsCredentials)
 
           Utils.checkThatBucketHasObjectLifecycleConfiguration(
             params.rootTempDir,

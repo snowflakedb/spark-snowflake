@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory
   * to provide AWS passwords
   *   - Add support for VARIANT
   */
-class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials => AmazonS3Client)
+class DefaultSource(jdbcWrapper: JDBCWrapper)
   extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider {
@@ -42,7 +42,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
   /**
     * Default constructor required by Data Source API
     */
-  def this() = this(DefaultJDBCWrapper, awsCredentials => new AmazonS3Client(awsCredentials))
+  def this() = this(DefaultJDBCWrapper)
 
   /**
     * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL. Resolves the schema
@@ -55,7 +55,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     //check spark version for push down
     if (params.autoPushdown)
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
-    SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
+    SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
 
   /**
@@ -69,7 +69,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
     //check spark version for push down
     if (params.autoPushdown)
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
-    SnowflakeRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
+    SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
 
   /**
@@ -119,7 +119,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper, s3ClientFactory: AWSCredentials =>
 
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
-      new SnowflakeWriter(jdbcWrapper, s3ClientFactory)
+      new SnowflakeWriter(jdbcWrapper)
         .save(sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
 
     }

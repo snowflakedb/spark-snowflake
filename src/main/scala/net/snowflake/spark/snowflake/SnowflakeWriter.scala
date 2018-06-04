@@ -48,8 +48,7 @@ import org.apache.spark.sql._
   *     which later will atomically replace the original table using SWAP.
   */
 private[snowflake] class SnowflakeWriter(
-    jdbcWrapper: JDBCWrapper,
-    s3ClientFactory: AWSCredentials => AmazonS3Client) {
+    jdbcWrapper: JDBCWrapper) {
 
   def save(
             sqlContext: SQLContext,
@@ -75,16 +74,12 @@ private[snowflake] class SnowflakeWriter(
         //todo
         sqlContext.sparkContext.emptyRDD[String]
     }
-    val source = if(params.usingExternalStage) SupportedSource.EXTERNAL
-      else SupportedSource.INTERNAL
     io.writeRDD(
       sqlContext,
       params,
       strRDD,
       output.schema,
-      saveMode,
-      source = source,
-      s3ClientFactory = Some(s3ClientFactory)
+      saveMode
     )
   }
 
@@ -137,5 +132,4 @@ private[snowflake] class SnowflakeWriter(
 
 object DefaultSnowflakeWriter
     extends SnowflakeWriter(
-      DefaultJDBCWrapper,
-      awsCredentials => new AmazonS3Client(awsCredentials))
+      DefaultJDBCWrapper)

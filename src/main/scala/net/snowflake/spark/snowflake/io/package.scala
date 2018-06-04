@@ -58,12 +58,8 @@ package object io {
                 schema: StructType,
                 saveMode: SaveMode,
                 mapper: Option[Map[String, String]] = None,
-                jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper,
-                source: SupportedSource = SupportedSource.INTERNAL,
-                s3ClientFactory: Option[AWSCredentials => AmazonS3Client] = None
+                jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper
               ): Unit = {
-
-    if (source == SupportedSource.INTERNAL) throw new IllegalArgumentException("s3ClientFactory should be provided when using s3 stage")
 
     StageWriter.writeToStage(
       rdd,
@@ -71,8 +67,7 @@ package object io {
       sqlContext,
       saveMode,
       params,
-      jdbcWrapper,
-      s3ClientFactory.get
+      jdbcWrapper
     )
 
   }
