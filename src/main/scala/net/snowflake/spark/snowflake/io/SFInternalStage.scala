@@ -314,8 +314,6 @@ private[io] class SFInternalStage(isWrite: Boolean,
       Option(stageInfo.getStorageAccount)
     else None
 
-  stageInfo.getLocation
-
   private[io] lazy val stageLocation: String =
     sfAgent.getStageLocation
 
@@ -351,6 +349,7 @@ private[io] class SFInternalStage(isWrite: Boolean,
 
 
   private val tempStage     = TEMP_STAGE_LOCATION
+
   private val dummyLocation = DUMMY_LOCATION
 
   private val command = {
@@ -376,10 +375,8 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private[io] def getEncryptionMaterials = encryptionMaterials
 
   private[io] def setupStageArea(): String = {
-
     jdbcWrapper.executeInterruptibly(connection,
                                           CREATE_TEMP_STAGE_STMT + tempStage)
-
     stageSet = true
     tempStage
   }

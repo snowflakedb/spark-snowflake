@@ -5,3 +5,5 @@ project/target
 *.DS_Store
 build/*.jar
 *.private
+metastore_db/*
+*.log
