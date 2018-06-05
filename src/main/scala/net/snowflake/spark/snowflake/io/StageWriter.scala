@@ -24,6 +24,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import javax.crypto.{Cipher, CipherOutputStream}
+import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.spark.snowflake.io.SFInternalStage.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
@@ -400,90 +401,106 @@ private[io] object StageWriter {
 
     source match {
       case SupportedSource.INTERNAL =>
-        @transient val keyIds = stageManager.getKeyIds
+        stageManager.stageType match {
+          case StageType.S3 =>
+            println("-------------->this is s3 <----------------------")
+            @transient val keyIds = stageManager.getKeyIds
 
-        val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+            val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
 
-        val awsID = stageManager.awsId
-        val awsKey = stageManager.awsKey
-        val awsToken = stageManager.awsToken
-        val is256 = stageManager.is256Encryption
-        val masterKey = stageManager.masterKey
-        val stageLocation = stageManager.stageLocation
+            val awsID = stageManager.awsId
+            val awsKey = stageManager.awsKey
+            val awsToken = stageManager.awsToken
+            val is256 = stageManager.is256Encryption
+            val masterKey = stageManager.masterKey
+            val stageLocation = stageManager.stageLocation
 
-        data.foreachPartition(rows => {
+            data.foreachPartition(rows => {
 
-          val (bucketName, path) = extractBucketNameAndPath(stageLocation)
-          val randStr = Random.alphanumeric take 10 mkString ""
-          var fileName = path + {
-            if (!path.endsWith("/")) "/" else ""
-          } + randStr + ".csv"
+              val (bucketName, path) = extractBucketNameAndPath(stageLocation)
+              val randStr = Random.alphanumeric take 10 mkString ""
+              var fileName = path + {
+                if (!path.endsWith("/")) "/" else ""
+              } + randStr + ".csv"
 
-          val amazonClient = createS3Client(is256,
-            masterKey,
-            queryId,
-            smkId,
-            awsID.get,
-            awsKey.get,
-            awsToken.get)
+              val amazonClient = createS3Client(is256,
+                masterKey,
+                queryId,
+                smkId,
+                awsID.get,
+                awsKey.get,
+                awsToken.get)
 
-          val (fileCipher: Cipher, meta: ObjectMetadata) =
-            if (!is256)
-              getCipherAndMetadata(masterKey, queryId, smkId)
-            else (_: Cipher, new ObjectMetadata())
+              val (fileCipher: Cipher, meta: ObjectMetadata) =
+                if (!is256)
+                  getCipherAndMetadata(masterKey, queryId, smkId)
+                else (_: Cipher, new ObjectMetadata())
 
-          if (params.sfCompress)
-            meta.setContentEncoding("GZIP")
+              if (params.sfCompress)
+                meta.setContentEncoding("GZIP")
 
-          val parallelism = params.parallelism.getOrElse(1)
+              val parallelism = params.parallelism.getOrElse(1)
 
-          val streamManager = new StreamTransferManager(
-            bucketName,
-            fileName,
-            amazonClient,
-            meta,
-            1, //numStreams
-            parallelism, //numUploadThreads.
-            5 * parallelism, //queueCapacity
-            50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
+              val streamManager = new StreamTransferManager(
+                bucketName,
+                fileName,
+                amazonClient,
+                meta,
+                1, //numStreams
+                parallelism, //numUploadThreads.
+                5 * parallelism, //queueCapacity
+                50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
 
-          try {
-            // TODO: Can we parallelize this write? Currently we don't because the Row Iterator is not thread safe.
+              try {
+                // TODO: Can we parallelize this write? Currently we don't because the Row Iterator is not thread safe.
 
-            val uploadOutStream = streamManager.getMultiPartOutputStreams.get(0)
-            var outStream: OutputStream = uploadOutStream
+                val uploadOutStream = streamManager.getMultiPartOutputStreams.get(0)
+                var outStream: OutputStream = uploadOutStream
 
-            if (!is256)
-              outStream = new CipherOutputStream(outStream, fileCipher)
+                if (!is256)
+                  outStream = new CipherOutputStream(outStream, fileCipher)
 
-            if (params.sfCompress) {
-              fileName = fileName + ".gz"
-              outStream = new GZIPOutputStream(outStream)
-            }
+                if (params.sfCompress) {
+                  fileName = fileName + ".gz"
+                  outStream = new GZIPOutputStream(outStream)
+                }
 
-            SnowflakeConnectorUtils.log.debug("Begin upload.")
+                SnowflakeConnectorUtils.log.debug("Begin upload.")
 
-            while (rows.hasNext) {
-              outStream.write(rows.next.getBytes("UTF-8"))
-              outStream.write('\n')
-              uploadOutStream.checkSize()
-            }
+                while (rows.hasNext) {
+                  outStream.write(rows.next.getBytes("UTF-8"))
+                  outStream.write('\n')
+                  uploadOutStream.checkSize()
+                }
 
-            outStream.close()
+                outStream.close()
 
-            SnowflakeConnectorUtils.log.debug(
-              "Completed S3 upload for partition.")
+                SnowflakeConnectorUtils.log.debug(
+                  "Completed S3 upload for partition.")
 
-          } catch {
-            case ex: Exception =>
-              streamManager.abort()
-              SnowflakeConnectorUtils.handleS3Exception(ex)
-          } finally {
-            streamManager.complete()
-          }
-        })
+              } catch {
+                case ex: Exception =>
+                  streamManager.abort()
+                  SnowflakeConnectorUtils.handleS3Exception(ex)
+              } finally {
+                streamManager.complete()
+              }
+            })
 
-        Some("s3n://" + stageLocation, "")
+            Some("s3n://" + stageLocation, "")
+
+          case StageType.AZURE =>
+            println("-------------->this is azure <----------------------")
+
+            Some("wasb://","")
+
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Only support S3 or Azure stage, stage type: ${stageManager.stageType} ")
+        }
+
+
+
 
       case SupportedSource.EXTERNAL =>
         val tempDir = params.createPerQueryTempDir()
