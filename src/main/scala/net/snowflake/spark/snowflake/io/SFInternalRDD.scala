@@ -16,12 +16,11 @@
 
 package net.snowflake.spark.snowflake.io
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
-import java.util
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream}
 import java.util.zip.GZIPInputStream
 
 import net.snowflake.client.jdbc._
-import net.snowflake.client.jdbc.cloud.storage.{EncryptionProvider, StageInfo}
+import net.snowflake.client.jdbc.cloud.storage.StageInfo
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlob, CloudBlobClient, CloudBlobContainer}
 import net.snowflake.spark.snowflake.io.SFInternalStage._
 import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils}
@@ -85,8 +84,6 @@ private[io] class SFInternalRDD(
 
   private val stageType: StageInfo.StageType = stageManager.stageType
 
-  println(s"xxxxxxxxxxxxxxx${stageType.toString}xxxxxxxxxxxxxxxxxxxx")
-
   override def getPartitions: Array[Partition] = {
 
     val encryptionMaterialsGrouped =
@@ -144,8 +141,6 @@ private[io] class SFInternalRDD(
                     dataObject.getObjectMetadata.getUserMetadata,
                     stageType)
                 }
-
-                println("-------------->this is s3 <----------------------")
               case StageInfo.StageType.AZURE =>
 
                 val azureClient: CloudBlobClient =
@@ -162,14 +157,7 @@ private[io] class SFInternalRDD(
                 blob.downloadAttributes()
 
                 stream = new ByteArrayInputStream(azureStream.toByteArray)
-                if (!is256) {
-                  stream = getDecryptedStream(stream,
-                    masterKey,
-                    blob.getMetadata,
-                    stageType)
-                }
-
-                println("------------->this is azure <--------------------")
+                stream = getDecryptedStream(stream, masterKey, blob.getMetadata, stageType)
 
               case _ =>
                 throw new UnsupportedOperationException(

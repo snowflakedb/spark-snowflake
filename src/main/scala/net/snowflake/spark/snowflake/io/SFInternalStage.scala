@@ -22,7 +22,6 @@ import java.net.URI
 import java.security.SecureRandom
 import java.sql.Connection
 import java.util
-import java.util.AbstractMap.SimpleEntry
 
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import javax.crypto.{Cipher, CipherInputStream, SecretKey}
@@ -32,11 +31,10 @@ import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
 import com.amazonaws.services.s3.model._
 import com.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
-import net.snowflake.client.jdbc.internal.snowflake.common.core.{RemoteStoreFileEncryptionMaterial, SqlState}
+import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.client.jdbc._
 import net.snowflake.client.jdbc.cloud.storage.StageInfo
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
@@ -64,7 +62,11 @@ private[io] object SFInternalStage {
   private[io] final val AMZ_MATDESC         = "x-amz-matdesc"
 
 
-  private[io] final val AZ_ENCRYPTIONDATAPROP = "encryptiondata"
+  private[io] final val AZ_ENCRYPTIONDATA   = "encryptiondata"
+  private[io] final val AZ_IV               = "ContentEncryptionIV"
+  private[io] final val AZ_KEY_WRAP         = "WrappedContentKey"
+  private[io] final val AZ_KEY              = "EncryptedKey"
+  private[io] final val AZ_MATDESC          = "matdesc"
   /**
     * A small helper for extracting bucket name and path from stage location.
     *
@@ -148,9 +150,9 @@ private[io] object SFInternalStage {
   {
     val mapper: ObjectMapper  = new ObjectMapper()
     val encryptionDataNode: JsonNode = mapper.readTree(jsonEncryptionData)
-    val iv: String = encryptionDataNode.findValue("ContentEncryptionIV").asText()
+    val iv: String = encryptionDataNode.findValue(AZ_IV).asText()
     val key: String = encryptionDataNode
-      .findValue("WrappedContentKey").findValue("EncryptedKey").asText()
+      .findValue(AZ_KEY_WRAP).findValue(AZ_KEY).asText()
     (key, iv)
   }
 
@@ -168,7 +170,7 @@ private[io] object SFInternalStage {
         case StageType.S3 =>
           (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
         case StageType.AZURE =>
-          parseEncryptionData(metaData.get(AZ_ENCRYPTIONDATAPROP))
+          parseEncryptionData(metaData.get(AZ_ENCRYPTIONDATA))
         case _ =>
           throw new
               UnsupportedOperationException(
@@ -203,11 +205,50 @@ private[io] object SFInternalStage {
     new CipherInputStream(stream, dataCipher)
   }
 
+  private[io] final def getCipherAndAZMetaData(
+                                                       masterKey: String,
+                                                       queryId: String,
+                                                       smkId: String
+                                                     ): (Cipher, util.HashMap[String, String]) = {
 
-  private[io] final def getCipherAndMetadata(
-      masterKey: String,
-      queryId: String,
-      smkId: String): (Cipher, ObjectMetadata) = {
+
+    def buildEncryptionMetadataJSON(iv64: String, key64: String): String =
+      s"""
+         | {"EncryptionMode":"FullBlob",
+         | "WrappedContentKey":
+         | {"KeyId":"symmKey1","EncryptedKey":"$key64","Algorithm":"AES_CBC_256"},
+         | "EncryptionAgent":{"Protocol":"1.0","EncryptionAlgorithm":"AES_CBC_256"},
+         | "ContentEncryptionIV":"$iv64",
+         | "KeyWrappingMetadata":{"EncryptionLibrary":"Java 5.3.0"}}
+       """.stripMargin
+
+    val (cipher, matDesc, enKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
+
+    val meta = new util.HashMap[String, String]()
+
+    meta.put(AZ_MATDESC, matDesc)
+    meta.put(AZ_ENCRYPTIONDATA, buildEncryptionMetadataJSON(ivData, enKeK))
+
+    (cipher, meta)
+  }
+
+
+  private[io] final def getCipherAndS3Metadata(
+                                              masterKey: String,
+                                              queryId: String,
+                                              smkId: String
+                                              ):(Cipher, ObjectMetadata) = {
+    val (cipher, matDesc, encKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
+    val meta = new ObjectMetadata()
+    meta.addUserMetadata(AMZ_MATDESC, matDesc)
+    meta.addUserMetadata(AMZ_KEY, encKeK)
+    meta.addUserMetadata(AMZ_IV, ivData)
+    (cipher, meta)
+  }
+  private final def getCipherAndMetadata(
+                                              masterKey: String,
+                                              queryId: String,
+                                              smkId: String): (Cipher, String, String, String) = {
 
     val decodedKey   = Base64.decode(masterKey)
     val keySize      = decodedKey.length
@@ -237,14 +278,11 @@ private[io] object SFInternalStage {
     val matDesc =
       new MatDesc(smkId.toLong, queryId, keySize * 8)
 
-    val meta = new ObjectMetadata()
-
-    meta.addUserMetadata(AMZ_MATDESC, matDesc.toString)
-    meta.addUserMetadata(AMZ_KEY, Base64.encodeAsString(encKeK: _*))
-    meta.addUserMetadata(AMZ_IV, Base64.encodeAsString(ivData: _*))
-
-    (fileCipher, meta)
+    (fileCipher, matDesc.toString, Base64.encodeAsString(encKeK: _*),Base64.encodeAsString(ivData: _*))
   }
+
+
+
 }
 
 private[io] class SFInternalStage(isWrite: Boolean,

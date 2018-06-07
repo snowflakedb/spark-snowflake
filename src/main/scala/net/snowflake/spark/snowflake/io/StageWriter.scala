@@ -25,7 +25,8 @@ import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import javax.crypto.{Cipher, CipherOutputStream}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
-import net.snowflake.spark.snowflake.io.SFInternalStage.{createS3Client, extractBucketNameAndPath, getCipherAndMetadata}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlobClient, CloudBlobContainer, CloudBlockBlob}
+import net.snowflake.spark.snowflake.io.SFInternalStage._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
@@ -401,23 +402,25 @@ private[io] object StageWriter {
 
     source match {
       case SupportedSource.INTERNAL =>
-        stageManager.stageType match {
-          case StageType.S3 =>
-            println("-------------->this is s3 <----------------------")
-            @transient val keyIds = stageManager.getKeyIds
+        @transient val keyIds = stageManager.getKeyIds
+        val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+        val masterKey = stageManager.masterKey
+        val stageLocation = stageManager.stageLocation
+        val (bucketName, path) = extractBucketNameAndPath(stageLocation)
 
-            val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+        val is256 = stageManager.is256Encryption
+
+
+        stageManager.stageType match {
+
+          case StageType.S3 =>
 
             val awsID = stageManager.awsId
             val awsKey = stageManager.awsKey
             val awsToken = stageManager.awsToken
-            val is256 = stageManager.is256Encryption
-            val masterKey = stageManager.masterKey
-            val stageLocation = stageManager.stageLocation
 
             data.foreachPartition(rows => {
 
-              val (bucketName, path) = extractBucketNameAndPath(stageLocation)
               val randStr = Random.alphanumeric take 10 mkString ""
               var fileName = path + {
                 if (!path.endsWith("/")) "/" else ""
@@ -430,15 +433,13 @@ private[io] object StageWriter {
                 awsID.get,
                 awsKey.get,
                 awsToken.get)
-
               val (fileCipher: Cipher, meta: ObjectMetadata) =
                 if (!is256)
-                  getCipherAndMetadata(masterKey, queryId, smkId)
+                  getCipherAndS3Metadata(masterKey, queryId, smkId)
                 else (_: Cipher, new ObjectMetadata())
 
               if (params.sfCompress)
                 meta.setContentEncoding("GZIP")
-
               val parallelism = params.parallelism.getOrElse(1)
 
               val streamManager = new StreamTransferManager(
@@ -490,17 +491,53 @@ private[io] object StageWriter {
             Some("s3n://" + stageLocation, "")
 
           case StageType.AZURE =>
-            println("-------------->this is azure <----------------------")
 
-            Some("wasb://","")
+            val azureSAS = stageManager.azureSAS
+            val azureAccount = stageManager.azureAccountName
+            val azureEndpoint = stageManager.azureEndpoint
+
+
+            data.foreachPartition(rows => {
+
+              val randStr = Random.alphanumeric take 10 mkString ""
+              val fileName = path + {
+                if (!path.endsWith("/")) "/" else ""
+              } + randStr + ".csv"
+
+              val azureClient: CloudBlobClient =
+                createAzureClient(
+                  azureAccount.get,
+                  azureEndpoint.get,
+                  azureSAS
+                )
+
+              val (cipher, meta) = getCipherAndAZMetaData(masterKey, queryId, smkId)
+              val outputFileName =
+                if (params.sfCompress) fileName.concat("gz") else fileName
+
+              val container: CloudBlobContainer = azureClient.getContainerReference(bucketName)
+              val blob: CloudBlockBlob = container.getBlockBlobReference(outputFileName)
+              blob.setMetadata(meta)
+
+              val EncryptedStream = new CipherOutputStream(blob.openOutputStream(), cipher)
+
+              val outputStream: OutputStream =
+                if (params.sfCompress) new GZIPOutputStream(EncryptedStream)
+                else EncryptedStream
+
+              while(rows.hasNext) {
+                outputStream.write(rows.next.getBytes("UTF-8"))
+                outputStream.write('\n')
+              }
+              outputStream.close()
+            })
+
+            Some(s"wasb://$azureAccount.$azureEndpoint/$stageLocation","")
 
           case _ =>
             throw new UnsupportedOperationException(
               s"Only support S3 or Azure stage, stage type: ${stageManager.stageType} ")
         }
-
-
-
 
       case SupportedSource.EXTERNAL =>
         val tempDir = params.createPerQueryTempDir()
