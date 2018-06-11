@@ -18,11 +18,7 @@ package net.snowflake.spark.snowflake.io
 
 object SupportedSource extends Enumeration {
   type SupportedSource = Value
-<<<<<<< HEAD
   val EXTERNAL, INTERNAL = Value
-=======
-  val S3INTERNAL, S3EXTERNAL = Value
->>>>>>> refactor
 
 }
 
@@ -30,11 +26,4 @@ object SupportedFormat extends Enumeration {
   type SupportedFormat = Value
   val CSV, JSON = Value
 }
-<<<<<<< HEAD
 
-object CloudStorageType extends Enumeration {
-  type CloudStorageType = Value
-  val S3, AZURE = Value
-}
-=======
->>>>>>> refactor

@@ -27,7 +27,7 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 
 import scala.collection.mutable.ArrayBuffer
 
-class S3CSVInputFormat extends FileInputFormat[java.lang.Long, String] {
+class SFCSVInputFormat extends FileInputFormat[java.lang.Long, String] {
   override def createRecordReader(split: InputSplit,
                                   context: TaskAttemptContext
                                  ): RecordReader[lang.Long, String] =

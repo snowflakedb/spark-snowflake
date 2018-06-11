@@ -123,6 +123,13 @@ private[io] object StageWriter {
               filesToCopy,
               None)
           }
+
+          //purge files after loading
+          if(params.purge()){
+            val fs = FileSystem.get(URI.create(filesToCopy.get._1), sqlContext.sparkContext.hadoopConfiguration)
+            fs.delete(new Path(filesToCopy.get._1), true)
+          }
+
         } finally {
           conn.close()
         }
@@ -360,6 +367,8 @@ private[io] object StageWriter {
       else
         ""
 
+    val purge = if (params.purge()) "PURGE = TRUE" else ""
+
     /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
       * function to individually set each file_format and copy option. */
 
@@ -378,6 +387,7 @@ private[io] object StageWriter {
        |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
        |  )
        |  $truncateCol
+       |  $purge
     """.stripMargin.trim
   }
 
@@ -479,12 +489,12 @@ private[io] object StageWriter {
                 SnowflakeConnectorUtils.log.debug(
                   "Completed S3 upload for partition.")
 
+                streamManager.complete()
+
               } catch {
                 case ex: Exception =>
                   streamManager.abort()
                   SnowflakeConnectorUtils.handleS3Exception(ex)
-              } finally {
-                streamManager.complete()
               }
             })
 
@@ -562,7 +572,6 @@ private[io] object StageWriter {
           .getOrElse(throw new Exception("No part files were written!"))
         // Note - temp dir already has "/", no need to add it
         Some(tempDir, "part")
-
     }
 
 
