@@ -25,11 +25,11 @@ import java.util
 
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import javax.crypto.{Cipher, CipherInputStream, SecretKey}
-import com.amazonaws.ClientConfiguration
-import com.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
-import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
-import com.amazonaws.services.s3.model._
-import com.amazonaws.util.Base64
+import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
+import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
 import net.snowflake.client.core.SFStatement
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.client.jdbc._

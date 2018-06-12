@@ -28,8 +28,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.io._
-import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
-import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
+//import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
+//import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}

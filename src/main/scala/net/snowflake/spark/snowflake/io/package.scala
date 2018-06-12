@@ -15,8 +15,6 @@
  */
 package net.snowflake.spark.snowflake
 
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource

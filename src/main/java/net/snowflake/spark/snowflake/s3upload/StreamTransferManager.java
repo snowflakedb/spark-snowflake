@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.s3upload;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.*;
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3;
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

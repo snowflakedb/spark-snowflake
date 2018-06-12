@@ -20,9 +20,9 @@ import java.net.URI
 import java.sql.{Connection, SQLException}
 import java.util.zip.GZIPOutputStream
 
-import com.amazonaws.services.s3.model.ObjectMetadata
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.ObjectMetadata
+import net.snowflake.client.jdbc.internal.amazonaws.auth.AWSCredentials
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import javax.crypto.{Cipher, CipherOutputStream}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlobClient, CloudBlobContainer, CloudBlockBlob}

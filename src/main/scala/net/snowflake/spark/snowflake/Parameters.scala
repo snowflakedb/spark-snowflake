@@ -17,7 +17,7 @@
 
 package net.snowflake.spark.snowflake
 
-import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory

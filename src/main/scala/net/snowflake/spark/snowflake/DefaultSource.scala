@@ -17,8 +17,6 @@
 
 package net.snowflake.spark.snowflake
 
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}

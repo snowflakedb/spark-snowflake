@@ -19,8 +19,8 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
+import net.snowflake.client.jdbc.internal.amazonaws.auth.AWSCredentials
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._

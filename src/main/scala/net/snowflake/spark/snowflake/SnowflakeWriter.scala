@@ -18,11 +18,8 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
+import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._

@@ -26,7 +26,7 @@ import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.util.{Random, Try}
+import scala.util.Try
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
