@@ -105,8 +105,8 @@ private[io] class SFInternalRDD(
                        context: TaskContext): Iterator[String] = {
 
     val mats   = thePartition.asInstanceOf[SFInternalPartition].srcFiles
-    val stringIterator = new StringIterator(format)
 
+    val stringIterator = new SFRecordReader(format)
     try {
       mats.foreach {
         case (file, queryId, smkId) =>
@@ -175,7 +175,7 @@ private[io] class SFInternalRDD(
       }
     } catch {
       case ex: Exception =>
-        stringIterator.closeAll()
+        stringIterator.close
         SnowflakeConnectorUtils.handleS3Exception(ex)
     }
     new InterruptibleIterator[String](context, stringIterator)

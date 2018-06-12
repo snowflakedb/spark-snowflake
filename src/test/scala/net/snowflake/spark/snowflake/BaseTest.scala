@@ -18,9 +18,9 @@ package net.snowflake.spark.snowflake
 import java.io.File
 import java.net.URI
 
-import com.amazonaws.services.s3.AmazonS3Client
-import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
-import com.amazonaws.services.s3.model.BucketLifecycleConfiguration.Rule
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration.Rule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.s3native.S3NInMemoryFileSystem

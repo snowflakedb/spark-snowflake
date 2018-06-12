@@ -55,7 +55,7 @@ private[io] class ExternalStageReader(
         case SupportedFormat.CSV =>
           sqlContext.sparkContext.newAPIHadoopFile(
             tempDir,
-            classOf[SFCSVInputFormat],
+            classOf[SFInputFormat],
             classOf[java.lang.Long],
             classOf[String]
           ).map(_._2)
