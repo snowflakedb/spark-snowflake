@@ -4,7 +4,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Ascii,
   Attribute,
   Concat,
-  Contains,
   Expression,
   Like,
   Lower,

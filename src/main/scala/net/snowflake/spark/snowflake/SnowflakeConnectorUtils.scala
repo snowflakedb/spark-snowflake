@@ -20,7 +20,6 @@ package net.snowflake.spark.snowflake
 
 import java.nio.file.Paths
 import java.security.InvalidKeyException
-
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql.SparkSession
 import org.slf4j.LoggerFactory

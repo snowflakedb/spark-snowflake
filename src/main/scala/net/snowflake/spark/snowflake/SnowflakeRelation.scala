@@ -19,7 +19,6 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 
-import net.snowflake.client.jdbc.internal.amazonaws.auth.AWSCredentials
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
@@ -150,9 +149,6 @@ private[snowflake] case class SnowflakeRelation(
       }
     } else {
       // Unload data from Snowflake into a temporary directory in S3:
-      //  val tempDir = params.createPerQueryTempDir()
-      // val unloadSql =
-      //     buildUnloadStmt(standardQuery(requiredColumns, filters), tempDir)
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
       getRDD[Row](standardQuery(requiredColumns, filters), prunedSchema)

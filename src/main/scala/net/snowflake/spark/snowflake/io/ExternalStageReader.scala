@@ -62,7 +62,6 @@ private[io] class ExternalStageReader(
         case SupportedFormat.JSON =>
           throw new UnsupportedOperationException("Not support JSON in current version")
           //todo
-          sqlContext.sparkContext.emptyRDD[String]
       }
     }
   }
