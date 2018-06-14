@@ -117,7 +117,7 @@ object Parameters {
 
     if (userParameters.contains(PARAM_TEMPDIR)) {
       log.warn(
-        "Use of an external S3 bucket for staging is deprecated and will be removed in a future version. " +
+        "Use of an external S3/Azure storage for staging is deprecated and will be removed in a future version. " +
           "Unset your 'tempDir' parameter to use the Snowflake internal stage instead.")
     }
     // Snowflake-todo Add more parameter checking
