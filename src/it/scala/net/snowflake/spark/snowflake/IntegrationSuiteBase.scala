@@ -237,7 +237,7 @@ trait IntegrationSuiteBase
     input match {
       case azure_url(container, account, path) =>
         s"fs.azure.sas.$container.$account.blob.core.windows.net"
-      case _ => throw new IllegalArgumentException(s"invalid wasd url: $input")
+      case _ => throw new IllegalArgumentException(s"invalid wasb url: $input")
     }
   }
 

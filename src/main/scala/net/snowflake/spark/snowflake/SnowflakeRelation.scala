@@ -29,8 +29,6 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
-
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 /** Data Source API implementation for Amazon Snowflake database tables */
@@ -91,7 +89,9 @@ private[snowflake] case class SnowflakeRelation(
   // SparkPlan's doExecute().
   def buildScanFromSQL[T: ClassTag](sql: String,
                                     schema: Option[StructType]): RDD[T] = {
-    if (params.checkBucketConfiguration && params.usingExternalStage) {
+    if (params.checkBucketConfiguration
+      && params.usingExternalStage
+      && params.rootTempDirStorageType == FSType.S3) {
       Utils.checkThatBucketHasObjectLifecycleConfiguration(
         params.rootTempDir,
         params.rootTempDirStorageType,
@@ -163,63 +163,17 @@ private[snowflake] case class SnowflakeRelation(
                                    resultSchema: StructType,
                                    format: SupportedFormat = SupportedFormat.CSV
                                  ): RDD[T] = {
+
     val source: SupportedSource =
       if (params.usingExternalStage) SupportedSource.EXTERNAL
       else SupportedSource.INTERNAL
 
     val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
 
+
     format match {
       case SupportedFormat.CSV =>
-        val converter = Conversions.createRowConverter[T](resultSchema)
-        val delimiter = '|'
-        val quoteChar = '"'
-
-        rdd.map(s => {
-          val fields = ArrayBuffer.empty[String]
-          var buff = new StringBuilder
-
-          def addField(): Unit = {
-            if (buff.isEmpty) fields.append(null)
-            else {
-              val field = buff.toString()
-              buff = new StringBuilder
-              fields.append(field)
-            }
-          }
-
-          var escaped = false
-          var index = 0
-
-          while (index < s.length) {
-            escaped = false
-            if (s(index) == quoteChar) {
-              index += 1
-              while (index < s.length && !(escaped && s(index) == delimiter)) {
-                if (escaped) {
-                  escaped = false
-                  buff.append(s(index))
-                }
-                else if (s(index) == quoteChar) escaped = true
-                else buff.append(s(index))
-                index += 1
-              }
-              addField()
-            }
-            else {
-              while (index < s.length && s(index) != delimiter) {
-                buff.append(s(index))
-                index += 1
-              }
-              addField()
-            }
-            index += 1
-          }
-
-          addField()
-
-          converter(fields.toArray)
-        })
+        rdd.mapPartitions(partition => CSVConverter.convert(partition, resultSchema))
       case SupportedFormat.JSON =>
         //todo
         sqlContext.sparkContext.emptyRDD[T]
