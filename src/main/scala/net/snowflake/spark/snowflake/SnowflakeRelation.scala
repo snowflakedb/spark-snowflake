@@ -170,10 +170,9 @@ private[snowflake] case class SnowflakeRelation(
 
     val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
 
-
     format match {
       case SupportedFormat.CSV =>
-        rdd.mapPartitions(partition => CSVConverter.convert(partition, resultSchema))
+        rdd.mapPartitions(CSVConverter.convert(_, resultSchema))
       case SupportedFormat.JSON =>
         //todo
         sqlContext.sparkContext.emptyRDD[T]
