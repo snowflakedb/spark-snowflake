@@ -53,7 +53,6 @@ object Parameters {
   val PARAM_SF_QUERY           = knownParam("query")
   val PARAM_SF_TIMEZONE        = knownParam("sftimezone")
   val PARAM_SF_WAREHOUSE       = knownParam("sfwarehouse")
-  val PARAM_JDBC_DRIVER        = knownParam("jdbcdriver")
   val PARAM_TEMP_KEY_ID        = knownParam("temporary_aws_access_key_id")
   val PARAM_TEMP_KEY_SECRET    = knownParam("temporary_aws_secret_access_key")
   val PARAM_TEMP_SESSION_TOKEN = knownParam("temporary_aws_session_token")
@@ -397,15 +396,6 @@ object Parameters {
         case None => None
         case Some(source: String) => Some(Utils.parseMap(source))
       }
-    }
-
-
-    /**
-      * The JDBC driver class name. This is used to make sure the driver is registered before
-      * connecting over JDBC.
-      */
-    def jdbcDriver: Option[String] = {
-      parameters.get(PARAM_JDBC_DRIVER)
     }
 
     /**

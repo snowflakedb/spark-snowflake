@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -105,7 +106,7 @@ private[snowflake] class JDBCWrapper {
     */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
-    val driverClassName = params.jdbcDriver.getOrElse("net.snowflake.client.jdbc.SnowflakeDriver")
+    val driverClassName = JDBC_DRIVER
     try {
       val driverClass = Utils.classForName(driverClassName)
       DriverRegistry.register(driverClass.getCanonicalName)

@@ -45,6 +45,8 @@ object Utils {
    */
   val SNOWFLAKE_SOURCE_NAME = "net.snowflake.spark.snowflake"
 
+  private[snowflake] val JDBC_DRIVER = "net.snowflake.client.jdbc.SnowflakeDriver"
+
   private val log = LoggerFactory.getLogger(getClass)
 
   def classForName(className: String): Class[_] = {
