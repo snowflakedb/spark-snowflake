@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,8 +28,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.io._
-import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
-import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -193,10 +193,11 @@ object Utils {
   private def mapFromSource(src: Source): Map[String, String] = {
     var map = new mutable.HashMap[String, String]
     for (line <- src.getLines()) {
-      val tokens = line.split("=")
-      assert(tokens.length == 2, "Can't parse this line: " + line)
-      val key = tokens(0).trim.toLowerCase
-      val value = tokens(1).trim
+
+      val index = line.indexOf('=')
+      assert(index > 0, "Can't parse this line: " + line)
+      val key = line.substring(0, index).trim.toLowerCase
+      val value = line.substring(index + 1).trim
       if (! key.startsWith("#"))
         map += (key -> value)
     }

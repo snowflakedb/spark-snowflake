@@ -4,7 +4,6 @@ import net.snowflake.spark.snowflake.SnowflakePushdownException
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
-  ExprId,
   NamedExpression
 }
 

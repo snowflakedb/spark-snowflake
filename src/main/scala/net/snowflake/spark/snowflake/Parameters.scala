@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 TouchType Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 
 package net.snowflake.spark.snowflake
 
-import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory
@@ -117,7 +117,7 @@ object Parameters {
 
     if (userParameters.contains(PARAM_TEMPDIR)) {
       log.warn(
-        "Use of an external S3 bucket for staging is deprecated and will be removed in a future version. " +
+        "Use of an external S3/Azure storage for staging is deprecated and will be removed in a future version. " +
           "Unset your 'tempDir' parameter to use the Snowflake internal stage instead.")
     }
     // Snowflake-todo Add more parameter checking

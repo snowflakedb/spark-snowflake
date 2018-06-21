@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 Databricks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 
-import com.amazonaws.auth.{AWSCredentials, AWSSessionCredentials, BasicAWSCredentials, InstanceProfileCredentialsProvider}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, AWSSessionCredentials, BasicAWSCredentials, InstanceProfileCredentialsProvider}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.hadoop.conf.Configuration

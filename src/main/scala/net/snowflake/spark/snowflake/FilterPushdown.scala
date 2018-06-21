@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
+ * Copyright 2015-2018 Snowflake Computing
  * Copyright 2015 Databricks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +19,6 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
