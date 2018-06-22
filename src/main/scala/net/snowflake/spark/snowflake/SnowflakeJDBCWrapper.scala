@@ -19,10 +19,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, Statement, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
+
+import net.snowflake.client.jdbc.telemetry.Telemetry
+import net.snowflake.client.jdbc.telemetry.Telemetry.createTelemetry
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
@@ -361,6 +364,8 @@ private[snowflake] class JDBCWrapper {
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
     answer
   }
+
+  def getTelemetry(conn: Connection): Telemetry = createTelemetry(conn)
 }
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper

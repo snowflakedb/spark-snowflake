@@ -18,7 +18,7 @@ package net.snowflake.spark.snowflake.io
 
 import java.sql.Connection
 
-import net.snowflake.spark.snowflake.{JDBCWrapper, Utils}
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeTelemetry, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.sql.SQLContext
 
@@ -64,6 +64,7 @@ private[io] trait DataUnloader {
       Utils.executePostActions(jdbcWrapper, conn, params)
       numRows
     } finally {
+      SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(conn))
       if (!keepOpen) conn.close()
     }
   }
