@@ -111,6 +111,9 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
 
   }
 
+  //these test suits are unstable because the properties of json is unordered.
+  //todo: create a method the compare two json strings.
+
   ignore("LogicalRelation, Filter, Project, Join") {
     checker(
       s"""
@@ -119,30 +122,30 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |on ISNULL(b.randInt2) = a.randBool AND a.randStr=b.randStr2
          |""".stripMargin,
       s"""
-         |{"action":"ReturnAnswer","args":"","children":[{"action":"Project",
-         |"args":{"fields":[{"source":"AttributeReference","type":"string"}]},
-         |"children":[{"action":"Join","args":{"type":"Inner","conditions":
-         |{"operator":"And","parameters":[{"operator":"EqualTo","parameters":[
-         |{"operator":"IsNull","parameters":[{"source":"AttributeReference",
-         |"type":"decimal(38,0)"}]},{"source":"AttributeReference","type":
-         |"boolean"}]},{"operator":"EqualTo","parameters":[{"source":
+         |{"type":"spark_plan","source":"spark_connector","data":{"action":
+         |"ReturnAnswer","args":"","children":[{"action":"Project","args":{
+         |"fields":[{"source":"AttributeReference","type":"string"}]},"children"
+         |:[{"action":"Join","args":{"type":"Inner","conditions":{"operator":
+         |"And","parameters":[{"operator":"EqualTo","parameters":[{"operator":
+         |"IsNull","parameters":[{"source":"AttributeReference","type":
+         |"decimal(38,0)"}]},{"source":"AttributeReference","type":"boolean"}]},
+         |{"operator":"EqualTo","parameters":[{"source":"AttributeReference",
+         |"type":"string"},{"source":"AttributeReference","type":"string"}]}]}},
+         |"children":[{"action":"Project","args":{"fields":[{"source":
          |"AttributeReference","type":"string"},{"source":"AttributeReference",
-         |"type":"string"}]}]}},"children":[{"action":"Project","args":{"fields":
-         |[{"source":"AttributeReference","type":"string"},{"source":
-         |"AttributeReference","type":"boolean"}]},"children":[{"action":
-         |"Filter","args":{"conditions":{"operator":"And","parameters":[{
-         |"operator":"IsNotNull","parameters":[{"source":"AttributeReference",
-         |"type":"boolean"}]},{"operator":"IsNotNull","parameters":[{"source":
-         |"AttributeReference","type":"string"}]}]}},"children":[{"action":
-         |"SnowflakeRelation","args":{"schema":["decimal(38,0)","decimal(38,0)",
-         |"string","boolean","decimal(38,0)"]},"children":[]}]}]},{"action":
-         |"Project","args":{"fields":[{"source":"AttributeReference","type":
-         |"string"},{"source":"AttributeReference","type":"decimal(38,0)"}]},
-         |"children":[{"action":"Filter","args":{"conditions":{"operator":
+         |"type":"boolean"}]},"children":[{"action":"Filter","args":{"conditions":
+         |{"operator":"And","parameters":[{"operator":"IsNotNull","parameters":
+         |[{"source":"AttributeReference","type":"boolean"}]},{"operator":
          |"IsNotNull","parameters":[{"source":"AttributeReference","type":
-         |"string"}]}},"children":[{"action":"SnowflakeRelation","args":{
-         |"schema":["decimal(38,0)","string","string","decimal(38,0)"]},
-         |"children":[]}]}]}]}]}]}""".stripMargin)
+         |"string"}]}]}},"children":[{"action":"SnowflakeRelation","args":
+         |{"schema":["decimal(38,0)","decimal(38,0)","string","boolean",
+         |"decimal(38,0)"]},"children":[]}]}]},{"action":"Project","args":
+         |{"fields":[{"source":"AttributeReference","type":"string"},{"source":
+         |"AttributeReference","type":"decimal(38,0)"}]},"children":[{"action":
+         |"Filter","args":{"conditions":{"operator":"IsNotNull","parameters":[
+         |{"source":"AttributeReference","type":"string"}]}},"children":[{"action"
+         |:"SnowflakeRelation","args":{"schema":["decimal(38,0)","string",
+         |"string","decimal(38,0)"]},"children":[]}]}]}]}]}]}}""".stripMargin)
 
   }
   ignore("aggregation") {
@@ -152,31 +155,36 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |from df_snowflake1 as a INNER JOIN df_snowflake2 as b
          |on cast(a.randInt/5 as integer) = cast(b.randInt2/5 as integer)
          |group by a.id""".stripMargin,
-      s"""{"action":"ReturnAnswer","args":"","children":[{"action":"Aggregate",
-         |"args":{"field":[{"source":"AttributeReference","type":"decimal(38,0)"
-         |},{"operator":"Alias","parameters":[{"operator":"AggregateExpression",
+      s"""
+         |{"type":"spark_plan","source":"spark_connector","data":{"action":
+         |"ReturnAnswer","args":"","children":[{"action":"Aggregate","args":
+         |{"field":[{"source":"AttributeReference","type":"decimal(38,0)"},
+         |{"operator":"Alias","parameters":[{"operator":"AggregateExpression",
          |"parameters":[{"operator":"Max","parameters":[{"source":
-         |"AttributeReference","type":"decimal(38,0)"}]}]}]}],"group":[{"source"
-         |:"AttributeReference","type":"decimal(38,0)"}]},"children":[{"action":
-         |"Project","args":{"fields":[{"source":"AttributeReference","type":
-         |"decimal(38,0)"},{"source":"AttributeReference","type":"decimal(38,0)"}
-         |]},"children":[{"action":"Join","args":{"type":"Inner","conditions":
-         |{"operator":"EqualTo","parameters":[{"operator":"Cast","parameters":[
-         |{"operator":"CheckOverflow","parameters":[{"operator":"Divide",
-         |"parameters":[{"operator":"PromotePrecision","parameters":[{"source":
-         |"AttributeReference","type":"decimal(38,0)"}]},{"source":"Literal","type"
-         |:"decimal(38,0)"}]}]}]},{"operator":"Cast","parameters":[{"operator":
-         |"CheckOverflow","parameters":[{"operator":"Divide","parameters":[{
-         |"operator":"PromotePrecision","parameters":[{"source":"AttributeReference"
-         |,"type":"decimal(38,0)"}]},{"source":"Literal","type":"decimal(38,0)"}
-         |]}]}]}]}},"children":[{"action":"Project","args":{"fields":[{"source":
-         |"AttributeReference","type":"decimal(38,0)"},{"source":"AttributeReference"
-         |,"type":"decimal(38,0)"}]},"children":[{"action":"SnowflakeRelation",
-         |"args":{"schema":["decimal(38,0)","decimal(38,0)","string","boolean",
-         |"decimal(38,0)"]},"children":[]}]},{"action":"Project","args":{"fields"
-         |:[{"source":"AttributeReference","type":"decimal(38,0)"}]},"children":[
-         |{"action":"SnowflakeRelation","args":{"schema":["decimal(38,0)","string",
-         |"string","decimal(38,0)"]},"children":[]}]}]}]}]}]}""".stripMargin)
+         |"AttributeReference","type":"decimal(38,0)"}]}]}]}],"group":
+         |[{"source":"AttributeReference","type":"decimal(38,0)"}]},"children":
+         |[{"action":"Project","args":{"fields":[{"source":"AttributeReference",
+         |"type":"decimal(38,0)"},{"source":"AttributeReference","type":
+         |"decimal(38,0)"}]},"children":[{"action":"Join","args":{"type":"Inner",
+         |"conditions":{"operator":"EqualTo","parameters":[{"operator":
+         |"Cast","parameters":[{"operator":"CheckOverflow","parameters":
+         |[{"operator":"Divide","parameters":[{"operator":"PromotePrecision",
+         |"parameters":[{"source":"AttributeReference","type":"decimal(38,0)"}]},
+         |{"source":"Literal","type":"decimal(38,0)"}]}]}]},{"operator":
+         |"Cast","parameters":[{"operator":"CheckOverflow","parameters":[{
+         |"operator":"Divide","parameters":[{"operator":"PromotePrecision",
+         |"parameters":[{"source":"AttributeReference","type":"decimal(38,0)"}]},
+         |{"source":"Literal","type":"decimal(38,0)"}]}]}]}]}},"children":[{
+         |"action":"Project","args":{"fields":[{"source":"AttributeReference",
+         |"type":"decimal(38,0)"},{"source":"AttributeReference","type":
+         |"decimal(38,0)"}]},"children":[{"action":"SnowflakeRelation","args":
+         |{"schema":["decimal(38,0)","decimal(38,0)","string","boolean",
+         |"decimal(38,0)"]},"children":[]}]},{"action":"Project","args":
+         |{"fields":[{"source":"AttributeReference","type":"decimal(38,0)"}]},
+         |"children":[{"action":"SnowflakeRelation","args":{"schema":
+         |["decimal(38,0)","string","string","decimal(38,0)"]},"children":
+         |[]}]}]}]}]}]}}
+       """.stripMargin)
 
   }
   ignore("limit, sort"){
@@ -187,14 +195,15 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |order by randInt desc limit 1
        """.stripMargin,
       s"""
-         |{"action":"ReturnAnswer","args":"","children":[{"action":"GlobalLimit"
+         |{"type":"spark_plan","source":"spark_connector","data":{"action":
+         |"ReturnAnswer","args":"","children":[{"action":"GlobalLimit"
          |,"args":{"condition":{"source":"Literal","type":"integer"}},"children"
          |:[{"action":"LocalLimit","args":{"condition":{"source":"Literal",
          |"type":"integer"}},"children":[{"action":"Sort","args":{"global":
          |true,"order":[{"operator":"SortOrder","parameters":[{"source":
          |"AttributeReference","type":"decimal(38,0)"}]}]},"children":[{"action"
          |:"SnowflakeRelation","args":{"schema":["decimal(38,0)","decimal(38,0)",
-         |"string","boolean","decimal(38,0)"]},"children":[]}]}]}]}]}
+         |"string","boolean","decimal(38,0)"]},"children":[]}]}]}]}]}}
        """.stripMargin)
   }
   ignore("window"){
@@ -206,7 +215,8 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |from df_snowflake1
        """.stripMargin,
       s"""
-         |{"action":"ReturnAnswer","args":"","children":[{"action":"Project",
+         |{"type":"spark_plan","source":"spark_connector","data":{"action":
+         |"ReturnAnswer","args":"","children":[{"action":"Project",
          |"args":{"fields":[{"source":"AttributeReference","type":"decimal(38,0)"}
          |,{"source":"AttributeReference","type":"string"},{"source":
          |"AttributeReference","type":"decimal(38,4)"},{"source":"AttributeReference"
@@ -236,7 +246,7 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |"AttributeReference","type":"decimal(38,0)"},{"source":"AttributeReference"
          |,"type":"decimal(38,0)"}]},"children":[{"action":"SnowflakeRelation",
          |"args":{"schema":["decimal(38,0)","decimal(38,0)","string","boolean",
-         |"decimal(38,0)"]},"children":[]}]}]}]}]}]}]}""".stripMargin)
+         |"decimal(38,0)"]},"children":[]}]}]}]}]}]}]}}""".stripMargin)
   }
   ignore("Union"){
     checker(
@@ -246,7 +256,8 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |select id from df_snowflake2
        """.stripMargin,
       s"""
-         |{"action":"ReturnAnswer","args":"","children":[{"action":"Aggregate",
+         |{"type":"spark_plan","source":"spark_connector","data":{"action":
+         |"ReturnAnswer","args":"","children":[{"action":"Aggregate",
          |"args":{"field":[{"source":"AttributeReference","type":"decimal(38,0)"
          |}],"group":[{"source":"AttributeReference","type":"decimal(38,0)"}]},
          |"children":[{"action":"Union","args":"","children":[{"action":"Project"
@@ -256,7 +267,7 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
          |,"children":[]}]},{"action":"Project","args":{"fields":[{"source":
          |"AttributeReference","type":"decimal(38,0)"}]},"children":[{"action":
          |"SnowflakeRelation","args":{"schema":["decimal(38,0)","string","string"
-         |,"decimal(38,0)"]},"children":[]}]}]}]}]}""".stripMargin)
+         |,"decimal(38,0)"]},"children":[]}]}]}]}]}}""".stripMargin)
   }
 
 

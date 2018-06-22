@@ -7,8 +7,11 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
+import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 
 object SnowflakeTelemetry {
+
+  private val TELEMETRY_SOURCE = "spark_connector"
 
   private var logs: List[(ObjectNode, Long)] = Nil //data and timestamp
   private val logger = LoggerFactory.getLogger(getClass)
@@ -20,22 +23,25 @@ object SnowflakeTelemetry {
 
   private[snowflake] def enableDebugMode(): Unit = debugMode = true
 
-  def addLog(log: (ObjectNode, Long)): Unit = {
+  def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
     //for test only
     if (debugMode) {
       println("---------->>>Telemetry Output<<<----------")
-      println(log._1.toString)
+      println(s"Type: ${log._1._1} \nData: ${log._1._2.toString}")
       println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
     }
     this.synchronized{
-      output = log._1
-      logs = log :: logs
+      output = mapper.createObjectNode()
+      output.put("type", log._1._1.toString)
+      output.put("source", TELEMETRY_SOURCE)
+      output.set("data", log._1._2)
+      logs = (output, log._2) :: logs
     }
 
   }
 
   def send(telemetry: Telemetry):Unit = {
-    var tmp: List[(ObjectNode, Long)] = _
+    var tmp: List[(ObjectNode, Long)] = Nil
     this.synchronized{
       tmp = logs
       logs = Nil
@@ -52,13 +58,14 @@ object SnowflakeTelemetry {
 
 
   /**
-    * Generate json string for giving spark plan tree, if only the tree is complete (root is ReturnAnswer) Snowflake plan
+    * Generate json node for giving spark plan tree,
+    * if only the tree is complete (root is ReturnAnswer) Snowflake plan
     */
-  def planToJson(plan: LogicalPlan): Option[ObjectNode] =
+  def planToJson(plan: LogicalPlan): Option[(TelemetryTypes, ObjectNode)] =
     plan.nodeName match {
       case "ReturnAnswer" => {
         val (isSFPlan, json) = planTree(plan)
-        if (isSFPlan) Some(json) else None
+        if (isSFPlan) Some(TelemetryTypes.SPARK_PLAN ,json) else None
       }
       case _ => None
     }
@@ -166,4 +173,9 @@ object SnowflakeTelemetry {
       case "And"|"Or" => args.sortBy(_.toString)
       case _ => args
     }
+}
+
+object TelemetryTypes extends Enumeration {
+  type TelemetryTypes = Value
+  val SPARK_PLAN = Value("spark_plan")
 }
