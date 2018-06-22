@@ -38,7 +38,7 @@ import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
-import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorException, Utils}
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorException, SnowflakeTelemetry, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
 import scala.collection.JavaConverters._
@@ -407,6 +407,7 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private var stageSet: Boolean = false
 
   private[io] def closeConnection(): Unit = {
+    SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(connection))
     connection.close()
   }
 
