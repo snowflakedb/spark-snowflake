@@ -233,10 +233,10 @@ trait IntegrationSuiteBase
   }
 
   def getAzureURL(input: String): String = {
-    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.blob\\.core\\.windows\\.net/(.+)?".r
+    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
     input match {
-      case azure_url(container, account, path) =>
-        s"fs.azure.sas.$container.$account.blob.core.windows.net"
+      case azure_url(container, account, endpoint, path) =>
+        s"fs.azure.sas.$container.$account.$endpoint"
       case _ => throw new IllegalArgumentException(s"invalid wasb url: $input")
     }
   }
