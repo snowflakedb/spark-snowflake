@@ -20,6 +20,45 @@ class IssueSuite extends IntegrationSuiteBase {
     super.beforeEach()
   }
 
+  test("csv delimiter character should not break rows"){
+    val st1 = new StructType(
+      Array(StructField("str", StringType, nullable = true))
+    )
+    val tt: String = "test_table_123"//s"tt_$randomSuffix"
+    try {
+      sparkSession.createDataFrame(
+        sparkSession.sparkContext.parallelize(
+          Seq(Row("\"\n\""),
+            Row("\"|\""),
+            Row("\",\""),
+            Row("\n")
+          )
+        ),
+        st1
+      )
+        .write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val loadDf = sqlContext.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+
+      //loadDf.show()
+      //print(s"-------------> size: ${loadDf.collect().length}")
+      assert(loadDf.collect().length == 4)
+
+    } finally {
+      jdbcUpdate(s"drop table if exists $tt")
+    }
+
+  }
+
   test("Column names can be reserved keywords if quoted.") {
     // For saving into SF, use reserved names to see if they work (should be auto-quoted)
     // Fix for (https://github.com/snowflakedb/spark-snowflake/issues/12)
