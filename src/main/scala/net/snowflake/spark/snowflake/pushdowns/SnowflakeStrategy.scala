@@ -1,5 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns
 
+
+import net.snowflake.spark.snowflake.SnowflakeTelemetry.{addLog, planToJson}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -17,6 +19,8 @@ class SnowflakeStrategy extends Strategy {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] =
     try {
+      planToJson(plan).foreach(addLog(_, System.currentTimeMillis()))
+
       buildQueryRDD(plan.transform({
         case Project(Nil, child)     => child
         case SubqueryAlias(_, child) => child

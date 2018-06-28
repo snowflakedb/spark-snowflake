@@ -19,10 +19,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, Statement, SQLException}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
+
+import net.snowflake.client.jdbc.telemetry.Telemetry
+import net.snowflake.client.jdbc.telemetry.Telemetry.createTelemetry
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
@@ -32,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -105,7 +109,7 @@ private[snowflake] class JDBCWrapper {
     */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
-    val driverClassName = params.jdbcDriver.getOrElse("net.snowflake.client.jdbc.SnowflakeDriver")
+    val driverClassName = JDBC_DRIVER
     try {
       val driverClass = Utils.classForName(driverClassName)
       DriverRegistry.register(driverClass.getCanonicalName)
@@ -141,7 +145,7 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("client_session_keep_alive", "true")
 
     // Force DECIMAL for NUMBER (SNOW-33227)
-    jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false");
+    jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")
 
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
@@ -360,6 +364,8 @@ private[snowflake] class JDBCWrapper {
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
     answer
   }
+
+  def getTelemetry(conn: Connection): Telemetry = createTelemetry(conn)
 }
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper

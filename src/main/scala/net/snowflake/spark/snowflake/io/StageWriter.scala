@@ -131,6 +131,7 @@ private[io] object StageWriter {
           }
 
         } finally {
+          SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(conn))
           conn.close()
         }
       case SupportedSource.INTERNAL =>
