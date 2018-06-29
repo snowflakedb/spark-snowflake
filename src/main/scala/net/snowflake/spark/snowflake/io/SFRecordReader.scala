@@ -102,11 +102,15 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
       val buff = ArrayBuffer.empty[Byte]
       format match {
         case SupportedFormat.CSV =>
+          var numOfQuote: Int = 0
           if (currentChar.isEmpty) currentChar = readChar()
+          if (currentChar.get == quoteChar) numOfQuote += 1
 
-          while (currentChar.isDefined && currentChar.get != lineFeed) {
+          while (currentChar.isDefined &&
+            !(currentChar.get == lineFeed && numOfQuote % 2 == 0)) {
             buff.append(currentChar.get)
             currentChar = readChar()
+            if(currentChar.get == quoteChar) numOfQuote += 1
           }
           currentChar = readChar()
 
