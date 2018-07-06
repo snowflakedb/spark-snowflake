@@ -20,6 +20,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
+import net.snowflake.spark.snowflake.Parameters.PARAM_TRUNCATE_TABLE
 import org.slf4j.LoggerFactory
 
 /**
@@ -70,6 +71,8 @@ object Parameters {
   val PARAM_COLUMN_MAP         = knownParam("columnmap")
   val PARAM_TRUNCATE_COLUMNS   = knownParam("truncate_columns")
   val PARAM_PURGE              = knownParam("purge")
+
+  val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -496,6 +499,11 @@ object Parameters {
         yield
           new StorageCredentialsSharedAccessSignature(sas)
     }
+    /**
+      * Truncate table when overwriting.
+      * Keep the table schema
+      */
+    def truncateTable: Boolean = isTrue(parameters(PARAM_TRUNCATE_TABLE))
   }
 }
 
