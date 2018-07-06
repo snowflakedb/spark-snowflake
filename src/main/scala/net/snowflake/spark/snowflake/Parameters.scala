@@ -20,7 +20,6 @@ package net.snowflake.spark.snowflake
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
-import net.snowflake.spark.snowflake.Parameters.PARAM_TRUNCATE_TABLE
 import org.slf4j.LoggerFactory
 
 /**
@@ -101,7 +100,7 @@ object Parameters {
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
     "diststyle"       -> "EVEN",
-    "usestagingtable" -> "true",
+    PARAM_USE_STAGING_TABLE -> "true",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on"
@@ -444,7 +443,7 @@ object Parameters {
       * Defaults to true.
       */
     def useStagingTable: Boolean =
-      parameters(PARAM_USE_STAGING_TABLE).toBoolean
+      isTrue(parameters(PARAM_USE_STAGING_TABLE))
 
     /**
       * Extra options to append to the Snowflake COPY command (e.g. "MAXERROR 100").
