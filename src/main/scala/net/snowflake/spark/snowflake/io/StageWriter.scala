@@ -169,10 +169,10 @@ private[io] object StageWriter {
           jdbcWrapper.tableExists(conn, table.toString)){
           if(params.useStagingTable){
             if(params.truncateTable)
-              execute(s"create or replace $tempTable like $table")
+              execute(s"create or replace table $tempTable like $table")
           }
           else if(params.truncateTable) execute(s"truncate $table")
-          else execute(s"drop table is exists $table")
+          else execute(s"drop table if exists $table")
         }
 
         //create table
