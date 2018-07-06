@@ -152,7 +152,8 @@ private[io] object StageWriter {
     val table = params.table.get
     val tempTable =
       TableName(s"${table.name}_staging_${Math.abs(Random.nextInt()).toString}")
-    val targetTable = if(params.useStagingTable) tempTable else table
+    val targetTable = if(saveMode == SaveMode.Overwrite
+      && params.useStagingTable) tempTable else table
 
     // Perform the load if there were files loaded
     if (filesToCopy.isDefined) {
@@ -178,7 +179,7 @@ private[io] object StageWriter {
         execute(createTableSql(data, schema, targetTable, jdbcWrapper))
 
         //pre actions
-        Utils.executePreActions(jdbcWrapper, conn, params, targetTable)
+        Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
 
         //copy
         log.debug(Utils.sanitizeQueryText(copyStatement))
@@ -186,7 +187,7 @@ private[io] object StageWriter {
         Utils.setLastCopyLoad(copyStatement)
 
         //post actions
-        Utils.executePostActions(jdbcWrapper, conn, params, targetTable)
+        Utils.executePostActions(jdbcWrapper, conn, params, Option(targetTable))
 
         if(saveMode == SaveMode.Overwrite && params.useStagingTable){
           if(jdbcWrapper.tableExists(conn, table.toString))
@@ -202,7 +203,8 @@ private[io] object StageWriter {
           throw e
       }
       finally {
-        execute(s"drop table is exists $targetTable")
+        if(targetTable == targetTable)
+          execute(s"drop table if exists $tempTable")
       }
     }
 

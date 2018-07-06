@@ -308,12 +308,12 @@ object Utils {
                                              jdbcWrapper: JDBCWrapper,
                                              conn: Connection,
                                              params: MergedParameters,
-                                             table: TableName
+                                             table: Option[TableName]
                                            ) : Unit = {
     // Execute preActions
     params.preActions.foreach { action =>
       if (action != null && !action.trim.isEmpty) {
-        val actionSql = if (action.contains("%s")) action.format(table) else action
+        val actionSql = if (action.contains("%s")) action.format(table.get) else action
         log.info("Executing preAction: " + actionSql)
         jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }
@@ -324,12 +324,12 @@ object Utils {
                                               jdbcWrapper: JDBCWrapper,
                                               conn: Connection,
                                               params: MergedParameters,
-                                              table: TableName
+                                              table: Option[TableName]
                                             ) : Unit = {
     // Execute preActions
     params.postActions.foreach { action =>
       if (action != null && !action.trim.isEmpty) {
-        val actionSql = if (action.contains("%s")) action.format(table) else action
+        val actionSql = if (action.contains("%s")) action.format(table.get) else action
         log.info("Executing postAction: " + actionSql)
         jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }
