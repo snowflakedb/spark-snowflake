@@ -31,7 +31,7 @@ class OnErrorSuite extends IntegrationSuiteBase{
   }
 
   override def afterAll(): Unit = {
-    //jdbcUpdate(s"drop table $table")
+    jdbcUpdate(s"drop table $table")
     super.afterAll()
   }
 
