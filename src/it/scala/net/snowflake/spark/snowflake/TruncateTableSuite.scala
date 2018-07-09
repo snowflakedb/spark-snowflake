@@ -6,7 +6,7 @@ import org.apache.spark.sql.{Row, SaveMode}
 
 import scala.util.Random
 
-class TruncateTableSuite extends IntegrationSuiteBase{
+class TruncateTableSuite extends IntegrationSuiteBase {
   val table = s"test_table_$randomSuffix"
 
   lazy val st1 = new StructType(
@@ -47,7 +47,6 @@ class TruncateTableSuite extends IntegrationSuiteBase{
     super.beforeAll()
   }
 
-
   test("use truncate table with staging table") {
 
     jdbcUpdate(s"drop table if exists $table")
@@ -81,8 +80,6 @@ class TruncateTableSuite extends IntegrationSuiteBase{
 
     //check schema
     assert(checkSchema1())
-
-
 
   }
 
@@ -213,10 +210,7 @@ class TruncateTableSuite extends IntegrationSuiteBase{
     st.equals(st1)
   }
 
-
-
-
-    override def afterAll(): Unit = {
+  override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $table")
     super.afterAll()
   }
