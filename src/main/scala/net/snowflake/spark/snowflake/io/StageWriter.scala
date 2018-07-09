@@ -93,36 +93,8 @@ private[io] object StageWriter {
 
           val filesToCopy =
             unloadData(sqlContext, rdd, params, source, None)
-
-          val action = (stagingTable: String) => {
-            val updatedParams = MergedParameters(
-              params.parameters.updated("dbtable", stagingTable))
-            doSnowflakeLoad(
-              sqlContext,
-              conn,
-              rdd,
-              schema,
-              saveMode,
-              updatedParams,
-              jdbcWrapper,
-              filesToCopy,
-              None)
-          }
-
-          if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-            withStagingTable(conn, jdbcWrapper, params.table.get, action)
-          } else {
-            doSnowflakeLoad(
-              sqlContext,
-              conn,
-              rdd,
-              schema,
-              saveMode,
-              params,
-              jdbcWrapper,
-              filesToCopy,
-              None)
-          }
+          writeToTable(sqlContext, conn, rdd, schema, saveMode, params,
+            jdbcWrapper, filesToCopy, None)
 
           //purge files after loading
           if(params.purge()){
@@ -138,135 +110,91 @@ private[io] object StageWriter {
         val stageManager = new SFInternalStage(true, jdbcWrapper, params)
 
         try {
-          stageManager.executeWithConnection(conn =>
-            jdbcWrapper.executeInterruptibly(conn, prologueSql))
-
+          stageManager.executeWithConnection(
+            jdbcWrapper.executeInterruptibly(_, prologueSql)
+          )
           val tempStage = Some("@" + stageManager.setupStageArea())
 
           val filesToCopy =
             unloadData(sqlContext, rdd, params, source, Some(stageManager))
 
-          if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-            stageManager.executeWithConnection({ conn => {
-              val action = (stagingTable: String) => {
-                val updatedParams = MergedParameters(
-                  params.parameters.updated("dbtable", stagingTable))
-
-                doSnowflakeLoad(
-                  sqlContext,
-                  conn,
-                  rdd,
-                  schema,
-                  saveMode,
-                  updatedParams,
-                  jdbcWrapper,
-                  filesToCopy,
-                  tempStage)
-              }
-              withStagingTable(conn, jdbcWrapper, params.table.get, action)
-            }
-            })
-          } else {
-            stageManager.executeWithConnection({ conn => {
-              doSnowflakeLoad(
-                sqlContext,
-                conn,
-                rdd,
-                schema,
-                saveMode,
-                params,
-                jdbcWrapper,
-                filesToCopy,
-                tempStage)
-            }
-            })
-
-          }
+          stageManager.executeWithConnection(
+            writeToTable(sqlContext, _, rdd, schema, saveMode, params,
+              jdbcWrapper, filesToCopy, tempStage)
+          )
         } finally {
           stageManager.closeConnection()
         }
     }
 
-
-  }
-
-  /**
-    * Sets up a staging table then runs the given action, passing the temporary table name
-    * as a parameter.
-    */
-  private def withStagingTable(
-                                conn: Connection,
-                                jdbcWrapper: JDBCWrapper,
-                                table: TableName,
-                                action: (String) => Unit
-                              ): Unit = {
-    val randomSuffix = Math.abs(Random.nextInt()).toString
-    val tempTable = TableName(s"${table.name}_staging_$randomSuffix")
-    log.info(
-      s"Loading new data for Snowflake table '$table' using temporary table '$tempTable'")
-
-    try {
-      action(tempTable.toString)
-
-      if (jdbcWrapper.tableExists(conn, table.toString)) {
-        // Rename temp table to final table. Use SWAP to make it atomic.bi
-        sql(conn, s"ALTER TABLE $table SWAP WITH $tempTable", jdbcWrapper)
-      } else {
-        // Table didn't exist, just rename temp table to it
-        sql(conn, s"ALTER TABLE $tempTable RENAME TO $table", jdbcWrapper)
-      }
-    } finally {
-      // If anything went wrong (or if SWAP worked), delete the temp table
-      sql(conn, s"DROP TABLE IF EXISTS $tempTable", jdbcWrapper)
-    }
-  }
-
-  // Execute a given string, logging it
-  def sql(conn: Connection, query: String, jdbcWrapper: JDBCWrapper): Boolean = {
-    log.debug(query)
-    jdbcWrapper.executeInterruptibly(conn, query)
   }
 
 
   /**
-    * Perform the Snowflake load, including deletion of existing data in the case of an overwrite,
-    * and creating the table if it doesn't already exist.
+    * load data from stage to table
     */
-  private def doSnowflakeLoad(
-                               sqlContext: SQLContext,
-                               conn: Connection,
-                               data: RDD[String],
-                               schema: StructType,
-                               saveMode: SaveMode,
-                               params: MergedParameters,
-                               jdbcWrapper: JDBCWrapper,
-                               filesToCopy: Option[(String, String)],
-                               tempStage: Option[String]): Unit = {
-
-    // Overwrites must drop the table, in case there has been a schema update
-    if (saveMode == SaveMode.Overwrite) {
-      val deleteStatement = s"DROP TABLE IF EXISTS ${params.table.get}"
-      log.debug(deleteStatement)
-      jdbcWrapper.executeInterruptibly(conn, deleteStatement)
+  private def writeToTable(
+                            sqlContext: SQLContext,
+                            conn: Connection,
+                            data: RDD[String],
+                            schema: StructType,
+                            saveMode: SaveMode,
+                            params: MergedParameters,
+                            jdbcWrapper: JDBCWrapper,
+                            filesToCopy: Option[(String, String)],
+                            tempStage: Option[String]
+                          ): Unit = {
+    def execute(statement: String): Unit = {
+      log.debug(statement)
+      jdbcWrapper.executeInterruptibly(conn, statement)
     }
 
-    // If the table doesn't exist, we need to create it first, using JDBC to infer column types
-    val createStatement = createTableSql(data, schema, params, jdbcWrapper)
-    log.debug(createStatement)
-    jdbcWrapper.executeInterruptibly(conn, createStatement)
-
-    // Execute preActions
-    Utils.executePreActions(jdbcWrapper, conn, params)
+    val table = params.table.get
+    val tempTable =
+      TableName(s"${table.name}_staging_${Math.abs(Random.nextInt()).toString}")
+    val targetTable = if(saveMode == SaveMode.Overwrite
+      && params.useStagingTable) tempTable else table
 
     // Perform the load if there were files loaded
     if (filesToCopy.isDefined) {
       // Load the temporary data into the new file
       val copyStatement =
-        copySql(sqlContext, data, schema, saveMode, params, filesToCopy.get, tempStage)
-      log.debug(Utils.sanitizeQueryText(copyStatement))
+        copySql(sqlContext, data, schema, saveMode, params,
+          targetTable, filesToCopy.get, tempStage)
+
       try {
+
+        //purge tables when overwriting
+        if(saveMode == SaveMode.Overwrite &&
+          jdbcWrapper.tableExists(conn, table.toString)){
+          if(params.useStagingTable){
+            if(params.truncateTable)
+              execute(s"create or replace table $tempTable like $table")
+          }
+          else if(params.truncateTable) execute(s"truncate $table")
+          else execute(s"drop table if exists $table")
+        }
+
+        //create table
+        execute(createTableSql(data, schema, targetTable, jdbcWrapper))
+
+        //pre actions
+        Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
+
+        //copy
+        log.debug(Utils.sanitizeQueryText(copyStatement))
         jdbcWrapper.executeInterruptibly(conn, copyStatement)
         Utils.setLastCopyLoad(copyStatement)
+
+        //post actions
+        Utils.executePostActions(jdbcWrapper, conn, params, Option(targetTable))
+
+        if(saveMode == SaveMode.Overwrite && params.useStagingTable){
+          if(jdbcWrapper.tableExists(conn, table.toString))
+            execute(s"alter table $table swap with $tempTable")
+          else
+            execute(s"alter table $tempTable rename to $table")
+        }
       } catch {
         case e: SQLException =>
           // snowflake-todo: try to provide more error information,
@@ -274,9 +202,12 @@ private[io] object StageWriter {
           log.error("Error occurred while loading files to Snowflake: " + e)
           throw e
       }
+      finally {
+        if(targetTable == targetTable)
+          execute(s"drop table if exists $tempTable")
+      }
     }
 
-    Utils.executePostActions(jdbcWrapper, conn, params)
   }
 
   /**
@@ -286,13 +217,12 @@ private[io] object StageWriter {
   private[snowflake] def createTableSql(
                                          data: RDD[String],
                                          schema: StructType,
-                                         params: MergedParameters,
+                                         table: TableName,
                                          jdbcWrapper: JDBCWrapper
                                        ): String = {
     val schemaSql = jdbcWrapper.schemaString(schema)
     // snowflake-todo: for now, we completely ignore
     // params.distStyle and params.distKey
-    val table = params.table.get
     s"CREATE TABLE IF NOT EXISTS $table ($schemaSql)"
   }
 
@@ -305,6 +235,7 @@ private[io] object StageWriter {
                        schema: StructType,
                        saveMode: SaveMode,
                        params: MergedParameters,
+                       table: TableName,
                        filesToCopy: (String, String),
                        tempStage: Option[String]): String = {
 
@@ -374,7 +305,7 @@ private[io] object StageWriter {
       * function to individually set each file_format and copy option. */
 
     s"""
-       |COPY INTO ${params.table.get} $mappingToString
+       |COPY INTO $table $mappingToString
        |$mappingFromString
        |
        |$credsString

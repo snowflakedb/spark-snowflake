@@ -304,26 +304,32 @@ object Utils {
      """.stripMargin.trim
   }
 
-  private [snowflake] def executePreActions(jdbcWrapper: JDBCWrapper,
-                                            conn: Connection,
-                                            params: MergedParameters) : Unit = {
+  private [snowflake] def executePreActions(
+                                             jdbcWrapper: JDBCWrapper,
+                                             conn: Connection,
+                                             params: MergedParameters,
+                                             table: Option[TableName]
+                                           ) : Unit = {
     // Execute preActions
     params.preActions.foreach { action =>
       if (action != null && !action.trim.isEmpty) {
-        val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
+        val actionSql = if (action.contains("%s")) action.format(table.get) else action
         log.info("Executing preAction: " + actionSql)
         jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }
     }
   }
 
-  private [snowflake] def executePostActions(jdbcWrapper: JDBCWrapper,
-                                             conn: Connection,
-                                             params: MergedParameters) : Unit = {
+  private [snowflake] def executePostActions(
+                                              jdbcWrapper: JDBCWrapper,
+                                              conn: Connection,
+                                              params: MergedParameters,
+                                              table: Option[TableName]
+                                            ) : Unit = {
     // Execute preActions
     params.postActions.foreach { action =>
       if (action != null && !action.trim.isEmpty) {
-        val actionSql = if (action.contains("%s")) action.format(params.table.get) else action
+        val actionSql = if (action.contains("%s")) action.format(table.get) else action
         log.info("Executing postAction: " + actionSql)
         jdbcWrapper.executePreparedInterruptibly(conn.prepareStatement(actionSql))
       }

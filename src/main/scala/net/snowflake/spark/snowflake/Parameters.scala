@@ -71,6 +71,8 @@ object Parameters {
   val PARAM_TRUNCATE_COLUMNS   = knownParam("truncate_columns")
   val PARAM_PURGE              = knownParam("purge")
 
+  val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
+
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
 
@@ -98,7 +100,7 @@ object Parameters {
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
     "diststyle"       -> "EVEN",
-    "usestagingtable" -> "true",
+    PARAM_USE_STAGING_TABLE -> "true",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on"
@@ -441,7 +443,7 @@ object Parameters {
       * Defaults to true.
       */
     def useStagingTable: Boolean =
-      parameters(PARAM_USE_STAGING_TABLE).toBoolean
+      isTrue(parameters(PARAM_USE_STAGING_TABLE))
 
     /**
       * Extra options to append to the Snowflake COPY command (e.g. "MAXERROR 100").
@@ -496,6 +498,11 @@ object Parameters {
         yield
           new StorageCredentialsSharedAccessSignature(sas)
     }
+    /**
+      * Truncate table when overwriting.
+      * Keep the table schema
+      */
+    def truncateTable: Boolean = isTrue(parameters(PARAM_TRUNCATE_TABLE))
   }
 }
 

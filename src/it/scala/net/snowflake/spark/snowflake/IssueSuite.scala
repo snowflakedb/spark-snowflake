@@ -22,16 +22,19 @@ class IssueSuite extends IntegrationSuiteBase {
 
   test("csv delimiter character should not break rows"){
     val st1 = new StructType(
-      Array(StructField("str", StringType, nullable = true))
+      Array(
+        StructField("str", StringType, nullable = false),
+        StructField("num", IntegerType, nullable = false)
+      )
     )
     val tt: String = "test_table_123"//s"tt_$randomSuffix"
     try {
       sparkSession.createDataFrame(
         sparkSession.sparkContext.parallelize(
-          Seq(Row("\"\n\""),
-            Row("\"|\""),
-            Row("\",\""),
-            Row("\n")
+          Seq(Row("\"\n\"",123),
+            Row("\"|\"",223),
+            Row("\",\"",345),
+            Row("\n",423)
           )
         ),
         st1

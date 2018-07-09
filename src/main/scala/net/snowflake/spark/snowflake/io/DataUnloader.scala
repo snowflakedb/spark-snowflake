@@ -40,7 +40,7 @@ private[io] trait DataUnloader {
       log.debug(Utils.sanitizeQueryText(prologueSql))
       jdbcWrapper.executeInterruptibly(conn, prologueSql)
 
-      Utils.executePreActions(jdbcWrapper, conn, params)
+      Utils.executePreActions(jdbcWrapper, conn, params, params.table)
 
       // Run the unload query
       log.debug(Utils.sanitizeQueryText(sql))
@@ -61,7 +61,7 @@ private[io] trait DataUnloader {
       val second  = res.next()
       assert(!second)
 
-      Utils.executePostActions(jdbcWrapper, conn, params)
+      Utils.executePostActions(jdbcWrapper, conn, params, params.table)
       numRows
     } finally {
       SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(conn))
