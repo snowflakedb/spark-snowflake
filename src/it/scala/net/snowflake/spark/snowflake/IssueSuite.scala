@@ -27,7 +27,7 @@ class IssueSuite extends IntegrationSuiteBase {
         StructField("num", IntegerType, nullable = false)
       )
     )
-    val tt: String = "test_table_123"//s"tt_$randomSuffix"
+    val tt: String = s"tt_$randomSuffix"
     try {
       sparkSession.createDataFrame(
         sparkSession.sparkContext.parallelize(
@@ -52,8 +52,6 @@ class IssueSuite extends IntegrationSuiteBase {
         .option("dbtable", tt)
         .load()
 
-      //loadDf.show()
-      //print(s"-------------> size: ${loadDf.collect().length}")
       assert(loadDf.collect().length == 4)
 
     } finally {

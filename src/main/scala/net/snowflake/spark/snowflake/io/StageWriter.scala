@@ -183,7 +183,20 @@ private[io] object StageWriter {
 
         //copy
         log.debug(Utils.sanitizeQueryText(copyStatement))
-        jdbcWrapper.executeInterruptibly(conn, copyStatement)
+        //todo: handle on_error parameter on spark side
+        //jdbcWrapper.executeInterruptibly(conn, copyStatement)
+
+        //report the number of skipped files.
+        val resultSet = jdbcWrapper.executeQueryInterruptibly(conn, copyStatement)
+        if(params.continueOnError){
+          var rowSkipped: Long = 0l
+          while(resultSet.next()){
+            rowSkipped +=
+              resultSet.getLong("rows_parsed") -
+                resultSet.getLong("rows_loaded")
+          }
+          log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
+        }
         Utils.setLastCopyLoad(copyStatement)
 
         //post actions
@@ -301,6 +314,8 @@ private[io] object StageWriter {
 
     val purge = if (params.purge()) "PURGE = TRUE" else ""
 
+    val onError = if (params.continueOnError) "ON_ERROR = CONTINUE" else ""
+
     /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
       * function to individually set each file_format and copy option. */
 
@@ -320,6 +335,7 @@ private[io] object StageWriter {
        |  )
        |  $truncateCol
        |  $purge
+       |  $onError
     """.stripMargin.trim
   }
 
