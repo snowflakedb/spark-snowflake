@@ -45,13 +45,13 @@ private[io] object StageWriter {
   private val log = LoggerFactory.getLogger(getClass)
 
   def writeToStage(
-                 rdd: RDD[String],
-                 schema: StructType,
-                 sqlContext: SQLContext,
-                 saveMode: SaveMode,
-                 params: MergedParameters,
-                 jdbcWrapper: JDBCWrapper
-               ): Unit = {
+                    rdd: RDD[String],
+                    schema: StructType,
+                    sqlContext: SQLContext,
+                    saveMode: SaveMode,
+                    params: MergedParameters,
+                    jdbcWrapper: JDBCWrapper
+                  ): Unit = {
 
     val source: SupportedSource =
       if (params.usingExternalStage) SupportedSource.EXTERNAL
@@ -93,13 +93,16 @@ private[io] object StageWriter {
 
           val filesToCopy =
             unloadData(sqlContext, rdd, params, source, None)
+
+          val tempStage = createTempStage(filesToCopy._1, params, conn, jdbcWrapper)
+
           writeToTable(sqlContext, conn, rdd, schema, saveMode, params,
-            jdbcWrapper, filesToCopy, None)
+            jdbcWrapper, filesToCopy._2, tempStage)
 
           //purge files after loading
-          if(params.purge()){
-            val fs = FileSystem.get(URI.create(filesToCopy.get._1), sqlContext.sparkContext.hadoopConfiguration)
-            fs.delete(new Path(filesToCopy.get._1), true)
+          if (params.purge()) {
+            val fs = FileSystem.get(URI.create(filesToCopy._1), sqlContext.sparkContext.hadoopConfiguration)
+            fs.delete(new Path(filesToCopy._1), true)
           }
 
         } finally {
@@ -113,14 +116,14 @@ private[io] object StageWriter {
           stageManager.executeWithConnection(
             jdbcWrapper.executeInterruptibly(_, prologueSql)
           )
-          val tempStage = Some("@" + stageManager.setupStageArea())
+          val tempStage = stageManager.setupStageArea()
 
-          val filesToCopy =
-            unloadData(sqlContext, rdd, params, source, Some(stageManager))
+          val file =
+            unloadData(sqlContext, rdd, params, source, Some(stageManager))._2
 
           stageManager.executeWithConnection(
             writeToTable(sqlContext, _, rdd, schema, saveMode, params,
-              jdbcWrapper, filesToCopy, tempStage)
+              jdbcWrapper, file, tempStage)
           )
         } finally {
           stageManager.closeConnection()
@@ -141,8 +144,8 @@ private[io] object StageWriter {
                             saveMode: SaveMode,
                             params: MergedParameters,
                             jdbcWrapper: JDBCWrapper,
-                            filesToCopy: Option[(String, String)],
-                            tempStage: Option[String]
+                            file: String,
+                            tempStage: String
                           ): Unit = {
     def execute(statement: String): Unit = {
       log.debug(statement)
@@ -152,74 +155,71 @@ private[io] object StageWriter {
     val table = params.table.get
     val tempTable =
       TableName(s"${table.name}_staging_${Math.abs(Random.nextInt()).toString}")
-    val targetTable = if(saveMode == SaveMode.Overwrite
+    val targetTable = if (saveMode == SaveMode.Overwrite
       && params.useStagingTable) tempTable else table
 
-    // Perform the load if there were files loaded
-    if (filesToCopy.isDefined) {
-      // Load the temporary data into the new file
-      val copyStatement =
-        copySql(sqlContext, data, schema, saveMode, params,
-          targetTable, filesToCopy.get, tempStage)
+    // Load the temporary data into the new file
+    val copyStatement =
+      copySql(sqlContext, data, schema, saveMode, params,
+        targetTable, file, tempStage)
 
-      try {
-
-        //purge tables when overwriting
-        if(saveMode == SaveMode.Overwrite &&
-          jdbcWrapper.tableExists(conn, table.toString)){
-          if(params.useStagingTable){
-            if(params.truncateTable)
-              execute(s"create or replace table $tempTable like $table")
-          }
-          else if(params.truncateTable) execute(s"truncate $table")
-          else execute(s"drop table if exists $table")
+    try {
+      //purge tables when overwriting
+      if (saveMode == SaveMode.Overwrite &&
+        jdbcWrapper.tableExists(conn, table.toString)) {
+        if (params.useStagingTable) {
+          if (params.truncateTable)
+            execute(s"create or replace table $tempTable like $table")
         }
-
-        //create table
-        execute(createTableSql(data, schema, targetTable, jdbcWrapper))
-
-        //pre actions
-        Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
-
-        //copy
-        log.debug(Utils.sanitizeQueryText(copyStatement))
-        //todo: handle on_error parameter on spark side
-        //jdbcWrapper.executeInterruptibly(conn, copyStatement)
-
-        //report the number of skipped files.
-        val resultSet = jdbcWrapper.executeQueryInterruptibly(conn, copyStatement)
-        if(params.continueOnError){
-          var rowSkipped: Long = 0l
-          while(resultSet.next()){
-            rowSkipped +=
-              resultSet.getLong("rows_parsed") -
-                resultSet.getLong("rows_loaded")
-          }
-          log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
-        }
-        Utils.setLastCopyLoad(copyStatement)
-
-        //post actions
-        Utils.executePostActions(jdbcWrapper, conn, params, Option(targetTable))
-
-        if(saveMode == SaveMode.Overwrite && params.useStagingTable){
-          if(jdbcWrapper.tableExists(conn, table.toString))
-            execute(s"alter table $table swap with $tempTable")
-          else
-            execute(s"alter table $tempTable rename to $table")
-        }
-      } catch {
-        case e: SQLException =>
-          // snowflake-todo: try to provide more error information,
-          // possibly from actual SQL output
-          log.error("Error occurred while loading files to Snowflake: " + e)
-          throw e
+        else if (params.truncateTable) execute(s"truncate $table")
+        else execute(s"drop table if exists $table")
       }
-      finally {
-        if(targetTable == targetTable)
-          execute(s"drop table if exists $tempTable")
+
+      //create table
+      execute(createTableSql(data, schema, targetTable, jdbcWrapper))
+
+      //pre actions
+      Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
+
+      //copy
+      log.debug(Utils.sanitizeQueryText(copyStatement))
+      //todo: handle on_error parameter on spark side
+      //jdbcWrapper.executeInterruptibly(conn, copyStatement)
+
+      //report the number of skipped files.
+      val resultSet = jdbcWrapper.executeQueryInterruptibly(conn, copyStatement)
+      if (params.continueOnError) {
+        var rowSkipped: Long = 0l
+        while (resultSet.next()) {
+          rowSkipped +=
+            resultSet.getLong("rows_parsed") -
+              resultSet.getLong("rows_loaded")
+        }
+        log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
       }
+      Utils.setLastCopyLoad(copyStatement)
+
+      //post actions
+      Utils.executePostActions(jdbcWrapper, conn, params, Option(targetTable))
+
+      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+        if (jdbcWrapper.tableExists(conn, table.toString))
+          execute(s"alter table $table swap with $tempTable")
+        else
+          execute(s"alter table $tempTable rename to $table")
+      }
+    } catch {
+      case e: SQLException =>
+        // snowflake-todo: try to provide more error information,
+        // possibly from actual SQL output
+        log.error("Error occurred while loading files to Snowflake: " + e)
+        throw e
     }
+    finally {
+      if (targetTable == targetTable)
+        execute(s"drop table if exists $tempTable")
+    }
+
 
   }
 
@@ -249,8 +249,8 @@ private[io] object StageWriter {
                        saveMode: SaveMode,
                        params: MergedParameters,
                        table: TableName,
-                       filesToCopy: (String, String),
-                       tempStage: Option[String]): String = {
+                       file: String,
+                       tempStage: String): String = {
 
     if (saveMode != SaveMode.Append && params.columnMap.isDefined)
       throw new UnsupportedOperationException("The column mapping only works in append mode.")
@@ -268,22 +268,7 @@ private[io] object StageWriter {
 
     }
 
-    val credsString =
-      if (tempStage.isEmpty)
-        CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext, params)
-      else ""
-
-    var fixedUrl = filesToCopy._1
-    var fromString: String = null
-    if (fixedUrl.startsWith("file://")) {
-      fromString =
-        s"FROM '$fixedUrl' PATTERN='.*${filesToCopy._2}-\\\\d+(.gz|)'"
-    } else {
-      fixedUrl = Utils.fixUrlForCopyCommand(fixedUrl)
-      val stage = tempStage map (s => s + s"/${filesToCopy._2}")
-      val source = stage.getOrElse(s"""'$fixedUrl${filesToCopy._2}'""")
-      fromString = s"FROM $source"
-    }
+    val fromString = s"FROM @$tempStage/$file"
 
     val mappingList: Option[List[(Int, String)]] = params.columnMap match {
       case Some(map) =>
@@ -322,8 +307,6 @@ private[io] object StageWriter {
     s"""
        |COPY INTO $table $mappingToString
        |$mappingFromString
-       |
-       |$credsString
        |FILE_FORMAT = (
        |    TYPE=CSV
        |    /* COMPRESSION=none */
@@ -354,7 +337,7 @@ private[io] object StageWriter {
                          params: MergedParameters,
                          source: SupportedSource,
                          stageMngr: Option[SFInternalStage]
-                        ): Option[(String, String)] = {
+                        ): (String, String) = {
 
     @transient val stageManager = stageMngr.orNull
 
@@ -446,7 +429,7 @@ private[io] object StageWriter {
               }
             })
 
-            Some("s3n://" + stageLocation, "")
+            ("s3n://" + stageLocation, "")
 
           case StageType.AZURE =>
 
@@ -483,14 +466,14 @@ private[io] object StageWriter {
                 if (params.sfCompress) new GZIPOutputStream(EncryptedStream)
                 else EncryptedStream
 
-              while(rows.hasNext) {
+              while (rows.hasNext) {
                 outputStream.write(rows.next.getBytes("UTF-8"))
                 outputStream.write('\n')
               }
               outputStream.close()
             })
 
-            Some(s"wasb://$azureAccount.$azureEndpoint/$stageLocation","")
+            (s"wasb://$azureAccount.$azureEndpoint/$stageLocation", "")
 
           case _ =>
             throw new UnsupportedOperationException(
@@ -519,10 +502,66 @@ private[io] object StageWriter {
           .headOption
           .getOrElse(throw new Exception("No part files were written!"))
         // Note - temp dir already has "/", no need to add it
-        Some(tempDir, "part")
+        (tempDir, "part")
     }
 
 
   }
+
+  /**
+    * create temporary external stage for given path
+    */
+  private[io] def createTempStage(
+                                   path: String,
+                                   params: MergedParameters,
+                                   conn: Connection,
+                                   jdbcWrapper: JDBCWrapper
+                                 ): String = {
+    def convertURL(url: String): String = {
+      val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
+      val s3_url = "s3[an]://(.+)".r
+
+      url match {
+        case azure_url(container, account, endpoint, path) =>
+          s"azure://$account.$endpoint/$container/$path"
+        case s3_url(path) =>
+          s"s3://$path"
+        case _ =>
+          throw new IllegalArgumentException(s"invalid url: $url")
+      }
+
+    }
+
+    val stageName = s"tmp_spark_stage_${Random.alphanumeric take 10 mkString ""}"
+    val urlString = convertURL(path)
+    val credString =
+      params.rootTempDirStorageType match {
+        case FSType.Azure =>
+          val sas = params.azureSAS
+          if (sas.isEmpty) throw new IllegalArgumentException("Azure SAS is undefined")
+          s"(azure_sas_token='${sas.get}')"
+        case FSType.S3 =>
+          val awsAccessKey = params.awsAccessKey
+          val awsSecretKey = params.awsSecretKey
+          if (awsAccessKey.isEmpty || awsSecretKey.isEmpty)
+            throw new IllegalArgumentException("AWS credential is undefined")
+          s"(aws_key_id='${awsAccessKey.get}' aws_secret_key='${awsSecretKey.get}')"
+
+        case _ =>
+          throw new UnsupportedOperationException("Only support Azure and S3 external stage")
+      }
+
+    val stageString =
+      s"""
+         |create or replace stage $stageName
+         |url = '$urlString'
+         |credentials=$credString
+       """.stripMargin
+
+    jdbcWrapper.executeInterruptibly(conn, stageString)
+
+    stageName
+  }
+
 
 }

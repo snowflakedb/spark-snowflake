@@ -393,9 +393,6 @@ object Parameters {
       * None if empty
       */
     def columnMap: Option[Map[String,String]] = {
-      if(parameters.get(PARAM_COLUMN_MAP).isDefined && parameters.get(PARAM_TEMPDIR).isDefined){
-        throw new IllegalArgumentException("Column Mapping function only supports internal stage")
-      }
       parameters.get(PARAM_COLUMN_MAP) match {
         case None => None
         case Some(source: String) => Some(Utils.parseMap(source))
@@ -511,6 +508,13 @@ object Parameters {
       * todo: create data validation function in spark side instead of using COPY COMMAND
       */
     def continueOnError: Boolean = isTrue(parameters(PARAM_CONTINUE_ON_ERROR))
+
+    def azureSAS: Option[String] = parameters.get(PARAM_TEMP_SAS_TOKEN)
+
+    def awsAccessKey: Option[String] = parameters.get(PARAM_AWS_ACCESS_KEY)
+
+    def awsSecretKey: Option[String] = parameters.get(PARAM_AWS_SECRET_KEY)
+
   }
 }
 
