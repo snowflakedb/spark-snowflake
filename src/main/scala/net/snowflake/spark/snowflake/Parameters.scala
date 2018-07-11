@@ -72,6 +72,7 @@ object Parameters {
   val PARAM_PURGE              = knownParam("purge")
 
   val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
+  val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -101,6 +102,7 @@ object Parameters {
     // * tempdir, dbtable and url have no default and they *must* be provided
     "diststyle"       -> "EVEN",
     PARAM_USE_STAGING_TABLE -> "true",
+    PARAM_CONTINUE_ON_ERROR -> "off",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on"
@@ -503,6 +505,12 @@ object Parameters {
       * Keep the table schema
       */
     def truncateTable: Boolean = isTrue(parameters(PARAM_TRUNCATE_TABLE))
+
+    /**
+      * Set on_error parameter to continue in COPY command
+      * todo: create data validation function in spark side instead of using COPY COMMAND
+      */
+    def continueOnError: Boolean = isTrue(parameters(PARAM_CONTINUE_ON_ERROR))
   }
 }
 
