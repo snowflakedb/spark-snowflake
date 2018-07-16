@@ -177,8 +177,7 @@ private[snowflake] case class SnowflakeRelation(
       case SupportedFormat.CSV =>
         rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
       case SupportedFormat.JSON =>
-        //todo
-        sqlContext.sparkContext.emptyRDD[T]
+        rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
     }
 
   }

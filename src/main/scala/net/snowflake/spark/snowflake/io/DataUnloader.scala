@@ -87,31 +87,36 @@ private[io] trait DataUnloader {
     /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
     function to individually set each file_format and copy option. */
 
-    val formatString = format match {
+    val (formatString, queryString): (String, String) = format match {
       case SupportedFormat.CSV =>
-        s"""
-           |FILE_FORMAT = (
-           |    TYPE=CSV
-           |    COMPRESSION='$compression'
-           |    FIELD_DELIMITER='|'
-           |    /*ESCAPE='\\\\'*/
-           |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
-           |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-           |    NULL_IF= ()
-           |  )
-         """.stripMargin
+        (
+          s"""
+             |FILE_FORMAT = (
+             |    TYPE=CSV
+             |    COMPRESSION='$compression'
+             |    FIELD_DELIMITER='|'
+             |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+             |    NULL_IF= ()
+             |  )
+             |  """.stripMargin,
+          s"""FROM ($query)"""
+        )
       case SupportedFormat.JSON =>
-        s"""
-           |FILE_FORMAT = (
-           |    TYPE=JSON
-           |    COMPRESSION='$compression'
-           |)
-         """.stripMargin
+        (
+          s"""
+             |FILE_FORMAT = (
+             |    TYPE=JSON
+             |    COMPRESSION='$compression'
+             |)
+             |""".stripMargin,
+          s"""FROM (SELECT object_construct(*) FROM ($query))"""
+        )
 
     }
+
     s"""
        |COPY INTO '$location'
-       |FROM ($query)
+       |$queryString
        |$credentials
        |$formatString
        |MAX_FILE_SIZE = ${params.s3maxfilesize}

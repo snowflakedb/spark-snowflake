@@ -13,17 +13,10 @@ object JsonConverter {
   private[snowflake] def convert[T: ClassTag](
                                               partition: Iterator[String],
                                               resultSchema: StructType
-                                             ): Iterator[T] = {
+                                             ): Iterator[T] =
+    partition.map(convertRow[T](resultSchema,_))
 
-    val types = new StructType(
-      Array(
-        StructField("num", IntegerType),
-        StructField("str", DecimalType(38,0))
-      )
-    )
 
-    null
-  }
 
   private[snowflake] def convertRow[T:ClassTag](
                                                  schema: StructType,
