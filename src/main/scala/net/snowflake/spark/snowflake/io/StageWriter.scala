@@ -553,7 +553,7 @@ private[io] object StageWriter {
 
     val stageString =
       s"""
-         |create or replace stage $stageName
+         |create or replace temporary stage $stageName
          |url = '$urlString'
          |credentials=$credString
        """.stripMargin
