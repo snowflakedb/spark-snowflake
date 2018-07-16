@@ -20,6 +20,7 @@ import java.sql.Connection
 
 import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeTelemetry, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -70,10 +71,13 @@ private[io] trait DataUnloader {
   }
 
   @transient
-  def buildUnloadStmt(query: String,
-                      location: String,
-                      compression: String,
-                      credentialsString: Option[String]): String = {
+  def buildUnloadStmt(
+                       query: String,
+                       location: String,
+                       compression: String,
+                       credentialsString: Option[String],
+                       format:SupportedFormat = SupportedFormat.CSV
+                     ): String = {
 
     val credentials = credentialsString.getOrElse("")
 
@@ -83,20 +87,36 @@ private[io] trait DataUnloader {
     /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
     function to individually set each file_format and copy option. */
 
+    val formatString = format match {
+      case SupportedFormat.CSV =>
+        s"""
+           |FILE_FORMAT = (
+           |    TYPE=CSV
+           |    COMPRESSION='$compression'
+           |    FIELD_DELIMITER='|'
+           |    /*ESCAPE='\\\\'*/
+           |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
+           |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+           |    NULL_IF= ()
+           |  )
+         """.stripMargin
+      case SupportedFormat.JSON =>
+        s"""
+           |FILE_FORMAT = (
+           |    TYPE=JSON
+           |    COMPRESSION='$compression'
+           |)
+         """.stripMargin
+
+    }
     s"""
        |COPY INTO '$location'
        |FROM ($query)
        |$credentials
-       |FILE_FORMAT = (
-       |    TYPE=CSV
-       |    COMPRESSION='$compression'
-       |    FIELD_DELIMITER='|'
-       |    /*ESCAPE='\\\\'*/
-       |    /*TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM'*/
-       |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    NULL_IF= ()
-       |  )
+       |$formatString
        |MAX_FILE_SIZE = ${params.s3maxfilesize}
        |""".stripMargin.trim
+
+
   }
 }

@@ -37,13 +37,17 @@ private[io] class ExternalStageReader(
     val tempDir = params.createPerQueryTempDir()
 
     val numRows = setup(
-      sql = buildUnloadStmt(
-        query = sql,
-        location = Utils.fixUrlForCopyCommand(tempDir),
-        compression = if (params.sfCompress) "gzip" else "none",
-        credentialsString = Some(
-          CloudCredentialsUtils.getSnowflakeCredentialsString(sqlContext,
-            params))),
+      sql =
+        buildUnloadStmt(
+          sql,
+          Utils.fixUrlForCopyCommand(tempDir),
+          if (params.sfCompress) "gzip" else "none",
+          Some(
+            CloudCredentialsUtils
+              .getSnowflakeCredentialsString(sqlContext, params)
+          ),
+          format
+      ),
 
       conn = jdbcWrapper.getConnector(params))
 
@@ -60,8 +64,12 @@ private[io] class ExternalStageReader(
             classOf[String]
           ).map(_._2)
         case SupportedFormat.JSON =>
-          throw new UnsupportedOperationException("Not support JSON in current version")
-          //todo
+          sqlContext.sparkContext.newAPIHadoopFile(
+            tempDir,
+            classOf[SFJsonInputFormat],
+            classOf[java.lang.Long],
+            classOf[String]
+          ).map(_._2)
       }
     }
   }

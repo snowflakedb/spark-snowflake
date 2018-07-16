@@ -19,15 +19,17 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{DateType, StructField, BooleanType, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Unit test for data type conversions
  */
 class ConversionsSuite extends FunSuite {
+
+  val mapper = new ObjectMapper()
 
   test("Data should be correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
@@ -85,5 +87,36 @@ class ConversionsSuite extends FunSuite {
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
     }
+  }
+
+  test("json string to row conversion") {
+    val str =
+      s"""
+         |{
+         |"byte": 1,
+         |"boolean": true,
+         |"date": "2015-07-09",
+         |"double": 1234.56,
+         |"float": 678.9,
+         |"decimal": 9999999999999999
+         |}
+       """.stripMargin
+
+    val schema: StructType = new StructType(
+      Array(
+        StructField("byte",ByteType, false),
+        StructField("boolean", BooleanType, false),
+        StructField("date", DateType, false),
+        StructField("double", DoubleType, false),
+        StructField("float", FloatType, false),
+        StructField("decimal", DecimalType(38,0), false)
+      )
+    )
+
+    val result: Row =
+      Conversions
+        .jsonStringToRow[Row](mapper.readTree(str), schema).asInstanceOf[Row]
+
+    println(result)
   }
 }
