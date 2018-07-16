@@ -218,7 +218,7 @@ private[snowflake] object Conversions {
     dataType match {
       case ByteType => data.asInt().toByte
       case BooleanType => data.asBoolean()
-      case DateType => parseDate(data.toString,isIR)
+      case DateType => parseDate(data.asText(),isIR)
       case DoubleType => data.asDouble()
       case FloatType => data.asDouble().toFloat
       case DecimalType() => Decimal(data.decimalValue())
@@ -226,13 +226,13 @@ private[snowflake] object Conversions {
       case LongType => data.asLong()
       case ShortType => data.shortValue()
       case StringType =>
-        if (isIR) UTF8String.fromString(data.toString) else data.toString
-      case TimestampType => parseTimestamp(data.toString, isIR)
+        if (isIR) UTF8String.fromString(data.asText()) else data.asText()
+      case TimestampType => parseTimestamp(data.asText(), isIR)
       case ArrayType(dt, _) =>
         val result = new Array[Any](data.size())
         (0 until data.size())
           .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
-        result
+        result.toSeq
       case StructType(fields) =>
         val converted = fields.map(
           field => {
