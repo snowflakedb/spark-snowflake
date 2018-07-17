@@ -24,11 +24,10 @@ import java.util.Date
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
 /**
@@ -245,15 +244,20 @@ private[snowflake] object Conversions {
         )
         if(isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
         else Row.fromSeq(converted).asInstanceOf[T]
-      //String key type only
+      //String key only
       case MapType(_, dt, _) =>
-        val result = new mutable.HashMap[String,Any]()
         val keys = data.fieldNames()
-        while(keys.hasNext){
+        var keyList: List[UTF8String] = Nil
+        var valueList: List[Any] = Nil
+        while (keys.hasNext){
           val key = keys.next()
-          result.put(key, jsonStringToRow(data.get(key),dt))
+          keyList = UTF8String.fromString(key) :: keyList
+          valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
         }
-        result
+        new ArrayBasedMapData(
+          new GenericArrayData(keyList.reverse.toArray),
+          new GenericArrayData(valueList.reverse.toArray)
+        )
       case _ =>
         if (isIR) UTF8String.fromString(data.toString) else data.toString
     }

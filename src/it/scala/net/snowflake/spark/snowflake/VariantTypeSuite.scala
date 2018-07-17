@@ -12,7 +12,9 @@ class VariantTypeSuite extends IntegrationSuiteBase {
         Array(
           StructField("str", StringType, false)
         )
-      ), false)
+      ), false),
+      StructField("MAP", MapType(StringType,StringType), false),
+      StructField("NUM", IntegerType, false)
     )
   )
 
@@ -20,8 +22,9 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    jdbcUpdate(s"create or replace table $tableName1 (arr array, ob object)")
-    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'))""")
+    jdbcUpdate(s"create or replace table $tableName1 (arr array, ob object, map variant, num integer)")
+    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'), parse_json('{"a":"one","b":"two"}'), 123)""")
+    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'), parse_json('{"a":"one","b":"two"}'), 123)""")
   }
 
 
@@ -39,7 +42,9 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     assert(df(0).get(0).isInstanceOf[String])
     assert(df(0).get(1).isInstanceOf[String])
-    assert(df.length == 1)
+    assert(df(0).get(2).isInstanceOf[String])
+    assert(df(0).get(3).toString == "123")
+    assert(df.length == 2)
   }
   test("unload variant data") {
     val df = sqlContext.read
@@ -53,7 +58,12 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     assert(df(0).getSeq(0).length == 4)
 
-    assert(df.length == 1)
+    assert(df(0).getMap[String,String](2).get("a").get == "one")
+    assert(df(0).getMap[String,String](2).get("b").get == "two")
+
+    assert(df(0).getInt(3) == 123)
+
+    assert(df.length == 2)
   }
 
 }
