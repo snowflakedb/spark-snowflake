@@ -24,7 +24,7 @@ import java.util.Date
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -232,7 +232,7 @@ private[snowflake] object Conversions {
         val result = new Array[Any](data.size())
         (0 until data.size())
           .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
-        result.toSeq
+        new GenericArrayData(result)
       case StructType(fields) =>
         val converted = fields.map(
           field => {
@@ -246,20 +246,18 @@ private[snowflake] object Conversions {
         if(isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
         else Row.fromSeq(converted).asInstanceOf[T]
       //String key type only
-      case MapType(_, dt, nullable) =>
+      case MapType(_, dt, _) =>
         val result = new mutable.HashMap[String,Any]()
         val keys = data.fieldNames()
         while(keys.hasNext){
           val key = keys.next()
-          result.put(key, data.get(key))
+          result.put(key, jsonStringToRow(data.get(key),dt))
         }
         result
       case _ =>
         if (isIR) UTF8String.fromString(data.toString) else data.toString
     }
   }
-
-
 
   private[snowflake] def isInternalRow[T: ClassTag](): Boolean = {
     val row         = implicitly[ClassTag[Row]]

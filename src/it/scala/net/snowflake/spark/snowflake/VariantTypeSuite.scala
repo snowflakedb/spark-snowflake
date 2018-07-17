@@ -7,8 +7,8 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   lazy val schema = new StructType(
     Array(
-      StructField("NUM", IntegerType, false),
-      StructField("VAR",StructType(
+      StructField("ARR", ArrayType(IntegerType), false),
+      StructField("OB",StructType(
         Array(
           StructField("str", StringType, false)
         )
@@ -20,8 +20,8 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    jdbcUpdate(s"create or replace table $tableName1 (num int, var variant)")
-    jdbcUpdate(s"""insert into $tableName1 (select 123, parse_json('{"str":"text"}'))""")
+    jdbcUpdate(s"create or replace table $tableName1 (arr array, ob object)")
+    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'))""")
   }
 
 
@@ -35,11 +35,11 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)
-      .load()
+      .load().collect()
 
-    //df.show()
-
-    assert(df.collect().length == 1)
+    assert(df(0).get(0).isInstanceOf[String])
+    assert(df(0).get(1).isInstanceOf[String])
+    assert(df.length == 1)
   }
   test("unload variant data") {
     val df = sqlContext.read
@@ -47,11 +47,13 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)
       .schema(schema)
-      .load()
+      .load().collect()
 
-    assert(df.collect()(0).getStruct(1).getString(0)=="text")
+    assert(df(0).getStruct(1).getString(0)=="text")
 
-    assert(df.collect().length == 1)
+    assert(df(0).getSeq(0).length == 4)
+
+    assert(df.length == 1)
   }
 
 }
