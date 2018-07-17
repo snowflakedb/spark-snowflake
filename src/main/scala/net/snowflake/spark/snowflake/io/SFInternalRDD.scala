@@ -65,7 +65,7 @@ private[io] class SFInternalRDD(
   private[io] val rowCount = stageManager
     .executeWithConnection({ c =>
       setup(preStatements = Seq.empty,
-            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None),
+            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, format),
             conn = c,
             keepOpen = true)
     })
