@@ -21,7 +21,8 @@ import java.sql.Timestamp
 import java.text._
 import java.util.Date
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -50,6 +51,8 @@ private[snowflake] object Conversions {
 
   // For DATE, simple ISO format
   private val PATTERN_DATE = "yyyy-MM-dd"
+
+  private val mapper = new ObjectMapper()
 
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 

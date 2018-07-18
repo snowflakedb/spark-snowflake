@@ -61,23 +61,15 @@ object SparkSnowflakeBuild extends Build {
         "net.snowflake" % "snowflake-jdbc" % "3.6.3",
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "3.0.5" % Test,
-        "org.mockito" % "mockito-core" % "1.10.19" % "test"
-      ),
-      libraryDependencies ++= (if (testHadoopVersion.value.startsWith("1")) {
-        Seq(
-          "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" force(),
-          "org.apache.hadoop" % "hadoop-test" % testHadoopVersion.value % "test" force()
-        )
-      } else {
-        Seq(
-          "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
-          "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
-          "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-          "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
-          "org.apache.hadoop" % "hadoop-azure" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force()
-        )
-      }),
-      libraryDependencies ++= Seq(
+        "org.mockito" % "mockito-core" % "1.10.19" % "test",
+        "org.apache.commons" % "commons-lang3" % "3.5",
+
+        "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
+        "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
+        "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
+        "org.apache.hadoop" % "hadoop-aws" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
+        "org.apache.hadoop" % "hadoop-azure" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force(),
+
         "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()

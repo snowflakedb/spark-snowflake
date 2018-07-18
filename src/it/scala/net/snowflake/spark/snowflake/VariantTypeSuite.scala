@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake
 
 import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import org.apache.spark.sql.{Row, SaveMode}
 
 class VariantTypeSuite extends IntegrationSuiteBase {
 
@@ -64,6 +65,35 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     assert(df(0).getInt(3) == 123)
 
     assert(df.length == 2)
+  }
+
+  test("load variant data") {
+
+    val data = sc.parallelize(
+      Seq(
+        Row(123, Array(1,2,3)),
+        Row(456, Array(4,5,6)),
+        Row(789, Array(7,8,9))
+      )
+    )
+    val schema = new StructType(
+      Array(
+        StructField("NUM", IntegerType, false),
+        StructField("ARR", ArrayType(IntegerType), false)
+      )
+    )
+
+    val df = sparkSession.createDataFrame(data, schema)
+
+    df.show()
+
+    df.write.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      //.option("timestampFormat", "yyyy/MM/dd HH:mm:ss ZZ")
+      .option("dbtable", "test123")
+      .mode(SaveMode.Overwrite)
+      .save()
+
   }
 
 }

@@ -55,8 +55,10 @@ package object io {
                 rdd: RDD[String],
                 schema: StructType,
                 saveMode: SaveMode,
+                format: SupportedFormat = SupportedFormat.CSV,
                 mapper: Option[Map[String, String]] = None,
                 jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper
+
               ): Unit = {
 
     StageWriter.writeToStage(
@@ -65,7 +67,8 @@ package object io {
       sqlContext,
       saveMode,
       params,
-      jdbcWrapper
+      jdbcWrapper,
+      format
     )
 
   }

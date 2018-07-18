@@ -31,6 +31,7 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
 import net.snowflake.spark.snowflake._
+import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.rdd.RDD
@@ -50,7 +51,8 @@ private[io] object StageWriter {
                     sqlContext: SQLContext,
                     saveMode: SaveMode,
                     params: MergedParameters,
-                    jdbcWrapper: JDBCWrapper
+                    jdbcWrapper: JDBCWrapper,
+                    format: SupportedFormat
                   ): Unit = {
 
     val source: SupportedSource =
@@ -97,7 +99,7 @@ private[io] object StageWriter {
           val tempStage = createTempStage(filesToCopy._1, params, conn, jdbcWrapper)
 
           writeToTable(sqlContext, conn, rdd, schema, saveMode, params,
-            jdbcWrapper, filesToCopy._2, tempStage)
+            jdbcWrapper, filesToCopy._2, tempStage, format)
 
           //purge files after loading
           if (params.purge()) {
@@ -123,7 +125,7 @@ private[io] object StageWriter {
 
           stageManager.executeWithConnection(
             writeToTable(sqlContext, _, rdd, schema, saveMode, params,
-              jdbcWrapper, file, tempStage)
+              jdbcWrapper, file, tempStage, format)
           )
         } finally {
           stageManager.closeConnection()
@@ -145,7 +147,8 @@ private[io] object StageWriter {
                             params: MergedParameters,
                             jdbcWrapper: JDBCWrapper,
                             file: String,
-                            tempStage: String
+                            tempStage: String,
+                            format: SupportedFormat
                           ): Unit = {
     def execute(statement: String): Unit = {
       log.debug(statement)
@@ -161,7 +164,7 @@ private[io] object StageWriter {
     // Load the temporary data into the new file
     val copyStatement =
       copySql(sqlContext, data, schema, saveMode, params,
-        targetTable, file, tempStage)
+        targetTable, file, tempStage, format)
 
     try {
       //purge tables when overwriting
@@ -250,19 +253,27 @@ private[io] object StageWriter {
                        params: MergedParameters,
                        table: TableName,
                        file: String,
-                       tempStage: String): String = {
+                       tempStage: String,
+                       format: SupportedFormat
+                     ): String = {
 
     if (saveMode != SaveMode.Append && params.columnMap.isDefined)
       throw new UnsupportedOperationException("The column mapping only works in append mode.")
 
     def getMappingToString(list: Option[List[(Int, String)]]): String = {
-      if (list.isEmpty || list.get.isEmpty) ""
+      if (format == SupportedFormat.JSON)
+        s"(${schema.fields.map(_.name).mkString(",")})"
+      else if(list.isEmpty || list.get.isEmpty) ""
       else
         s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
     }
 
     def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
-      if (list.isEmpty || list.get.isEmpty) from
+      if(format == SupportedFormat.JSON){
+        val names = schema.fields.map(x=>"parse_json($1):".concat(x.name)).mkString(",")
+        s"from (select $names $from tmp)"
+      }
+      else if (list.isEmpty || list.get.isEmpty) from
       else
         s"from (select ${list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
 
@@ -291,6 +302,26 @@ private[io] object StageWriter {
 
     val mappingFromString = getMappingFromString(mappingList, fromString)
 
+    val formatString =
+      format match {
+        case SupportedFormat.CSV =>
+          s"""
+             |FILE_FORMAT = (
+             |    TYPE=CSV
+             |    FIELD_DELIMITER='|'
+             |    NULL_IF=()
+             |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+             |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+             |  )
+           """.stripMargin
+        case SupportedFormat.JSON =>
+          s"""
+             |FILE_FORMAT = (
+             |    TYPE = JSON
+             |)
+           """.stripMargin
+      }
+
     val truncateCol =
       if (params.truncateColumns())
         "TRUNCATECOLUMNS = TRUE"
@@ -307,15 +338,7 @@ private[io] object StageWriter {
     s"""
        |COPY INTO $table $mappingToString
        |$mappingFromString
-       |FILE_FORMAT = (
-       |    TYPE=CSV
-       |    /* COMPRESSION=none */
-       |    FIELD_DELIMITER='|'
-       |    /* ESCAPE='\\\\' */
-       |    NULL_IF=()
-       |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-       |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
-       |  )
+       |$formatString
        |  $truncateCol
        |  $purge
        |  $onError
