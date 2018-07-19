@@ -20,6 +20,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   )
 
   val tableName1 = s"spark_test_table_$randomSuffix"
+  val tableName2 = s"spark_test_table_$randomSuffix"
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -31,6 +32,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $tableName1")
+    jdbcUpdate(s"drop table if exists $tableName2")
     super.afterAll()
   }
 
@@ -71,28 +73,43 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     val data = sc.parallelize(
       Seq(
-        Row(123, Array(1,2,3)),
-        Row(456, Array(4,5,6)),
-        Row(789, Array(7,8,9))
+        Row(123, Array(1,2,3), Map("a"->1), Row("abc")),
+        Row(456, Array(4,5,6), Map("b"->2), Row("def")),
+        Row(789, Array(7,8,9), Map("c"->3), Row("ghi"))
       )
     )
-    val schema = new StructType(
+    val schema1 = new StructType(
       Array(
         StructField("NUM", IntegerType, false),
-        StructField("ARR", ArrayType(IntegerType), false)
+        StructField("ARR", ArrayType(IntegerType), false),
+        StructField("MAP", MapType(StringType, IntegerType), false),
+        StructField("OBJ", StructType(Array(StructField("STR", StringType, false))))
       )
     )
 
-    val df = sparkSession.createDataFrame(data, schema)
-
-    df.show()
+    val df = sparkSession.createDataFrame(data, schema1)
 
     df.write.format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      //.option("timestampFormat", "yyyy/MM/dd HH:mm:ss ZZ")
-      .option("dbtable", "test123")
+      .option("dbtable", tableName2)
       .mode(SaveMode.Overwrite)
       .save()
+
+    val out = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable",tableName2)
+      .schema(schema1)
+      .load()
+
+    val result = out.collect()
+    assert(result.length == 3)
+
+    assert(result(0).getInt(0) == 123)
+    assert(result(0).getList[Int](1).get(0) == 1)
+    assert(result(1).getList[Int](1).get(1) == 5)
+    assert(result(2).getList[Int](1).get(2) == 9)
+    assert(result(1).getMap[String, Int](2)("b") == 2)
+    assert(result(2).getStruct(3).getString(0) == "ghi")
 
   }
 
