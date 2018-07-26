@@ -12,7 +12,7 @@ import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext
 import scala.collection.mutable.ArrayBuffer
 
 
-class SFInputFormat extends FileInputFormat[java.lang.Long, String] {
+class SFCSVInputFormat extends FileInputFormat[java.lang.Long, String] {
   override def createRecordReader(
                                    split: InputSplit,
                                    context: TaskAttemptContext
@@ -20,12 +20,24 @@ class SFInputFormat extends FileInputFormat[java.lang.Long, String] {
     new SFRecordReader(SupportedFormat.CSV)
 }
 
+class SFJsonInputFormat extends FileInputFormat[java.lang.Long, String] {
+  override def createRecordReader(
+                                   split: InputSplit,
+                                   context: TaskAttemptContext
+                                 ): RecordReader[lang.Long, String] =
+    new SFRecordReader(SupportedFormat.JSON)
+}
+
+
 private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.CSV)
   extends RecordReader[java.lang.Long, String]
   with Iterator[String]{
 
   @inline private final val lineFeed: Byte = '\n'
   @inline private final val quoteChar: Byte = '"'
+  @inline private final val leftBrace: Byte = '{'
+  @inline private final val rightBrace: Byte = '}'
+
   @inline private final val codecBufferSize = 64 * 1024
   @inline private final val inputBufferSize = 1024 * 1024
 
@@ -117,8 +129,29 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
           if(currentChar.isEmpty) nextStream()
 
         case SupportedFormat.JSON =>
-          throw new UnsupportedOperationException("Not Support JSON in current version")
-          //todo
+          //no empty file accepted, at least one record
+          //remove white spaces
+          while(currentChar.isEmpty || currentChar.get != leftBrace)
+            currentChar = readChar()
+          var numOfBrace = 1
+
+          while(numOfBrace != 0){
+            buff.append(currentChar.get)
+            currentChar = readChar()
+            currentChar match {
+              case Some(`leftBrace`) => numOfBrace += 1
+              case Some(`rightBrace`) => numOfBrace -= 1
+              case None =>
+                throw new IllegalArgumentException("input json file is invalid")
+              case _ =>
+            }
+          }
+          buff.append(currentChar.get)
+          //remove white spaces
+          while(currentChar.isDefined && currentChar.get != leftBrace)
+            currentChar = readChar()
+          if(currentChar.isEmpty) nextStream()
+
       }
       new String(buff.toArray, Charset.forName("UTF-8"))
     }

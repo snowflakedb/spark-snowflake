@@ -21,9 +21,11 @@ import java.sql.Timestamp
 import java.text._
 import java.util.Date
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,16 +41,18 @@ private[snowflake] object Conversions {
   // parsing with PATTERN_NTZ fails for PATTERN_TZLTZ strings.
   // Note - for JDK 1.6, we use Z ipo XX for SimpleDateFormat
   private val PATTERN_TZLTZ =
-    if (System.getProperty("java.version").startsWith("1.6."))
-      "Z yyyy-MM-dd HH:mm:ss.SSS"
-    else
-      "XX yyyy-MM-dd HH:mm:ss.SSS"
+  if (System.getProperty("java.version").startsWith("1.6."))
+    "Z yyyy-MM-dd HH:mm:ss.SSS"
+  else
+    "XX yyyy-MM-dd HH:mm:ss.SSS"
 
   // For NTZ, Snowflake serializes w/o timezone
   private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss.SSS"
 
   // For DATE, simple ISO format
   private val PATTERN_DATE = "yyyy-MM-dd"
+
+  private val mapper = new ObjectMapper()
 
   private val snowflakeTimestampFormat: DateFormat = new DateFormat() {
 
@@ -70,7 +74,7 @@ private[snowflake] object Conversions {
     }
 
     override def parse(source: String, pos: ParsePosition): Date = {
-      val idx    = pos.getIndex
+      val idx = pos.getIndex
       val errIdx = pos.getErrorIndex
       // First try with the NTZ format, as that's our default TIMESTAMP type
       var res = formatNtz.get().parse(source, pos)
@@ -125,7 +129,7 @@ private[snowflake] object Conversions {
     * the given schema to Row instances
     */
   def createRowConverter[T: ClassTag](
-      schema: StructType): (Array[String]) => T = {
+                                       schema: StructType): (Array[String]) => T = {
     convertRow[T](schema, _: Array[String])
   }
 
@@ -136,15 +140,7 @@ private[snowflake] object Conversions {
   private def convertRow[T: ClassTag](schema: StructType,
                                       fields: Array[String]): T = {
 
-    val row         = implicitly[ClassTag[Row]]
-    val internalRow = implicitly[ClassTag[InternalRow]]
-
-    val isInternalRow: Boolean = implicitly[ClassTag[T]] match {
-      case `row`         => false
-      case `internalRow` => true
-      case _ =>
-        throw new SnowflakeConnectorException("Wrong type for convertRow.")
-    }
+    val isIR: Boolean = isInternalRow[T]()
 
     val converted = fields.zip(schema).map {
       case (input, field) =>
@@ -155,23 +151,23 @@ private[snowflake] object Conversions {
           null
         } else
           field.dataType match {
-            case ByteType        => data.toByte
-            case BooleanType     => parseBoolean(data)
-            case DateType        => parseDate(data, isInternalRow)
-            case DoubleType      => data.toDouble
-            case FloatType       => data.toFloat
-            case dt: DecimalType => parseDecimal(data, isInternalRow)
-            case IntegerType     => data.toInt
-            case LongType        => data.toLong
-            case ShortType       => data.toShort
+            case ByteType => data.toByte
+            case BooleanType => parseBoolean(data)
+            case DateType => parseDate(data, isIR)
+            case DoubleType => data.toDouble
+            case FloatType => data.toFloat
+            case dt: DecimalType => parseDecimal(data, isIR)
+            case IntegerType => data.toInt
+            case LongType => data.toLong
+            case ShortType => data.toShort
             case StringType =>
-              if (isInternalRow) UTF8String.fromString(data) else data
-            case TimestampType => parseTimestamp(data, isInternalRow)
-            case _             => data
+              if (isIR) UTF8String.fromString(data) else data
+            case TimestampType => parseTimestamp(data, isIR)
+            case _ => data
           }
     }
 
-    if (isInternalRow) {
+    if (isIR) {
       InternalRow.fromSeq(converted).asInstanceOf[T]
     } else
       Row.fromSeq(converted).asInstanceOf[T]
@@ -211,5 +207,74 @@ private[snowflake] object Conversions {
       snowflakeDecimalFormat.get().parse(s).asInstanceOf[java.math.BigDecimal]
     if (isInternalRow) Decimal(res)
     else res
+  }
+
+  /**
+    * Convert a json String to Row
+    */
+  private[snowflake] def jsonStringToRow[T: ClassTag](
+                                                       data: JsonNode,
+                                                       dataType: DataType
+                                                     ): Any = {
+    val isIR: Boolean = isInternalRow[T]()
+    dataType match {
+      case ByteType => data.asInt().toByte
+      case BooleanType => data.asBoolean()
+      case DateType => parseDate(data.asText(),isIR)
+      case DoubleType => data.asDouble()
+      case FloatType => data.asDouble().toFloat
+      case DecimalType() => Decimal(data.decimalValue())
+      case IntegerType => data.asInt()
+      case LongType => data.asLong()
+      case ShortType => data.shortValue()
+      case StringType =>
+        if (isIR) UTF8String.fromString(data.asText()) else data.asText()
+      case TimestampType => parseTimestamp(data.asText(), isIR)
+      case ArrayType(dt, _) =>
+        val result = new Array[Any](data.size())
+        (0 until data.size())
+          .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
+        new GenericArrayData(result)
+      case StructType(fields) =>
+        val converted = fields.map(
+          field => {
+            val value = data.findValue(field.name)
+            if(value == null) {
+              if (field.nullable) null
+              else throw new IllegalArgumentException("data is not nullable")
+            } else jsonStringToRow[T](value, field.dataType)
+          }
+        )
+        if(isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
+        else Row.fromSeq(converted).asInstanceOf[T]
+      //String key only
+      case MapType(_, dt, _) =>
+        val keys = data.fieldNames()
+        var keyList: List[UTF8String] = Nil
+        var valueList: List[Any] = Nil
+        while (keys.hasNext){
+          val key = keys.next()
+          keyList = UTF8String.fromString(key) :: keyList
+          valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+        }
+        new ArrayBasedMapData(
+          new GenericArrayData(keyList.reverse.toArray),
+          new GenericArrayData(valueList.reverse.toArray)
+        )
+      case _ =>
+        if (isIR) UTF8String.fromString(data.toString) else data.toString
+    }
+  }
+
+  private[snowflake] def isInternalRow[T: ClassTag](): Boolean = {
+    val row         = implicitly[ClassTag[Row]]
+    val internalRow = implicitly[ClassTag[InternalRow]]
+
+    implicitly[ClassTag[T]] match {
+      case `row`         => false
+      case `internalRow` => true
+      case _ =>
+        throw new SnowflakeConnectorException("Wrong type for convertRow.")
+    }
   }
 }

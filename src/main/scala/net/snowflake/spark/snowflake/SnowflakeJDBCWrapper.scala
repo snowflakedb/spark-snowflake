@@ -185,42 +185,45 @@ private[snowflake] class JDBCWrapper {
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
   def schemaString(schema: StructType): String = {
-    val sb = new StringBuilder()
-    schema.fields.foreach { field =>
-      {
-        val name = field.name
-        val formattedName = Utils.ensureQuoted(name)
-        val typ: String = field.dataType match {
-          case IntegerType => "INTEGER"
-          case LongType => "INTEGER"
-          case DoubleType => "DOUBLE"
-          case FloatType => "FLOAT"
-          case ShortType => "INTEGER"
-          case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
-          case BooleanType => "BOOLEAN"
-          case StringType =>
-            if (field.metadata.contains("maxlength")) {
-              s"VARCHAR(${field.metadata.getLong("maxlength")})"
-            } else {
-              "STRING"
-            }
-//        case BinaryType => "BLOB"
-          case TimestampType => "TIMESTAMP"
-          case DateType => "DATE"
-          case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
-          case _ =>
-            throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
+    schema.fields.map( field=>{
+      val name: String = Utils.ensureQuoted(field.name)
+      val `type`: String = schemaConversion(field)
+      val nullable: String = if (field.nullable) "" else "NOT NULL"
+      s"""$name ${`type`} $nullable"""
+    }).mkString(",")
+  }
+
+  /**
+    * Retrieve corresponding data type in snowflake of giving struct field
+    */
+  def schemaConversion(field: StructField): String =
+    field.dataType match {
+      case IntegerType => "INTEGER"
+      case LongType => "INTEGER"
+      case DoubleType => "DOUBLE"
+      case FloatType => "FLOAT"
+      case ShortType => "INTEGER"
+      case ByteType => "INTEGER" // Snowflake does not support the BYTE type.
+      case BooleanType => "BOOLEAN"
+      case StringType =>
+        if (field.metadata.contains("maxlength")) {
+          s"VARCHAR(${field.metadata.getLong("maxlength")})"
+        } else {
+          "STRING"
         }
-        val nullable = if (field.nullable) "" else "NOT NULL"
-        sb.append(s""", $formattedName $typ $nullable""".trim)
-      }
-    }
-    if (sb.length < 2) "" else sb.substring(2)
+      //        case BinaryType => "BLOB"
+      case TimestampType => "TIMESTAMP"
+      case DateType => "DATE"
+      case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
+      case _: StructType | _: ArrayType | _: MapType => "VARIANT"
+      case _ =>
+        throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
   }
 
 
 
-  /**
+
+/**
     * Returns true if the table already exists in the JDBC database.
     */
   def tableExists(conn: Connection, table: String): Boolean = {

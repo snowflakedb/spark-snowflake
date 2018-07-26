@@ -160,22 +160,24 @@ private[snowflake] case class SnowflakeRelation(
   // without first executing it.
   private def getRDD[T: ClassTag](
                                    sql: String,
-                                   resultSchema: StructType,
-                                   format: SupportedFormat = SupportedFormat.CSV
+                                   resultSchema: StructType
                                  ): RDD[T] = {
 
     val source: SupportedSource =
       if (params.usingExternalStage) SupportedSource.EXTERNAL
       else SupportedSource.INTERNAL
 
+    val format: SupportedFormat =
+      if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
+      else SupportedFormat.CSV
+
     val rdd: RDD[String] = io.readRDD(sqlContext, params, sql, jdbcWrapper, source, format)
 
     format match {
       case SupportedFormat.CSV =>
-        rdd.mapPartitions(CSVConverter.convert(_, resultSchema))
+        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
       case SupportedFormat.JSON =>
-        //todo
-        sqlContext.sparkContext.emptyRDD[T]
+        rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
     }
 
   }

@@ -33,6 +33,7 @@ import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLife
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
 /**
@@ -416,5 +417,13 @@ object Utils {
     else
       "\"" + name + "\""
   }
+
+  /**
+    * Check whether the giving DataFrame contains variant type or not
+    */
+  def containVariant(schema: StructType): Boolean =
+    schema.fields.map(DefaultJDBCWrapper.schemaConversion).contains("VARIANT")
+
+
 
 }

@@ -19,15 +19,17 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{DateType, StructField, BooleanType, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Unit test for data type conversions
  */
 class ConversionsSuite extends FunSuite {
+
+  val mapper = new ObjectMapper()
 
   test("Data should be correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
@@ -85,5 +87,59 @@ class ConversionsSuite extends FunSuite {
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
     }
+  }
+
+  test("json string to row conversion") {
+    val str =
+      s"""
+         |{
+         |"byte": 1,
+         |"boolean": true,
+         |"date": "2015-07-09",
+         |"double": 1234.56,
+         |"float": 678.98,
+         |"decimal": 9999999999999999,
+         |"integer": 1234,
+         |"long": 123123123,
+         |"short":123,
+         |"string": "test string",
+         |"timestamp": "2015-07-01 00:00:00.001",
+         |"array":[1,2,3,4,5],
+         |"map":{"a":1,"b":2,"c":3},
+         |"structure":{"num":123,"str":"str1"}
+         |}
+       """.stripMargin
+
+    val schema: StructType = new StructType(
+      Array(
+        StructField("byte",ByteType, false),
+        StructField("boolean", BooleanType, false),
+        StructField("date", DateType, false),
+        StructField("double", DoubleType, false),
+        StructField("float", FloatType, false),
+        StructField("decimal", DecimalType(38,0), false),
+        StructField("integer", IntegerType, false),
+        StructField("long", LongType, false),
+        StructField("short", ShortType, false),
+        StructField("string", StringType, false),
+        StructField("timestamp", TimestampType, false),
+        StructField("array", ArrayType(IntegerType), false),
+        StructField("map", MapType(StringType, IntegerType), false),
+        StructField("structure",StructType(
+          Array(
+            StructField("num", IntegerType, false),
+            StructField("str", StringType, false)
+          )
+        ),false)
+      )
+    )
+
+    val result: Row =
+      Conversions
+        .jsonStringToRow[Row](mapper.readTree(str), schema).asInstanceOf[Row]
+
+    val expect = "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string,2015-07-01 00:00:00.001,WrappedArray(1, 2, 3, 4, 5),Map(b -> 2, a -> 1, c -> 3),[123,str1]]"
+
+    assert(expect == result.toString())
   }
 }

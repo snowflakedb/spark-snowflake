@@ -51,9 +51,14 @@ private[snowflake] class SnowflakeWriter(
             sqlContext: SQLContext,
             data: DataFrame,
             saveMode: SaveMode,
-            params: MergedParameters,
-            format: SupportedFormat = SupportedFormat.CSV
+            params: MergedParameters
           ): Unit = {
+    val spark = sqlContext.sparkSession
+    import spark.implicits._ // for toJson conversion
+
+    val format: SupportedFormat =
+      if(Utils.containVariant(data.schema)) SupportedFormat.JSON
+      else SupportedFormat.CSV
 
     val output: DataFrame = removeUselessColumns(data, params)
     val strRDD = format match {
@@ -68,15 +73,15 @@ private[snowflake] class SnowflakeWriter(
             .mkString("|")
         })
       case SupportedFormat.JSON =>
-        //todo
-        sqlContext.sparkContext.emptyRDD[String]
+        output.toJSON.map(_.toString).rdd
     }
     io.writeRDD(
       sqlContext,
       params,
       strRDD,
       output.schema,
-      saveMode
+      saveMode,
+      format
     )
   }
 
