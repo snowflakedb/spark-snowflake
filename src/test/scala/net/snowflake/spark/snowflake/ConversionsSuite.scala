@@ -138,7 +138,8 @@ class ConversionsSuite extends FunSuite {
       Conversions
         .jsonStringToRow[Row](mapper.readTree(str), schema).asInstanceOf[Row]
 
-    val expect = "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string,2015-07-01 00:00:00.001,WrappedArray(1, 2, 3, 4, 5),Map(b -> 2, a -> 1, c -> 3),[123,str1]]"
+    val expect = "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string,2015-07-01 00:00:00.001,[1,2,3,4,5],keys: [a,b,c], values: [1,2,3],[123,str1]]"
+
 
     assert(expect == result.toString())
   }
