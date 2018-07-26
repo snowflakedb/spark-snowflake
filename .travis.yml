@@ -11,7 +11,7 @@ matrix:
   include:
     # Scala 2.11 tests:
     - jdk: openjdk8
-      scala: 2.11.7
+      scala: 2.11.12
       env: HADOOP_VERSION="2.8.0" SPARK_VERSION="2.3.0" INTEGRATION_TESTS="true"
 
 #env:
