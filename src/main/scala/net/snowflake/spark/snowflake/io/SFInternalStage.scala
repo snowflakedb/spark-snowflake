@@ -51,7 +51,9 @@ private[io] object SFInternalStage {
   private[io] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
   private[io] final val AES                 = "AES"
+  @Deprecated
   private[io] final val DEFAULT_PARALLELISM = 10
+  @Deprecated
   private[io] final val S3_MAX_RETRIES      = 3
   private[io] final val CREATE_TEMP_STAGE_STMT =
     s"""CREATE OR REPLACE TEMP STAGE """
