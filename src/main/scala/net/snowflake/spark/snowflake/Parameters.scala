@@ -222,8 +222,7 @@ object Parameters {
     lazy val usingExternalStage: Boolean = !rootTempDir.isEmpty
 
     lazy val rootTempDirStorageType: FSType = {
-      val tempDir = Option(parameters.getOrElse(PARAM_TEMPDIR, "")).
-        getOrElse("")
+      val tempDir = parameters.getOrElse(PARAM_TEMPDIR, "")
 
       if (tempDir.isEmpty) {
         FSType.Unknown
@@ -257,7 +256,7 @@ object Parameters {
       */
     lazy val rootTempDir: String = {
       rootTempDirStorageType
-      Option(parameters.getOrElse(PARAM_TEMPDIR, "")).getOrElse("")
+      parameters.getOrElse(PARAM_TEMPDIR, "")
     }
 
     /**
