@@ -28,7 +28,7 @@ class SnowflakeSink(
   )
 
   private val tableName = param.table.get
-  
+
 
 
 
