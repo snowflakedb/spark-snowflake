@@ -73,6 +73,7 @@ object Parameters {
 
   val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
+  val PARAM_STREAMING_KEEP_FAILED_FILES = knownParam("streaming_keep_failed_files")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -106,8 +107,8 @@ object Parameters {
     PARAM_TRUNCATE_TABLE -> "off",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
-    PARAM_AUTO_PUSHDOWN -> "on"
-
+    PARAM_AUTO_PUSHDOWN -> "on",
+    PARAM_STREAMING_KEEP_FAILED_FILES -> "off"
   )
 
   /**
@@ -514,6 +515,8 @@ object Parameters {
     def awsAccessKey: Option[String] = parameters.get(PARAM_AWS_ACCESS_KEY)
 
     def awsSecretKey: Option[String] = parameters.get(PARAM_AWS_SECRET_KEY)
+
+    def streamingKeepFailedFiles: Boolean = isTrue(parameters(PARAM_STREAMING_KEEP_FAILED_FILES))
 
   }
 }

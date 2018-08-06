@@ -7,7 +7,7 @@ import java.security.spec.{PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 import net.snowflake.ingest.SimpleIngestManager
-import net.snowflake.ingest.connection.{HistoryResponse, IngestStatus}
+import net.snowflake.ingest.connection.IngestStatus
 import net.snowflake.ingest.utils.StagedFileWrapper
 
 object SnowflakeIngestConnector {

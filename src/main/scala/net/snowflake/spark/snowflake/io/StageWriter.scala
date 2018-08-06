@@ -534,6 +534,7 @@ private[io] object StageWriter {
   /**
     * create temporary external stage for given path
     */
+  @deprecated
   private[io] def createTempStage(
                                    path: String,
                                    params: MergedParameters,

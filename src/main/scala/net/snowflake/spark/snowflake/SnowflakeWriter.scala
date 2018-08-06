@@ -18,9 +18,11 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
+
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 
@@ -53,28 +55,12 @@ private[snowflake] class SnowflakeWriter(
             saveMode: SaveMode,
             params: MergedParameters
           ): Unit = {
-    val spark = sqlContext.sparkSession
-    import spark.implicits._ // for toJson conversion
-
     val format: SupportedFormat =
       if(Utils.containVariant(data.schema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
     val output: DataFrame = removeUselessColumns(data, params)
-    val strRDD = format match {
-      case SupportedFormat.CSV =>
-        val conversionFunction = genConversionFunctions(output.schema)
-        output.rdd.map(row=>{
-          row.toSeq
-            .zip(conversionFunction)
-            .map{
-              case(element, func) => func(element)
-            }
-            .mkString("|")
-        })
-      case SupportedFormat.JSON =>
-        output.toJSON.map(_.toString).rdd
-    }
+    val strRDD = dataFrameToRDD(sqlContext, output, params, format)
     io.writeRDD(
       sqlContext,
       params,
@@ -83,6 +69,31 @@ private[snowflake] class SnowflakeWriter(
       saveMode,
       format
     )
+  }
+
+  def dataFrameToRDD(
+                      sqlContext: SQLContext,
+                      data: DataFrame,
+                      params: MergedParameters,
+                      format: SupportedFormat
+                    ): RDD[String] = {
+    val spark = sqlContext.sparkSession
+    import spark.implicits._ // for toJson conversion
+
+    format match {
+      case SupportedFormat.CSV =>
+        val conversionFunction = genConversionFunctions(data.schema)
+        data.rdd.map(row=>{
+          row.toSeq
+            .zip(conversionFunction)
+            .map{
+              case(element, func) => func(element)
+            }
+            .mkString("|")
+        })
+      case SupportedFormat.JSON =>
+        data.toJSON.map(_.toString).rdd
+    }
   }
 
   /**
