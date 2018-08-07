@@ -99,7 +99,12 @@ object CloudStorageOperations {
   /**
     * @return Storage client and stage name
     */
-  def createStorageClient(param: MergedParameters, conn: Connection): (CloudStorage, String) = {
+  def createStorageClient(
+                           param: MergedParameters,
+                           conn: Connection,
+                           tempStage: Boolean = true,
+                           stage: Option[String] = None
+                         ): (CloudStorage, String) = {
     val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
 
@@ -112,13 +117,14 @@ object CloudStorageOperations {
         require(param.awsAccessKey.isDefined, "missing aws access key")
         require(param.awsSecretKey.isDefined, "missing aws secret key")
 
-        val stageName = s"tmp_spark_stage_${Random.alphanumeric take 10 mkString ""}"
+        val stageName = stage
+            .getOrElse(s"tmp_spark_stage_${Random.alphanumeric take 10 mkString ""}")
 
         //val meta: ObjectMetadata = new ObjectMetadata()
 
         val sql =
           s"""
-             |create or replace temporary stage $stageName
+             |create or replace ${if(tempStage) "temporary" else ""} stage $stageName
              |url = 's3://$bucket/$prefix'
              |credentials =
              |(aws_key_id='${param.awsAccessKey.get}' aws_secret_key='${param.awsSecretKey.get}')
@@ -144,8 +150,15 @@ object CloudStorageOperations {
     * @param storage storage client
     * @return a list of file name
     */
-  def saveToStorage(data: RDD[String])(implicit storage: CloudStorage): List[String] =
-    storage.upload(data)
+  def saveToStorage(
+                     data: RDD[String],
+                     format: SupportedFormat = SupportedFormat.CSV,
+                     dir: Option[String] = None
+                   )(implicit storage: CloudStorage): List[String] =
+    storage.upload(data, format, dir)
+
+  def deleteFiles(files: List[String])(implicit  storage: CloudStorage): Unit =
+    storage.deleteFiles(files)
 
 
   def createAWSClient(
@@ -275,16 +288,19 @@ case class S3Storage(
   //todo
   override def download(fileName: String): InputStream = null
 
-  override def deleteFile(fileName: String): Unit = {}
+  override def deleteFile(fileName: String): Unit = {
+    throw new UnsupportedOperationException()
+  }
     //s3Client.deleteObject(bucketName, prefix.concat(fileName))
 
-  override def deleteFiles(fileNames: List[String]): Unit = {}
-//    s3Client.deleteObjects(
-//      new DeleteObjectsRequest(bucketName)
-//        .withKeys(fileNames.map(prefix.concat): _*)
-//    )
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    val s3Client = CloudStorageOperations.createAWSClient(awsId, awsKey, awsToken, parallelism)
+    s3Client.deleteObjects(
+      new DeleteObjectsRequest(bucketName)
+        .withKeys(fileNames.map(prefix.concat):_*)
+    )
 
-
+  }
 
 }
 
