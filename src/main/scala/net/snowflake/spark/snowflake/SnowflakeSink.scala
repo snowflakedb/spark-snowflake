@@ -5,6 +5,7 @@ import net.snowflake.spark.snowflake.io.{CloudStorageOperations, SupportedFormat
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
 import org.slf4j.LoggerFactory
 
 class SnowflakeSink(
@@ -26,7 +27,7 @@ class SnowflakeSink(
 
   require(
     param.table.isDefined,
-    "Snowflake table name must be specified with the 'dbtable' parameter"
+    "Snowflake table name must be specified with 'dbtable' parameter"
   )
 
   val conn = DefaultJDBCWrapper.getConnector(param)
@@ -35,13 +36,18 @@ class SnowflakeSink(
   log.debug(prologueSql)
   DefaultJDBCWrapper.executeInterruptibly(conn, prologueSql)
 
-  val (storage, stageName) = CloudStorageOperations.createStorageClient(param, conn)
+  private implicit val (storage, stageName) = CloudStorageOperations.createStorageClient(param, conn, false)
 
   private val tableName = param.table.get
 
   private var pipeName: Option[String] = None
 
   private var format: Option[SupportedFormat] = None
+
+  private implicit lazy val ingestManager =
+    SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
+
+
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     //initialize pipe
@@ -92,13 +98,22 @@ class SnowflakeSink(
     }
 
     //prepare data
-    val rdd = DefaultSnowflakeWriter.dataFrameToRDD(sqlContext, data, param, format.get)
+    val rdd =
+      DefaultSnowflakeWriter.dataFrameToRDD(
+        sqlContext,
+        streamingToNonStreaming(sqlContext,data),
+        param,
+        format.get)
 
     //write to storage
+    val files =
+      CloudStorageOperations.saveToStorage(rdd, format.get, Some(batchId.toString))
 
-    rdd.mapPartitions[String](part=>{
-      null
-    })
+    files.foreach(println)
+    val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
+
+    //Purge files
+    CloudStorageOperations.deleteFiles(files)
 
   }
 
