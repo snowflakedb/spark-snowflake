@@ -1,13 +1,16 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
+import net.snowflake.spark.snowflake.io.{CloudStorageOperations, SupportedFormat}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.snowflake.SparkFunctions.addShutdownHook
 import org.slf4j.LoggerFactory
+
+import scala.util.Random
 
 class SnowflakeSink(
                      sqlContext: SQLContext,
@@ -44,9 +47,13 @@ class SnowflakeSink(
   log.debug(prologueSql)
   DefaultJDBCWrapper.executeInterruptibly(conn, prologueSql)
 
-  private implicit var storage: CloudStorage = _
-
-  private var stageName: String = _
+  private implicit lazy val (storage, stageName) =
+    CloudStorageOperations
+      .createStorageClient(
+        param,
+        conn,
+        false
+      )
 
   private val tableName = param.table.get
 
@@ -54,19 +61,15 @@ class SnowflakeSink(
 
   private var format: SupportedFormat = _
 
-  private var pipeCreateTime: Long = _
-
   private implicit lazy val ingestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
-
-  //drop dead pipes and stages
-  scanPipes()
-  scanStages()
 
   /**
     * Create pipe, stage, and storage client
     */
   def init(schema: StructType): Unit = {
+
+    //create table
     val schemaSql = DefaultJDBCWrapper.schemaString(schema)
     val createTableSql =
       s"""
@@ -75,25 +78,13 @@ class SnowflakeSink(
     log.debug(createTableSql)
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, createTableSql)
 
+    //create pipe
     format =
       if (Utils.containVariant(schema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
-
-    pipeCreateTime = System.currentTimeMillis()
-
-    val storageInfo =
-      CloudStorageOperations
-        .createStorageClient(
-          param,
-          conn,
-          false,
-          Some(s"${STREAMING_OBJECT_PREFIX}_${STAGE_TOKEN}_${pipeCreateTime}"))
-
-    storage = storageInfo._1
-    stageName = storageInfo._2
-
-    pipeName = Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_${pipeCreateTime}")
+    pipeName =
+      Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_${Random.alphanumeric take 10 mkString ""}")
 
     val formatString =
       format match {
@@ -124,6 +115,12 @@ class SnowflakeSink(
     log.debug(createPipeStatement)
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
 
+    //remove stage and pipe
+    addShutdownHook(()=>{
+      dropStage(stageName)
+      dropPipe(pipeName.get)
+    })
+
   }
 
 
@@ -148,13 +145,6 @@ class SnowflakeSink(
     //Purge files
     CloudStorageOperations.deleteFiles(files)
 
-    if(System.currentTimeMillis() - pipeCreateTime > PIPE_LIFETIME * 1000) {
-      dropPipe(pipeName.get)
-      dropStage(stageName)
-      pipeName = None
-    }
-
-
   }
 
   private def dropPipe(pipe: String): Unit = {
@@ -167,45 +157,6 @@ class SnowflakeSink(
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
   }
 
-  /**
-    * Scan pipe list, remove all dead pipes
-    */
-  private def scanPipes(): Unit = {
-    val pipePattern = s"^${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_(\\d+)$$".r
-    val statement: String = s"show pipes"
-    val pipes = DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
-    while (pipes.next()) {
-      val pipe = pipes.getString("name")
-      pipe match {
-        case pipePattern(time) =>
-          val currentTime: Long = System.currentTimeMillis()
-          val createTime: Long = time.toLong
-          if (currentTime - createTime > PIPE_LIFETIME * 2000) //double lifetime
-            dropPipe(pipe)
-        case _ =>
-      }
-    }
-  }
-
-  /**
-    * Scan stage list, remove all dead stages
-    */
-  private def scanStages(): Unit = {
-    val stagePattern = s"^${STREAMING_OBJECT_PREFIX}_${STAGE_TOKEN}_(\\d+)$$".r
-    val statement: String = s"show stages"
-    val stages = DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
-    while (stages.next()) {
-      val stage = stages.getString("name")
-      stage match {
-        case stagePattern(time) =>
-          val currentTime: Long = System.currentTimeMillis()
-          val createTime: Long = time.toLong
-          if (currentTime - createTime > PIPE_LIFETIME * 2000) //double lifetime
-            dropStage(stage)
-        case _ =>
-      }
-    }
-  }
 
 
 }
