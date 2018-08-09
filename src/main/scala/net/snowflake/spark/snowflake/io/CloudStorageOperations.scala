@@ -19,20 +19,24 @@ package net.snowflake.spark.snowflake.io
 import java.io.{InputStream, OutputStream}
 import java.security.SecureRandom
 import java.sql.Connection
+import java.util.zip.GZIPOutputStream
 
-import javax.crypto.{Cipher, SecretKey}
+import javax.crypto.{Cipher, CipherOutputStream}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import net.snowflake.client.jdbc.MatDesc
+import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicAWSCredentials, BasicSessionCredentials}
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3EncryptionClient}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import net.snowflake.spark.snowflake.Utils
 import net.snowflake.spark.snowflake.s3upload.{MultiPartOutputStream, StreamTransferManager}
 import org.apache.spark.rdd.RDD
+import org.slf4j.LoggerFactory
 
 import scala.util.Random
 
@@ -46,11 +50,13 @@ object CloudStorageOperations {
   private final val KEY_CIPHER: String = "AES/ECB/PKCS5Padding"
   private final val AMZ_MATDESC = "x-amz-matdesc"
 
+  private val log = LoggerFactory.getLogger(getClass)
+
   private[io] final def getCipherAndS3Metadata(
-                                            masterKey: String,
-                                            queryId: String,
-                                            smkId: String
-                                          ): (Cipher, ObjectMetadata) = {
+                                                masterKey: String,
+                                                queryId: String,
+                                                smkId: String
+                                              ): (Cipher, ObjectMetadata) = {
     val (cipher, matDesc, encKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
     val meta = new ObjectMetadata()
     meta.addUserMetadata(AMZ_MATDESC, matDesc)
@@ -60,9 +66,9 @@ object CloudStorageOperations {
   }
 
   private[io] final def getCipherAndMetadata(
-                                          masterKey: String,
-                                          queryId: String,
-                                          smkId: String): (Cipher, String, String, String) = {
+                                              masterKey: String,
+                                              queryId: String,
+                                              smkId: String): (Cipher, String, String, String) = {
 
     val decodedKey = Base64.decode(masterKey)
     val keySize = decodedKey.length
@@ -105,8 +111,16 @@ object CloudStorageOperations {
                            tempStage: Boolean = true,
                            stage: Option[String] = None
                          ): (CloudStorage, String) = {
+    val propolueSql = Utils.genPrologueSql(param)
+    log.debug(propolueSql)
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn, propolueSql)
+
+
     val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
+    val compress = param.sfCompress
+    val stageName = stage
+      .getOrElse(s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}")
 
     param.rootTempDir match {
       //External Stage
@@ -117,14 +131,9 @@ object CloudStorageOperations {
         require(param.awsAccessKey.isDefined, "missing aws access key")
         require(param.awsSecretKey.isDefined, "missing aws secret key")
 
-        val stageName = stage
-            .getOrElse(s"tmp_spark_stage_${Random.alphanumeric take 10 mkString ""}")
-
-        //val meta: ObjectMetadata = new ObjectMetadata()
-
         val sql =
           s"""
-             |create or replace ${if(tempStage) "temporary" else ""} stage $stageName
+             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
              |url = 's3://$bucket/$prefix'
              |credentials =
              |(aws_key_id='${param.awsAccessKey.get}' aws_secret_key='${param.awsSecretKey.get}')
@@ -136,10 +145,58 @@ object CloudStorageOperations {
           bucketName = bucket,
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
-          pref = prefix
+          pref = prefix,
+          compress = compress
         ), stageName)
       case _ => // Internal Stage
-        throw new UnsupportedOperationException("Not support internal stage")
+
+        val sql =
+          s"""
+             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+           """.stripMargin
+        DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
+
+        @transient val stageManager =
+          new SFInternalStage(true, DefaultJDBCWrapper, param, Some(stageName))
+        //todo move stage creation from stage manager to this class
+
+        @transient val keyIds = stageManager.getKeyIds
+        val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+        val masterKey = stageManager.masterKey
+        val stageLocation = stageManager.stageLocation
+
+        stageManager.stageType match {
+          case StageType.S3 =>
+            val url = "([^/]+)/?(.*)".r
+
+            val url(bucket, path) = stageLocation
+
+            val awsId = stageManager.awsId
+            val awsKey = stageManager.awsKey
+            val awsToken = stageManager.awsToken
+
+            (S3Storage(
+              bucketName = bucket,
+              awsId = awsId.get,
+              awsKey = awsKey.get,
+              awsToken = awsToken,
+              masterKey = Some(masterKey),
+              queryId = Some(queryId),
+              smkId = Some(smkId),
+              compress = compress,
+              pref = path
+            ), stageName)
+
+          case StageType.AZURE =>
+            //todo
+            throw new UnsupportedOperationException(
+              "Not support Azure stage"
+            )
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Only support s3 or Azure stage, stage types: ${stageManager.stageType}"
+            )
+        }
     }
   }
 
@@ -157,16 +214,16 @@ object CloudStorageOperations {
                    )(implicit storage: CloudStorage): List[String] =
     storage.upload(data, format, dir)
 
-  def deleteFiles(files: List[String])(implicit  storage: CloudStorage): Unit =
+  def deleteFiles(files: List[String])(implicit storage: CloudStorage): Unit =
     storage.deleteFiles(files)
 
 
-  def createAWSClient(
-                       awsId: String,
-                       awsKey: String,
-                       awsToken: Option[String],
-                       parallelism:Int
-                     ): AmazonS3Client = {
+  private[io] def createS3Client(
+                                  awsId: String,
+                                  awsKey: String,
+                                  awsToken: Option[String],
+                                  parallelism: Int
+                                ): AmazonS3Client = {
     val awsCredentials = awsToken match {
       case Some(token) => new BasicSessionCredentials(awsId, awsKey, token)
       case None => new BasicAWSCredentials(awsId, awsKey)
@@ -180,7 +237,6 @@ object CloudStorageOperations {
 
     new AmazonS3Client(awsCredentials, clientConfig)
   }
-
 
 }
 
@@ -208,17 +264,11 @@ case class S3Storage(
                       compress: Boolean = false,
                       is256: Boolean = false,
                       pref: String = "",
-                      meta: ObjectMetadata = new ObjectMetadata(),
                       parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                     ) extends CloudStorage {
 
 
-
   val prefix: String = if (pref.endsWith("/")) pref else pref + "/"
-
-
-
-
 
 
   //future work, replace io operation in RDD and writer
@@ -234,16 +284,27 @@ case class S3Storage(
 
     val files = data.mapPartitions(rows => {
 
-      val s3Client: AmazonS3Client = CloudStorageOperations.createAWSClient(awsId, awsKey, awsToken, parallelism)
+      val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
 
-      val fileName = s"$directory/${Random.alphanumeric take 10 mkString ""}.csv"
-      //s"$prefix$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if(compress) ".gz" else ""}"
+      val fileName =
+        s"$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if (compress) ".gz" else ""}"
+
+      val (fileCipher, meta) =
+        masterKey match {
+          case Some(_) =>
+            CloudStorageOperations.getCipherAndS3Metadata(masterKey.get, queryId.get, smkId.get)
+          case None =>
+            (null, new ObjectMetadata())
+        }
+
+
+      if (compress) meta.setContentEncoding("GZIP")
 
       val streamTransferManager = new StreamTransferManager(
         bucketName,
-        prefix+fileName,
+        prefix + fileName,
         s3Client,
-        new ObjectMetadata(),
+        meta,
         1,
         parallelism,
         5 * parallelism,
@@ -251,12 +312,19 @@ case class S3Storage(
       )
 
       try {
-        val outputStream: OutputStream = streamTransferManager.getMultiPartOutputStreams.get(0)
+        val uploadStream = streamTransferManager.getMultiPartOutputStreams.get(0)
+        var outputStream: OutputStream = uploadStream
 
-        while(rows.hasNext){
+        if (masterKey.isDefined) outputStream =
+          new CipherOutputStream(outputStream, fileCipher)
+
+        if (compress)
+          outputStream = new GZIPOutputStream(outputStream)
+
+        while (rows.hasNext) {
           outputStream.write(rows.next.getBytes("UTF-8"))
           outputStream.write('\n')
-          outputStream.asInstanceOf[MultiPartOutputStream].checkSize()
+          uploadStream.checkSize()
         }
 
         outputStream.close()
@@ -268,9 +336,10 @@ case class S3Storage(
           SnowflakeConnectorUtils.handleS3Exception(ex)
       }
 
-      new Iterator[String]{
+      new Iterator[String] {
 
         private var name: Option[String] = Some(fileName)
+
         override def hasNext: Boolean = name.isDefined
 
         override def next(): String = {
@@ -291,13 +360,14 @@ case class S3Storage(
   override def deleteFile(fileName: String): Unit = {
     throw new UnsupportedOperationException()
   }
-    //s3Client.deleteObject(bucketName, prefix.concat(fileName))
+
+  //s3Client.deleteObject(bucketName, prefix.concat(fileName))
 
   override def deleteFiles(fileNames: List[String]): Unit = {
-    val s3Client = CloudStorageOperations.createAWSClient(awsId, awsKey, awsToken, parallelism)
+    val s3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     s3Client.deleteObjects(
       new DeleteObjectsRequest(bucketName)
-        .withKeys(fileNames.map(prefix.concat):_*)
+        .withKeys(fileNames.map(prefix.concat): _*)
     )
 
   }

@@ -43,10 +43,6 @@ class SnowflakeSink(
 
   val conn = DefaultJDBCWrapper.getConnector(param)
 
-  private val prologueSql = Utils.genPrologueSql(param)
-  log.debug(prologueSql)
-  DefaultJDBCWrapper.executeInterruptibly(conn, prologueSql)
-
   private implicit lazy val (storage, stageName) =
     CloudStorageOperations
       .createStorageClient(

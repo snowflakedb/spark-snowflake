@@ -54,8 +54,8 @@ class StreamingSuite extends IntegrationSuiteBase {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
-    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", params.awsAccessKey.get)
-    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", params.awsSecretKey.get)
+//    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", params.awsAccessKey.get)
+//    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", params.awsSecretKey.get)
 
 
     val lines = spark.readStream

@@ -50,25 +50,26 @@ import scala.util.Random
 private[io] object SFInternalStage {
   private[io] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
-  private[io] final val AES                 = "AES"
+  private[io] final val AES = "AES"
   @Deprecated
   private[io] final val DEFAULT_PARALLELISM = 10
   @Deprecated
-  private[io] final val S3_MAX_RETRIES      = 3
+  private[io] final val S3_MAX_RETRIES = 3
   private[io] final val CREATE_TEMP_STAGE_STMT =
     s"""CREATE OR REPLACE TEMP STAGE """
-  private[io] final val AMZ_KEY: String     = "x-amz-key"
-  private[io] final val AMZ_IV: String      = "x-amz-iv"
+  private[io] final val AMZ_KEY: String = "x-amz-key"
+  private[io] final val AMZ_IV: String = "x-amz-iv"
   private[io] final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
-  private[io] final val KEY_CIPHER: String  = "AES/ECB/PKCS5Padding"
-  private[io] final val AMZ_MATDESC         = "x-amz-matdesc"
+  private[io] final val KEY_CIPHER: String = "AES/ECB/PKCS5Padding"
+  private[io] final val AMZ_MATDESC = "x-amz-matdesc"
 
 
-  private[io] final val AZ_ENCRYPTIONDATA   = "encryptiondata"
-  private[io] final val AZ_IV               = "ContentEncryptionIV"
-  private[io] final val AZ_KEY_WRAP         = "WrappedContentKey"
-  private[io] final val AZ_KEY              = "EncryptedKey"
-  private[io] final val AZ_MATDESC          = "matdesc"
+  private[io] final val AZ_ENCRYPTIONDATA = "encryptiondata"
+  private[io] final val AZ_IV = "ContentEncryptionIV"
+  private[io] final val AZ_KEY_WRAP = "WrappedContentKey"
+  private[io] final val AZ_KEY = "EncryptedKey"
+  private[io] final val AZ_MATDESC = "matdesc"
+
   /**
     * A small helper for extracting bucket name and path from stage location.
     *
@@ -76,25 +77,25 @@ private[io] object SFInternalStage {
     * @return s3 location
     */
   private[io] final def extractBucketNameAndPath(
-      stageLocation: String): (String, String) =
-    if(stageLocation.contains("/"))
-      (stageLocation.substring(0,stageLocation.indexOf("/")),
-      stageLocation.substring(stageLocation.indexOf("/") + 1))
+                                                  stageLocation: String): (String, String) =
+    if (stageLocation.contains("/"))
+      (stageLocation.substring(0, stageLocation.indexOf("/")),
+        stageLocation.substring(stageLocation.indexOf("/") + 1))
     else (stageLocation, "")
 
   private[io] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
 
   private[io] final def createAzureClient(
-                                         storageAccount: String,
-                                         endpoint: String,
-                                         sas: Option[String] = None
+                                           storageAccount: String,
+                                           endpoint: String,
+                                           sas: Option[String] = None
                                          ): CloudBlobClient = {
     val storageEndpoint: URI =
       new URI("https",
-        s"$storageAccount.$endpoint/",null,null)
+        s"$storageAccount.$endpoint/", null, null)
     val azCreds =
-      if(sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
+      if (sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
       else StorageCredentialsAnonymous.ANONYMOUS
 
 
@@ -102,16 +103,15 @@ private[io] object SFInternalStage {
   }
 
 
-
   private[io] final def createS3Client(
-      is256: Boolean,
-      masterKey: String,
-      queryId: String,
-      smkId: String,
-      awsId: String,
-      awsKey: String,
-      awsToken: String,
-      parallel: Option[Int] = None): AmazonS3Client = {
+                                        is256: Boolean,
+                                        masterKey: String,
+                                        queryId: String,
+                                        smkId: String,
+                                        awsId: String,
+                                        awsKey: String,
+                                        awsToken: String,
+                                        parallel: Option[Int] = None): AmazonS3Client = {
 
     val parallelism = parallel.getOrElse(DEFAULT_PARALLELISM)
 
@@ -148,9 +148,8 @@ private[io] object SFInternalStage {
   }
 
   private[io] final def parseEncryptionData(jsonEncryptionData: String):
-  (String, String) =
-  {
-    val mapper: ObjectMapper  = new ObjectMapper()
+  (String, String) = {
+    val mapper: ObjectMapper = new ObjectMapper()
     val encryptionDataNode: JsonNode = mapper.readTree(jsonEncryptionData)
     val iv: String = encryptionDataNode.findValue(AZ_IV).asText()
     val key: String = encryptionDataNode
@@ -163,11 +162,11 @@ private[io] object SFInternalStage {
                                             masterKey: String,
                                             metaData: util.Map[String, String],
                                             stageType: StageType
-      //meta: ObjectMetadata
+                                            //meta: ObjectMetadata
                                           ): InputStream = {
 
     val decodedKey = Base64.decode(masterKey)
-    val (key, iv)  =
+    val (key, iv) =
       stageType match {
         case StageType.S3 =>
           (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
@@ -180,14 +179,13 @@ private[io] object SFInternalStage {
       }
 
 
-
     if (key == null || iv == null)
       throw new SnowflakeSQLException(SqlState.INTERNAL_ERROR,
-                                      ErrorCode.INTERNAL_ERROR.getMessageCode,
-                                      "File " + "metadata incomplete")
+        ErrorCode.INTERNAL_ERROR.getMessageCode,
+        "File " + "metadata incomplete")
 
     val keyBytes: Array[Byte] = Base64.decode(key)
-    val ivBytes: Array[Byte]  = Base64.decode(iv)
+    val ivBytes: Array[Byte] = Base64.decode(iv)
 
     val queryStageMasterKey: SecretKey =
       new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
@@ -199,19 +197,19 @@ private[io] object SFInternalStage {
     // .length == fileKey.length
     //     (fileKeyBytes.length may be bigger due to padding)
     val fileKey =
-      new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+    new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
 
-    val dataCipher           = Cipher.getInstance(DATA_CIPHER)
+    val dataCipher = Cipher.getInstance(DATA_CIPHER)
     val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
     dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
     new CipherInputStream(stream, dataCipher)
   }
 
   private[io] final def getCipherAndAZMetaData(
-                                                       masterKey: String,
-                                                       queryId: String,
-                                                       smkId: String
-                                                     ): (Cipher, util.HashMap[String, String]) = {
+                                                masterKey: String,
+                                                queryId: String,
+                                                smkId: String
+                                              ): (Cipher, util.HashMap[String, String]) = {
 
 
     def buildEncryptionMetadataJSON(iv64: String, key64: String): String =
@@ -236,10 +234,10 @@ private[io] object SFInternalStage {
 
 
   private[io] final def getCipherAndS3Metadata(
-                                              masterKey: String,
-                                              queryId: String,
-                                              smkId: String
-                                              ):(Cipher, ObjectMetadata) = {
+                                                masterKey: String,
+                                                queryId: String,
+                                                smkId: String
+                                              ): (Cipher, ObjectMetadata) = {
     val (cipher, matDesc, encKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
     val meta = new ObjectMetadata()
     meta.addUserMetadata(AMZ_MATDESC, matDesc)
@@ -247,17 +245,18 @@ private[io] object SFInternalStage {
     meta.addUserMetadata(AMZ_IV, ivData)
     (cipher, meta)
   }
-  private final def getCipherAndMetadata(
-                                              masterKey: String,
-                                              queryId: String,
-                                              smkId: String): (Cipher, String, String, String) = {
 
-    val decodedKey   = Base64.decode(masterKey)
-    val keySize      = decodedKey.length
+  private final def getCipherAndMetadata(
+                                          masterKey: String,
+                                          queryId: String,
+                                          smkId: String): (Cipher, String, String, String) = {
+
+    val decodedKey = Base64.decode(masterKey)
+    val keySize = decodedKey.length
     val fileKeyBytes = new Array[Byte](keySize)
-    val fileCipher   = Cipher.getInstance(DATA_CIPHER)
-    val blockSz      = fileCipher.getBlockSize
-    val ivData       = new Array[Byte](blockSz)
+    val fileCipher = Cipher.getInstance(DATA_CIPHER)
+    val blockSz = fileCipher.getBlockSize
+    val ivData = new Array[Byte](blockSz)
 
     val secRnd = SecureRandom.getInstance("SHA1PRNG", "SUN")
     secRnd.nextBytes(new Array[Byte](10))
@@ -270,7 +269,7 @@ private[io] object SFInternalStage {
 
     fileCipher.init(Cipher.ENCRYPT_MODE, fileKey, iv)
 
-    val keyCipher           = Cipher.getInstance(KEY_CIPHER)
+    val keyCipher = Cipher.getInstance(KEY_CIPHER)
     val queryStageMasterKey = new SecretKeySpec(decodedKey, 0, keySize, AES)
 
     // Init cipher
@@ -280,16 +279,17 @@ private[io] object SFInternalStage {
     val matDesc =
       new MatDesc(smkId.toLong, queryId, keySize * 8)
 
-    (fileCipher, matDesc.toString, Base64.encodeAsString(encKeK: _*),Base64.encodeAsString(ivData: _*))
+    (fileCipher, matDesc.toString, Base64.encodeAsString(encKeK: _*), Base64.encodeAsString(ivData: _*))
   }
-
 
 
 }
 
 private[io] class SFInternalStage(isWrite: Boolean,
                                   jdbcWrapper: JDBCWrapper,
-                                  params: MergedParameters) {
+                                  params: MergedParameters,
+                                  stage: Option[String] = None
+                                 ) {
 
   import SFInternalStage._
 
@@ -300,10 +300,9 @@ private[io] class SFInternalStage(isWrite: Boolean,
     Utils.setLastPutCommand(command)
     Utils.setLastGetCommand(command)
 
-    if (!stageSet) setupStageArea()
     new SnowflakeFileTransferAgent(command,
-                                   connection.getSfSession,
-                                   new SFStatement(connection.getSfSession))
+      connection.getSfSession,
+      new SFStatement(connection.getSfSession))
   }
 
   private lazy val encryptionMaterials = sfAgent.getEncryptionMaterial
@@ -323,34 +322,34 @@ private[io] class SFInternalStage(isWrite: Boolean,
 
   //try get aws credentials
   private[io] lazy val awsId: Option[String] =
-    if(stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3)
       Option(stageCredentials.get("AWS_ID").toString)
     else None
 
   private[io] lazy val awsKey: Option[String] =
-    if(stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3)
       Option(stageCredentials.get("AWS_KEY").toString)
     else None
 
   private[io] lazy val awsToken: Option[String] =
-    if(stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3)
       Option(stageCredentials.get("AWS_TOKEN").toString)
     else None
 
   //try get azure credentials
 
   private[io] lazy val azureSAS: Option[String] =
-    if(stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE)
       Option(stageCredentials.get("AZURE_SAS_TOKEN").toString)
     else None
 
   private[io] lazy val azureEndpoint: Option[String] =
-    if(stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE)
       Option(stageInfo.getEndPoint)
     else None
 
   private[io] lazy val azureAccountName: Option[String] =
-    if(stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE)
       Option(stageInfo.getStorageAccount)
     else None
 
@@ -362,8 +361,8 @@ private[io] class SFInternalStage(isWrite: Boolean,
       srcMaterialsMap.asScala.toList.map {
         case (k, v) =>
           (k,
-           if (v != null) v.getQueryId else null,
-           if (v != null) v.getSmkId.toString else null)
+            if (v != null) v.getQueryId else null,
+            if (v != null) v.getSmkId.toString else null)
       }
     } else {
       encryptionMaterials.asScala map { encMat =>
@@ -388,7 +387,15 @@ private[io] class SFInternalStage(isWrite: Boolean,
   }
 
 
-  private val tempStage     = TEMP_STAGE_LOCATION
+  private lazy val tempStage: String =
+    stage match {
+      case Some(str) => str
+      case None =>
+        val name = TEMP_STAGE_LOCATION
+        jdbcWrapper.executeQueryInterruptibly(
+          connection, CREATE_TEMP_STAGE_STMT + name)
+        name
+    }
 
   private val dummyLocation = DUMMY_LOCATION
 
@@ -406,7 +413,6 @@ private[io] class SFInternalStage(isWrite: Boolean,
       comm
   }
 
-  private var stageSet: Boolean = false
 
   private[io] def closeConnection(): Unit = {
     SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(connection))
@@ -416,14 +422,11 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private[io] def getEncryptionMaterials = encryptionMaterials
 
   private[io] def setupStageArea(): String = {
-    jdbcWrapper.executeInterruptibly(connection,
-                                          CREATE_TEMP_STAGE_STMT + tempStage)
-    stageSet = true
     tempStage
   }
 
   private[io] def executeWithConnection(
-      connectionFunc: (Connection => Any)) = {
+                                         connectionFunc: (Connection => Any)) = {
     connectionFunc(connection)
   }
 }
