@@ -521,7 +521,7 @@ object Parameters {
 
     def streamingKeepFailedFiles: Boolean = isTrue(parameters(PARAM_STREAMING_KEEP_FAILED_FILES))
 
-    def isSslON: Boolean = isTrue(PARAM_SF_SSL)
+    def isSslON: Boolean = isTrue(sfSSL)
 
     def getPublicKeyPath: Option[String] = parameters.get(PARAM_PUBLIC_KEY_PATH)
 

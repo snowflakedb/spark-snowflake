@@ -17,8 +17,10 @@
 package net.snowflake.spark.snowflake.io
 
 import java.io.{InputStream, OutputStream}
+import java.net.URI
 import java.security.SecureRandom
 import java.sql.Connection
+import java.util
 import java.util.zip.GZIPOutputStream
 
 import javax.crypto.{Cipher, CipherOutputStream}
@@ -30,11 +32,13 @@ import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, B
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.Utils
-import net.snowflake.spark.snowflake.s3upload.{MultiPartOutputStream, StreamTransferManager}
+import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
@@ -50,6 +54,12 @@ object CloudStorageOperations {
   private final val KEY_CIPHER: String = "AES/ECB/PKCS5Padding"
   private final val AMZ_MATDESC = "x-amz-matdesc"
 
+  private final val AZ_ENCRYPTIONDATA = "encryptiondata"
+  private final val AZ_IV = "ContentEncryptionIV"
+  private final val AZ_KEY_WRAP = "WrappedContentKey"
+  private final val AZ_KEY = "EncryptedKey"
+  private final val AZ_MATDESC = "matdesc"
+
   private val log = LoggerFactory.getLogger(getClass)
 
   private[io] final def getCipherAndS3Metadata(
@@ -62,6 +72,33 @@ object CloudStorageOperations {
     meta.addUserMetadata(AMZ_MATDESC, matDesc)
     meta.addUserMetadata(AMZ_KEY, encKeK)
     meta.addUserMetadata(AMZ_IV, ivData)
+    (cipher, meta)
+  }
+
+  private[io] final def getCipherAndAZMetaData(
+                                                masterKey: String,
+                                                queryId: String,
+                                                smkId: String
+                                              ): (Cipher, util.HashMap[String, String]) = {
+
+
+    def buildEncryptionMetadataJSON(iv64: String, key64: String): String =
+      s"""
+         | {"EncryptionMode":"FullBlob",
+         | "WrappedContentKey":
+         | {"KeyId":"symmKey1","EncryptedKey":"$key64","Algorithm":"AES_CBC_256"},
+         | "EncryptionAgent":{"Protocol":"1.0","EncryptionAlgorithm":"AES_CBC_256"},
+         | "ContentEncryptionIV":"$iv64",
+         | "KeyWrappingMetadata":{"EncryptionLibrary":"Java 5.3.0"}}
+       """.stripMargin
+
+    val (cipher, matDesc, enKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
+
+    val meta = new util.HashMap[String, String]()
+
+    meta.put(AZ_MATDESC, matDesc)
+    meta.put(AZ_ENCRYPTIONDATA, buildEncryptionMetadataJSON(ivData, enKeK))
+
     (cipher, meta)
   }
 
@@ -116,7 +153,7 @@ object CloudStorageOperations {
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, propolueSql)
 
 
-    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
+    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
     val compress = param.sfCompress
     val stageName = stage
@@ -125,8 +162,29 @@ object CloudStorageOperations {
     param.rootTempDir match {
       //External Stage
       case azure_url(container, account, endpoint, path) =>
-        //todo
-        throw new UnsupportedOperationException("Not support azure in streaming")
+        require(param.azureSAS.isDefined, "missing Azure SAS")
+
+        val azureSAS = param.azureSAS.get
+
+        val sql =
+          s"""
+             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+             |url = 'azure://$account.$endpoint/$container/$path'
+             |credentials =
+             |(azure_sas_token='${azureSAS}')
+         """.stripMargin
+
+        DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
+
+        (AzureStorage(
+          containerName = container,
+          azureAccount = account,
+          azureEndPoint = endpoint,
+          azureSAS = azureSAS,
+          compress = compress,
+          pref = path
+        ),stageName)
+
       case s3_url(bucket, prefix) =>
         require(param.awsAccessKey.isDefined, "missing aws access key")
         require(param.awsSecretKey.isDefined, "missing aws secret key")
@@ -238,9 +296,42 @@ object CloudStorageOperations {
     new AmazonS3Client(awsCredentials, clientConfig)
   }
 
+  private[io] final def createAzureClient(
+                                           storageAccount: String,
+                                           endpoint: String,
+                                           sas: Option[String] = None
+                                         ): CloudBlobClient = {
+    val storageEndpoint: URI =
+      new URI("https",
+        s"$storageAccount.$endpoint/", null, null)
+    val azCreds =
+      if (sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
+      else StorageCredentialsAnonymous.ANONYMOUS
+
+    new CloudBlobClient(storageEndpoint, azCreds)
+  }
+
+}
+
+private class SingleElementIterator (fileName: String) extends Iterator[String] {
+
+  private var name: Option[String] = Some(fileName)
+
+  override def hasNext: Boolean = name.isDefined
+
+  override def next(): String = {
+    val t = name.get
+    name = None
+    t
+  }
 }
 
 sealed trait CloudStorage {
+
+  val pref: String
+
+  lazy val prefix: String =
+    if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
   def upload(data: RDD[String], format: SupportedFormat = SupportedFormat.CSV,
              dir: Option[String] = None): List[String]
@@ -253,6 +344,62 @@ sealed trait CloudStorage {
     fileNames.foreach(deleteFile)
 }
 
+case class AzureStorage(
+                         containerName: String,
+                         azureAccount: String,
+                         azureEndPoint: String,
+                         azureSAS: String,
+                         compress: Boolean = false,
+                         override val pref: String = ""
+                       ) extends CloudStorage {
+
+  override def upload(data: RDD[String],
+                      format: SupportedFormat = SupportedFormat.CSV,
+                      dir: Option[String]): List[String] = {
+    val directory: String =
+      dir match {
+        case Some(str: String) => str
+        case None => Random.alphanumeric take 10 mkString ""
+      }
+
+    val files = data.mapPartitions(rows => {
+
+      val azureClient: CloudBlobClient =
+        CloudStorageOperations
+          .createAzureClient(azureAccount, azureEndPoint, Some(azureSAS))
+
+      val fileName =
+        s"$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if (compress) ".gz" else ""}"
+
+      val container = azureClient.getContainerReference(containerName)
+      val blob = container.getBlockBlobReference(prefix.concat(fileName))
+
+
+      val outputStream: OutputStream = blob.openOutputStream()
+
+      while (rows.hasNext) {
+        outputStream.write(rows.next.getBytes("UTF-8"))
+        outputStream.write('\n')
+      }
+      outputStream.close()
+
+      new SingleElementIterator(fileName)
+    })
+
+    files.collect().toList
+  }
+
+
+  override def download(fileName: String): InputStream =
+    throw new NotImplementedError()
+
+  override def deleteFile(fileName: String): Unit =
+    CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndPoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
+}
+
 case class S3Storage(
                       bucketName: String,
                       awsId: String,
@@ -263,18 +410,15 @@ case class S3Storage(
                       smkId: Option[String] = None,
                       compress: Boolean = false,
                       is256: Boolean = false,
-                      pref: String = "",
+                      override val pref: String = "",
                       parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                     ) extends CloudStorage {
-
-
-  val prefix: String = if (pref.endsWith("/")) pref else pref + "/"
-
 
   //future work, replace io operation in RDD and writer
   override def upload(data: RDD[String],
                       format: SupportedFormat = SupportedFormat.CSV,
                       dir: Option[String] = None): List[String] = {
+
     val directory: String =
       dir match {
         case Some(str: String) => str
@@ -336,18 +480,7 @@ case class S3Storage(
           SnowflakeConnectorUtils.handleS3Exception(ex)
       }
 
-      new Iterator[String] {
-
-        private var name: Option[String] = Some(fileName)
-
-        override def hasNext: Boolean = name.isDefined
-
-        override def next(): String = {
-          val t = name.get
-          name = None
-          t
-        }
-      }
+      new SingleElementIterator(fileName)
     })
 
     files.collect().toList
@@ -355,24 +488,23 @@ case class S3Storage(
 
 
   //todo
-  override def download(fileName: String): InputStream = null
+  override def download(fileName: String): InputStream =
+    throw new NotImplementedError()
 
-  override def deleteFile(fileName: String): Unit = {
-    throw new UnsupportedOperationException()
-  }
+  override def deleteFile(fileName: String): Unit =
+    CloudStorageOperations
+      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .deleteObject(bucketName, prefix.concat(fileName))
 
-  //s3Client.deleteObject(bucketName, prefix.concat(fileName))
+  override def deleteFiles(fileNames: List[String]): Unit =
+    CloudStorageOperations
+      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .deleteObjects(
+        new DeleteObjectsRequest(bucketName)
+          .withKeys(fileNames.map(prefix.concat): _*)
+      )
 
-  override def deleteFiles(fileNames: List[String]): Unit = {
-    val s3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
-    s3Client.deleteObjects(
-      new DeleteObjectsRequest(bucketName)
-        .withKeys(fileNames.map(prefix.concat): _*)
-    )
-
-  }
 
 }
 
-//todo case class AzureStorage() extends CloudStorage
 //todo: google cloud, local file for testing?

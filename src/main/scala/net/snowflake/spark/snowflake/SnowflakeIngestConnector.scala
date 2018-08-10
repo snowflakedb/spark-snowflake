@@ -85,7 +85,7 @@ object SnowflakeIngestConnector {
     val accountPattern = "([^\\.]+).+".r
 
     param.sfURL.trim match {
-      case urlPattern(schemeStr, host, portStr) =>
+      case urlPattern(_, host, portStr) =>
         val scheme: String = if (param.isSslON) "https" else "http"
 
         val port: Int =
