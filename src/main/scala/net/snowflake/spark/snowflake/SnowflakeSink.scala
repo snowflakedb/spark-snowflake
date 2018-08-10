@@ -2,12 +2,11 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{CloudStorageOperations, SupportedFormat}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobEnd, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.snowflake.SparkFunctions.addShutdownHook
 import org.slf4j.LoggerFactory
 
 import scala.util.Random
@@ -70,7 +69,9 @@ class SnowflakeSink(
   /**
     * Create pipe, stage, and storage client
     */
-  def init(schema: StructType): Unit = {
+  def init(data: DataFrame): Unit = {
+
+    val schema = data.schema
 
     report // initialize report
 
@@ -120,18 +121,22 @@ class SnowflakeSink(
     log.debug(createPipeStatement)
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
 
-    //remove stage and pipe
-    addShutdownHook(()=>{
-      if(report.dropStage) dropStage(stageName)
-      dropPipe(pipeName.get)
-      println(report)
-    })
+    data.sparkSession.sparkContext.addSparkListener(
+      new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          super.onApplicationEnd(applicationEnd)
+          if (report.dropStage) dropStage(stageName)
+          dropPipe(pipeName.get)
+          println(report)
+        }
+      }
+    )
 
   }
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (pipeName.isEmpty) init(data.schema)
+    if (pipeName.isEmpty) init(data)
 
     //prepare data
     val rdd =
