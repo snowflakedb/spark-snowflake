@@ -60,10 +60,19 @@ class SnowflakeSink(
   private implicit lazy val ingestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
 
+  private lazy val report =
+    new SnowflakeStreamingReport(
+      stageName,
+      if(param.rootTempDir.isEmpty) None else Some(param.rootTempDir),
+      param.streamingKeepFailedFiles
+    )
+
   /**
     * Create pipe, stage, and storage client
     */
   def init(schema: StructType): Unit = {
+
+    report // initialize report
 
     //create table
     val schemaSql = DefaultJDBCWrapper.schemaString(schema)
@@ -113,8 +122,9 @@ class SnowflakeSink(
 
     //remove stage and pipe
     addShutdownHook(()=>{
-      dropStage(stageName)
+      if(report.dropStage) dropStage(stageName)
       dropPipe(pipeName.get)
+      println(report)
     })
 
   }
@@ -138,8 +148,12 @@ class SnowflakeSink(
     files.foreach(println)
     val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
 
+    report.addFailedFiles(failedFiles)
+
     //Purge files
-    CloudStorageOperations.deleteFiles(files)
+    if(param.streamingKeepFailedFiles)
+      CloudStorageOperations.deleteFiles(files.filterNot(failedFiles.toSet))
+    else CloudStorageOperations.deleteFiles(files)
 
   }
 

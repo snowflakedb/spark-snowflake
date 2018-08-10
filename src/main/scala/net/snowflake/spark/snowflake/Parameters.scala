@@ -110,7 +110,7 @@ object Parameters {
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
-    PARAM_STREAMING_KEEP_FAILED_FILES -> "off",
+    PARAM_STREAMING_KEEP_FAILED_FILES -> "on",
     PARAM_SF_SSL -> "on"
   )
 

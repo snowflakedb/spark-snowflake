@@ -7,7 +7,11 @@ import java.nio.charset.Charset
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.Row
 
+import scala.util.Random
+
 class StreamingSuite extends IntegrationSuiteBase {
+
+  val table = s"test_table_${Random.alphanumeric take 10 mkString ""}"
 
   private class NetworkService(
                                 val port: Int,
@@ -44,19 +48,17 @@ class StreamingSuite extends IntegrationSuiteBase {
     val loadedDf = sqlContext.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("query", s"select * from streaming_test order by value")
+      .option("query", s"select * from $table order by value")
       .load()
     checkAnswer(loadedDf, expectedAnswer)
   }
-
-  test("Test streaming writer") {
-
+  //manual test only
+  ignore("test failed files"){
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
-//    sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", params.awsAccessKey.get)
-//    sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", params.awsSecretKey.get)
-
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"create or replace table $table (value int)")
 
     val lines = spark.readStream
       .format("socket")
@@ -85,7 +87,55 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "streaming_test")
+      .option("dbtable", table)
+      .option("streaming_keep_failed_files", "on")
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .start()
+
+
+    query.awaitTermination(100000)
+
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"drop table $table")
+
+  }
+
+  test("Test streaming writer") {
+
+    val spark = sqlContext.sparkSession
+    import spark.implicits._
+
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"create or replace table $table (value string)")
+
+    val lines = spark.readStream
+      .format("socket")
+      .option("host", "localhost")
+      .option("port", 5678)
+      .load()
+    val words = lines.as[String].flatMap(_.split(" "))
+
+    val checkpoint = "check"
+    removeDirectory(new File(checkpoint))
+
+    new Thread(new NetworkService(
+      5678,
+      Seq("one two",
+        "three four five",
+        "six seven eight night ten",
+        "1 2 3 4 5",
+        "6 7 8 9 0"),
+      sleepBeforeAll = 5,
+      sleepAfterAll = 10,
+      sleepAfterEach = 5
+    )).start()
+
+
+    val query = words.writeStream
+      .outputMode("append")
+      .option("checkpointLocation", checkpoint)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", table)
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
@@ -114,6 +164,9 @@ class StreamingSuite extends IntegrationSuiteBase {
       Row("three"),
       Row("two")
     ))
+
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"drop table $table")
 
   }
 }
