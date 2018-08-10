@@ -179,11 +179,11 @@ object CloudStorageOperations {
         (AzureStorage(
           containerName = container,
           azureAccount = account,
-          azureEndPoint = endpoint,
+          azureEndpoint = endpoint,
           azureSAS = azureSAS,
           compress = compress,
           pref = path
-        ),stageName)
+        ), stageName)
 
       case s3_url(bucket, prefix) =>
         require(param.awsAccessKey.isDefined, "missing aws access key")
@@ -222,13 +222,11 @@ object CloudStorageOperations {
         val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
         val masterKey = stageManager.masterKey
         val stageLocation = stageManager.stageLocation
+        val url = "([^/]+)/?(.*)".r
+        val url(bucket, path) = stageLocation
 
         stageManager.stageType match {
           case StageType.S3 =>
-            val url = "([^/]+)/?(.*)".r
-
-            val url(bucket, path) = stageLocation
-
             val awsId = stageManager.awsId
             val awsKey = stageManager.awsKey
             val awsToken = stageManager.awsToken
@@ -246,10 +244,24 @@ object CloudStorageOperations {
             ), stageName)
 
           case StageType.AZURE =>
-            //todo
-            throw new UnsupportedOperationException(
-              "Not support Azure stage"
-            )
+
+            val azureSAS = stageManager.azureSAS.get
+            val azureAccount = stageManager.azureAccountName.get
+            val azureEndpoint = stageManager.azureEndpoint.get
+
+            (AzureStorage(
+              containerName = bucket,
+              azureAccount = azureAccount,
+              azureEndpoint = azureEndpoint,
+              azureSAS = azureSAS,
+              masterKey = Some(masterKey),
+              queryId = Some(queryId),
+              smkId = Some(smkId),
+              compress = compress,
+              pref = path
+            ), stageName)
+
+
           case _ =>
             throw new UnsupportedOperationException(
               s"Only support s3 or Azure stage, stage types: ${stageManager.stageType}"
@@ -313,7 +325,7 @@ object CloudStorageOperations {
 
 }
 
-private class SingleElementIterator (fileName: String) extends Iterator[String] {
+private class SingleElementIterator(fileName: String) extends Iterator[String] {
 
   private var name: Option[String] = Some(fileName)
 
@@ -347,8 +359,11 @@ sealed trait CloudStorage {
 case class AzureStorage(
                          containerName: String,
                          azureAccount: String,
-                         azureEndPoint: String,
+                         azureEndpoint: String,
                          azureSAS: String,
+                         masterKey: Option[String] = None,
+                         queryId: Option[String] = None,
+                         smkId: Option[String] = None,
                          compress: Boolean = false,
                          override val pref: String = ""
                        ) extends CloudStorage {
@@ -366,7 +381,7 @@ case class AzureStorage(
 
       val azureClient: CloudBlobClient =
         CloudStorageOperations
-          .createAzureClient(azureAccount, azureEndPoint, Some(azureSAS))
+          .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
 
       val fileName =
         s"$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if (compress) ".gz" else ""}"
@@ -374,8 +389,17 @@ case class AzureStorage(
       val container = azureClient.getContainerReference(containerName)
       val blob = container.getBlockBlobReference(prefix.concat(fileName))
 
-
-      val outputStream: OutputStream = blob.openOutputStream()
+      val outputStream: OutputStream =
+        if (masterKey.isDefined) {
+          val (cipher, meta) =
+            CloudStorageOperations
+              .getCipherAndAZMetaData(masterKey.get, queryId.get, smkId.get)
+          blob.setMetadata(meta)
+          val encryptedStream = new CipherOutputStream(blob.openOutputStream(), cipher)
+          if(compress) new GZIPOutputStream(encryptedStream)
+          else encryptedStream
+        }
+        else blob.openOutputStream()
 
       while (rows.hasNext) {
         outputStream.write(rows.next.getBytes("UTF-8"))
@@ -395,9 +419,20 @@ case class AzureStorage(
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndPoint, Some(azureSAS))
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
+
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    val container =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+
+    fileNames
+      .map(prefix.concat)
+      .foreach(container.getBlockBlobReference(_).deleteIfExists())
+  }
 }
 
 case class S3Storage(
