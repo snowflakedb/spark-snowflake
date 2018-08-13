@@ -44,6 +44,9 @@ import org.slf4j.LoggerFactory
 
 import scala.util.Random
 
+
+//todo: replace all storage operations by the methods in this class
+
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
   private[io] final val S3_MAX_RETRIES = 3
