@@ -115,6 +115,8 @@ class StreamingSuite extends IntegrationSuiteBase {
       .load()
     val words = lines.as[String].flatMap(_.split(" "))
 
+    val output = words.toDF("VALUE")
+
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
@@ -131,7 +133,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     )).start()
 
 
-    val query = words.writeStream
+    val query = output.writeStream
       .outputMode("append")
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)

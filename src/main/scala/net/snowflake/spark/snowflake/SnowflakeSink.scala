@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{CloudStorageOperations, SupportedFormat}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobEnd, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
@@ -19,10 +19,6 @@ class SnowflakeSink(
                    ) extends Sink {
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
-  private val STAGE_TOKEN = "STAGE"
-
-  //todo: change to a large number
-  private val PIPE_LIFETIME: Long = 100
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -51,6 +47,8 @@ class SnowflakeSink(
       )
 
   private val tableName = param.table.get
+
+  private lazy val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString)
 
   private var pipeName: Option[String] = None
 
@@ -92,6 +90,76 @@ class SnowflakeSink(
     pipeName =
       Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_${Random.alphanumeric take 10 mkString ""}")
 
+    val createPipeStatement =
+      s"""
+         |create or replace pipe ${pipeName.get}
+         |as ${copySql(format)}
+         |""".stripMargin
+    log.debug(createPipeStatement)
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
+
+    data.sparkSession.sparkContext.addSparkListener(
+      new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          super.onApplicationEnd(applicationEnd)
+          if (report.dropStage) dropStage(stageName)
+          dropPipe(pipeName.get)
+          println(report)
+        }
+      }
+    )
+
+  }
+
+  /**
+    * Generate the COPY SQL command for creating pipe only
+    */
+  private def copySql(
+                       format: SupportedFormat
+                     ): String = {
+
+    def getMappingToString(list: Option[List[(Int, String)]]): String = {
+      if (format == SupportedFormat.JSON)
+        s"(${tableSchema.fields.map(_.name).mkString(",")})"
+      else if(list.isEmpty || list.get.isEmpty) ""
+      else
+        s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+    }
+
+    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
+      if(format == SupportedFormat.JSON){
+        val names = tableSchema.fields.map(x=>"parse_json($1):".concat(x.name)).mkString(",")
+        s"from (select $names $from tmp)"
+      }
+      else if (list.isEmpty || list.get.isEmpty) from
+      else
+        s"from (select ${list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
+
+    }
+
+    val fromString = s"FROM @$stageName"
+
+    val mappingList: Option[List[(Int, String)]] = param.columnMap match {
+      case Some(map) =>
+        Some(map.toList.map {
+          case (key, value) =>
+            try {
+              (tableSchema.fieldIndex(key) + 1, value)
+            } catch {
+              case e: Exception => {
+                log.error("Error occurred while column mapping: " + e)
+                throw e
+              }
+            }
+        })
+
+      case None => None
+    }
+
+    val mappingToString = getMappingToString(mappingList)
+
+    val mappingFromString = getMappingFromString(mappingList, fromString)
+
     val formatString =
       format match {
         case SupportedFormat.CSV =>
@@ -111,28 +179,14 @@ class SnowflakeSink(
              |)
            """.stripMargin
       }
-    val createPipeStatement =
-      s"""
-         |create or replace pipe ${pipeName.get}
-         |as copy into $tableName
-         |from @$stageName
-         |$formatString
-         |""".stripMargin
-    log.debug(createPipeStatement)
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
 
-    data.sparkSession.sparkContext.addSparkListener(
-      new SparkListener {
-        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-          super.onApplicationEnd(applicationEnd)
-          if (report.dropStage) dropStage(stageName)
-          dropPipe(pipeName.get)
-          println(report)
-        }
-      }
-    )
-
+    s"""
+       |COPY INTO $tableName $mappingToString
+       |$mappingFromString
+       |$formatString
+    """.stripMargin.trim
   }
+
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
