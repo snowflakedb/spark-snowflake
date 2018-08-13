@@ -161,11 +161,6 @@ private[io] object StageWriter {
     val targetTable = if (saveMode == SaveMode.Overwrite
       && params.useStagingTable) tempTable else table
 
-    // Load the temporary data into the new file
-    val copyStatement =
-      copySql(sqlContext, data, schema, saveMode, params,
-        targetTable, file, tempStage, format)
-
     try {
       //purge tables when overwriting
       if (saveMode == SaveMode.Overwrite &&
@@ -183,6 +178,11 @@ private[io] object StageWriter {
 
       //pre actions
       Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
+
+      // Load the temporary data into the new file
+      val copyStatement =
+        copySql(sqlContext, data, schema, saveMode, params,
+          targetTable, file, tempStage, format, conn)
 
       //copy
       log.debug(Utils.sanitizeQueryText(copyStatement))
@@ -254,30 +254,40 @@ private[io] object StageWriter {
                        table: TableName,
                        file: String,
                        tempStage: String,
-                       format: SupportedFormat
+                       format: SupportedFormat,
+                       conn: Connection
                      ): String = {
 
     if (saveMode != SaveMode.Append && params.columnMap.isDefined)
       throw new UnsupportedOperationException("The column mapping only works in append mode.")
 
-    def getMappingToString(list: Option[List[(Int, String)]]): String = {
-      if (format == SupportedFormat.JSON)
-        s"(${schema.fields.map(_.name).mkString(",")})"
-      else if(list.isEmpty || list.get.isEmpty) ""
-      else
-        s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
-    }
-
-    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
-      if(format == SupportedFormat.JSON){
-        val names = schema.fields.map(x=>"parse_json($1):".concat(x.name)).mkString(",")
-        s"from (select $names $from tmp)"
+    def getMappingToString(list: Option[List[(Int, String)]]): String =
+      format match {
+        case SupportedFormat.JSON =>
+          val tableSchema = DefaultJDBCWrapper.resolveTable(conn, table.name)
+          if (list.isEmpty || list.get.isEmpty)
+            s"(${tableSchema.fields.map(_.name).mkString(",")})"
+          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+        case SupportedFormat.CSV =>
+          if (list.isEmpty || list.get.isEmpty) ""
+          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
       }
-      else if (list.isEmpty || list.get.isEmpty) from
-      else
-        s"from (select ${list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
 
-    }
+
+    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
+      format match {
+        case SupportedFormat.JSON =>
+          if (list.isEmpty || list.get.isEmpty) {
+            val names = schema.fields.map(x => "parse_json($1):".concat(x.name)).mkString(",")
+            s"from (select $names $from tmp)"
+          }
+          else
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(schema(x._1-1).name)).mkString(", ")} $from tmp)"
+        case SupportedFormat.CSV =>
+          if (list.isEmpty || list.get.isEmpty) from
+          else
+            s"from (select ${list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
+      }
 
     val fromString = s"FROM @$tempStage/$file"
 
