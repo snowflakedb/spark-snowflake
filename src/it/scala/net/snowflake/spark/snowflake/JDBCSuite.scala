@@ -26,25 +26,46 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     conn.createTable(name, schema, false, false)
 
-    assert(conn.tableExists(name))
-
-    conn.dropTable(name)
+    assert(conn.dropTable(name))
 
     conn.createTable(name, schema, true, true)
 
-    assert(conn.tableExists(name))
-
-    conn.dropTable(name)
+    assert(conn.dropTable(name))
 
     conn.createTable(name, schema, false, true)
 
-    assert(conn.tableExists(name))
+    assert(conn.dropTable(name))
 
-    conn.dropTable(name)
+    assert(!conn.dropTable(name))
 
   }
 
   test("create and drop stage") {
+
+    val name = s"spark_test_stage_$randomSuffix"
+
+    conn.createStage(name, overwrite = false, temporary = false)
+
+    assert(conn.dropStage(name))
+
+    assert(!conn.dropStage(name))
+
+    conn.createStage(name, overwrite = true, temporary = true)
+
+    assert(conn.dropStage(name))
+
+    assert(!conn.dropStage(name))
+
+    conn.createStage(
+      name,
+      params.storagePath,
+      params.awsAccessKey,
+      params.awsSecretKey,
+      params.azureSAS,
+      false,
+      true
+    )
+    assert(conn.dropStage(name))
 
   }
 

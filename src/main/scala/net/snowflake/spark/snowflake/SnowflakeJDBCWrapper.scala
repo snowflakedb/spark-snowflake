@@ -431,10 +431,17 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
     }
 
-    def dropTable(name: String): Unit = {
+    /**
+      * Drop a table
+      * @param name table name
+      * @return true if table dropped, false if the given table not exists
+      */
+    def dropTable(name: String): Boolean = {
       val statement = connection.prepareStatement("drop table identifier(?)")
       statement.setString(1, name)
-      executePreparedQueryInterruptibly(statement)
+      Try {
+        executePreparedQueryInterruptibly(statement)
+      }.isSuccess
     }
 
     /**
@@ -477,6 +484,21 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       val statement = connection.prepareStatement(sql)
       statement.setString(1, name)
       executePreparedQueryInterruptibly(statement)
+    }
+
+    /**
+      * Drop a stage
+      * @param name stage name
+      * @return true if stage dropped, false if the given stage not exists.
+      */
+    def dropStage(name: String): Boolean = {
+      val statement = connection.prepareStatement(
+        s"drop stage identifier(?)"
+      )
+      statement.setString(1, name)
+      Try{
+        executePreparedQueryInterruptibly(statement)
+      }.isSuccess
     }
 
   }
