@@ -51,6 +51,7 @@ private[snowflake] class JDBCWrapper {
     log.debug("Creating a new ExecutionContext")
     val threadFactory = new ThreadFactory {
       private[this] val count = new AtomicInteger()
+
       override def newThread(r: Runnable) = {
         val thread = new Thread(r)
         thread.setName(s"spark-snowflake-JDBCWrapper-${count.incrementAndGet}")
@@ -65,9 +66,9 @@ private[snowflake] class JDBCWrapper {
     * Takes a (schema, table) specification and returns the table's Catalyst
     * schema.
     *
-    * @param conn A JDBC connection to the database.
+    * @param conn  A JDBC connection to the database.
     * @param table The table name of the desired table.  This may also be a
-    *   SQL query wrapped in parentheses.
+    *              SQL query wrapped in parentheses.
     * @return A StructType giving the table's Catalyst schema.
     * @throws SQLException if the table specification is garbage.
     * @throws SQLException if the table contains an unsupported type.
@@ -89,13 +90,13 @@ private[snowflake] class JDBCWrapper {
         val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
         val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
         fields(i) = StructField(
-                                // Add quotes around column names if Snowflake would usually require them.
-                                if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
-                                  columnName
-                                else
-                                  s""""$columnName"""",
-                                columnType,
-                                nullable)
+          // Add quotes around column names if Snowflake would usually require them.
+          if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
+            columnName
+          else
+            s""""$columnName"""",
+          columnType,
+          nullable)
         i = i + 1
       }
       new StructType(fields)
@@ -105,7 +106,7 @@ private[snowflake] class JDBCWrapper {
   }
 
   /**
-    *  Get a connection based on the provided parameters
+    * Get a connection based on the provided parameters
     */
   def getConnector(params: MergedParameters): Connection = {
     // Derive class name
@@ -158,16 +159,18 @@ private[snowflake] class JDBCWrapper {
     def esc(s: String): String = {
       s.replace("\"", "").replace("\\", "")
     }
+
     val sparkAppName = SparkContext.getOrCreate().getConf.get("spark.app.name", "")
     val scalaVersion = scala.tools.nsc.Properties.versionString
     val javaVersion = System.getProperty("java.version", "UNKNOWN")
-    val snowflakeClientInfo = s""" {
-        | "spark.version" : "${esc(SPARK_VERSION)}",
-        | "spark.snowflakedb.version" : "${esc(SPARK_SNOWFLAKEDB_VERSION)}",
-        | "spark.app.name" : "${esc(sparkAppName)}",
-        | "scala.version" : "${esc(scalaVersion)}",
-        | "java.version" : "${esc(javaVersion)}"
-        |}""".stripMargin
+    val snowflakeClientInfo =
+      s""" {
+         | "spark.version" : "${esc(SPARK_VERSION)}",
+         | "spark.snowflakedb.version" : "${esc(SPARK_SNOWFLAKEDB_VERSION)}",
+         | "spark.app.name" : "${esc(sparkAppName)}",
+         | "scala.version" : "${esc(scalaVersion)}",
+         | "java.version" : "${esc(javaVersion)}"
+         |}""".stripMargin
     log.debug(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
@@ -185,7 +188,7 @@ private[snowflake] class JDBCWrapper {
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
   def schemaString(schema: StructType): String = {
-    schema.fields.map( field=>{
+    schema.fields.map(field => {
       val name: String = Utils.ensureQuoted(field.name)
       val `type`: String = schemaConversion(field)
       val nullable: String = if (field.nullable) "" else "NOT NULL"
@@ -218,14 +221,13 @@ private[snowflake] class JDBCWrapper {
       case _: StructType | _: ArrayType | _: MapType => "VARIANT"
       case _ =>
         throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
-  }
+    }
 
 
-
-
-/**
+  /**
     * Returns true if the table already exists in the JDBC database.
     */
+  @deprecated
   def tableExists(conn: Connection, table: String): Boolean = {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems, considering "table" could also include the database name.
@@ -238,8 +240,8 @@ private[snowflake] class JDBCWrapper {
     executeInterruptibly(statement,
       {
         stmt: Statement =>
-        val prepStmt = stmt.asInstanceOf[PreparedStatement]
-        prepStmt.execute()
+          val prepStmt = stmt.asInstanceOf[PreparedStatement]
+          prepStmt.execute()
       })
   }
 
@@ -251,8 +253,8 @@ private[snowflake] class JDBCWrapper {
     executeInterruptibly(statement,
       {
         stmt: Statement =>
-        val prepStmt = stmt.asInstanceOf[PreparedStatement]
-        prepStmt.executeQuery()
+          val prepStmt = stmt.asInstanceOf[PreparedStatement]
+          prepStmt.executeQuery()
       })
   }
 
@@ -317,10 +319,14 @@ private[snowflake] class JDBCWrapper {
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY => null
-      case java.sql.Types.BIGINT => if (signed) { LongType } else { DecimalType(20, 0) }
-//      case java.sql.Types.BINARY        => BinaryType
-//      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
-//      case java.sql.Types.BLOB          => BinaryType
+      case java.sql.Types.BIGINT => if (signed) {
+        LongType
+      } else {
+        DecimalType(20, 0)
+      }
+      //      case java.sql.Types.BINARY        => BinaryType
+      //      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
+      //      case java.sql.Types.BLOB          => BinaryType
       case java.sql.Types.BOOLEAN => BooleanType
       case java.sql.Types.CHAR => StringType
       case java.sql.Types.CLOB => StringType
@@ -337,10 +343,14 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.DISTINCT => null
       case java.sql.Types.DOUBLE => DoubleType
       case java.sql.Types.FLOAT => FloatType
-      case java.sql.Types.INTEGER => if (signed) { IntegerType } else { LongType }
+      case java.sql.Types.INTEGER => if (signed) {
+        IntegerType
+      } else {
+        LongType
+      }
       case java.sql.Types.JAVA_OBJECT => null
       case java.sql.Types.LONGNVARCHAR => StringType
-//      case java.sql.Types.LONGVARBINARY => BinaryType
+      //      case java.sql.Types.LONGVARBINARY => BinaryType
       case java.sql.Types.LONGVARCHAR => StringType
       case java.sql.Types.NCHAR => StringType
       case java.sql.Types.NCLOB => StringType
@@ -355,10 +365,10 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.SMALLINT => IntegerType
       case java.sql.Types.SQLXML => StringType // Snowflake-todo: ?
       case java.sql.Types.STRUCT => StringType // Snowflake-todo: ?
-//      case java.sql.Types.TIME          => TimestampType
+      //      case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIMESTAMP => TimestampType
       case java.sql.Types.TINYINT => IntegerType
-//      case java.sql.Types.VARBINARY     => BinaryType
+      //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType
       case _ => null
       // scalastyle:on
@@ -368,7 +378,107 @@ private[snowflake] class JDBCWrapper {
     answer
   }
 
+  @deprecated
   def getTelemetry(conn: Connection): Telemetry = createTelemetry(conn)
 }
 
-private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper
+private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
+
+  implicit class DataBaseOperations(connection: Connection) {
+
+    /**
+      * @return telemetry connector
+      */
+    def getTelemetry: Telemetry = createTelemetry(connection)
+
+    /**
+      * Create a table
+      *
+      * @param name      table name
+      * @param schema    table schema
+      * @param overwrite use "create or replace" if true,
+      *                  otherwise, use "create if not exists"
+      */
+    def createTable(
+                     name: String,
+                     schema: StructType,
+                     overwrite: Boolean = false,
+                     temporary: Boolean = false
+                   ): Unit = {
+
+      val schemaSql = schemaString(schema)
+      val statement =
+        if (overwrite) connection.prepareStatement(
+          s"""create or replace ${if (temporary) "temporary" else ""} table identifier(?) ($schemaSql)""")
+        else connection.prepareStatement(
+          s"""create ${if (temporary) "temporary" else ""} table if not exists identifier(?) ($schemaSql)""")
+
+      statement.setString(1, name)
+      executePreparedQueryInterruptibly(statement)
+    }
+
+    /**
+      * @param name table name
+      * @return true if table exists, otherwise false
+      */
+    def tableExists(name: String): Boolean = {
+      val statement = connection.prepareStatement(
+        "select 1 from identifier(?) limit 1"
+      )
+      statement.setString(1, name)
+      Try {
+        executePreparedQueryInterruptibly(statement)
+      }.isSuccess
+    }
+
+    def dropTable(name: String): Unit = {
+      val statement = connection.prepareStatement("drop table identifier(?)")
+      statement.setString(1, name)
+      executePreparedQueryInterruptibly(statement)
+    }
+
+    /**
+      * Create an internal stage if location is None,
+      * otherwise create an external stage
+      *
+      * @param name         stage name
+      * @param location     storage path for external stage
+      * @param awsAccessKey aws access key
+      * @param awsSecretKey aws secret key
+      * @param azureSAS     azure sas
+      * @param overwrite    use "create or replace stage" if true,
+      *                     otherwise use " create stage if not exists"
+      * @param temporary    create temporary stage if it is true
+      */
+    def createStage(
+                     name: String,
+                     location: Option[String] = None,
+                     awsAccessKey: Option[String] = None,
+                     awsSecretKey: Option[String] = None,
+                     azureSAS: Option[String] = None,
+                     overwrite: Boolean = false,
+                     temporary: Boolean = false
+                   ): Unit = {
+
+      val stageSql =
+        if (overwrite) s"create or replace ${if (temporary) "temporary" else ""} stage identifier(?)"
+        else s"create ${if (temporary) "temporary" else ""} stage if not exists identifier(?)"
+      val sql = location match {
+        case Some(path) =>
+          val externalStage = s"$stageSql url='$path'"
+          azureSAS match {
+            case Some(sas) =>
+              s"$externalStage credentials = (azure_sas_token = '$sas')"
+            case None =>
+              s"$externalStage credentials = (aws_key_id = '${awsAccessKey.get}' aws_secret_key = '${awsSecretKey.get}')"
+          }
+        case None => stageSql
+      }
+      val statement = connection.prepareStatement(sql)
+      statement.setString(1, name)
+      executePreparedQueryInterruptibly(statement)
+    }
+
+  }
+
+}
