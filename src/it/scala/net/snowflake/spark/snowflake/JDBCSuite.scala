@@ -69,5 +69,15 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   }
 
+  ignore ("test") {
+    val statement  =  conn.prepareStatement(
+      "create or replace table identifier(?) (num int)"
+    )
+
+    statement.setString(1, "\"abc\"")
+
+    DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+  }
+
 
 }

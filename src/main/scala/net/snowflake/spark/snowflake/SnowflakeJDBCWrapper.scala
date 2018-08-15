@@ -501,6 +501,10 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
     }
 
+    def createPipe(name: String): Unit = {}
+
+    def dropPipe(name: String): Boolean = false
+
   }
 
 }
