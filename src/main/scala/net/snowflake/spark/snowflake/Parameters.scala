@@ -22,6 +22,8 @@ import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory
 
+import scala.util.Try
+
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
   * defaults.
@@ -74,6 +76,8 @@ object Parameters {
   val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
   val PARAM_STREAMING_KEEP_FAILED_FILES = knownParam("streaming_keep_failed_files")
+  val PARAM_STREAMING_WAITING_TIME = knownParam("streaming_waiting_time")
+  val PARAM_STREAMING_FAST_MODE = knownParam("streaming_fast_mode")
   val PARAM_PUBLIC_KEY_PATH    = knownParam("public_key_path")
   val PARAM_PRIVATE_KEY_PATH   = knownParam("private_key_path")
 
@@ -110,6 +114,8 @@ object Parameters {
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
+    PARAM_STREAMING_FAST_MODE -> "off",
+    PARAM_STREAMING_WAITING_TIME -> "120",
     PARAM_STREAMING_KEEP_FAILED_FILES -> "on",
     PARAM_SF_SSL -> "on"
   )
@@ -526,6 +532,11 @@ object Parameters {
     def getPublicKeyPath: Option[String] = parameters.get(PARAM_PUBLIC_KEY_PATH)
 
     def getPrivateKeyPath: Option[String] = parameters.get(PARAM_PRIVATE_KEY_PATH)
+
+    def streamingFastMode: Boolean = isTrue(parameters(PARAM_STREAMING_FAST_MODE))
+
+    def streamingWaitingTime: Long =
+      Try(parameters(PARAM_STREAMING_WAITING_TIME).toLong).getOrElse(120)
 
   }
 }
