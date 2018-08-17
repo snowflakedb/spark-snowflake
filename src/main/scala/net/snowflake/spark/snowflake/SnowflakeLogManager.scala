@@ -1,8 +1,9 @@
 package net.snowflake.spark.snowflake
 
 import java.nio.charset.Charset
+import java.util.function.Consumer
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
 import net.snowflake.spark.snowflake.SnowflakeLogType.SnowflakeLogType
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
@@ -18,13 +19,14 @@ private[snowflake] object SnowflakeLogManager {
   val FAILED_FILE_NAMES = "failedFileNames"
   val LOADED_FILE_NAMES = "loadedFileNames"
   val LOG_DIR = "log"
+  val PIPE_NAME = "pipeName"
 
   implicit val mapper: ObjectMapper = new ObjectMapper()
 
   def getLogObject(json: String): SnowflakeLog = getLogObject(mapper.readTree(json).asInstanceOf[ObjectNode])
 
   def getLogObject(node: ObjectNode): SnowflakeLog =
-    if(node.has(LOG_TYPE)) {
+    if (node.has(LOG_TYPE)) {
       SnowflakeLogType.withName(node.get(LOG_TYPE).asText()) match {
         case SnowflakeLogType.STREAMING_BATCH_LOG =>
           StreamingBatchLog(node)(mapper)
@@ -72,19 +74,22 @@ case class StreamingBatchLog(override val node: ObjectNode)
 
   private lazy val batchId: Long = node.get(SnowflakeLogManager.BATCH_ID).asLong()
 
-//  def setFailedFiles(fileNames: List[String]): StreamingBatchLog = {
-//    val arr = node.putArray(SnowflakeLogManager.FAILED_FILE_NAMES)
-//    fileNames.foreach(arr.add)
-//    this
-//  }
-//
-//  def addFailedFiles(fileNames: List[String]): StreamingBatchLog =
-//    if (node.has(SnowflakeLogManager.FAILED_FILE_NAMES)) {
-//      val arr = node.get(SnowflakeLogManager.FAILED_FILE_NAMES).asInstanceOf[ArrayNode]
-//      fileNames.foreach(arr.add)
-//      this
-//    }
-//    else setFailedFiles(fileNames)
+
+  private def getListFromJson(name: String): List[String] = {
+    if (node.has(name)) {
+      var result: List[String] = Nil
+      val arr = node.get(name).asInstanceOf[ArrayNode]
+      (0 until arr.size()).foreach(x => result = arr.get(x).asText :: result)
+      result
+    } else Nil
+  }
+
+
+  def getFileList: List[String] = getListFromJson(SnowflakeLogManager.FILE_NAMES)
+
+  def getLoadedFileList: List[String] = getListFromJson(SnowflakeLogManager.LOADED_FILE_NAMES)
+
+  def getPipeName: String = node.get(SnowflakeLogManager.PIPE_NAME).asText()
 
   def setLoadedFileNames(fileNames: List[String]): StreamingBatchLog = {
     val arr = node.putArray(SnowflakeLogManager.LOADED_FILE_NAMES)
@@ -114,16 +119,17 @@ object StreamingBatchLog {
   implicit val mapper: ObjectMapper = SnowflakeLogManager.mapper
   implicit val isCompressed: Boolean = false
 
-  def apply(batchId: Long, fileNames: List[String]): StreamingBatchLog = {
+  def apply(batchId: Long, fileNames: List[String], pipeName: String): StreamingBatchLog = {
     val node = mapper.createObjectNode()
     node.put(SnowflakeLogManager.BATCH_ID, batchId)
+    node.put(SnowflakeLogManager.PIPE_NAME, pipeName)
     node.put(SnowflakeLogManager.LOG_TYPE, SnowflakeLogType.STREAMING_BATCH_LOG.toString)
     val arr = node.putArray(SnowflakeLogManager.FILE_NAMES)
     fileNames.foreach(arr.add)
     StreamingBatchLog(node)(mapper)
   }
 
-  def fileName(batchId: Long): String = s"${batchId/GROUP_SIZE}/${batchId%GROUP_SIZE}.json"
+  def fileName(batchId: Long): String = s"${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
 
   def logExists(batchId: Long)(implicit storage: CloudStorage): Boolean =
     storage.fileExists(SnowflakeLogManager.getFullPath(fileName(batchId)))
@@ -132,17 +138,17 @@ object StreamingBatchLog {
     val inputStream = storage.download(SnowflakeLogManager.getFullPath(fileName(batchId)))
     val buffer = ArrayBuffer.empty[Byte]
 
-    var c:Int = inputStream.read()
-    while(c != -1){
+    var c: Int = inputStream.read()
+    while (c != -1) {
       buffer.append(c.toByte)
       c = inputStream.read()
     }
-    try{
-    StreamingBatchLog(
-      mapper.readTree(
-        new String(buffer.toArray, Charset.forName("UTF-8"))
-      ).asInstanceOf[ObjectNode]
-    )(mapper)
+    try {
+      StreamingBatchLog(
+        mapper.readTree(
+          new String(buffer.toArray, Charset.forName("UTF-8"))
+        ).asInstanceOf[ObjectNode]
+      )(mapper)
     } catch {
       case _: Exception => throw new IllegalArgumentException(s"log file: ${fileName(batchId)} is broken")
     }

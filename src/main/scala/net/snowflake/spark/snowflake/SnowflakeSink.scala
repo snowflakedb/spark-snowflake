@@ -181,36 +181,38 @@ class SnowflakeSink(
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (StreamingBatchLog.logExists(batchId)) {
+    val (files, batchLog) =
+      if (!StreamingBatchLog.logExists(batchId)) {
+        if (pipeName.isEmpty) init(data)
 
-      println(StreamingBatchLog.loadLog(batchId).toString)
-    }
-    else {
-      if (pipeName.isEmpty) init(data)
+        //prepare data
+        val rdd =
+          DefaultSnowflakeWriter.dataFrameToRDD(
+            sqlContext,
+            streamingToNonStreaming(sqlContext, data),
+            param,
+            format)
 
-      //prepare data
-      val rdd =
-        DefaultSnowflakeWriter.dataFrameToRDD(
-          sqlContext,
-          streamingToNonStreaming(sqlContext, data),
-          param,
-          format)
+        //write to storage
+        val fileList = CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
 
-      //write to storage
-      val files =
-        CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
+        //write file names to log file
+        val batchLog = StreamingBatchLog(batchId, fileList, pipeName.get)
+        batchLog.save
 
-      //write file names to log file
-      val batchLog = StreamingBatchLog(batchId, files)
-      batchLog.save
+        (fileList, batchLog)
+      } else {
+        val batchLog = StreamingBatchLog.loadLog(batchId)
+        val fileList = batchLog.getFileList
+        //todo: check pipe existence, if not create a new one
+        pipeName = Some(batchLog.getPipeName)
+        (fileList, batchLog)
+      }
 
-      files.foreach(println)
+    if(batchLog.getLoadedFileList.isEmpty){
       val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
-
       if (param.streamingKeepFailedFiles && failedFiles.nonEmpty) fileFailed = true
-
       val loadedFiles = files.filterNot(failedFiles.toSet)
-
       batchLog.setLoadedFileNames(loadedFiles)
       batchLog.save
 
