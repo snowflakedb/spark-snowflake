@@ -410,39 +410,20 @@ case class AzureStorage(
         case Some(str: String) => str
         case None => Random.alphanumeric take 10 mkString ""
       }
+    val files = data.mapPartitionsWithIndex{
+      case(index, rows) => {
+        val fileName =
+          s"$index.${format.toString}${if (compress) ".gz" else ""}"
 
-    val files = data.mapPartitions(rows => {
-
-      val azureClient: CloudBlobClient =
-        CloudStorageOperations
-          .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-
-      val fileName =
-        s"$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if (compress) ".gz" else ""}"
-
-      val container = azureClient.getContainerReference(containerName)
-      val blob = container.getBlockBlobReference(prefix.concat(fileName))
-
-      val outputStream: OutputStream =
-        if (masterKey.isDefined) {
-          val (cipher, meta) =
-            CloudStorageOperations
-              .getCipherAndAZMetaData(masterKey.get, queryId.get, smkId.get)
-          blob.setMetadata(meta)
-          val encryptedStream = new CipherOutputStream(blob.openOutputStream(), cipher)
-          if (compress) new GZIPOutputStream(encryptedStream)
-          else encryptedStream
+        val outputStream = upload(fileName, Some(directory))
+        while (rows.hasNext) {
+          outputStream.write(rows.next.getBytes("UTF-8"))
+          outputStream.write('\n')
         }
-        else blob.openOutputStream()
-
-      while (rows.hasNext) {
-        outputStream.write(rows.next.getBytes("UTF-8"))
-        outputStream.write('\n')
+        outputStream.close()
+        new SingleElementIterator(s"$directory/$fileName")
       }
-      outputStream.close()
-
-      new SingleElementIterator(fileName)
-    })
+    }
 
     files.collect().toList
   }
