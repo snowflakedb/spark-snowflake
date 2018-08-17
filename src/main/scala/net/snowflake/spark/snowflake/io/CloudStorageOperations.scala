@@ -351,12 +351,18 @@ sealed trait CloudStorage {
   def upload(data: RDD[String], format: SupportedFormat = SupportedFormat.CSV,
              dir: Option[String] = None): List[String]
 
+  def upload(fileName: String, dir: Option[String]): OutputStream
+
   def download(fileName: String): InputStream
 
   def deleteFile(fileName: String): Unit
 
   def deleteFiles(fileNames: List[String]): Unit =
     fileNames.foreach(deleteFile)
+
+  def rename(oldName: String, newName: String): Unit
+
+  def fileExists(fileName: String): Boolean
 }
 
 case class AzureStorage(
@@ -370,6 +376,31 @@ case class AzureStorage(
                          compress: Boolean = false,
                          override val pref: String = ""
                        ) extends CloudStorage {
+
+  override def upload(fileName: String, dir: Option[String]): OutputStream = {
+    val azureClient: CloudBlobClient =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+
+    val file: String =
+      if (dir.isDefined) s"${dir.get}/$fileName"
+      else fileName
+
+    val container = azureClient.getContainerReference(containerName)
+    val blob = container.getBlockBlobReference(prefix.concat(file))
+
+    val encryptedStream = if (masterKey.isDefined) {
+      val (cipher, meta) =
+        CloudStorageOperations
+          .getCipherAndAZMetaData(masterKey.get, queryId.get, smkId.get)
+      blob.setMetadata(meta)
+      new CipherOutputStream(blob.openOutputStream(), cipher)
+    }
+    else blob.openOutputStream()
+
+    if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
+
+  }
 
   override def upload(data: RDD[String],
                       format: SupportedFormat = SupportedFormat.CSV,
@@ -399,7 +430,7 @@ case class AzureStorage(
               .getCipherAndAZMetaData(masterKey.get, queryId.get, smkId.get)
           blob.setMetadata(meta)
           val encryptedStream = new CipherOutputStream(blob.openOutputStream(), cipher)
-          if(compress) new GZIPOutputStream(encryptedStream)
+          if (compress) new GZIPOutputStream(encryptedStream)
           else encryptedStream
         }
         else blob.openOutputStream()
@@ -436,6 +467,12 @@ case class AzureStorage(
       .map(prefix.concat)
       .foreach(container.getBlockBlobReference(_).deleteIfExists())
   }
+
+  override def rename(oldName: String, newName: String): Unit =
+    throw new NotImplementedError()
+
+  override def fileExists(fileName: String): Boolean =
+    throw new NotImplementedError()
 }
 
 case class S3Storage(
@@ -451,6 +488,9 @@ case class S3Storage(
                       override val pref: String = "",
                       parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                     ) extends CloudStorage {
+
+  override def upload(fileName: String, dir: Option[String]): OutputStream =
+    throw new NotImplementedError()
 
   //future work, replace io operation in RDD and writer
   override def upload(data: RDD[String],
@@ -542,7 +582,11 @@ case class S3Storage(
           .withKeys(fileNames.map(prefix.concat): _*)
       )
 
+  override def rename(oldName: String, newName: String): Unit =
+    throw new NotImplementedError()
 
+  override def fileExists(fileName: String): Boolean =
+    throw new NotImplementedError()
 }
 
 //todo: google cloud, local file for testing?

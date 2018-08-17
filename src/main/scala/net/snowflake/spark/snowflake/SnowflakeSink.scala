@@ -214,6 +214,7 @@ class SnowflakeSink(
       CloudStorageOperations.deleteFiles(files.filterNot(failedFiles.toSet))
     else CloudStorageOperations.deleteFiles(files)
 
+
   }
 
   private def dropPipe(pipe: String): Unit = {
