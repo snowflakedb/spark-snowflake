@@ -77,8 +77,12 @@ case class StreamingBatchLog(override val node: ObjectNode)
 
   def save(implicit storage: CloudStorage): Unit = {
     val outputStream =
-      storage.upload(StreamingBatchLog.fileName(batchId), Some(SnowflakeLogManager.LOG_DIR))
-    outputStream.write(toString.getBytes)
+      storage.upload(
+        StreamingBatchLog.fileName(batchId),
+        Some(SnowflakeLogManager.LOG_DIR))(false)
+    val text = this.toString
+    println(s"log: $text")
+    outputStream.write(text.getBytes("UTF-8"))
     outputStream.close()
   }
 

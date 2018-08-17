@@ -204,6 +204,10 @@ class SnowflakeSink(
     val files =
       CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
 
+    //write file names to log file
+    val batchLog = StreamingBatchLog(batchId, files)
+    batchLog.save
+
     files.foreach(println)
     val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
 

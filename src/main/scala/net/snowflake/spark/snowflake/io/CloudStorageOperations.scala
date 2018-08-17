@@ -351,7 +351,8 @@ sealed trait CloudStorage {
   def upload(data: RDD[String], format: SupportedFormat = SupportedFormat.CSV,
              dir: Option[String] = None): List[String]
 
-  def upload(fileName: String, dir: Option[String]): OutputStream
+  def upload(fileName: String, dir: Option[String])
+            (implicit isCompressed: Boolean): OutputStream
 
   def download(fileName: String): InputStream
 
@@ -373,11 +374,12 @@ case class AzureStorage(
                          masterKey: Option[String] = None,
                          queryId: Option[String] = None,
                          smkId: Option[String] = None,
-                         compress: Boolean = false,
+                         implicit val compress: Boolean = false,
                          override val pref: String = ""
                        ) extends CloudStorage {
 
-  override def upload(fileName: String, dir: Option[String]): OutputStream = {
+  override def upload(fileName: String, dir: Option[String])
+                     (implicit isCompressed: Boolean): OutputStream = {
     val azureClient: CloudBlobClient =
       CloudStorageOperations
         .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -398,7 +400,7 @@ case class AzureStorage(
     }
     else blob.openOutputStream()
 
-    if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
+    if (isCompressed) new GZIPOutputStream(encryptedStream) else encryptedStream
 
   }
 
@@ -464,13 +466,13 @@ case class S3Storage(
                       masterKey: Option[String] = None,
                       queryId: Option[String] = None,
                       smkId: Option[String] = None,
-                      compress: Boolean = false,
-                      is256: Boolean = false,
+                      implicit val compress: Boolean = false,
                       override val pref: String = "",
                       parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                     ) extends CloudStorage {
 
-  override def upload(fileName: String, dir: Option[String]): OutputStream =
+  override def upload(fileName: String, dir: Option[String])
+                     (implicit isCompressed: Boolean): OutputStream =
     throw new NotImplementedError()
 
   //future work, replace io operation in RDD and writer
