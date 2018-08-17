@@ -16,24 +16,26 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.io.{InputStream, OutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
 import java.net.URI
 import java.security.SecureRandom
 import java.sql.Connection
 import java.util
-import java.util.zip.GZIPOutputStream
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import javax.crypto.{Cipher, CipherOutputStream}
+import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import net.snowflake.client.jdbc.MatDesc
+import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeSQLException}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
+import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeConnectorUtils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -64,6 +66,64 @@ object CloudStorageOperations {
   private final val AZ_MATDESC = "matdesc"
 
   private val log = LoggerFactory.getLogger(getClass)
+
+  private[io] final def getDecryptedStream(
+                                            stream: InputStream,
+                                            masterKey: String,
+                                            metaData: util.Map[String, String],
+                                            stageType: StageType
+                                            //meta: ObjectMetadata
+                                          ): InputStream = {
+
+    val decodedKey = Base64.decode(masterKey)
+    val (key, iv) =
+      stageType match {
+        case StageType.S3 =>
+          (metaData.get(AMZ_KEY), metaData.get(AMZ_IV))
+        case StageType.AZURE =>
+          parseEncryptionData(metaData.get(AZ_ENCRYPTIONDATA))
+        case _ =>
+          throw new
+              UnsupportedOperationException(
+                s"Only support s3 or azure stage. Stage Type: $stageType")
+      }
+
+
+    if (key == null || iv == null)
+      throw new SnowflakeSQLException(SqlState.INTERNAL_ERROR,
+        ErrorCode.INTERNAL_ERROR.getMessageCode,
+        "File " + "metadata incomplete")
+
+    val keyBytes: Array[Byte] = Base64.decode(key)
+    val ivBytes: Array[Byte] = Base64.decode(iv)
+
+    val queryStageMasterKey: SecretKey =
+      new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
+
+    val keyCipher: Cipher = Cipher.getInstance(KEY_CIPHER)
+    keyCipher.init(Cipher.DECRYPT_MODE, queryStageMasterKey)
+
+    val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes) // NB: we assume qsmk
+    // .length == fileKey.length
+    //     (fileKeyBytes.length may be bigger due to padding)
+    val fileKey =
+    new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+
+    val dataCipher = Cipher.getInstance(DATA_CIPHER)
+    val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
+    dataCipher.init(Cipher.DECRYPT_MODE, fileKey, ivy)
+    new CipherInputStream(stream, dataCipher)
+  }
+
+  private[io] final def parseEncryptionData(jsonEncryptionData: String):
+  (String, String) = {
+    val mapper: ObjectMapper = new ObjectMapper()
+    val encryptionDataNode: JsonNode = mapper.readTree(jsonEncryptionData)
+    val iv: String = encryptionDataNode.findValue(AZ_IV).asText()
+    val key: String = encryptionDataNode
+      .findValue(AZ_KEY_WRAP).findValue(AZ_KEY).asText()
+    (key, iv)
+  }
 
   private[io] final def getCipherAndS3Metadata(
                                                 masterKey: String,
@@ -354,7 +414,8 @@ sealed trait CloudStorage {
   def upload(fileName: String, dir: Option[String])
             (implicit isCompressed: Boolean): OutputStream
 
-  def download(fileName: String): InputStream
+  def download(fileName: String)
+              (implicit isCompressed: Boolean): InputStream
 
   def deleteFile(fileName: String): Unit
 
@@ -380,16 +441,15 @@ case class AzureStorage(
 
   override def upload(fileName: String, dir: Option[String])
                      (implicit isCompressed: Boolean): OutputStream = {
-    val azureClient: CloudBlobClient =
-      CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
-    val container = azureClient.getContainerReference(containerName)
-    val blob = container.getBlockBlobReference(prefix.concat(file))
+    val blob =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+        .getBlockBlobReference(prefix.concat(file))
 
     val encryptedStream = if (masterKey.isDefined) {
       val (cipher, meta) =
@@ -412,8 +472,8 @@ case class AzureStorage(
         case Some(str: String) => str
         case None => Random.alphanumeric take 10 mkString ""
       }
-    val files = data.mapPartitionsWithIndex{
-      case(index, rows) => {
+    val files = data.mapPartitionsWithIndex {
+      case (index, rows) => {
         val fileName =
           s"$index.${format.toString}${if (compress) ".gz" else ""}"
 
@@ -431,8 +491,30 @@ case class AzureStorage(
   }
 
 
-  override def download(fileName: String): InputStream =
-    throw new NotImplementedError()
+  override def download(fileName: String)
+                       (implicit isCompressed: Boolean): InputStream = {
+    val blob =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+        .getBlockBlobReference(prefix.concat(fileName))
+
+    val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    blob.download(azureStream)
+    blob.downloadAttributes()
+
+    val inputStream: InputStream =
+      if (masterKey.isDefined)
+        CloudStorageOperations.getDecryptedStream(
+          new ByteArrayInputStream(azureStream.toByteArray),
+          masterKey.get,
+          blob.getMetadata,
+          StageType.AZURE
+        )
+      else new ByteArrayInputStream(azureStream.toByteArray)
+    if (isCompressed) new GZIPInputStream(inputStream)
+    else inputStream
+  }
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
@@ -455,7 +537,10 @@ case class AzureStorage(
     throw new NotImplementedError()
 
   override def fileExists(fileName: String): Boolean =
-    throw new NotImplementedError()
+    CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .getBlockBlobReference(prefix.concat(fileName)).exists()
 }
 
 case class S3Storage(
@@ -549,7 +634,8 @@ case class S3Storage(
 
 
   //todo
-  override def download(fileName: String): InputStream =
+  override def download(fileName: String)
+                       (implicit isCompressed: Boolean): InputStream =
     throw new NotImplementedError()
 
   override def deleteFile(fileName: String): Unit =

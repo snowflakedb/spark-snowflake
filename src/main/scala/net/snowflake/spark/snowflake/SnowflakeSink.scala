@@ -24,6 +24,8 @@ class SnowflakeSink(
 
   private val param = Parameters.mergeParameters(parameters)
 
+  private var fileFailed: Boolean = false
+
   //discussion: Do we want to support overwrite mode?
   //In Spark Streaming, there are only three mode append, complete, update
   require(
@@ -57,21 +59,12 @@ class SnowflakeSink(
   private implicit lazy val ingestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
 
-  private lazy val report =
-    new SnowflakeStreamingReport(
-      stageName,
-      if(param.rootTempDir.isEmpty) None else Some(param.rootTempDir),
-      param.streamingKeepFailedFiles
-    )
-
   /**
     * Create pipe, stage, and storage client
     */
   def init(data: DataFrame): Unit = {
 
     val schema = data.schema
-
-    report // initialize report
 
     //create table
     val schemaSql = DefaultJDBCWrapper.schemaString(schema)
@@ -102,9 +95,8 @@ class SnowflakeSink(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
-          if (report.dropStage) dropStage(stageName)
+          if (!fileFailed) dropStage(stageName)
           dropPipe(pipeName.get)
-          println(report)
         }
       }
     )
@@ -121,14 +113,14 @@ class SnowflakeSink(
     def getMappingToString(list: Option[List[(Int, String)]]): String = {
       if (format == SupportedFormat.JSON)
         s"(${tableSchema.fields.map(_.name).mkString(",")})"
-      else if(list.isEmpty || list.get.isEmpty) ""
+      else if (list.isEmpty || list.get.isEmpty) ""
       else
         s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
     }
 
     def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
-      if(format == SupportedFormat.JSON){
-        val names = tableSchema.fields.map(x=>"parse_json($1):".concat(x.name)).mkString(",")
+      if (format == SupportedFormat.JSON) {
+        val names = tableSchema.fields.map(x => "parse_json($1):".concat(x.name)).mkString(",")
         s"from (select $names $from tmp)"
       }
       else if (list.isEmpty || list.get.isEmpty) from
@@ -188,36 +180,45 @@ class SnowflakeSink(
   }
 
 
-
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (pipeName.isEmpty) init(data)
+    if (StreamingBatchLog.logExists(batchId)) {
 
-    //prepare data
-    val rdd =
-      DefaultSnowflakeWriter.dataFrameToRDD(
-        sqlContext,
-        streamingToNonStreaming(sqlContext, data),
-        param,
-        format)
+      println(StreamingBatchLog.loadLog(batchId).toString)
+    }
+    else {
+      if (pipeName.isEmpty) init(data)
 
-    //write to storage
-    val files =
-      CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
+      //prepare data
+      val rdd =
+        DefaultSnowflakeWriter.dataFrameToRDD(
+          sqlContext,
+          streamingToNonStreaming(sqlContext, data),
+          param,
+          format)
 
-    //write file names to log file
-    val batchLog = StreamingBatchLog(batchId, files)
-    batchLog.save
+      //write to storage
+      val files =
+        CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
 
-    files.foreach(println)
-    val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
+      //write file names to log file
+      val batchLog = StreamingBatchLog(batchId, files)
+      batchLog.save
 
-    report.addFailedFiles(failedFiles)
+      files.foreach(println)
+      val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
 
-    //Purge files
-    if(param.streamingKeepFailedFiles)
-      CloudStorageOperations.deleteFiles(files.filterNot(failedFiles.toSet))
-    else CloudStorageOperations.deleteFiles(files)
+      if (param.streamingKeepFailedFiles && failedFiles.nonEmpty) fileFailed = true
 
+      val loadedFiles = files.filterNot(failedFiles.toSet)
+
+      batchLog.setLoadedFileNames(loadedFiles)
+      batchLog.save
+
+      //Purge files
+      if (param.streamingKeepFailedFiles)
+        CloudStorageOperations.deleteFiles(loadedFiles)
+      else CloudStorageOperations.deleteFiles(files)
+    }
 
   }
 
@@ -230,7 +231,6 @@ class SnowflakeSink(
     val statement: String = s"drop stage if exists $stage"
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
   }
-
 
 
 }
