@@ -61,6 +61,7 @@ sealed trait SnowflakeLog {
   * {
   * "logType": "STREAMING_BATCH_LOG",
   * "batchId": 123,
+  * "pipeName": "snowpipe_name"
   * "fileNames": ["fileName1","fileName2"],
   * "LoadedFileNames": ["fileName1", "fileName2"]
   * }
@@ -152,6 +153,12 @@ object StreamingBatchLog {
     } catch {
       case _: Exception => throw new IllegalArgumentException(s"log file: ${fileName(batchId)} is broken")
     }
+  }
+
+  def mergeBatchLog(groupId: Long): Unit = {
+    var logs: List[StreamingBatchLog] =
+      (0 until GROUP_SIZE)
+        .map(x => loadLog(groupId * GROUP_SIZE + x)).toList
   }
 }
 
