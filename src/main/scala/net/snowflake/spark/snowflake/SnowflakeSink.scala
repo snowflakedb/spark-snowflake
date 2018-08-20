@@ -209,9 +209,19 @@ class SnowflakeSink(
         (fileList, batchLog)
       }
 
+    fileFailed = fileFailed || batchLog.hasFileFailed
+
+    //merge batch logs
+    if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
+      val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
+      if (!StreamingFailedFileReport.logExists(groupId))
+        StreamingBatchLog.mergeBatchLog(groupId)
+    }
+
     if(batchLog.getLoadedFileList.isEmpty){
       val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
       if (param.streamingKeepFailedFiles && failedFiles.nonEmpty) fileFailed = true
+      if (fileFailed) batchLog.fileFailed
       val loadedFiles = files.filterNot(failedFiles.toSet)
       batchLog.setLoadedFileNames(loadedFiles)
       batchLog.save

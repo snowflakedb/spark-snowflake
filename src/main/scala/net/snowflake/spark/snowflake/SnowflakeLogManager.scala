@@ -1,7 +1,6 @@
 package net.snowflake.spark.snowflake
 
 import java.nio.charset.Charset
-import java.util.function.Consumer
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
@@ -15,11 +14,13 @@ private[snowflake] object SnowflakeLogManager {
 
   val LOG_TYPE = "logType"
   val BATCH_ID = "batchId"
+  val GROUP_ID = "groupId"
   val FILE_NAMES = "fileNames"
   val FAILED_FILE_NAMES = "failedFileNames"
   val LOADED_FILE_NAMES = "loadedFileNames"
   val LOG_DIR = "log"
   val PIPE_NAME = "pipeName"
+  val FILE_FAILED = "fileFailed"
 
   implicit val mapper: ObjectMapper = new ObjectMapper()
 
@@ -35,9 +36,7 @@ private[snowflake] object SnowflakeLogManager {
     }
     else throw new IllegalArgumentException("Invalid log data")
 
-  //  case class StreamingFailedFileReport(logs: List[StreamingBatchLog]) extends SnowflakeLog {
-  //    override def generateJson: String = ???
-  //  }
+
   /**
     * @param fileName file name
     * @return logDir / file name
@@ -63,7 +62,8 @@ sealed trait SnowflakeLog {
   * "batchId": 123,
   * "pipeName": "snowpipe_name"
   * "fileNames": ["fileName1","fileName2"],
-  * "LoadedFileNames": ["fileName1", "fileName2"]
+  * "LoadedFileNames": ["fileName1", "fileName2"],
+  * "fileFailed": false
   * }
   *
   * @param node a JSON object node contains log data
@@ -75,7 +75,6 @@ case class StreamingBatchLog(override val node: ObjectNode)
 
   private lazy val batchId: Long = node.get(SnowflakeLogManager.BATCH_ID).asLong()
 
-
   private def getListFromJson(name: String): List[String] = {
     if (node.has(name)) {
       var result: List[String] = Nil
@@ -85,6 +84,10 @@ case class StreamingBatchLog(override val node: ObjectNode)
     } else Nil
   }
 
+  def hasFileFailed: Boolean =
+    node.get(SnowflakeLogManager.FILE_FAILED).asBoolean
+
+  def fileFailed: Unit = node.put(SnowflakeLogManager.FILE_FAILED, true)
 
   def getFileList: List[String] = getListFromJson(SnowflakeLogManager.FILE_NAMES)
 
@@ -115,22 +118,27 @@ case class StreamingBatchLog(override val node: ObjectNode)
 object StreamingBatchLog {
 
   //threshold for grouping log
-  private val GROUP_SIZE: Int = 100
+  val GROUP_SIZE: Int = 2
 
   implicit val mapper: ObjectMapper = SnowflakeLogManager.mapper
   implicit val isCompressed: Boolean = false
 
-  def apply(batchId: Long, fileNames: List[String], pipeName: String): StreamingBatchLog = {
+  def apply(batchId: Long,
+            fileNames: List[String],
+            pipeName: String,
+            fileFailed: Boolean = false
+           ): StreamingBatchLog = {
     val node = mapper.createObjectNode()
     node.put(SnowflakeLogManager.BATCH_ID, batchId)
     node.put(SnowflakeLogManager.PIPE_NAME, pipeName)
     node.put(SnowflakeLogManager.LOG_TYPE, SnowflakeLogType.STREAMING_BATCH_LOG.toString)
+    node.put(SnowflakeLogManager.FILE_FAILED, fileFailed)
     val arr = node.putArray(SnowflakeLogManager.FILE_NAMES)
     fileNames.foreach(arr.add)
     StreamingBatchLog(node)(mapper)
   }
 
-  def fileName(batchId: Long): String = s"${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
+  def fileName(batchId: Long): String = s"tmp/${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
 
   def logExists(batchId: Long)(implicit storage: CloudStorage): Boolean =
     storage.fileExists(SnowflakeLogManager.getFullPath(fileName(batchId)))
@@ -155,11 +163,66 @@ object StreamingBatchLog {
     }
   }
 
-  def mergeBatchLog(groupId: Long): Unit = {
-    var logs: List[StreamingBatchLog] =
+  def mergeBatchLog(groupId: Long)(implicit storage: CloudStorage): Unit = {
+    val logs: List[StreamingBatchLog] =
       (0 until GROUP_SIZE)
-        .map(x => loadLog(groupId * GROUP_SIZE + x)).toList
+        .flatMap(x=>{
+          val batchId = groupId * GROUP_SIZE + x
+          if(logExists(batchId))
+            Seq(loadLog(batchId))
+          else Nil
+        }
+        ).toList
+//      (0 until GROUP_SIZE)
+//        .map(x => loadLog(groupId * GROUP_SIZE + x)).toList
+
+    StreamingFailedFileReport(
+      groupId,
+      logs.flatMap(x => {
+        val files = x.getFileList
+        val loadedFile = x.getLoadedFileList
+        files.filterNot(loadedFile.toSet)
+      })
+    )(mapper).save
+
+    //remove logs
   }
+}
+
+
+case class StreamingFailedFileReport(groupId: Long, failedFiles: List[String])
+                                    (override implicit val mapper: ObjectMapper) extends SnowflakeLog {
+  override implicit val logType: SnowflakeLogType = SnowflakeLogType.STREAMING_FAILED_FILE_REPORT
+  override implicit val node: ObjectNode = mapper.createObjectNode()
+
+  node.put(SnowflakeLogManager.LOG_TYPE, logType.toString)
+  node.put(SnowflakeLogManager.GROUP_ID, groupId)
+
+  val arr = node.putArray(SnowflakeLogManager.FAILED_FILE_NAMES)
+  failedFiles.foreach(arr.add)
+
+  def save(implicit storage: CloudStorage): Unit = {
+    val outputStream =
+      storage.upload(
+        StreamingFailedFileReport.fileName(groupId),
+        Some(SnowflakeLogManager.LOG_DIR)
+      )(false)
+    val text = this.toString
+    println(s"report: $text")
+    outputStream.write(text.getBytes("UTF-8"))
+    outputStream.close()
+  }
+
+}
+
+object StreamingFailedFileReport {
+
+  def logExists(groupId: Long)(implicit storage: CloudStorage): Boolean =
+    storage.fileExists(SnowflakeLogManager.getFullPath(fileName(groupId)))
+
+  def fileName(groupId: Long): String =
+    s"failed_files/$groupId.json"
+
 }
 
 private[snowflake] object SnowflakeLogType extends Enumeration {

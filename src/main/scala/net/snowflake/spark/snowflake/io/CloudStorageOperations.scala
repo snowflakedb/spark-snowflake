@@ -493,6 +493,8 @@ case class AzureStorage(
 
   override def download(fileName: String)
                        (implicit isCompressed: Boolean): InputStream = {
+
+    println(s"download fileName:${prefix.concat(fileName)}")
     val blob =
       CloudStorageOperations
         .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))

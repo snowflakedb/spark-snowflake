@@ -36,6 +36,30 @@ class StreamingSuite extends IntegrationSuiteBase {
     }
   }
 
+  private class NetworkService2(
+                                 val port: Int,
+                                 val times: Int = 1000,
+                                 val sleepBeforeAll: Int = 10,
+                                 val sleepAfterEach: Int = 5) extends Runnable {
+    val serverSocket = new ServerSocket(port)
+
+    def run(): Unit = {
+      val socket = serverSocket.accept()
+      val output = new DataOutputStream(socket.getOutputStream)
+      Thread.sleep(sleepBeforeAll * 1000)
+
+      (0 until times).foreach(index => {
+        val word = Random.alphanumeric.take(10).mkString("")
+        println(s"send message: $index $word")
+        s"$word\n".getBytes(Charset.forName("UTF-8")).foreach(x => output.write(x))
+        Thread.sleep(sleepAfterEach * 1000)
+      })
+
+      socket.close()
+
+    }
+  }
+
   def removeDirectory(dir: File): Unit = {
     if (dir.isDirectory) {
       val files = dir.listFiles
@@ -52,13 +76,14 @@ class StreamingSuite extends IntegrationSuiteBase {
       .load()
     checkAnswer(loadedDf, expectedAnswer)
   }
+
   //manual test only
-  ignore("test failed files"){
+  test("test") {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"create or replace table $table (value int)")
+      "create or replace table stream_test_table (value string)")
 
     val lines = spark.readStream
       .format("socket")
@@ -70,15 +95,9 @@ class StreamingSuite extends IntegrationSuiteBase {
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
-    new Thread(new NetworkService(
+    new Thread(new NetworkService2(
       5678,
-      Seq("one two",
-        "three four five",
-        "six seven eight night ten",
-        "1 2 3 4 5",
-        "6 7 8 9 0"),
       sleepBeforeAll = 5,
-      sleepAfterAll = 10,
       sleepAfterEach = 5
     )).start()
 
@@ -87,20 +106,18 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)
-      .option("dbtable", table)
+      .option("dbtable", "stream_test_table")
       .option("streaming_keep_failed_files", "on")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
 
-    query.awaitTermination(100000)
+    query.awaitTermination()
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop table $table")
 
   }
 
-  test("Test streaming writer") {
+  ignore("Test streaming writer") {
 
     val spark = sqlContext.sparkSession
     import spark.implicits._

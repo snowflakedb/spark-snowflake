@@ -7,10 +7,13 @@ class LoggerSuite extends IntegrationSuiteBase {
   val mapper = new ObjectMapper()
 
   test("test") {
-//    val log = StreamingBatchLog(0, List("a", "b"))
-//    log.setFailedFiles(List("a"))
-//    log.addFailedFiles(List("b"))
-//    println(log)
+
+    val node = mapper.createObjectNode()
+
+
+
+    val log = StreamingBatchLog(0, List("a", "b"), "abc")
+    println(log)
 
 //    val node = mapper.readTree("{\"abc\":\"123\"}")
 //    println(node.get("abc").asText())
