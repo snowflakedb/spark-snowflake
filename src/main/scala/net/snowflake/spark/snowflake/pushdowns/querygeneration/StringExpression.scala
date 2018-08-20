@@ -38,7 +38,7 @@ private[querygeneration] object StringExpression {
     Option(
       expr match {
         case _: Ascii | _: Lower | _: Substring | _: StringLPad |
-            _: StringRPad | _: StringReverse | _: StringTranslate |
+            _: StringRPad | _: StringTranslate |
             _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
             _: Substring | _: Upper =>
           expr.prettyName.toUpperCase + block(
