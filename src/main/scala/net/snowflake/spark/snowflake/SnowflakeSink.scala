@@ -114,24 +114,36 @@ class SnowflakeSink(
                        format: SupportedFormat
                      ): String = {
 
-    def getMappingToString(list: Option[List[(Int, String)]]): String = {
-      if (format == SupportedFormat.JSON)
-        s"(${tableSchema.fields.map(_.name).mkString(",")})"
-      else if (list.isEmpty || list.get.isEmpty) ""
-      else
-        s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
-    }
-
-    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String = {
-      if (format == SupportedFormat.JSON) {
-        val names = tableSchema.fields.map(x => "parse_json($1):".concat(x.name)).mkString(",")
-        s"from (select $names $from tmp)"
+    def getMappingToString(list: Option[List[(Int, String)]]): String =
+      format match {
+        case SupportedFormat.JSON =>
+          val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name)
+          if (list.isEmpty || list.get.isEmpty)
+            s"(${schema.fields.map(x => Utils.ensureQuoted(x.name)).mkString(",")})"
+          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+        case SupportedFormat.CSV =>
+          if (list.isEmpty || list.get.isEmpty) ""
+          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
       }
-      else if (list.isEmpty || list.get.isEmpty) from
-      else
-        s"from (select ${list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ")} $from tmp)"
 
-    }
+    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
+      format match {
+        case SupportedFormat.JSON =>
+          if (list.isEmpty || list.get.isEmpty) {
+            val names =
+              tableSchema
+                .fields
+                .map(x => "parse_json($1):".concat(Utils.ensureQuoted(x.name)))
+                .mkString(",")
+            s"from (select $names $from tmp)"
+          }
+          else
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1-1).name))).mkString(", ")} $from tmp)"
+        case SupportedFormat.CSV =>
+          if (list.isEmpty || list.get.isEmpty) from
+          else
+            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.ensureQuoted(x._1.toString))).mkString(", ")} $from tmp)"
+      }
 
     val fromString = s"FROM @$stageName"
 
