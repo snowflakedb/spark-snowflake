@@ -118,7 +118,7 @@ case class StreamingBatchLog(override val node: ObjectNode)
 object StreamingBatchLog {
 
   //threshold for grouping log
-  val GROUP_SIZE: Int = 2
+  val GROUP_SIZE: Int = 10
 
   implicit val mapper: ObjectMapper = SnowflakeLogManager.mapper
   implicit val isCompressed: Boolean = false
@@ -163,6 +163,12 @@ object StreamingBatchLog {
     }
   }
 
+  def deleteBatchLog(batchIds: List[Long])(implicit storage: CloudStorage): Unit = {
+    storage.deleteFiles(
+      batchIds.map(x=>SnowflakeLogManager.getFullPath(fileName(x)))
+    )
+  }
+
   def mergeBatchLog(groupId: Long)(implicit storage: CloudStorage): Unit = {
     val logs: List[StreamingBatchLog] =
       (0 until GROUP_SIZE)
@@ -173,8 +179,6 @@ object StreamingBatchLog {
           else Nil
         }
         ).toList
-//      (0 until GROUP_SIZE)
-//        .map(x => loadLog(groupId * GROUP_SIZE + x)).toList
 
     StreamingFailedFileReport(
       groupId,
@@ -185,11 +189,27 @@ object StreamingBatchLog {
       })
     )(mapper).save
 
-    //remove logs
+    //remove batch log
+    deleteBatchLog(
+      logs.map(_.batchId)
+    )
+
   }
 }
 
-
+/**
+  * Contains all failed file names
+  *
+  * {
+  * "logType":"STREAMING_FAILED_FILE_REPORT",
+  * "groupId":1,
+  * "failedFileNames":[]
+  * }
+  *
+  * @param groupId
+  * @param failedFiles
+  * @param mapper
+  */
 case class StreamingFailedFileReport(groupId: Long, failedFiles: List[String])
                                     (override implicit val mapper: ObjectMapper) extends SnowflakeLog {
   override implicit val logType: SnowflakeLogType = SnowflakeLogType.STREAMING_FAILED_FILE_REPORT

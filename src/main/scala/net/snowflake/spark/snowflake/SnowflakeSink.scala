@@ -9,7 +9,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
 import org.slf4j.LoggerFactory
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class SnowflakeSink(
                      sqlContext: SQLContext,
@@ -59,6 +59,8 @@ class SnowflakeSink(
   private implicit lazy val ingestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
 
+  private var lastBatchId: Int = -1
+
   /**
     * Create pipe, stage, and storage client
     */
@@ -97,6 +99,8 @@ class SnowflakeSink(
           super.onApplicationEnd(applicationEnd)
           if (!fileFailed) dropStage(stageName)
           dropPipe(pipeName.get)
+          if(lastBatchId>=0)
+            StreamingBatchLog.mergeBatchLog(lastBatchId / StreamingBatchLog.GROUP_SIZE)
         }
       }
     )
@@ -204,8 +208,8 @@ class SnowflakeSink(
       } else {
         val batchLog = StreamingBatchLog.loadLog(batchId)
         val fileList = batchLog.getFileList
-        //todo: check pipe existence, if not create a new one
         pipeName = Some(batchLog.getPipeName)
+        if(!pipeExists(pipeName.get)) init(data)
         (fileList, batchLog)
       }
 
@@ -232,6 +236,14 @@ class SnowflakeSink(
       else CloudStorageOperations.deleteFiles(files)
     }
 
+  }
+
+
+  private def pipeExists(pipe: String): Boolean = {
+    val statement: String = s"desc pipe $pipe"
+    Try{
+      DefaultJDBCWrapper.executePreparedQueryInterruptibly(conn, statement)
+    }.isSuccess
   }
 
   private def dropPipe(pipe: String): Unit = {
