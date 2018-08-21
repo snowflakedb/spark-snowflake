@@ -403,7 +403,21 @@ object Utils {
     * check whether a name is quoted
     */
   def isQuoted(name: String): Boolean = {
+    isQuotedWithDoubleQuotes(name) || isQuotedWithBackticks(name)
+  }
+
+  /**
+    * check whether a name is quoted with double quotes
+    */
+  def isQuotedWithDoubleQuotes(name: String): Boolean = {
     name.startsWith("\"") && name.endsWith("\"")
+  }
+
+  /**
+    * check whether a name is quoted with backticks
+    */
+  def isQuotedWithBackticks(name: String): Boolean = {
+    name.startsWith("`") && name.endsWith("`")
   }
 
   /**
