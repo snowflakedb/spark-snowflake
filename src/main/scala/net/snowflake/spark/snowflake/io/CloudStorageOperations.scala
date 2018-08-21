@@ -25,6 +25,7 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
+import net.snowflake.client.jdbc.cloud.storage.StageInfo
 import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeSQLException}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
@@ -72,7 +73,6 @@ object CloudStorageOperations {
                                             masterKey: String,
                                             metaData: util.Map[String, String],
                                             stageType: StageType
-                                            //meta: ObjectMetadata
                                           ): InputStream = {
 
     val decodedKey = Base64.decode(masterKey)
@@ -244,7 +244,6 @@ object CloudStorageOperations {
           azureAccount = account,
           azureEndpoint = endpoint,
           azureSAS = azureSAS,
-          compress = compress,
           pref = path
         ), stageName)
 
@@ -266,8 +265,7 @@ object CloudStorageOperations {
           bucketName = bucket,
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
-          pref = prefix,
-          compress = compress
+          pref = prefix
         ), stageName)
       case _ => // Internal Stage
 
@@ -302,7 +300,6 @@ object CloudStorageOperations {
               masterKey = Some(masterKey),
               queryId = Some(queryId),
               smkId = Some(smkId),
-              compress = compress,
               pref = path
             ), stageName)
 
@@ -320,7 +317,6 @@ object CloudStorageOperations {
               masterKey = Some(masterKey),
               queryId = Some(queryId),
               smkId = Some(smkId),
-              compress = compress,
               pref = path
             ), stageName)
 
@@ -343,9 +339,10 @@ object CloudStorageOperations {
   def saveToStorage(
                      data: RDD[String],
                      format: SupportedFormat = SupportedFormat.CSV,
-                     dir: Option[String] = None
+                     dir: Option[String] = None,
+                     compress: Boolean = true
                    )(implicit storage: CloudStorage): List[String] =
-    storage.upload(data, format, dir)
+    storage.upload(data, format, dir, compress)
 
   def deleteFiles(files: List[String])(implicit storage: CloudStorage): Unit =
     storage.deleteFiles(files)
@@ -408,14 +405,39 @@ sealed trait CloudStorage {
   lazy val prefix: String =
     if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
-  def upload(data: RDD[String], format: SupportedFormat = SupportedFormat.CSV,
-             dir: Option[String] = None): List[String]
 
-  def upload(fileName: String, dir: Option[String])
-            (implicit isCompressed: Boolean): OutputStream
+  def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream
 
-  def download(fileName: String)
-              (implicit isCompressed: Boolean): InputStream
+  def upload(
+              data: RDD[String],
+              format: SupportedFormat = SupportedFormat.CSV,
+              dir: Option[String],
+              compress: Boolean = true
+            ): List[String] = {
+    val directory: String =
+      dir match {
+        case Some(str: String) => str
+        case None => Random.alphanumeric take 10 mkString ""
+      }
+    val files = data.mapPartitionsWithIndex {
+      case (index, rows) => {
+        val fileName =
+          s"$index.${format.toString}${if (compress) ".gz" else ""}"
+
+        val outputStream = upload(fileName, Some(directory), compress)
+        while (rows.hasNext) {
+          outputStream.write(rows.next.getBytes("UTF-8"))
+          outputStream.write('\n')
+        }
+        outputStream.close()
+        new SingleElementIterator(s"$directory/$fileName")
+      }
+    }
+
+    files.collect().toList
+  }
+
+  def download(fileName: String, compress: Boolean): InputStream
 
   def deleteFile(fileName: String): Unit
 
@@ -435,12 +457,10 @@ case class AzureStorage(
                          masterKey: Option[String] = None,
                          queryId: Option[String] = None,
                          smkId: Option[String] = None,
-                         implicit val compress: Boolean = false,
                          override val pref: String = ""
                        ) extends CloudStorage {
 
-  override def upload(fileName: String, dir: Option[String])
-                     (implicit isCompressed: Boolean): OutputStream = {
+  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
@@ -460,39 +480,11 @@ case class AzureStorage(
     }
     else blob.openOutputStream()
 
-    if (isCompressed) new GZIPOutputStream(encryptedStream) else encryptedStream
+    if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
 
   }
 
-  override def upload(data: RDD[String],
-                      format: SupportedFormat = SupportedFormat.CSV,
-                      dir: Option[String]): List[String] = {
-    val directory: String =
-      dir match {
-        case Some(str: String) => str
-        case None => Random.alphanumeric take 10 mkString ""
-      }
-    val files = data.mapPartitionsWithIndex {
-      case (index, rows) => {
-        val fileName =
-          s"$index.${format.toString}${if (compress) ".gz" else ""}"
-
-        val outputStream = upload(fileName, Some(directory))
-        while (rows.hasNext) {
-          outputStream.write(rows.next.getBytes("UTF-8"))
-          outputStream.write('\n')
-        }
-        outputStream.close()
-        new SingleElementIterator(s"$directory/$fileName")
-      }
-    }
-
-    files.collect().toList
-  }
-
-
-  override def download(fileName: String)
-                       (implicit isCompressed: Boolean): InputStream = {
+  override def download(fileName: String, compress: Boolean): InputStream = {
 
     println(s"download fileName:${prefix.concat(fileName)}")
     val blob =
@@ -514,7 +506,7 @@ case class AzureStorage(
           StageType.AZURE
         )
       else new ByteArrayInputStream(azureStream.toByteArray)
-    if (isCompressed) new GZIPInputStream(inputStream)
+    if (compress) new GZIPInputStream(inputStream)
     else inputStream
   }
 
@@ -553,92 +545,63 @@ case class S3Storage(
                       masterKey: Option[String] = None,
                       queryId: Option[String] = None,
                       smkId: Option[String] = None,
-                      implicit val compress: Boolean = false,
                       override val pref: String = "",
                       parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                     ) extends CloudStorage {
 
-  override def upload(fileName: String, dir: Option[String])
-                     (implicit isCompressed: Boolean): OutputStream =
-    throw new NotImplementedError()
+  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+    val file: String =
+      if(dir.isDefined) s"${dir.get}/$fileName"
+      else fileName
 
-  //future work, replace io operation in RDD and writer
-  override def upload(data: RDD[String],
-                      format: SupportedFormat = SupportedFormat.CSV,
-                      dir: Option[String] = None): List[String] = {
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
 
-    val directory: String =
-      dir match {
-        case Some(str: String) => str
-        case None => Random.alphanumeric take 10 mkString ""
+    val (fileCipher, meta) =
+      masterKey match {
+        case Some(_) =>
+          CloudStorageOperations.getCipherAndS3Metadata(masterKey.get, queryId.get, smkId.get)
+        case None =>
+          (null, new ObjectMetadata())
       }
 
+    if (compress) meta.setContentEncoding("GZIP")
 
-    val files = data.mapPartitions(rows => {
+    var outputStream: OutputStream = new OutputStream {
+      val buffer: ByteArrayOutputStream = new ByteArrayOutputStream()
 
-      val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+      override def write(b: Int): Unit = buffer.write(b)
 
-      val fileName =
-        s"$directory/${Random.alphanumeric take 10 mkString ""}.${format.toString}${if (compress) ".gz" else ""}"
-
-      val (fileCipher, meta) =
-        masterKey match {
-          case Some(_) =>
-            CloudStorageOperations.getCipherAndS3Metadata(masterKey.get, queryId.get, smkId.get)
-          case None =>
-            (null, new ObjectMetadata())
-        }
-
-
-      if (compress) meta.setContentEncoding("GZIP")
-
-      val streamTransferManager = new StreamTransferManager(
-        bucketName,
-        prefix + fileName,
-        s3Client,
-        meta,
-        1,
-        parallelism,
-        5 * parallelism,
-        50
-      )
-
-      try {
-        val uploadStream = streamTransferManager.getMultiPartOutputStreams.get(0)
-        var outputStream: OutputStream = uploadStream
-
-        if (masterKey.isDefined) outputStream =
-          new CipherOutputStream(outputStream, fileCipher)
-
-        if (compress)
-          outputStream = new GZIPOutputStream(outputStream)
-
-        while (rows.hasNext) {
-          outputStream.write(rows.next.getBytes("UTF-8"))
-          outputStream.write('\n')
-          uploadStream.checkSize()
-        }
-
-        outputStream.close()
-
-        streamTransferManager.complete()
-      } catch {
-        case ex: Exception =>
-          streamTransferManager.abort()
-          SnowflakeConnectorUtils.handleS3Exception(ex)
+      override def close(): Unit = {
+        buffer.close()
+        val inputStream: InputStream =
+          new ByteArrayInputStream(buffer.toByteArray)
+        s3Client.putObject(bucketName, prefix.concat(file), inputStream, meta)
       }
+    }
 
-      new SingleElementIterator(fileName)
-    })
+    if(masterKey.isDefined) outputStream =
+      new CipherOutputStream(outputStream, fileCipher)
 
-    files.collect().toList
+    if(compress) new GZIPOutputStream(outputStream)
+    else outputStream
   }
 
+  override def download(fileName: String, compress: Boolean): InputStream = {
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
+    var inputStream: InputStream = dataObject.getObjectContent
+    if(masterKey.isDefined)
+      inputStream =
+        CloudStorageOperations.getDecryptedStream(
+          inputStream,
+          masterKey.get,
+          dataObject.getObjectMetadata.getUserMetadata,
+          StageType.S3
+        )
+    if(compress) new GZIPInputStream(inputStream)
+    else inputStream
 
-  //todo
-  override def download(fileName: String)
-                       (implicit isCompressed: Boolean): InputStream =
-    throw new NotImplementedError()
+  }
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
@@ -656,8 +619,10 @@ case class S3Storage(
   override def rename(oldName: String, newName: String): Unit =
     throw new NotImplementedError()
 
-  override def fileExists(fileName: String): Boolean =
-    throw new NotImplementedError()
+  override def fileExists(fileName: String): Boolean = {
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
+  }
 }
 
 //todo: google cloud, local file for testing?

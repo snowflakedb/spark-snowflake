@@ -61,6 +61,8 @@ class SnowflakeSink(
 
   private var lastBatchId: Int = -1
 
+  private val compress: Boolean = param.sfCompress
+
   /**
     * Create pipe, stage, and storage client
     */
@@ -210,7 +212,7 @@ class SnowflakeSink(
             format)
 
         //write to storage
-        val fileList = CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString))
+        val fileList = CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString), compress)
 
         //write file names to log file
         val batchLog = StreamingBatchLog(batchId, fileList, pipeName.get)

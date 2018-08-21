@@ -105,7 +105,9 @@ case class StreamingBatchLog(override val node: ObjectNode)
     val outputStream =
       storage.upload(
         StreamingBatchLog.fileName(batchId),
-        Some(SnowflakeLogManager.LOG_DIR))(false)
+        Some(SnowflakeLogManager.LOG_DIR),
+        false
+      )
     val text = this.toString
     println(s"log: $text")
     outputStream.write(text.getBytes("UTF-8"))
@@ -121,7 +123,6 @@ object StreamingBatchLog {
   val GROUP_SIZE: Int = 10
 
   implicit val mapper: ObjectMapper = SnowflakeLogManager.mapper
-  implicit val isCompressed: Boolean = false
 
   def apply(batchId: Long,
             fileNames: List[String],
@@ -144,7 +145,7 @@ object StreamingBatchLog {
     storage.fileExists(SnowflakeLogManager.getFullPath(fileName(batchId)))
 
   def loadLog(batchId: Long)(implicit storage: CloudStorage): StreamingBatchLog = {
-    val inputStream = storage.download(SnowflakeLogManager.getFullPath(fileName(batchId)))
+    val inputStream = storage.download(SnowflakeLogManager.getFullPath(fileName(batchId)), false)
     val buffer = ArrayBuffer.empty[Byte]
 
     var c: Int = inputStream.read()
@@ -225,8 +226,9 @@ case class StreamingFailedFileReport(groupId: Long, failedFiles: List[String])
     val outputStream =
       storage.upload(
         StreamingFailedFileReport.fileName(groupId),
-        Some(SnowflakeLogManager.LOG_DIR)
-      )(false)
+        Some(SnowflakeLogManager.LOG_DIR),
+        false
+      )
     val text = this.toString
     println(s"report: $text")
     outputStream.write(text.getBytes("UTF-8"))
