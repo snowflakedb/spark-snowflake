@@ -22,7 +22,7 @@ class SnowflakeSink(
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private val param = Parameters.mergeParameters(parameters)
+  implicit private val param = Parameters.mergeParameters(parameters)
 
   private var fileFailed: Boolean = false
 
@@ -38,7 +38,7 @@ class SnowflakeSink(
     "Snowflake table name must be specified with 'dbtable' parameter"
   )
 
-  val conn = DefaultJDBCWrapper.getConnector(param)
+  implicit val conn = DefaultJDBCWrapper.getConnector(param)
 
   private implicit lazy val (storage, stageName) =
     CloudStorageOperations
@@ -59,7 +59,7 @@ class SnowflakeSink(
   private implicit lazy val ingestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
 
-  private var lastBatchId: Int = -1
+  private var lastBatchId: Long = -1
 
   private val compress: Boolean = param.sfCompress
 
@@ -199,6 +199,7 @@ class SnowflakeSink(
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    lastBatchId = batchId
     val (files, batchLog) =
       if (!StreamingBatchLog.logExists(batchId)) {
         if (pipeName.isEmpty) init(data)

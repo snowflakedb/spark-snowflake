@@ -201,6 +201,63 @@ object CloudStorageOperations {
     (fileCipher, matDesc.toString, Base64.encodeAsString(encKeK: _*), Base64.encodeAsString(ivData: _*))
   }
 
+  def createStorageClientFromStage(
+                                    param: MergedParameters,
+                                    conn: Connection,
+                                    stageName: String
+                                  ): CloudStorage = {
+    @transient val stageManager =
+      new SFInternalStage(true, DefaultJDBCWrapper, param, Some(stageName))
+    //todo move stage creation from stage manager to this class
+
+    @transient val keyIds = stageManager.getKeyIds
+    val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+    val masterKey = stageManager.masterKey
+    val stageLocation = stageManager.stageLocation
+    val url = "([^/]+)/?(.*)".r
+    val url(bucket, path) = stageLocation
+
+    stageManager.stageType match {
+      case StageType.S3 =>
+        val awsId = stageManager.awsId
+        val awsKey = stageManager.awsKey
+        val awsToken = stageManager.awsToken
+
+        S3Storage(
+          bucketName = bucket,
+          awsId = awsId.get,
+          awsKey = awsKey.get,
+          awsToken = awsToken,
+          masterKey = Some(masterKey),
+          queryId = Some(queryId),
+          smkId = Some(smkId),
+          pref = path
+        )
+
+      case StageType.AZURE =>
+
+        val azureSAS = stageManager.azureSAS.get
+        val azureAccount = stageManager.azureAccountName.get
+        val azureEndpoint = stageManager.azureEndpoint.get
+
+        AzureStorage(
+          containerName = bucket,
+          azureAccount = azureAccount,
+          azureEndpoint = azureEndpoint,
+          azureSAS = azureSAS,
+          masterKey = Some(masterKey),
+          queryId = Some(queryId),
+          smkId = Some(smkId),
+          pref = path
+        )
+
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Only support s3 or Azure stage, stage types: ${stageManager.stageType}"
+        )
+    }
+  }
+
 
   /**
     * @return Storage client and stage name
@@ -218,7 +275,6 @@ object CloudStorageOperations {
 
     val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
-    val compress = param.sfCompress
     val stageName = stage
       .getOrElse(s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}")
 
@@ -275,57 +331,7 @@ object CloudStorageOperations {
            """.stripMargin
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
-        @transient val stageManager =
-          new SFInternalStage(true, DefaultJDBCWrapper, param, Some(stageName))
-        //todo move stage creation from stage manager to this class
-
-        @transient val keyIds = stageManager.getKeyIds
-        val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
-        val masterKey = stageManager.masterKey
-        val stageLocation = stageManager.stageLocation
-        val url = "([^/]+)/?(.*)".r
-        val url(bucket, path) = stageLocation
-
-        stageManager.stageType match {
-          case StageType.S3 =>
-            val awsId = stageManager.awsId
-            val awsKey = stageManager.awsKey
-            val awsToken = stageManager.awsToken
-
-            (S3Storage(
-              bucketName = bucket,
-              awsId = awsId.get,
-              awsKey = awsKey.get,
-              awsToken = awsToken,
-              masterKey = Some(masterKey),
-              queryId = Some(queryId),
-              smkId = Some(smkId),
-              pref = path
-            ), stageName)
-
-          case StageType.AZURE =>
-
-            val azureSAS = stageManager.azureSAS.get
-            val azureAccount = stageManager.azureAccountName.get
-            val azureEndpoint = stageManager.azureEndpoint.get
-
-            (AzureStorage(
-              containerName = bucket,
-              azureAccount = azureAccount,
-              azureEndpoint = azureEndpoint,
-              azureSAS = azureSAS,
-              masterKey = Some(masterKey),
-              queryId = Some(queryId),
-              smkId = Some(smkId),
-              pref = path
-            ), stageName)
-
-
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Only support s3 or Azure stage, stage types: ${stageManager.stageType}"
-            )
-        }
+        (createStorageClientFromStage(param, conn, stageName), stageName)
     }
   }
 
@@ -551,7 +557,7 @@ case class S3Storage(
 
   override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
     val file: String =
-      if(dir.isDefined) s"${dir.get}/$fileName"
+      if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
@@ -579,10 +585,10 @@ case class S3Storage(
       }
     }
 
-    if(masterKey.isDefined) outputStream =
+    if (masterKey.isDefined) outputStream =
       new CipherOutputStream(outputStream, fileCipher)
 
-    if(compress) new GZIPOutputStream(outputStream)
+    if (compress) new GZIPOutputStream(outputStream)
     else outputStream
   }
 
@@ -590,7 +596,7 @@ case class S3Storage(
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
     var inputStream: InputStream = dataObject.getObjectContent
-    if(masterKey.isDefined)
+    if (masterKey.isDefined)
       inputStream =
         CloudStorageOperations.getDecryptedStream(
           inputStream,
@@ -598,7 +604,7 @@ case class S3Storage(
           dataObject.getObjectMetadata.getUserMetadata,
           StageType.S3
         )
-    if(compress) new GZIPInputStream(inputStream)
+    if (compress) new GZIPInputStream(inputStream)
     else inputStream
 
   }
