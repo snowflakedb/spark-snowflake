@@ -12,7 +12,7 @@ class LoggerSuite extends IntegrationSuiteBase {
 
 
 
-    val log = StreamingBatchLog(0, List("a", "b"), "abc")
+    val log = StreamingBatchLog(0, List("a", "b"))
     println(log)
 
 //    val node = mapper.readTree("{\"abc\":\"123\"}")

@@ -26,6 +26,8 @@ class SnowflakeSink(
 
   private var fileFailed: Boolean = false
 
+  private var config: StreamingConfiguration = null
+
   //discussion: Do we want to support overwrite mode?
   //In Spark Streaming, there are only three mode append, complete, update
   require(
@@ -40,13 +42,23 @@ class SnowflakeSink(
 
   val conn = DefaultJDBCWrapper.getConnector(param)
 
-  private implicit lazy val (storage, stageName) =
-    CloudStorageOperations
-      .createStorageClient(
-        param,
-        conn,
-        false
-      )
+//  private implicit lazy val (storage, stageName) =
+//    CloudStorageOperations
+//      .createStorageClient(
+//        param,
+//        conn,
+//        false
+//      )
+
+  private var stageName: String = _
+
+  private implicit lazy val storage =
+    if(stageName == null){
+      val result = CloudStorageOperations.createStorageClient(param, conn, false)
+      stageName = result._2
+      result._1
+    }
+    else CloudStorageOperations.createStorageClientFromStage(param, conn, stageName)
 
   private val tableName = param.table.get
 
@@ -73,6 +85,7 @@ class SnowflakeSink(
   def init(data: DataFrame): Unit = {
 
     val schema = data.schema
+    storage // init
 
     //create table
     val schemaSql = DefaultJDBCWrapper.schemaString(schema)
@@ -114,6 +127,8 @@ class SnowflakeSink(
         }
       }
     )
+    config = StreamingConfiguration(stageName, pipeName.get)
+    config.save
 
   }
 
@@ -211,6 +226,11 @@ class SnowflakeSink(
 
     param.streamingCheckPoint match {
       case Some(_) =>
+        if(config == null && StreamingConfiguration.logExists){
+          config = StreamingConfiguration.loadLog
+          stageName = config.getStageName
+          pipeName = Some(config.getPipeName)
+        }
         //todo: backup stage
         val (files, batchLog) =
           if (!StreamingBatchLog.logExists(batchId)) {
@@ -230,15 +250,14 @@ class SnowflakeSink(
                 .saveToStorage(rdd, format, Some(batchId.toString), compress)
 
             //write file names to log file
-            val batchLog = StreamingBatchLog(batchId, fileList, pipeName.get)
+            val batchLog = StreamingBatchLog(batchId, fileList)
             batchLog.save
 
             (fileList, batchLog)
           } else {
             val batchLog = StreamingBatchLog.loadLog(batchId)
             val fileList = batchLog.getFileList
-            pipeName = Some(batchLog.getPipeName)
-            if (!pipeExists(pipeName.get)) init(data)
+            //todo change pipe and stage
             (fileList, batchLog)
           }
 
