@@ -25,7 +25,6 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import net.snowflake.client.jdbc.cloud.storage.StageInfo
 import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeSQLException}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
@@ -37,11 +36,10 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, 
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
-import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeConnectorUtils}
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.Utils
-import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
@@ -204,7 +202,8 @@ object CloudStorageOperations {
   def createStorageClientFromStage(
                                     param: MergedParameters,
                                     conn: Connection,
-                                    stageName: String
+                                    stageName: String,
+                                    dir: Option[String] = None
                                   ): CloudStorage = {
     @transient val stageManager =
       new SFInternalStage(true, DefaultJDBCWrapper, param, Some(stageName))
@@ -216,6 +215,14 @@ object CloudStorageOperations {
     val stageLocation = stageManager.stageLocation
     val url = "([^/]+)/?(.*)".r
     val url(bucket, path) = stageLocation
+
+    val fullPath: String =
+      dir match {
+        case Some(str) =>
+          if(path.endsWith("/")) path + str
+          else path + "/" + str
+        case None => path
+      }
 
     stageManager.stageType match {
       case StageType.S3 =>
@@ -231,7 +238,7 @@ object CloudStorageOperations {
           masterKey = Some(masterKey),
           queryId = Some(queryId),
           smkId = Some(smkId),
-          pref = path
+          pref = fullPath
         )
 
       case StageType.AZURE =>
@@ -248,7 +255,7 @@ object CloudStorageOperations {
           masterKey = Some(masterKey),
           queryId = Some(queryId),
           smkId = Some(smkId),
-          pref = path
+          pref = fullPath
         )
 
       case _ =>

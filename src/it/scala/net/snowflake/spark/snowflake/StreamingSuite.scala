@@ -155,6 +155,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
+      .option("sf_streaming_checkpoint", "test")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
@@ -186,6 +187,8 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"drop table $table")
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"drop stage ${SnowflakeLogManager.LOG_STAGE}")
 
   }
 }

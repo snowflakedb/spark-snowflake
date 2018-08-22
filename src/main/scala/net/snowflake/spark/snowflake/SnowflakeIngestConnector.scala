@@ -70,11 +70,19 @@ object SnowflakeIngestConnector {
                          ): SimpleIngestManager =
     new SimpleIngestManager(account, user, pipe, keyPair, scheme, host, port)
 
-  def ingestFiles(files: List[String])(implicit manager: SimpleIngestManager): List[String] = {
-    manager.ingestFiles(files.map(new StagedFileWrapper(_)).asJava, null)
+  def ingestFilesAndCheck(files: List[String])
+                 (implicit manager: SimpleIngestManager): List[String] = {
+    ingestFiles(files)
     val failedFiles = waitForFileHistory(files)
     failedFiles
   }
+
+  def ingestFiles(files: List[String])
+                 (implicit manager: SimpleIngestManager): Unit =
+    manager.ingestFiles(files.map(new StagedFileWrapper(_)).asJava, null)
+
+
+
 
   def createIngestManager(
                            param: MergedParameters,

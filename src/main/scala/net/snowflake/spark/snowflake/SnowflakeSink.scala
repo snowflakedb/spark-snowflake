@@ -22,7 +22,7 @@ class SnowflakeSink(
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  implicit private val param = Parameters.mergeParameters(parameters)
+  private val param = Parameters.mergeParameters(parameters)
 
   private var fileFailed: Boolean = false
 
@@ -38,7 +38,7 @@ class SnowflakeSink(
     "Snowflake table name must be specified with 'dbtable' parameter"
   )
 
-  implicit val conn = DefaultJDBCWrapper.getConnector(param)
+  val conn = DefaultJDBCWrapper.getConnector(param)
 
   private implicit lazy val (storage, stageName) =
     CloudStorageOperations
@@ -62,6 +62,10 @@ class SnowflakeSink(
   private var lastBatchId: Long = -1
 
   private val compress: Boolean = param.sfCompress
+
+  //if checkpoint unassigned, should never be used
+  implicit private lazy val logStorage: LogStorageClient =
+    new LogStorageClient(param, conn, param.streamingCheckPoint.get)
 
   /**
     * Create pipe, stage, and storage client
@@ -99,10 +103,14 @@ class SnowflakeSink(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
-          if (!fileFailed) dropStage(stageName)
+
+          if(param.streamingCheckPoint.isDefined){
+            if (!fileFailed) dropStage(stageName)
+            if (lastBatchId >= 0)
+              StreamingBatchLog.mergeBatchLog(lastBatchId / StreamingBatchLog.GROUP_SIZE)
+          }
           dropPipe(pipeName.get)
-          if(lastBatchId>=0)
-            StreamingBatchLog.mergeBatchLog(lastBatchId / StreamingBatchLog.GROUP_SIZE)
+
         }
       }
     )
@@ -140,7 +148,7 @@ class SnowflakeSink(
             s"from (select $names $from tmp)"
           }
           else
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1-1).name))).mkString(", ")} $from tmp)"
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) from
           else
@@ -200,10 +208,63 @@ class SnowflakeSink(
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     lastBatchId = batchId
-    val (files, batchLog) =
-      if (!StreamingBatchLog.logExists(batchId)) {
-        if (pipeName.isEmpty) init(data)
 
+    param.streamingCheckPoint match {
+      case Some(_) =>
+        //todo: backup stage
+        val (files, batchLog) =
+          if (!StreamingBatchLog.logExists(batchId)) {
+            if (pipeName.isEmpty) init(data)
+
+            //prepare data
+            val rdd =
+              DefaultSnowflakeWriter.dataFrameToRDD(
+                sqlContext,
+                streamingToNonStreaming(sqlContext, data),
+                param,
+                format)
+
+            //write to storage
+            val fileList =
+              CloudStorageOperations
+                .saveToStorage(rdd, format, Some(batchId.toString), compress)
+
+            //write file names to log file
+            val batchLog = StreamingBatchLog(batchId, fileList, pipeName.get)
+            batchLog.save
+
+            (fileList, batchLog)
+          } else {
+            val batchLog = StreamingBatchLog.loadLog(batchId)
+            val fileList = batchLog.getFileList
+            pipeName = Some(batchLog.getPipeName)
+            if (!pipeExists(pipeName.get)) init(data)
+            (fileList, batchLog)
+          }
+
+        fileFailed = fileFailed || batchLog.hasFileFailed
+
+        //todo: check if merged
+        //merge batch logs
+        if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
+          val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
+          if (!StreamingFailedFileReport.logExists(groupId))
+            StreamingBatchLog.mergeBatchLog(groupId)
+        }
+
+        if (batchLog.getLoadedFileList.isEmpty) {
+          val failedFiles = SnowflakeIngestConnector.ingestFilesAndCheck(files)
+          if (failedFiles.nonEmpty) fileFailed = true
+          if (fileFailed) batchLog.fileFailed
+          val loadedFiles = files.filterNot(failedFiles.toSet)
+          batchLog.setLoadedFileNames(loadedFiles)
+          batchLog.save
+
+          //Purge files
+          CloudStorageOperations.deleteFiles(loadedFiles)
+        }
+      case None =>
+        if (pipeName.isEmpty) init(data)
         //prepare data
         val rdd =
           DefaultSnowflakeWriter.dataFrameToRDD(
@@ -211,44 +272,11 @@ class SnowflakeSink(
             streamingToNonStreaming(sqlContext, data),
             param,
             format)
-
         //write to storage
-        val fileList = CloudStorageOperations.saveToStorage(rdd, format, Some(batchId.toString), compress)
-
-        //write file names to log file
-        val batchLog = StreamingBatchLog(batchId, fileList, pipeName.get)
-        batchLog.save
-
-        (fileList, batchLog)
-      } else {
-        val batchLog = StreamingBatchLog.loadLog(batchId)
-        val fileList = batchLog.getFileList
-        pipeName = Some(batchLog.getPipeName)
-        if(!pipeExists(pipeName.get)) init(data)
-        (fileList, batchLog)
-      }
-
-    fileFailed = fileFailed || batchLog.hasFileFailed
-
-    //merge batch logs
-    if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
-      val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
-      if (!StreamingFailedFileReport.logExists(groupId))
-        StreamingBatchLog.mergeBatchLog(groupId)
-    }
-
-    if(batchLog.getLoadedFileList.isEmpty){
-      val failedFiles = SnowflakeIngestConnector.ingestFiles(files)
-      if (param.streamingKeepFailedFiles && failedFiles.nonEmpty) fileFailed = true
-      if (fileFailed) batchLog.fileFailed
-      val loadedFiles = files.filterNot(failedFiles.toSet)
-      batchLog.setLoadedFileNames(loadedFiles)
-      batchLog.save
-
-      //Purge files
-      if (param.streamingKeepFailedFiles)
-        CloudStorageOperations.deleteFiles(loadedFiles)
-      else CloudStorageOperations.deleteFiles(files)
+        val fileList =
+          CloudStorageOperations
+            .saveToStorage(rdd, format, Some(batchId.toString), compress)
+        SnowflakeIngestConnector.ingestFiles(fileList)
     }
 
   }
@@ -256,7 +284,7 @@ class SnowflakeSink(
 
   private def pipeExists(pipe: String): Boolean = {
     val statement: String = s"desc pipe $pipe"
-    Try{
+    Try {
       DefaultJDBCWrapper.executePreparedQueryInterruptibly(conn, statement)
     }.isSuccess
   }
