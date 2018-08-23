@@ -40,15 +40,12 @@ class SnowflakeSink(
     "Snowflake table name must be specified with 'dbtable' parameter"
   )
 
-  val conn = DefaultJDBCWrapper.getConnector(param)
+  require(
+    param.getPublicKeyPath.isDefined && param.getPrivateKeyPath.isDefined,
+    "key pair's path must be specified in Snowflake streaming"
+  )
 
-//  private implicit lazy val (storage, stageName) =
-//    CloudStorageOperations
-//      .createStorageClient(
-//        param,
-//        conn,
-//        false
-//      )
+  val conn = DefaultJDBCWrapper.getConnector(param)
 
   private var stageName: String = _
 
@@ -231,7 +228,6 @@ class SnowflakeSink(
           stageName = config.getStageName
           pipeName = Some(config.getPipeName)
         }
-        //todo: backup stage
         val (files, batchLog) =
           if (!StreamingBatchLog.logExists(batchId)) {
             if (pipeName.isEmpty) init(data)
@@ -257,13 +253,11 @@ class SnowflakeSink(
           } else {
             val batchLog = StreamingBatchLog.loadLog(batchId)
             val fileList = batchLog.getFileList
-            //todo change pipe and stage
             (fileList, batchLog)
           }
 
         fileFailed = fileFailed || batchLog.hasFileFailed
 
-        //todo: check if merged
         //merge batch logs
         if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
           val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
@@ -272,6 +266,7 @@ class SnowflakeSink(
         }
 
         if (batchLog.getLoadedFileList.isEmpty) {
+          //todo: time out
           val failedFiles = SnowflakeIngestConnector.ingestFilesAndCheck(files)
           if (failedFiles.nonEmpty) fileFailed = true
           if (fileFailed) batchLog.fileFailed
