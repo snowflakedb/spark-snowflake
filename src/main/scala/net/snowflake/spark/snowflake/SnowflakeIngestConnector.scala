@@ -11,6 +11,10 @@ import net.snowflake.ingest.connection.IngestStatus
 import net.snowflake.ingest.utils.StagedFileWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
+import scala.concurrent.{Await, Future, TimeoutException}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object SnowflakeIngestConnector {
 
   def privateKeyReader(fileName: String): PrivateKey = {
@@ -70,11 +74,28 @@ object SnowflakeIngestConnector {
                          ): SimpleIngestManager =
     new SimpleIngestManager(account, user, pipe, keyPair, scheme, host, port)
 
-  def ingestFilesAndCheck(files: List[String])
-                 (implicit manager: SimpleIngestManager): List[String] = {
+  /**
+    * Ingest files and wait ingest history
+    * @param files a list of file names
+    * @param sec time out in second
+    * @param manager Ingest Manager
+    * @return a list of failed file name, or None in case of time out
+    */
+  def ingestFilesAndCheck(files: List[String], sec: Long)
+                 (implicit manager: SimpleIngestManager): Option[List[String]] = {
     ingestFiles(files)
-    val failedFiles = waitForFileHistory(files)
-    failedFiles
+
+    lazy val checker = Future{ waitForFileHistory(files) }
+
+    try{
+      Some(Await.result(checker, sec second))
+    }
+    catch {
+      case _:TimeoutException => None
+    }
+
+
+
   }
 
   def ingestFiles(files: List[String])

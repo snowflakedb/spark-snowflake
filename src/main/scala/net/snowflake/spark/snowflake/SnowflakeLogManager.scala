@@ -19,6 +19,8 @@ private[snowflake] class SnowflakeLogManager {
   val FILE_NAMES = "fileNames"
   val FAILED_FILE_NAMES = "failedFileNames"
   val LOADED_FILE_NAMES = "loadedFileNames"
+  val TIME_OUT_FILES = "timeOutFiles"
+  val TIME_OUT = "timeOut"
   val PIPE_NAME = "pipeName"
   val STAGE_NAME = "stageName"
   val FILE_FAILED = "fileFailed"
@@ -88,6 +90,15 @@ sealed trait SnowflakeLog {
   override def toString: String = node.toString
 
   def save(implicit storage: LogStorageClient): Unit
+
+  protected def getListFromJson(name: String): List[String] = {
+    if (node.has(name)) {
+      var result: List[String] = Nil
+      val arr = node.get(name).asInstanceOf[ArrayNode]
+      (0 until arr.size()).foreach(x => result = arr.get(x).asText :: result)
+      result
+    } else Nil
+  }
 }
 
 /**
@@ -99,7 +110,8 @@ sealed trait SnowflakeLog {
   * "batchId": 123,
   * "fileNames": ["fileName1","fileName2"],
   * "LoadedFileNames": ["fileName1", "fileName2"],
-  * "fileFailed": false
+  * "fileFailed": false,
+  * "timeOut": true
   * }
   *
   * @param node a JSON object node contains log data
@@ -110,19 +122,14 @@ case class StreamingBatchLog(override val node: ObjectNode) extends SnowflakeLog
 
   private lazy val batchId: Long = node.get(SnowflakeLogManager.BATCH_ID).asLong()
 
-  private def getListFromJson(name: String): List[String] = {
-    if (node.has(name)) {
-      var result: List[String] = Nil
-      val arr = node.get(name).asInstanceOf[ArrayNode]
-      (0 until arr.size()).foreach(x => result = arr.get(x).asText :: result)
-      result
-    } else Nil
-  }
-
   def hasFileFailed: Boolean =
     node.get(SnowflakeLogManager.FILE_FAILED).asBoolean
 
   def fileFailed: Unit = node.put(SnowflakeLogManager.FILE_FAILED, true)
+
+  def isTimeOut: Boolean = node.get(SnowflakeLogManager.TIME_OUT).asBoolean()
+
+  def timeOut: Unit = node.put(SnowflakeLogManager.TIME_OUT, true)
 
   def getFileList: List[String] = getListFromJson(SnowflakeLogManager.FILE_NAMES)
 
@@ -157,12 +164,14 @@ object StreamingBatchLog extends SnowflakeLogManager {
 
   def apply(batchId: Long,
             fileNames: List[String],
-            fileFailed: Boolean = false
+            fileFailed: Boolean = false,
+            timeOut: Boolean = false
            ): StreamingBatchLog = {
     val node = mapper.createObjectNode()
     node.put(BATCH_ID, batchId)
     node.put(LOG_TYPE, SnowflakeLogType.STREAMING_BATCH_LOG.toString)
     node.put(FILE_FAILED, fileFailed)
+    node.put(TIME_OUT, timeOut)
     val arr = node.putArray(FILE_NAMES)
     fileNames.foreach(arr.add)
     StreamingBatchLog(node)
@@ -219,11 +228,12 @@ object StreamingBatchLog extends SnowflakeLogManager {
 
     StreamingFailedFileReport(
       groupId,
-      logs.flatMap(x => {
+      logs.filterNot(_.isTimeOut).flatMap(x => {
         val files = x.getFileList
         val loadedFile = x.getLoadedFileList
         files.filterNot(loadedFile.toSet)
-      })
+      }),
+      logs.filter(_.isTimeOut).flatMap(_.getFileList)
     ).save
 
     //remove batch log
@@ -240,7 +250,8 @@ object StreamingBatchLog extends SnowflakeLogManager {
   * {
   * "logType":"STREAMING_FAILED_FILE_REPORT",
   * "groupId":1,
-  * "failedFileNames":[]
+  * "failedFileNames":[],
+  * "timeOutFiles":[]
   * }
   *
   */
@@ -267,12 +278,14 @@ case class StreamingFailedFileReport(override val node: ObjectNode) extends Snow
 
 object StreamingFailedFileReport extends SnowflakeLogManager {
 
-  def apply(groupId: Long, failedFiles: List[String]): StreamingFailedFileReport = {
+  def apply(groupId: Long, failedFiles: List[String], timeOutFiles: List[String]): StreamingFailedFileReport = {
     val node = mapper.createObjectNode()
     node.put(LOG_TYPE, SnowflakeLogType.STREAMING_FAILED_FILE_REPORT.toString)
     node.put(GROUP_ID, groupId)
     val arr = node.putArray(FAILED_FILE_NAMES)
     failedFiles.foreach(arr.add)
+    val arr1 = node.putArray(TIME_OUT_FILES)
+    timeOutFiles.foreach(arr1.add)
     StreamingFailedFileReport(node)
   }
 

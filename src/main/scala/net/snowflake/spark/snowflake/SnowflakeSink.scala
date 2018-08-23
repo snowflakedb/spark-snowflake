@@ -265,17 +265,26 @@ class SnowflakeSink(
             StreamingBatchLog.mergeBatchLog(groupId)
         }
 
-        if (batchLog.getLoadedFileList.isEmpty) {
-          //todo: time out
-          val failedFiles = SnowflakeIngestConnector.ingestFilesAndCheck(files)
-          if (failedFiles.nonEmpty) fileFailed = true
-          if (fileFailed) batchLog.fileFailed
-          val loadedFiles = files.filterNot(failedFiles.toSet)
-          batchLog.setLoadedFileNames(loadedFiles)
-          batchLog.save
+        if (batchLog.isTimeOut || batchLog.getLoadedFileList.isEmpty) {
+          SnowflakeIngestConnector
+            .ingestFilesAndCheck(files, param.streamingWaitingTime) match {
+            case Some(failedFiles) =>
+              if(failedFiles.nonEmpty) fileFailed = true
 
-          //Purge files
-          CloudStorageOperations.deleteFiles(loadedFiles)
+              if(fileFailed) batchLog.fileFailed
+
+              val loadedFiles = files.filterNot(failedFiles.toSet)
+              batchLog.setLoadedFileNames(loadedFiles)
+              batchLog.save
+
+              //purge loaded files
+              CloudStorageOperations.deleteFiles(loadedFiles)
+
+            case None =>
+              fileFailed = true
+              batchLog.timeOut
+              batchLog.save
+          }
         }
       case None =>
         if (pipeName.isEmpty) init(data)
