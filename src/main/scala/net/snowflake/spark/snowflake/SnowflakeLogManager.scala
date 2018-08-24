@@ -1,13 +1,11 @@
 package net.snowflake.spark.snowflake
 
 import java.nio.charset.Charset
-import java.sql.Connection
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.SnowflakeLogType.SnowflakeLogType
-import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
+import net.snowflake.spark.snowflake.io.CloudStorage
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,7 +22,7 @@ private[snowflake] class SnowflakeLogManager {
   val PIPE_NAME = "pipeName"
   val STAGE_NAME = "stageName"
   val FILE_FAILED = "fileFailed"
-  val LOG_STAGE = "snowflake_spark_log"
+  val LOG_DIR = "log"
 
   implicit val mapper: ObjectMapper = new ObjectMapper()
 }
@@ -40,46 +38,11 @@ private[snowflake] object SnowflakeLogManager extends SnowflakeLogManager {
           StreamingBatchLog(node)
         case SnowflakeLogType.STREAMING_FAILED_FILE_REPORT =>
           StreamingFailedFileReport(node)
-        case SnowflakeLogType.STREAMING_CONFIGURATION =>
-          StreamingConfiguration(node)
         case _ => throw new UnsupportedOperationException("Not Support")
       }
     }
     else throw new IllegalArgumentException("Invalid log data")
 
-}
-
-private[snowflake] class LogStorageClient(
-                                           param: MergedParameters,
-                                           conn: Connection,
-                                           prefix: String
-                                         ) {
-
-  private var storageClient: CloudStorage = _
-  private var lastUpdateTime: Long = 0
-  private val REFRESH_TIME: Long = 2 * 3600 * 1000 //two hours
-
-
-  def getLogStorageClient: CloudStorage = {
-    val time = System.currentTimeMillis()
-    if (time - lastUpdateTime > REFRESH_TIME) {
-      val sql =
-        s"""
-           |create stage if not exists ${SnowflakeLogManager.LOG_STAGE}
-           """.stripMargin
-      DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
-      storageClient =
-        CloudStorageOperations
-          .createStorageClientFromStage(
-            param,
-            conn,
-            SnowflakeLogManager.LOG_STAGE,
-            Some(prefix)
-          )
-      lastUpdateTime = time
-    }
-    storageClient
-  }
 }
 
 sealed trait SnowflakeLog {
@@ -89,7 +52,7 @@ sealed trait SnowflakeLog {
 
   override def toString: String = node.toString
 
-  def save(implicit storage: LogStorageClient): Unit
+  def save(implicit storage: CloudStorage): Unit
 
   protected def getListFromJson(name: String): List[String] = {
     if (node.has(name)) {
@@ -110,7 +73,6 @@ sealed trait SnowflakeLog {
   * "batchId": 123,
   * "fileNames": ["fileName1","fileName2"],
   * "LoadedFileNames": ["fileName1", "fileName2"],
-  * "fileFailed": false,
   * "timeOut": true
   * }
   *
@@ -121,11 +83,6 @@ case class StreamingBatchLog(override val node: ObjectNode) extends SnowflakeLog
   override implicit val logType: SnowflakeLogType = SnowflakeLogType.STREAMING_BATCH_LOG
 
   private lazy val batchId: Long = node.get(SnowflakeLogManager.BATCH_ID).asLong()
-
-  def hasFileFailed: Boolean =
-    node.get(SnowflakeLogManager.FILE_FAILED).asBoolean
-
-  def fileFailed: Unit = node.put(SnowflakeLogManager.FILE_FAILED, true)
 
   def isTimeOut: Boolean = node.get(SnowflakeLogManager.TIME_OUT).asBoolean()
 
@@ -141,9 +98,9 @@ case class StreamingBatchLog(override val node: ObjectNode) extends SnowflakeLog
     this
   }
 
-  override def save(implicit storage: LogStorageClient): Unit = {
+  override def save(implicit storage: CloudStorage): Unit = {
     val outputStream =
-      storage.getLogStorageClient.upload(
+      storage.upload(
         StreamingBatchLog.fileName(batchId),
         None,
         false
@@ -164,31 +121,27 @@ object StreamingBatchLog extends SnowflakeLogManager {
 
   def apply(batchId: Long,
             fileNames: List[String],
-            fileFailed: Boolean = false,
             timeOut: Boolean = false
            ): StreamingBatchLog = {
     val node = mapper.createObjectNode()
     node.put(BATCH_ID, batchId)
     node.put(LOG_TYPE, SnowflakeLogType.STREAMING_BATCH_LOG.toString)
-    node.put(FILE_FAILED, fileFailed)
     node.put(TIME_OUT, timeOut)
     val arr = node.putArray(FILE_NAMES)
     fileNames.foreach(arr.add)
     StreamingBatchLog(node)
   }
 
-  def fileName(batchId: Long): String = s"tmp/${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
+  def fileName(batchId: Long): String = s"${SnowflakeLogManager.LOG_DIR}/tmp/${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
 
   def logExists(batchId: Long)
-               (implicit storage: LogStorageClient): Boolean =
-    storage.getLogStorageClient
-      .fileExists(fileName(batchId))
+               (implicit storage: CloudStorage): Boolean =
+    storage.fileExists(fileName(batchId))
 
   def loadLog(batchId: Long)
-             (implicit storage: LogStorageClient): StreamingBatchLog = {
+             (implicit storage: CloudStorage): StreamingBatchLog = {
     val inputStream =
-      storage.getLogStorageClient
-        .download(fileName(batchId), false)
+      storage.download(fileName(batchId), false)
     val buffer = ArrayBuffer.empty[Byte]
 
     var c: Int = inputStream.read()
@@ -208,14 +161,14 @@ object StreamingBatchLog extends SnowflakeLogManager {
   }
 
   def deleteBatchLog(batchIds: List[Long])
-                    (implicit storage: LogStorageClient): Unit =
-    storage.getLogStorageClient.deleteFiles(
+                    (implicit storage: CloudStorage): Unit =
+    storage.deleteFiles(
       batchIds.map(fileName)
     )
 
 
   def mergeBatchLog(groupId: Long)
-                   (implicit storage: LogStorageClient): Unit = {
+                   (implicit storage: CloudStorage): Unit = {
     val logs: List[StreamingBatchLog] =
       (0 until GROUP_SIZE)
         .flatMap(x => {
@@ -261,9 +214,9 @@ case class StreamingFailedFileReport(override val node: ObjectNode) extends Snow
 
   lazy val groupId: Long = node.get(SnowflakeLogManager.GROUP_ID).asLong
 
-  override def save(implicit storage: LogStorageClient): Unit = {
+  override def save(implicit storage: CloudStorage): Unit = {
     val outputStream =
-      storage.getLogStorageClient.upload(
+      storage.upload(
         StreamingFailedFileReport.fileName(groupId),
         None,
         false
@@ -290,94 +243,19 @@ object StreamingFailedFileReport extends SnowflakeLogManager {
   }
 
   def logExists(groupId: Long)
-               (implicit storage: LogStorageClient): Boolean =
-    storage.getLogStorageClient
-      .fileExists(fileName(groupId))
+               (implicit storage: CloudStorage): Boolean =
+    storage.fileExists(fileName(groupId))
 
   def fileName(groupId: Long): String =
-    s"failed_files/$groupId.json"
+    s"${SnowflakeLogManager.LOG_DIR}/failed_files/$groupId.json"
 
 }
 
-/**
-  *
-  * {
-  * "pipeName": pipe_name,
-  * "stageName": stage_name
-  * }
-  */
-case class StreamingConfiguration(override val node: ObjectNode) extends SnowflakeLog {
-
-  override implicit val logType: SnowflakeLogType = SnowflakeLogType.STREAMING_CONFIGURATION
-
-  def getPipeName: String =
-    node.get(SnowflakeLogManager.PIPE_NAME).asText()
-
-  def getStageName: String =
-    node.get(SnowflakeLogManager.STAGE_NAME).asText()
-
-  override def save(implicit storage: LogStorageClient): Unit = {
-    val outputStream =
-      storage.getLogStorageClient
-        .upload(
-          StreamingConfiguration.fileName,
-          None,
-          false
-        )
-
-    val text = this.toString
-    println(s"streaming configuration: $text")
-    outputStream.write(text.getBytes("UTF-8"))
-    outputStream.close()
-  }
-}
-
-object StreamingConfiguration extends SnowflakeLogManager {
-
-  val fileName = "snowflake_streaming_configuration.json"
-
-  def apply(stageName: String, pipeName: String): StreamingConfiguration = {
-    val node = mapper.createObjectNode()
-    node.put(LOG_TYPE, SnowflakeLogType.STREAMING_CONFIGURATION.toString)
-    node.put(PIPE_NAME, pipeName)
-    node.put(STAGE_NAME, stageName)
-    StreamingConfiguration(node)
-  }
-
-  def logExists(implicit storage: LogStorageClient): Boolean =
-    storage.getLogStorageClient.fileExists(fileName)
-
-  def loadLog(implicit storage: LogStorageClient): StreamingConfiguration = {
-    val inputStream =
-      storage.getLogStorageClient
-        .download(fileName, false)
-    val buffer = ArrayBuffer.empty[Byte]
-
-    var c: Int = inputStream.read()
-    while (c != -1) {
-      buffer.append(c.toByte)
-      c = inputStream.read()
-    }
-
-    try {
-      StreamingConfiguration(
-        mapper.readTree(
-          new String(buffer.toArray, Charset.forName("UTF-8"))
-        ).asInstanceOf[ObjectNode]
-      )
-    } catch {
-      case _: Exception =>
-        throw new IllegalArgumentException(s"snowflake streaming configuration log file is broken")
-    }
-  }
-
-}
 
 private[snowflake] object SnowflakeLogType extends Enumeration {
   type SnowflakeLogType = Value
   val STREAMING_BATCH_LOG,
-  STREAMING_FAILED_FILE_REPORT,
-  STREAMING_CONFIGURATION = Value
+  STREAMING_FAILED_FILE_REPORT = Value
 }
 
 

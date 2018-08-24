@@ -121,6 +121,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     val spark = sqlContext.sparkSession
     import spark.implicits._
+    val streamingStage = "streaming_test_stage"
 
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"create or replace table $table (value string)")
@@ -155,6 +156,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
+      .option("streaming_stage", streamingStage)
       .option("sf_streaming_checkpoint", "test")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
@@ -188,7 +190,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"drop table $table")
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop stage ${SnowflakeLogManager.LOG_STAGE}")
+      s"drop stage $streamingStage")
 
   }
 }

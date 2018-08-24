@@ -1,15 +1,13 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.{CloudStorageOperations, SupportedFormat}
+import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
 import org.slf4j.LoggerFactory
-
-import scala.util.{Random, Try}
 
 class SnowflakeSink(
                      sqlContext: SQLContext,
@@ -19,14 +17,11 @@ class SnowflakeSink(
                    ) extends Sink {
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
+  private val AWS_TOKEN_REFRESH_TIME = 2 * 3600 * 1000
 
   private val log = LoggerFactory.getLogger(getClass)
 
   private val param = Parameters.mergeParameters(parameters)
-
-  private var fileFailed: Boolean = false
-
-  private var config: StreamingConfiguration = null
 
   //discussion: Do we want to support overwrite mode?
   //In Spark Streaming, there are only three mode append, complete, update
@@ -45,17 +40,20 @@ class SnowflakeSink(
     "key pair's path must be specified in Snowflake streaming"
   )
 
+  require(
+    param.streamingStage.isDefined,
+    "Streaming stage name must be specified with 'streaming_stage' parameter"
+  )
+
   val conn = DefaultJDBCWrapper.getConnector(param)
 
-  private var stageName: String = _
+  private val stageName: String = param.streamingStage.get
 
-  private implicit lazy val storage =
-    if(stageName == null){
-      val result = CloudStorageOperations.createStorageClient(param, conn, false)
-      stageName = result._2
-      result._1
-    }
-    else CloudStorageOperations.createStorageClientFromStage(param, conn, stageName)
+
+  private var lastUpdateTime: Long = 0
+
+  private implicit var storage: CloudStorage = _
+
 
   private val tableName = param.table.get
 
@@ -72,9 +70,20 @@ class SnowflakeSink(
 
   private val compress: Boolean = param.sfCompress
 
-  //if checkpoint unassigned, should never be used
-  implicit private lazy val logStorage: LogStorageClient =
-    new LogStorageClient(param, conn, param.streamingCheckPoint.get)
+
+  def updateStorage: Unit = {
+    val currentTime = System.currentTimeMillis()
+
+    if (currentTime - lastUpdateTime > AWS_TOKEN_REFRESH_TIME) {
+
+      //always replace external stage
+      storage = CloudStorageOperations.createStorageClient(param, conn, false, Some(stageName), false)._1
+
+      lastUpdateTime =
+        if (param.rootTempDir.nonEmpty) Long.MaxValue else currentTime //don't check external stage
+    }
+  }
+
 
   /**
     * Create pipe, stage, and storage client
@@ -82,7 +91,6 @@ class SnowflakeSink(
   def init(data: DataFrame): Unit = {
 
     val schema = data.schema
-    storage // init
 
     //create table
     val schemaSql = DefaultJDBCWrapper.schemaString(schema)
@@ -99,8 +107,9 @@ class SnowflakeSink(
       else SupportedFormat.CSV
 
     pipeName =
-      Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_${Random.alphanumeric take 10 mkString ""}")
+      Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName")
 
+    //Always create new pipe, may cancel incomplete loading task
     val createPipeStatement =
       s"""
          |create or replace pipe ${pipeName.get}
@@ -114,19 +123,18 @@ class SnowflakeSink(
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
 
-          if(param.streamingCheckPoint.isDefined){
-            if (!fileFailed) dropStage(stageName)
-            if (lastBatchId >= 0)
-              StreamingBatchLog.mergeBatchLog(lastBatchId / StreamingBatchLog.GROUP_SIZE)
+          if (!param.streamingFastMode) {
+            dropPipe(pipeName.get)
           }
-          dropPipe(pipeName.get)
+
+          val groupId: Long = lastBatchId / StreamingBatchLog.GROUP_SIZE
+          if (!StreamingFailedFileReport.logExists(groupId))
+            StreamingBatchLog.mergeBatchLog(groupId)
+
 
         }
       }
     )
-    config = StreamingConfiguration(stageName, pipeName.get)
-    config.save
-
   }
 
   /**
@@ -221,106 +229,84 @@ class SnowflakeSink(
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     lastBatchId = batchId
 
-    param.streamingCheckPoint match {
-      case Some(_) =>
-        if(config == null && StreamingConfiguration.logExists){
-          config = StreamingConfiguration.loadLog
-          stageName = config.getStageName
-          pipeName = Some(config.getPipeName)
+    if (param.streamingFastMode) {
+      updateStorage
+      if (pipeName.isEmpty) init(data)
+      //prepare data
+      val rdd =
+        DefaultSnowflakeWriter.dataFrameToRDD(
+          sqlContext,
+          streamingToNonStreaming(sqlContext, data),
+          param,
+          format)
+      //write to storage
+      val fileList =
+        CloudStorageOperations
+          .saveToStorage(rdd, format, Some(batchId.toString), compress)
+      SnowflakeIngestConnector.ingestFiles(fileList)
+    } else {
+      updateStorage
+      val (files, batchLog) =
+        if (!StreamingBatchLog.logExists(batchId)) {
+          if (pipeName.isEmpty) init(data)
+
+          //prepare data
+          val rdd =
+            DefaultSnowflakeWriter.dataFrameToRDD(
+              sqlContext,
+              streamingToNonStreaming(sqlContext, data),
+              param,
+              format)
+
+          //write to storage
+          val fileList =
+            CloudStorageOperations
+              .saveToStorage(rdd, format, Some(batchId.toString), compress)
+
+          //write file names to log file
+          val batchLog = StreamingBatchLog(batchId, fileList)
+          batchLog.save
+
+          (fileList, batchLog)
+        } else {
+          pipeName =
+            Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName")
+          val batchLog = StreamingBatchLog.loadLog(batchId)
+          val fileList = batchLog.getFileList
+          (fileList, batchLog)
         }
-        val (files, batchLog) =
-          if (!StreamingBatchLog.logExists(batchId)) {
-            if (pipeName.isEmpty) init(data)
 
-            //prepare data
-            val rdd =
-              DefaultSnowflakeWriter.dataFrameToRDD(
-                sqlContext,
-                streamingToNonStreaming(sqlContext, data),
-                param,
-                format)
+      //merge batch logs
+      if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
+        val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
+        if (!StreamingFailedFileReport.logExists(groupId))
+          StreamingBatchLog.mergeBatchLog(groupId)
+      }
 
-            //write to storage
-            val fileList =
-              CloudStorageOperations
-                .saveToStorage(rdd, format, Some(batchId.toString), compress)
+      if (batchLog.isTimeOut || batchLog.getLoadedFileList.isEmpty) {
+        SnowflakeIngestConnector
+          .ingestFilesAndCheck(files, param.streamingWaitingTime) match {
+          case Some(failedFiles) =>
 
-            //write file names to log file
-            val batchLog = StreamingBatchLog(batchId, fileList)
+            val loadedFiles = files.filterNot(failedFiles.toSet)
+            batchLog.setLoadedFileNames(loadedFiles)
             batchLog.save
 
-            (fileList, batchLog)
-          } else {
-            val batchLog = StreamingBatchLog.loadLog(batchId)
-            val fileList = batchLog.getFileList
-            (fileList, batchLog)
-          }
+            //purge loaded files
+            CloudStorageOperations.deleteFiles(loadedFiles)
 
-        fileFailed = fileFailed || batchLog.hasFileFailed
-
-        //merge batch logs
-        if (batchId % StreamingBatchLog.GROUP_SIZE == 0 && batchId != 0) {
-          val groupId: Long = batchId / StreamingBatchLog.GROUP_SIZE - 1
-          if (!StreamingFailedFileReport.logExists(groupId))
-            StreamingBatchLog.mergeBatchLog(groupId)
+          case None =>
+            batchLog.timeOut
+            batchLog.save
         }
-
-        if (batchLog.isTimeOut || batchLog.getLoadedFileList.isEmpty) {
-          SnowflakeIngestConnector
-            .ingestFilesAndCheck(files, param.streamingWaitingTime) match {
-            case Some(failedFiles) =>
-              if(failedFiles.nonEmpty) fileFailed = true
-
-              if(fileFailed) batchLog.fileFailed
-
-              val loadedFiles = files.filterNot(failedFiles.toSet)
-              batchLog.setLoadedFileNames(loadedFiles)
-              batchLog.save
-
-              //purge loaded files
-              CloudStorageOperations.deleteFiles(loadedFiles)
-
-            case None =>
-              fileFailed = true
-              batchLog.timeOut
-              batchLog.save
-          }
-        }
-      case None =>
-        if (pipeName.isEmpty) init(data)
-        //prepare data
-        val rdd =
-          DefaultSnowflakeWriter.dataFrameToRDD(
-            sqlContext,
-            streamingToNonStreaming(sqlContext, data),
-            param,
-            format)
-        //write to storage
-        val fileList =
-          CloudStorageOperations
-            .saveToStorage(rdd, format, Some(batchId.toString), compress)
-        SnowflakeIngestConnector.ingestFiles(fileList)
+      }
     }
 
-  }
-
-
-  private def pipeExists(pipe: String): Boolean = {
-    val statement: String = s"desc pipe $pipe"
-    Try {
-      DefaultJDBCWrapper.executePreparedQueryInterruptibly(conn, statement)
-    }.isSuccess
   }
 
   private def dropPipe(pipe: String): Unit = {
     val statement: String = s"drop pipe if exists $pipe"
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
   }
-
-  private def dropStage(stage: String): Unit = {
-    val statement: String = s"drop stage if exists $stage"
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn, statement)
-  }
-
 
 }

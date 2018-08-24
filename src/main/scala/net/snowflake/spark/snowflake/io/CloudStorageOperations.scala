@@ -273,7 +273,8 @@ object CloudStorageOperations {
                            param: MergedParameters,
                            conn: Connection,
                            tempStage: Boolean = true,
-                           stage: Option[String] = None
+                           stage: Option[String] = None,
+                           overwrite: Boolean = true
                          ): (CloudStorage, String) = {
     val propolueSql = Utils.genPrologueSql(param)
     log.debug(propolueSql)
@@ -334,7 +335,7 @@ object CloudStorageOperations {
 
         val sql =
           s"""
-             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+             |create ${if(overwrite) "or replace" else ""} ${if (tempStage) "temporary" else ""} stage ${if(overwrite) "" else "if not exists"} $stageName
            """.stripMargin
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
