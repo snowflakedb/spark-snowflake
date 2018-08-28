@@ -93,7 +93,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     val words = lines.as[String].flatMap(_.split(" "))
 
     val checkpoint = "check"
-    removeDirectory(new File(checkpoint))
+//    removeDirectory(new File(checkpoint))
 
     new Thread(new NetworkService2(
       5678,
@@ -188,8 +188,8 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"drop table $table")
-//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-//      s"drop stage $streamingStage")
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"drop stage $streamingStage")
 
   }
 }

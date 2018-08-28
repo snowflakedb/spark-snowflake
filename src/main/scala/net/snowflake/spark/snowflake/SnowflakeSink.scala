@@ -7,6 +7,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
+import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
 class SnowflakeSink(
@@ -17,7 +18,6 @@ class SnowflakeSink(
                    ) extends Sink {
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
-  private val AWS_TOKEN_REFRESH_TIME = 2 * 3600 * 1000
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -57,27 +57,29 @@ class SnowflakeSink(
 
   private lazy val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString)
 
-  private var pipeName: Option[String] = None
+  private lazy val pipeName: String = init()
 
-  private var format: SupportedFormat = _
+  private lazy val format: SupportedFormat =
+    if (Utils.containVariant(schema.get)) SupportedFormat.JSON
+    else SupportedFormat.CSV
 
   private implicit lazy val ingestManager =
-    SnowflakeIngestConnector.createIngestManager(param, pipeName.get)
-
-  private var lastBatchId: Long = -1
+    SnowflakeIngestConnector.createIngestManager(param, pipeName)
 
   private val compress: Boolean = param.sfCompress
 
+  private var schema: Option[StructType] = None
+
+  private var lastBatchId: Long = -1
+
 
   /**
-    * Create pipe, stage, and storage client
+    * Create pipe
     */
-  def init(data: DataFrame): Unit = {
-
-    val schema = data.schema
+  def init(): String = {
 
     //create table
-    val schemaSql = DefaultJDBCWrapper.schemaString(schema)
+    val schemaSql = DefaultJDBCWrapper.schemaString(schema.get)
     val createTableSql =
       s"""
          |create table if not exists $tableName ($schemaSql)
@@ -85,40 +87,31 @@ class SnowflakeSink(
     log.debug(createTableSql)
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, createTableSql)
 
-    //create pipe
-    format =
-      if (Utils.containVariant(schema)) SupportedFormat.JSON
-      else SupportedFormat.CSV
+    val pipe = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
-    pipeName =
-      Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName")
 
-    //Always create new pipe, may cancel incomplete loading task
     val createPipeStatement =
       s"""
-         |create or replace pipe ${pipeName.get}
+         |create or replace pipe $pipe
          |as ${copySql(format)}
          |""".stripMargin
     log.debug(createPipeStatement)
     DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
 
-    data.sparkSession.sparkContext.addSparkListener(
+    sqlContext.sparkContext.addSparkListener(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
-
           if (!param.streamingFastMode) {
-            dropPipe(pipeName.get)
+            dropPipe(pipe)
           }
-
           val groupId: Long = lastBatchId / StreamingBatchLog.GROUP_SIZE
           if (!StreamingFailedFileReport.logExists(groupId))
             StreamingBatchLog.mergeBatchLog(groupId)
-
-
         }
       }
     )
+    pipe
   }
 
   /**
@@ -211,11 +204,11 @@ class SnowflakeSink(
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    if(schema.isEmpty) schema = Some(data.schema)
     lastBatchId = batchId
 
     if (param.streamingFastMode) {
 
-      if (pipeName.isEmpty) init(data)
       //prepare data
       val rdd =
         DefaultSnowflakeWriter.dataFrameToRDD(
@@ -231,8 +224,6 @@ class SnowflakeSink(
     } else {
       val (files, batchLog) =
         if (!StreamingBatchLog.logExists(batchId)) {
-          if (pipeName.isEmpty) init(data)
-
           //prepare data
           val rdd =
             DefaultSnowflakeWriter.dataFrameToRDD(
@@ -252,11 +243,7 @@ class SnowflakeSink(
 
           (fileList, batchLog)
         } else {
-          format =
-            if (Utils.containVariant(data.schema)) SupportedFormat.JSON
-            else SupportedFormat.CSV
-          pipeName =
-            Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName")
+
           val batchLog = StreamingBatchLog.loadLog(batchId)
           val fileList = batchLog.getFileList
           (fileList, batchLog)

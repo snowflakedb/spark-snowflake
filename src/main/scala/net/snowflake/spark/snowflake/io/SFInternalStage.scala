@@ -289,13 +289,14 @@ private[io] class SFInternalStage(isWrite: Boolean,
                                   jdbcWrapper: JDBCWrapper,
                                   params: MergedParameters,
                                   stage: Option[String] = None,
-                                  fileName: String = ""
+                                  fileName: String = "",
+                                  conn: Option[Connection] = None
                                  ) {
 
   import SFInternalStage._
 
   private lazy val connection: SnowflakeConnectionV1 =
-    jdbcWrapper.getConnector(params).asInstanceOf[SnowflakeConnectionV1]
+    conn.getOrElse(jdbcWrapper.getConnector(params)).asInstanceOf[SnowflakeConnectionV1]
 
   private lazy val sfAgent = {
     Utils.setLastPutCommand(command)

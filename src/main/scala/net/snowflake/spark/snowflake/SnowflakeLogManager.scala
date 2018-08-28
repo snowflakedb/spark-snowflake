@@ -189,11 +189,10 @@ object StreamingBatchLog extends SnowflakeLogManager {
       logs.filter(_.isTimeOut).flatMap(_.getFileList)
     ).save
 
-//    //remove batch log
-//    deleteBatchLog(
-//      logs.map(_.batchId)
-//    )
-
+    //remove batch log
+    deleteBatchLog(
+      logs.map(_.batchId)
+    )
   }
 }
 

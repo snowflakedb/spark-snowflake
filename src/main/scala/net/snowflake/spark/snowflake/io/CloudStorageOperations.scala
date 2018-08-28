@@ -97,9 +97,6 @@ object CloudStorageOperations {
     val keyBytes: Array[Byte] = Base64.decode(key)
     val ivBytes: Array[Byte] = Base64.decode(iv)
 
-
-//    println(s"----------> decodedKey: ${decodedKey.mkString(" ")}")
-//    println(s"----------> ivBytes: ${ivBytes.mkString(" ")}")
     val queryStageMasterKey: SecretKey =
       new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
 
@@ -444,8 +441,6 @@ case class InternalAzureStorage(
     val azureEndPoint = stageManager.azureEndpoint.get
     val prefix: String =
       if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
-
-//    println(masterKey)
 
     (container, azureAccount, azureEndPoint, azureSAS, masterKey, queryId, smkId, prefix)
   }
