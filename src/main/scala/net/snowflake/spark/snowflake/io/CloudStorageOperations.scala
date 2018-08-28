@@ -43,10 +43,12 @@ import net.snowflake.spark.snowflake.Utils
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 
 //todo: replace all storage operations by the methods in this class
+
+//todo: split get and put
 
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
@@ -95,17 +97,19 @@ object CloudStorageOperations {
     val keyBytes: Array[Byte] = Base64.decode(key)
     val ivBytes: Array[Byte] = Base64.decode(iv)
 
+
+//    println(s"----------> decodedKey: ${decodedKey.mkString(" ")}")
+//    println(s"----------> ivBytes: ${ivBytes.mkString(" ")}")
     val queryStageMasterKey: SecretKey =
       new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
 
     val keyCipher: Cipher = Cipher.getInstance(KEY_CIPHER)
     keyCipher.init(Cipher.DECRYPT_MODE, queryStageMasterKey)
 
-    val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes) // NB: we assume qsmk
-    // .length == fileKey.length
-    //     (fileKeyBytes.length may be bigger due to padding)
+
+    val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes)
     val fileKey =
-    new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+      new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
 
     val dataCipher = Cipher.getInstance(DATA_CIPHER)
     val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
@@ -203,60 +207,33 @@ object CloudStorageOperations {
                                     param: MergedParameters,
                                     conn: Connection,
                                     stageName: String,
-                                    dir: Option[String] = None
+                                    dir: Option[String] = None,
+                                    temporary: Boolean = false
                                   ): CloudStorage = {
+    def stageNotExists(stage: String): Boolean = {
+      val sql = s"desc stage $stage"
+      Try {
+        DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
+      }.isFailure
+    }
+
+    if (stageNotExists(stageName)) {
+      val sql =
+        s"""
+           |create ${if (temporary) "temporary" else ""} stage $stageName
+           """.stripMargin
+      DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
+    }
+
     @transient val stageManager =
-      new SFInternalStage(true, DefaultJDBCWrapper, param, Some(stageName))
-    //todo move stage creation from stage manager to this class
-
-    @transient val keyIds = stageManager.getKeyIds
-    val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
-    val masterKey = stageManager.masterKey
-    val stageLocation = stageManager.stageLocation
-    val url = "([^/]+)/?(.*)".r
-    val url(bucket, path) = stageLocation
-
-    val fullPath: String =
-      dir match {
-        case Some(str) =>
-          if(path.endsWith("/")) path + str
-          else path + "/" + str
-        case None => path
-      }
+      new SFInternalStage(false, DefaultJDBCWrapper, param, Some(stageName))
 
     stageManager.stageType match {
       case StageType.S3 =>
-        val awsId = stageManager.awsId
-        val awsKey = stageManager.awsKey
-        val awsToken = stageManager.awsToken
-
-        S3Storage(
-          bucketName = bucket,
-          awsId = awsId.get,
-          awsKey = awsKey.get,
-          awsToken = awsToken,
-          masterKey = Some(masterKey),
-          queryId = Some(queryId),
-          smkId = Some(smkId),
-          pref = fullPath
-        )
+        InternalS3Storage(param, stageName)
 
       case StageType.AZURE =>
-
-        val azureSAS = stageManager.azureSAS.get
-        val azureAccount = stageManager.azureAccountName.get
-        val azureEndpoint = stageManager.azureEndpoint.get
-
-        AzureStorage(
-          containerName = bucket,
-          azureAccount = azureAccount,
-          azureEndpoint = azureEndpoint,
-          azureSAS = azureSAS,
-          masterKey = Some(masterKey),
-          queryId = Some(queryId),
-          smkId = Some(smkId),
-          pref = fullPath
-        )
+        InternalAzureStorage(param, stageName)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -273,8 +250,7 @@ object CloudStorageOperations {
                            param: MergedParameters,
                            conn: Connection,
                            tempStage: Boolean = true,
-                           stage: Option[String] = None,
-                           overwrite: Boolean = true
+                           stage: Option[String] = None
                          ): (CloudStorage, String) = {
     val propolueSql = Utils.genPrologueSql(param)
     log.debug(propolueSql)
@@ -303,7 +279,7 @@ object CloudStorageOperations {
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
-        (AzureStorage(
+        (ExternalAzureStorage(
           containerName = container,
           azureAccount = account,
           azureEndpoint = endpoint,
@@ -325,20 +301,13 @@ object CloudStorageOperations {
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
-        (S3Storage(
+        (ExternalS3Storage(
           bucketName = bucket,
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
           pref = prefix
         ), stageName)
       case _ => // Internal Stage
-
-        val sql =
-          s"""
-             |create ${if(overwrite) "or replace" else ""} ${if (tempStage) "temporary" else ""} stage ${if(overwrite) "" else "if not exists"} $stageName
-           """.stripMargin
-        DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
-
         (createStorageClientFromStage(param, conn, stageName), stageName)
     }
   }
@@ -414,12 +383,6 @@ private class SingleElementIterator(fileName: String) extends Iterator[String] {
 
 sealed trait CloudStorage {
 
-  val pref: String
-
-  lazy val prefix: String =
-    if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
-
-
   def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream
 
   def upload(
@@ -458,21 +421,138 @@ sealed trait CloudStorage {
   def deleteFiles(fileNames: List[String]): Unit =
     fileNames.foreach(deleteFile)
 
-  def rename(oldName: String, newName: String): Unit
-
   def fileExists(fileName: String): Boolean
 }
 
-case class AzureStorage(
-                         containerName: String,
-                         azureAccount: String,
-                         azureEndpoint: String,
-                         azureSAS: String,
-                         masterKey: Option[String] = None,
-                         queryId: Option[String] = None,
-                         smkId: Option[String] = None,
-                         override val pref: String = ""
-                       ) extends CloudStorage {
+case class InternalAzureStorage(
+                                 param: MergedParameters,
+                                 stageName: String
+                               ) extends CloudStorage {
+
+
+  private def getStageInfo(isWrite: Boolean, fileName:String = ""):
+  (String, String, String, String, String, String, String, String) = {
+    @transient val stageManager = new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName)
+    @transient val keyIds = stageManager.getKeyIds
+    val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+    val masterKey = stageManager.masterKey
+    val stageLocation = stageManager.stageLocation
+    val url = "([^/]+)/?(.*)".r
+    val url(container, path) = stageLocation
+    val azureSAS = stageManager.azureSAS.get
+    val azureAccount = stageManager.azureAccountName.get
+    val azureEndPoint = stageManager.azureEndpoint.get
+    val prefix: String =
+      if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
+
+//    println(masterKey)
+
+    (container, azureAccount, azureEndPoint, azureSAS, masterKey, queryId, smkId, prefix)
+  }
+
+
+  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+
+    val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, queryId, smkId, prefix)
+    = getStageInfo(true)
+
+    val file: String =
+      if (dir.isDefined) s"${dir.get}/$fileName"
+      else fileName
+
+    val blob =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+        .getBlockBlobReference(prefix.concat(file))
+
+    val encryptedStream = {
+      val (cipher, meta) =
+        CloudStorageOperations
+          .getCipherAndAZMetaData(masterKey, queryId, smkId)
+      blob.setMetadata(meta)
+      new CipherOutputStream(blob.openOutputStream(), cipher)
+    }
+
+
+    if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
+
+  }
+
+  override def download(fileName: String, compress: Boolean): InputStream = {
+
+    val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, _, _, prefix)
+    = getStageInfo(false, fileName)
+
+    println(s"download fileName:${prefix.concat(fileName)}")
+    val blob =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+        .getBlockBlobReference(prefix.concat(fileName))
+
+    val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    blob.download(azureStream)
+    blob.downloadAttributes()
+
+    val inputStream: InputStream =
+      CloudStorageOperations.getDecryptedStream(
+        new ByteArrayInputStream(azureStream.toByteArray),
+        masterKey,
+        blob.getMetadata,
+        StageType.AZURE
+      )
+
+    if (compress) new GZIPInputStream(inputStream)
+    else inputStream
+  }
+
+  override def deleteFile(fileName: String): Unit = {
+
+    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
+    = getStageInfo(true)
+
+    CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
+  }
+
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
+    = getStageInfo(true)
+
+    val container =
+      CloudStorageOperations
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .getContainerReference(containerName)
+
+    fileNames
+      .map(prefix.concat)
+      .foreach(container.getBlockBlobReference(_).deleteIfExists())
+  }
+
+
+  override def fileExists(fileName: String): Boolean = {
+    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
+    = getStageInfo(false)
+    CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .getBlockBlobReference(prefix.concat(fileName)).exists()
+  }
+}
+
+case class ExternalAzureStorage(
+                                 containerName: String,
+                                 azureAccount: String,
+                                 azureEndpoint: String,
+                                 azureSAS: String,
+                                 pref: String = ""
+                               ) extends CloudStorage {
+
+  lazy val prefix: String =
+    if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
   override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
     val file: String =
@@ -485,16 +565,7 @@ case class AzureStorage(
         .getContainerReference(containerName)
         .getBlockBlobReference(prefix.concat(file))
 
-    val encryptedStream = if (masterKey.isDefined) {
-      val (cipher, meta) =
-        CloudStorageOperations
-          .getCipherAndAZMetaData(masterKey.get, queryId.get, smkId.get)
-      blob.setMetadata(meta)
-      new CipherOutputStream(blob.openOutputStream(), cipher)
-    }
-    else blob.openOutputStream()
-
-    if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
+    if (compress) new GZIPOutputStream(blob.openOutputStream()) else blob.openOutputStream()
 
   }
 
@@ -511,15 +582,7 @@ case class AzureStorage(
     blob.download(azureStream)
     blob.downloadAttributes()
 
-    val inputStream: InputStream =
-      if (masterKey.isDefined)
-        CloudStorageOperations.getDecryptedStream(
-          new ByteArrayInputStream(azureStream.toByteArray),
-          masterKey.get,
-          blob.getMetadata,
-          StageType.AZURE
-        )
-      else new ByteArrayInputStream(azureStream.toByteArray)
+    val inputStream: InputStream = new ByteArrayInputStream(azureStream.toByteArray)
     if (compress) new GZIPInputStream(inputStream)
     else inputStream
   }
@@ -541,9 +604,6 @@ case class AzureStorage(
       .foreach(container.getBlockBlobReference(_).deleteIfExists())
   }
 
-  override def rename(oldName: String, newName: String): Unit =
-    throw new NotImplementedError()
-
   override def fileExists(fileName: String): Boolean =
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -551,19 +611,40 @@ case class AzureStorage(
       .getBlockBlobReference(prefix.concat(fileName)).exists()
 }
 
-case class S3Storage(
-                      bucketName: String,
-                      awsId: String,
-                      awsKey: String,
-                      awsToken: Option[String] = None,
-                      masterKey: Option[String] = None,
-                      queryId: Option[String] = None,
-                      smkId: Option[String] = None,
-                      override val pref: String = "",
-                      parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
-                    ) extends CloudStorage {
+case class InternalS3Storage(
+                              param: MergedParameters,
+                              stageName: String,
+                              parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
+                            ) extends CloudStorage {
+
+  private def getStageInfo(isWrite: Boolean, fileName: String = ""):
+  (String, String, String, Option[String], String, String, String, String) = {
+    @transient val stageManager =
+      new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName)
+    //todo move stage creation from stage manager to this class
+
+    @transient val keyIds = stageManager.getKeyIds
+    val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
+    val masterKey = stageManager.masterKey
+    val stageLocation = stageManager.stageLocation
+    val url = "([^/]+)/?(.*)".r
+    val url(bucket, path) = stageLocation
+    val awsId = stageManager.awsId.get
+    val awsKey = stageManager.awsKey.get
+    val awsToken = stageManager.awsToken
+
+    val prefix: String =
+      if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
+
+    (bucket, awsId, awsKey, awsToken, masterKey, queryId, smkId, prefix)
+  }
+
 
   override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+
+    val (bucketName, awsId, awsKey, awsToken, masterKey, queryId, smkId, prefix) = getStageInfo(true)
+
+
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
@@ -571,12 +652,7 @@ case class S3Storage(
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
 
     val (fileCipher, meta) =
-      masterKey match {
-        case Some(_) =>
-          CloudStorageOperations.getCipherAndS3Metadata(masterKey.get, queryId.get, smkId.get)
-        case None =>
-          (null, new ObjectMetadata())
-      }
+      CloudStorageOperations.getCipherAndS3Metadata(masterKey, queryId, smkId)
 
     if (compress) meta.setContentEncoding("GZIP")
 
@@ -593,8 +669,90 @@ case class S3Storage(
       }
     }
 
-    if (masterKey.isDefined) outputStream =
+    outputStream =
       new CipherOutputStream(outputStream, fileCipher)
+
+    if (compress) new GZIPOutputStream(outputStream)
+    else outputStream
+  }
+
+  override def download(fileName: String, compress: Boolean): InputStream = {
+    val (bucketName, awsId, awsKey, awsToken, masterKey, _, _, prefix) = getStageInfo(false, fileName)
+
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
+    var inputStream: InputStream = dataObject.getObjectContent
+    inputStream =
+      CloudStorageOperations.getDecryptedStream(
+        inputStream,
+        masterKey,
+        dataObject.getObjectMetadata.getUserMetadata,
+        StageType.S3
+      )
+    if (compress) new GZIPInputStream(inputStream)
+    else inputStream
+
+  }
+
+  override def deleteFile(fileName: String): Unit = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true)
+    CloudStorageOperations
+      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .deleteObject(bucketName, prefix.concat(fileName))
+  }
+
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true)
+    CloudStorageOperations
+      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .deleteObjects(
+        new DeleteObjectsRequest(bucketName)
+          .withKeys(fileNames.map(prefix.concat): _*)
+      )
+  }
+
+  override def fileExists(fileName: String): Boolean = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(false)
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
+  }
+}
+
+case class ExternalS3Storage(
+                              bucketName: String,
+                              awsId: String,
+                              awsKey: String,
+                              awsToken: Option[String] = None,
+                              pref: String = "",
+                              parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
+                            ) extends CloudStorage {
+
+  lazy val prefix: String =
+    if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
+
+  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+    val file: String =
+      if (dir.isDefined) s"${dir.get}/$fileName"
+      else fileName
+
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+
+    val meta = new ObjectMetadata()
+
+    if (compress) meta.setContentEncoding("GZIP")
+
+    val outputStream: OutputStream = new OutputStream {
+      val buffer: ByteArrayOutputStream = new ByteArrayOutputStream()
+
+      override def write(b: Int): Unit = buffer.write(b)
+
+      override def close(): Unit = {
+        buffer.close()
+        val inputStream: InputStream =
+          new ByteArrayInputStream(buffer.toByteArray)
+        s3Client.putObject(bucketName, prefix.concat(file), inputStream, meta)
+      }
+    }
 
     if (compress) new GZIPOutputStream(outputStream)
     else outputStream
@@ -603,15 +761,7 @@ case class S3Storage(
   override def download(fileName: String, compress: Boolean): InputStream = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
-    var inputStream: InputStream = dataObject.getObjectContent
-    if (masterKey.isDefined)
-      inputStream =
-        CloudStorageOperations.getDecryptedStream(
-          inputStream,
-          masterKey.get,
-          dataObject.getObjectMetadata.getUserMetadata,
-          StageType.S3
-        )
+    val inputStream: InputStream = dataObject.getObjectContent
     if (compress) new GZIPInputStream(inputStream)
     else inputStream
 
@@ -629,9 +779,6 @@ case class S3Storage(
         new DeleteObjectsRequest(bucketName)
           .withKeys(fileNames.map(prefix.concat): _*)
       )
-
-  override def rename(oldName: String, newName: String): Unit =
-    throw new NotImplementedError()
 
   override def fileExists(fileName: String): Boolean = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)

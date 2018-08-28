@@ -107,7 +107,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoTable)
       .option("dbtable", "stream_test_table")
-      .option("streaming_keep_failed_files", "on")
+      .option("streaming_stage", "streaming_test_stage")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
@@ -157,7 +157,6 @@ class StreamingSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("streaming_stage", streamingStage)
-      .option("sf_streaming_checkpoint", "test")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
@@ -189,8 +188,8 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"drop table $table")
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop stage $streamingStage")
+//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+//      s"drop stage $streamingStage")
 
   }
 }

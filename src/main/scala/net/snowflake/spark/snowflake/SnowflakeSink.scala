@@ -49,10 +49,8 @@ class SnowflakeSink(
 
   private val stageName: String = param.streamingStage.get
 
-
-  private var lastUpdateTime: Long = 0
-
-  private implicit var storage: CloudStorage = _
+  private implicit val storage: CloudStorage =
+    CloudStorageOperations.createStorageClient(param, conn, false, Some(stageName))._1
 
 
   private val tableName = param.table.get
@@ -69,20 +67,6 @@ class SnowflakeSink(
   private var lastBatchId: Long = -1
 
   private val compress: Boolean = param.sfCompress
-
-
-  def updateStorage: Unit = {
-    val currentTime = System.currentTimeMillis()
-
-    if (currentTime - lastUpdateTime > AWS_TOKEN_REFRESH_TIME) {
-
-      //always replace external stage
-      storage = CloudStorageOperations.createStorageClient(param, conn, false, Some(stageName), false)._1
-
-      lastUpdateTime =
-        if (param.rootTempDir.nonEmpty) Long.MaxValue else currentTime //don't check external stage
-    }
-  }
 
 
   /**
@@ -230,7 +214,7 @@ class SnowflakeSink(
     lastBatchId = batchId
 
     if (param.streamingFastMode) {
-      updateStorage
+
       if (pipeName.isEmpty) init(data)
       //prepare data
       val rdd =
@@ -245,7 +229,6 @@ class SnowflakeSink(
           .saveToStorage(rdd, format, Some(batchId.toString), compress)
       SnowflakeIngestConnector.ingestFiles(fileList)
     } else {
-      updateStorage
       val (files, batchLog) =
         if (!StreamingBatchLog.logExists(batchId)) {
           if (pipeName.isEmpty) init(data)
@@ -269,6 +252,9 @@ class SnowflakeSink(
 
           (fileList, batchLog)
         } else {
+          format =
+            if (Utils.containVariant(data.schema)) SupportedFormat.JSON
+            else SupportedFormat.CSV
           pipeName =
             Some(s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName")
           val batchLog = StreamingBatchLog.loadLog(batchId)

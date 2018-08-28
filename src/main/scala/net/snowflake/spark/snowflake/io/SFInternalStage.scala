@@ -288,7 +288,8 @@ private[io] object SFInternalStage {
 private[io] class SFInternalStage(isWrite: Boolean,
                                   jdbcWrapper: JDBCWrapper,
                                   params: MergedParameters,
-                                  stage: Option[String] = None
+                                  stage: Option[String] = None,
+                                  fileName: String = ""
                                  ) {
 
   import SFInternalStage._
@@ -404,7 +405,7 @@ private[io] class SFInternalStage(isWrite: Boolean,
       if (isWrite)
         s"PUT $dummyLocation @$tempStage"
       else
-        s"GET @$tempStage $dummyLocation"
+        s"GET @$tempStage/$fileName $dummyLocation"
 
     if (params.parallelism.isDefined) {
       comm + s" PARALLEL=${params.parallelism.get}"
