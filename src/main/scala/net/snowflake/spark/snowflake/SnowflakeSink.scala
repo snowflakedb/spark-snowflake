@@ -45,7 +45,7 @@ class SnowflakeSink(
     "Streaming stage name must be specified with 'streaming_stage' parameter"
   )
 
-  val conn = DefaultJDBCWrapper.getConnector(param)
+  private implicit val conn = DefaultJDBCWrapper.getConnector(param)
 
   private val stageName: String = param.streamingStage.get
 

@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import java.nio.charset.Charset
+import java.sql.Connection
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
@@ -52,7 +53,7 @@ sealed trait SnowflakeLog {
 
   override def toString: String = node.toString
 
-  def save(implicit storage: CloudStorage): Unit
+  def save(implicit storage: CloudStorage, conn: Connection): Unit
 
   protected def getListFromJson(name: String): List[String] = {
     if (node.has(name)) {
@@ -98,7 +99,7 @@ case class StreamingBatchLog(override val node: ObjectNode) extends SnowflakeLog
     this
   }
 
-  override def save(implicit storage: CloudStorage): Unit = {
+  override def save(implicit storage: CloudStorage, conn: Connection): Unit = {
     val outputStream =
       storage.upload(
         StreamingBatchLog.fileName(batchId),
@@ -135,11 +136,11 @@ object StreamingBatchLog extends SnowflakeLogManager {
   def fileName(batchId: Long): String = s"${SnowflakeLogManager.LOG_DIR}/tmp/${batchId / GROUP_SIZE}/${batchId % GROUP_SIZE}.json"
 
   def logExists(batchId: Long)
-               (implicit storage: CloudStorage): Boolean =
+               (implicit storage: CloudStorage, conn: Connection): Boolean =
     storage.fileExists(fileName(batchId))
 
   def loadLog(batchId: Long)
-             (implicit storage: CloudStorage): StreamingBatchLog = {
+             (implicit storage: CloudStorage, conn: Connection): StreamingBatchLog = {
     val inputStream =
       storage.download(fileName(batchId), false)
     val buffer = ArrayBuffer.empty[Byte]
@@ -161,14 +162,14 @@ object StreamingBatchLog extends SnowflakeLogManager {
   }
 
   def deleteBatchLog(batchIds: List[Long])
-                    (implicit storage: CloudStorage): Unit =
+                    (implicit storage: CloudStorage, conn: Connection): Unit =
     storage.deleteFiles(
       batchIds.map(fileName)
     )
 
 
   def mergeBatchLog(groupId: Long)
-                   (implicit storage: CloudStorage): Unit = {
+                   (implicit storage: CloudStorage, conn: Connection): Unit = {
     val logs: List[StreamingBatchLog] =
       (0 until GROUP_SIZE)
         .flatMap(x => {
@@ -213,7 +214,7 @@ case class StreamingFailedFileReport(override val node: ObjectNode) extends Snow
 
   lazy val groupId: Long = node.get(SnowflakeLogManager.GROUP_ID).asLong
 
-  override def save(implicit storage: CloudStorage): Unit = {
+  override def save(implicit storage: CloudStorage, conn: Connection): Unit = {
     val outputStream =
       storage.upload(
         StreamingFailedFileReport.fileName(groupId),
@@ -242,7 +243,7 @@ object StreamingFailedFileReport extends SnowflakeLogManager {
   }
 
   def logExists(groupId: Long)
-               (implicit storage: CloudStorage): Boolean =
+               (implicit storage: CloudStorage, conn: Connection): Boolean =
     storage.fileExists(fileName(groupId))
 
   def fileName(groupId: Long): String =

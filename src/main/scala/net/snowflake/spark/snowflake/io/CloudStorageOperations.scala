@@ -305,7 +305,7 @@ object CloudStorageOperations {
           pref = prefix
         ), stageName)
       case _ => // Internal Stage
-        (createStorageClientFromStage(param, conn, stageName), stageName)
+        (createStorageClientFromStage(param, conn, stageName, None, tempStage), stageName)
     }
   }
 
@@ -324,7 +324,7 @@ object CloudStorageOperations {
                    )(implicit storage: CloudStorage): List[String] =
     storage.upload(data, format, dir, compress)
 
-  def deleteFiles(files: List[String])(implicit storage: CloudStorage): Unit =
+  def deleteFiles(files: List[String])(implicit storage: CloudStorage, connection: Connection): Unit =
     storage.deleteFiles(files)
 
 
@@ -380,7 +380,8 @@ private class SingleElementIterator(fileName: String) extends Iterator[String] {
 
 sealed trait CloudStorage {
 
-  def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream
+  def upload(fileName: String, dir: Option[String], compress: Boolean)
+            (implicit connection: Connection): OutputStream
 
   def upload(
               data: RDD[String],
@@ -398,7 +399,7 @@ sealed trait CloudStorage {
         val fileName =
           s"$index.${format.toString}${if (compress) ".gz" else ""}"
 
-        val outputStream = upload(fileName, Some(directory), compress)
+        val outputStream = upload(fileName, Some(directory), compress)(null)
         while (rows.hasNext) {
           outputStream.write(rows.next.getBytes("UTF-8"))
           outputStream.write('\n')
@@ -411,14 +412,18 @@ sealed trait CloudStorage {
     files.collect().toList
   }
 
-  def download(fileName: String, compress: Boolean): InputStream
+  def download(fileName: String, compress: Boolean)
+              (implicit connection: Connection): InputStream
 
-  def deleteFile(fileName: String): Unit
+  def deleteFile(fileName: String)
+                (implicit connection: Connection): Unit
 
-  def deleteFiles(fileNames: List[String]): Unit =
+  def deleteFiles(fileNames: List[String])
+                 (implicit connection: Connection): Unit =
     fileNames.foreach(deleteFile)
 
-  def fileExists(fileName: String): Boolean
+  def fileExists(fileName: String)
+                (implicit connection: Connection): Boolean
 }
 
 case class InternalAzureStorage(
@@ -427,9 +432,9 @@ case class InternalAzureStorage(
                                ) extends CloudStorage {
 
 
-  private def getStageInfo(isWrite: Boolean, fileName:String = ""):
+  private def getStageInfo(isWrite: Boolean, fileName:String = "", conn: Option[Connection] = None):
   (String, String, String, String, String, String, String, String) = {
-    @transient val stageManager = new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName)
+    @transient val stageManager = new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName, conn)
     @transient val keyIds = stageManager.getKeyIds
     val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
     val masterKey = stageManager.masterKey
@@ -446,10 +451,11 @@ case class InternalAzureStorage(
   }
 
 
-  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+  override def upload(fileName: String, dir: Option[String], compress: Boolean)
+                     (implicit connection: Connection): OutputStream = {
 
     val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, queryId, smkId, prefix)
-    = getStageInfo(true)
+    = getStageInfo(true, conn = Option(connection))
 
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
@@ -474,10 +480,11 @@ case class InternalAzureStorage(
 
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
+  override def download(fileName: String, compress: Boolean)
+                       (implicit connection: Connection): InputStream = {
 
     val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, _, _, prefix)
-    = getStageInfo(false, fileName)
+    = getStageInfo(false, fileName, Option(connection))
 
     println(s"download fileName:${prefix.concat(fileName)}")
     val blob =
@@ -502,10 +509,11 @@ case class InternalAzureStorage(
     else inputStream
   }
 
-  override def deleteFile(fileName: String): Unit = {
+  override def deleteFile(fileName: String)
+                         (implicit connection: Connection): Unit = {
 
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfo(true)
+    = getStageInfo(true, conn = Option(connection))
 
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -513,9 +521,10 @@ case class InternalAzureStorage(
       .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
   }
 
-  override def deleteFiles(fileNames: List[String]): Unit = {
+  override def deleteFiles(fileNames: List[String])
+                          (implicit connection: Connection): Unit = {
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfo(true)
+    = getStageInfo(true, conn = Option(connection))
 
     val container =
       CloudStorageOperations
@@ -528,9 +537,10 @@ case class InternalAzureStorage(
   }
 
 
-  override def fileExists(fileName: String): Boolean = {
+  override def fileExists(fileName: String)
+                         (implicit connection: Connection): Boolean = {
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfo(false)
+    = getStageInfo(false, conn = Option(connection))
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
@@ -549,7 +559,8 @@ case class ExternalAzureStorage(
   lazy val prefix: String =
     if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
-  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+  override def upload(fileName: String, dir: Option[String], compress: Boolean)
+                     (implicit connection: Connection): OutputStream = {
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
@@ -564,7 +575,8 @@ case class ExternalAzureStorage(
 
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
+  override def download(fileName: String, compress: Boolean)
+                       (implicit connection: Connection): InputStream = {
 
     println(s"download fileName:${prefix.concat(fileName)}")
     val blob =
@@ -582,13 +594,15 @@ case class ExternalAzureStorage(
     else inputStream
   }
 
-  override def deleteFile(fileName: String): Unit =
+  override def deleteFile(fileName: String)
+                         (implicit connection: Connection): Unit =
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
 
-  override def deleteFiles(fileNames: List[String]): Unit = {
+  override def deleteFiles(fileNames: List[String])
+                          (implicit connection: Connection): Unit = {
     val container =
       CloudStorageOperations
         .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -599,7 +613,8 @@ case class ExternalAzureStorage(
       .foreach(container.getBlockBlobReference(_).deleteIfExists())
   }
 
-  override def fileExists(fileName: String): Boolean =
+  override def fileExists(fileName: String)
+                         (implicit connection: Connection): Boolean =
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
@@ -612,10 +627,10 @@ case class InternalS3Storage(
                               parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                             ) extends CloudStorage {
 
-  private def getStageInfo(isWrite: Boolean, fileName: String = ""):
+  private def getStageInfo(isWrite: Boolean, fileName: String = "", conn: Option[Connection] = None):
   (String, String, String, Option[String], String, String, String, String) = {
     @transient val stageManager =
-      new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName)
+      new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName, conn)
     //todo move stage creation from stage manager to this class
 
     @transient val keyIds = stageManager.getKeyIds
@@ -635,9 +650,10 @@ case class InternalS3Storage(
   }
 
 
-  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+  override def upload(fileName: String, dir: Option[String], compress: Boolean)
+                     (implicit connection: Connection): OutputStream = {
 
-    val (bucketName, awsId, awsKey, awsToken, masterKey, queryId, smkId, prefix) = getStageInfo(true)
+    val (bucketName, awsId, awsKey, awsToken, masterKey, queryId, smkId, prefix) = getStageInfo(true,  conn = Option(connection))
 
 
     val file: String =
@@ -671,8 +687,9 @@ case class InternalS3Storage(
     else outputStream
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
-    val (bucketName, awsId, awsKey, awsToken, masterKey, _, _, prefix) = getStageInfo(false, fileName)
+  override def download(fileName: String, compress: Boolean)
+                       (implicit connection: Connection): InputStream = {
+    val (bucketName, awsId, awsKey, awsToken, masterKey, _, _, prefix) = getStageInfo(false, fileName, Option(connection))
 
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
@@ -689,15 +706,17 @@ case class InternalS3Storage(
 
   }
 
-  override def deleteFile(fileName: String): Unit = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true)
+  override def deleteFile(fileName: String)
+                         (implicit connection: Connection): Unit = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true, conn = Option(connection))
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObject(bucketName, prefix.concat(fileName))
   }
 
-  override def deleteFiles(fileNames: List[String]): Unit = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true)
+  override def deleteFiles(fileNames: List[String])
+                          (implicit connection: Connection): Unit = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(true, conn = Option(connection))
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObjects(
@@ -706,8 +725,9 @@ case class InternalS3Storage(
       )
   }
 
-  override def fileExists(fileName: String): Boolean = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(false)
+  override def fileExists(fileName: String)
+                         (implicit connection: Connection): Boolean = {
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfo(false, conn = Option(connection))
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
@@ -725,7 +745,8 @@ case class ExternalS3Storage(
   lazy val prefix: String =
     if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
-  override def upload(fileName: String, dir: Option[String], compress: Boolean): OutputStream = {
+  override def upload(fileName: String, dir: Option[String], compress: Boolean)
+                     (implicit connection: Connection): OutputStream = {
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
@@ -753,7 +774,8 @@ case class ExternalS3Storage(
     else outputStream
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
+  override def download(fileName: String, compress: Boolean)
+                       (implicit connection: Connection): InputStream = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
     val inputStream: InputStream = dataObject.getObjectContent
@@ -762,12 +784,14 @@ case class ExternalS3Storage(
 
   }
 
-  override def deleteFile(fileName: String): Unit =
+  override def deleteFile(fileName: String)
+                         (implicit connection: Connection): Unit =
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObject(bucketName, prefix.concat(fileName))
 
-  override def deleteFiles(fileNames: List[String]): Unit =
+  override def deleteFiles(fileNames: List[String])
+                          (implicit connection: Connection): Unit =
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObjects(
@@ -775,7 +799,8 @@ case class ExternalS3Storage(
           .withKeys(fileNames.map(prefix.concat): _*)
       )
 
-  override def fileExists(fileName: String): Boolean = {
+  override def fileExists(fileName: String)
+                         (implicit connection: Connection): Boolean = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
