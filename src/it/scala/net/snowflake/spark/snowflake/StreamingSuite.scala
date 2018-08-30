@@ -78,7 +78,7 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   //manual test only
-  test("test") {
+  ignore("test") {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
