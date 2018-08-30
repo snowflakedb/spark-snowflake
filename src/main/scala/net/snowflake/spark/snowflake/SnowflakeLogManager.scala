@@ -118,7 +118,7 @@ case class StreamingBatchLog(override val node: ObjectNode) extends SnowflakeLog
 object StreamingBatchLog extends SnowflakeLogManager {
 
   //threshold for grouping log
-  val GROUP_SIZE: Int = 10
+  val GROUP_SIZE: Int = 100
 
   def apply(batchId: Long,
             fileNames: List[String],
