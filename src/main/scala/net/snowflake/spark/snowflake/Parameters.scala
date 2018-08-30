@@ -22,6 +22,8 @@ import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory
 
+import scala.util.Try
+
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
   * defaults.
@@ -73,6 +75,11 @@ object Parameters {
 
   val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
+  val PARAM_STREAMING_WAITING_TIME = knownParam("streaming_waiting_time")
+  val PARAM_STREAMING_FAST_MODE = knownParam("streaming_fast_mode")
+  val PARAM_STREAMING_STAGE    = knownParam("streaming_stage")
+  val PARAM_PUBLIC_KEY_PATH    = knownParam("public_key_path")
+  val PARAM_PRIVATE_KEY_PATH   = knownParam("private_key_path")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -106,8 +113,10 @@ object Parameters {
     PARAM_TRUNCATE_TABLE -> "off",
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
-    PARAM_AUTO_PUSHDOWN -> "on"
-
+    PARAM_AUTO_PUSHDOWN -> "on",
+    PARAM_STREAMING_WAITING_TIME -> "120",
+    PARAM_SF_SSL -> "on",
+    PARAM_STREAMING_FAST_MODE -> "off"
   )
 
   /**
@@ -222,8 +231,7 @@ object Parameters {
     lazy val usingExternalStage: Boolean = !rootTempDir.isEmpty
 
     lazy val rootTempDirStorageType: FSType = {
-      val tempDir = Option(parameters.getOrElse(PARAM_TEMPDIR, "")).
-        getOrElse("")
+      val tempDir = parameters.getOrElse(PARAM_TEMPDIR, "")
 
       if (tempDir.isEmpty) {
         FSType.Unknown
@@ -257,7 +265,7 @@ object Parameters {
       */
     lazy val rootTempDir: String = {
       rootTempDirStorageType
-      Option(parameters.getOrElse(PARAM_TEMPDIR, "")).getOrElse("")
+      parameters.getOrElse(PARAM_TEMPDIR, "")
     }
 
     /**
@@ -515,6 +523,19 @@ object Parameters {
     def awsAccessKey: Option[String] = parameters.get(PARAM_AWS_ACCESS_KEY)
 
     def awsSecretKey: Option[String] = parameters.get(PARAM_AWS_SECRET_KEY)
+
+    def isSslON: Boolean = isTrue(sfSSL)
+
+    def getPublicKeyPath: Option[String] = parameters.get(PARAM_PUBLIC_KEY_PATH)
+
+    def getPrivateKeyPath: Option[String] = parameters.get(PARAM_PRIVATE_KEY_PATH)
+
+    def streamingWaitingTime: Long =
+      Try(parameters(PARAM_STREAMING_WAITING_TIME).toLong).getOrElse(120)
+
+    def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
+
+    def streamingFastMode: Boolean = isTrue(parameters(PARAM_STREAMING_FAST_MODE))
 
   }
 }

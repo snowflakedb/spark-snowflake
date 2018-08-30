@@ -17,7 +17,9 @@
 
 package net.snowflake.spark.snowflake
 
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider}
+import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
@@ -33,7 +35,8 @@ import org.slf4j.LoggerFactory
 class DefaultSource(jdbcWrapper: JDBCWrapper)
   extends RelationProvider
     with SchemaRelationProvider
-    with CreatableRelationProvider {
+    with CreatableRelationProvider
+    with StreamSinkProvider{
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -124,4 +127,12 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     createRelation(sqlContext, parameters)
   }
+
+  override def createSink(
+                           sqlContext: SQLContext,
+                           parameters: Map[String, String],
+                           partitionColumns: Seq[String],
+                           outputMode: OutputMode
+                         ): Sink =
+    new SnowflakeSink(sqlContext, parameters, partitionColumns, outputMode)
 }
