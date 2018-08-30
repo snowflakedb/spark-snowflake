@@ -77,6 +77,12 @@ class StreamingSuite extends IntegrationSuiteBase {
     checkAnswer(loadedDf, expectedAnswer)
   }
 
+  override def afterAll(): Unit = {
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"drop table $table")
+    super.afterAll()
+  }
+
   //manual test only
   ignore("test") {
     val spark = sqlContext.sparkSession
@@ -161,7 +167,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .start()
 
 
-    query.awaitTermination(100000)
+    query.awaitTermination(120000)
 
     checkTestTable(Seq(
       Row("0"),
@@ -186,10 +192,9 @@ class StreamingSuite extends IntegrationSuiteBase {
       Row("two")
     ))
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop table $table")
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop stage $streamingStage")
+//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+//      s"drop stage $streamingStage")
 
   }
+
 }
