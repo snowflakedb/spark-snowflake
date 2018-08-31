@@ -46,9 +46,13 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     conn.createStage(name, overwrite = false, temporary = false)
 
+    assert(conn.stageExists(name))
+
     assert(conn.dropStage(name))
 
     assert(!conn.dropStage(name))
+
+    assert(!conn.stageExists(name))
 
     conn.createStage(name, overwrite = true, temporary = true)
 
@@ -75,6 +79,8 @@ class JDBCSuite extends IntegrationSuiteBase {
     )
 
     statement.setString(1, "\"abc\"")
+
+
 
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
   }

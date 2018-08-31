@@ -423,7 +423,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       */
     def tableExists(name: String): Boolean = {
       val statement = connection.prepareStatement(
-        "select 1 from identifier(?) limit 1"
+        "desc table identifier(?)"
       )
       statement.setString(1, name)
       Try {
@@ -501,9 +501,30 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
     }
 
-    def createPipe(name: String): Unit = {}
 
-    def dropPipe(name: String): Boolean = false
+    /**
+      *
+      * @param name stage name
+      * @return true is stage exists, otherwise false
+      */
+    def stageExists(name: String): Boolean = {
+      val statement = connection.prepareStatement(
+        "desc stage identifier(?)"
+      )
+      statement.setString(1, name)
+      Try{
+        executePreparedQueryInterruptibly(statement)
+      }.isSuccess
+    }
+
+
+
+    //pipe operations
+    def createPipe(name: String): Unit = throw new NotImplementedError()
+
+    def dropPipe(name: String): Boolean = throw new NotImplementedError()
+
+    def pipeExists(name: String): Boolean = throw new NotImplementedError()
 
   }
 
