@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake
 
 import DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
 class JDBCSuite extends IntegrationSuiteBase {
 
@@ -73,16 +74,28 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore ("test") {
-    val statement  =  conn.prepareStatement(
-      "create or replace table identifier(?) (num int)"
-    )
+  test("test") {
 
-    statement.setString(1, "\"abc\"")
+//    val df =
+//      sqlContext
+//        .read
+//        .format(SNOWFLAKE_SOURCE_NAME)
+//        .options(connectorOptionsNoTable)
+//        .option("dbtable", "test_table")
+//        .load()
+//
+//    df.where("num > 1").show()
+
+    // insert into test_table values("abc"), ("123")
+
+    val st1 = StringVariable("abc") + ConstantString("),(") +
+      StringVariable("123") + ConstantString(")")
+
+    val st2 = ConstantString(",(") + StringVariable("456") + ConstantString(")")
+
+    (ConstantString("insert into test_table values (") + st1 + st2).execute(conn)
 
 
-
-    DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
   }
 
 
