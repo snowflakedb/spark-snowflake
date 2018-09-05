@@ -406,9 +406,9 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                      temporary: Boolean = false
                    ): Unit =
       (EmptySnowflakeSQLStatement() + "create" +
-        (if(overwrite) "or replace" else "") +
-        (if(temporary) "temporary" else "") + "table" +
-        (if(!overwrite) "if not exists" else "") + Identifier(name) +
+        (if (overwrite) "or replace" else "") +
+        (if (temporary) "temporary" else "") + "table" +
+        (if (!overwrite) "if not exists" else "") + Identifier(name) +
         s"(${schemaString(schema)})").execute(connection)
 
     /**
@@ -422,6 +422,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
     /**
       * Drop a table
+      *
       * @param name table name
       * @return true if table dropped, false if the given table not exists
       */
@@ -455,18 +456,18 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                    ): Unit = {
 
       (EmptySnowflakeSQLStatement() + "create" +
-        (if(overwrite) "or replace" else "") +
-        (if(temporary) "temporary" else "") + "stage" +
-        (if(!overwrite) "if not exists" else "") + Identifier(name) +
+        (if (overwrite) "or replace" else "") +
+        (if (temporary) "temporary" else "") + "stage" +
+        (if (!overwrite) "if not exists" else "") + Identifier(name) +
         (location match {
           case Some(path) =>
             ConstantString(s"url='$path' credentials = (") +
-              (azureSAS match{
-              case Some(sas) =>
-                ConstantString(s"azure_sas_token = '$sas')")
-              case None =>
+              (azureSAS match {
+                case Some(sas) =>
+                  ConstantString(s"azure_sas_token = '$sas')")
+                case None =>
                   ConstantString(s"aws_key_id = '${awsAccessKey.get}' aws_secret_key = '${awsSecretKey.get}')")
-            })
+              })
           case None => EmptySnowflakeSQLStatement()
         })
         ).execute(connection)
@@ -475,11 +476,12 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
     /**
       * Drop a stage
+      *
       * @param name stage name
       * @return true if stage dropped, false if the given stage not exists.
       */
     def dropStage(name: String): Boolean =
-      Try{
+      Try {
         (EmptySnowflakeSQLStatement() + "drop stage" + Identifier(name)).execute(connection)
       }.isSuccess
 
@@ -490,7 +492,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @return true is stage exists, otherwise false
       */
     def stageExists(name: String): Boolean = {
-      Try{
+      Try {
         (EmptySnowflakeSQLStatement() + "desc stage" + Identifier(name)).execute(connection)
       }.isSuccess
     }
@@ -517,36 +519,35 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
   * SQL string wrapper
   */
 private[snowflake] class SnowflakeSQLStatement(
-                                              val numOfVar: Int = 0,
-                                              val list: List[StatementElement] = Nil
+                                                val numOfVar: Int = 0,
+                                                val list: List[StatementElement] = Nil
                                               ) {
 
-  def + (element: StatementElement): SnowflakeSQLStatement =
+  def +(element: StatementElement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
       numOfVar + element.isVariable,
       element :: list
     )
 
-  def + (statement: SnowflakeSQLStatement): SnowflakeSQLStatement =
+  def +(statement: SnowflakeSQLStatement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
       numOfVar + statement.numOfVar,
       statement.list ::: list
     )
 
-  def + (str: String): SnowflakeSQLStatement = this + ConstantString(str)
+  def +(str: String): SnowflakeSQLStatement = this + ConstantString(str)
 
   def isEmpty: Boolean = list.isEmpty
 
-  def execute(implicit conn: Connection): Unit = {
+  def execute(implicit conn: Connection): ResultSet = {
     val sql = list.reverse
     val varArray: Array[StatementElement] = new Array[StatementElement](numOfVar)
     var indexOfVar: Int = 0
     val buffer = new StringBuilder
 
     sql.foreach(element => {
-      if(element.isInstanceOf[ConstantString]) buffer.append(element)
-      else {
-        buffer.append(element)
+      buffer.append(element)
+      if (!element.isInstanceOf[ConstantString]) {
         varArray(indexOfVar) = element
         indexOfVar += 1
       }
@@ -555,11 +556,11 @@ private[snowflake] class SnowflakeSQLStatement(
 
     val statement = conn.prepareStatement(buffer.toString())
 
-    varArray.zipWithIndex.foreach{
-      case(element, index) => {
+    varArray.zipWithIndex.foreach {
+      case (element, index) => {
         element match {
           case ele: VariableElement[String] => //StringVariable, Identifier
-            statement.setString(index+1, ele.variable)
+            statement.setString(index + 1, ele.variable)
           case _ =>
             throw new IllegalArgumentException("Unexpected Element Type: " + element.getClass.getName)
         }
@@ -569,31 +570,51 @@ private[snowflake] class SnowflakeSQLStatement(
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
 
   }
+
+
+  override def toString: String = {
+    val buffer = new StringBuilder
+    val sql = list.reverse
+
+    sql.foreach {
+      case x: ConstantString => {
+        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+        buffer.append(x)
+      }
+      case x: VariableElement[_] => {
+        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+        buffer.append(x.variable)
+      }
+    }
+
+    buffer.toString()
+  }
+
 }
 
 private[snowflake] object EmptySnowflakeSQLStatement {
   def apply(): SnowflakeSQLStatement = new SnowflakeSQLStatement()
 }
 
-private[snowflake] sealed trait StatementElement{
+private[snowflake] sealed trait StatementElement {
 
   val value: String
 
   val isVariable: Int = 0
 
-  def + (element: StatementElement): SnowflakeSQLStatement =
+  def +(element: StatementElement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
       isVariable + element.isVariable,
       element :: List[StatementElement](this)
     )
 
-  def + (statement: SnowflakeSQLStatement): SnowflakeSQLStatement =
+  def +(statement: SnowflakeSQLStatement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
       isVariable + statement.numOfVar,
       statement.list ::: List[StatementElement](this)
     )
 
-  def + (str: String): SnowflakeSQLStatement = this + ConstantString(str)
+  def +(str: String): SnowflakeSQLStatement = this + ConstantString(str)
 
   override def toString: String = value
 }
