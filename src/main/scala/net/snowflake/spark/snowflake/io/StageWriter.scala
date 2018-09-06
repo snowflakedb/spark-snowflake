@@ -312,6 +312,7 @@ private[io] object StageWriter {
              |    NULL_IF=()
              |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
              |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+             |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
              |  )
            """.stripMargin
         case SupportedFormat.JSON =>
