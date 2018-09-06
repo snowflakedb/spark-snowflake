@@ -561,6 +561,16 @@ private[snowflake] class SnowflakeSQLStatement(
         element match {
           case ele: VariableElement[String] => //StringVariable, Identifier
             statement.setString(index + 1, ele.variable)
+          case ele: VariableElement[Int] =>
+            statement.setInt(index + 1, ele.variable)
+          case ele: VariableElement[Long] =>
+            statement.setLong(index + 1, ele.variable)
+          case ele: VariableElement[Float] =>
+            statement.setFloat(index + 1, ele.variable)
+          case ele: VariableElement[Double] =>
+            statement.setDouble(index + 1, ele.variable)
+          case ele: VariableElement[Boolean] =>
+            statement.setBoolean(index +1, ele.variable)
           case _ =>
             throw new IllegalArgumentException("Unexpected Element Type: " + element.getClass.getName)
         }
@@ -617,6 +627,11 @@ private[snowflake] sealed trait StatementElement {
   def +(str: String): SnowflakeSQLStatement = this + ConstantString(str)
 
   override def toString: String = value
+
+  def ! : SnowflakeSQLStatement = toStatement
+
+  def toStatement: SnowflakeSQLStatement =
+    new SnowflakeSQLStatement(isVariable, List[StatementElement](this))
 }
 
 private[snowflake] case class ConstantString(override val value: String) extends StatementElement
@@ -635,4 +650,14 @@ private[snowflake] case class Identifier(override val variable: String) extends 
 }
 
 private[snowflake] case class StringVariable(override val variable: String) extends VariableElement[String]
+
+private[snowflake] case class IntVariable(override val variable: Int) extends VariableElement[Int]
+
+private[snowflake] case class LongVariable(override val variable: Long) extends VariableElement[Long]
+
+private[snowflake] case class FloatVariable(override val variable: Float) extends VariableElement[Float]
+
+private[snowflake] case class DoubleVariable(override val variable: Double) extends VariableElement[Double]
+
+private[Boolean] case class BooleanVariable(override val variable: Boolean) extends VariableElement[Boolean]
 
