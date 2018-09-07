@@ -43,7 +43,7 @@ package object io {
       case SupportedSource.INTERNAL =>
         new SFInternalRDD(sqlContext, params, sql, jdbcWrapper, format, statement)
       case SupportedSource.EXTERNAL =>
-        new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format).getRDD() //todo
+        new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format, statement).getRDD()
     }
 
 

@@ -15,7 +15,7 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import net.snowflake.spark.snowflake.{CloudCredentialsUtils, JDBCWrapper, Utils}
+import net.snowflake.spark.snowflake.{CloudCredentialsUtils, JDBCWrapper, SnowflakeSQLStatement, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.rdd.RDD
@@ -24,12 +24,13 @@ import org.slf4j.{Logger, LoggerFactory}
 
 
 private[io] class ExternalStageReader(
-                  val sqlContext: SQLContext,
-                  val params: MergedParameters,
-                  val sql: String,
-                  val jdbcWrapper: JDBCWrapper,
-                  val format: SupportedFormat = SupportedFormat.CSV
-                ) extends DataUnloader {
+                                       val sqlContext: SQLContext,
+                                       val params: MergedParameters,
+                                       val sql: String,
+                                       val jdbcWrapper: JDBCWrapper,
+                                       val format: SupportedFormat = SupportedFormat.CSV,
+                                       val statement: Option[SnowflakeSQLStatement] = None
+                                     ) extends DataUnloader {
   override val log: Logger = LoggerFactory.getLogger(getClass)
 
 
@@ -47,9 +48,22 @@ private[io] class ExternalStageReader(
               .getSnowflakeCredentialsString(sqlContext, params)
           ),
           format
-      ),
+        ),
 
-      conn = jdbcWrapper.getConnector(params))
+      conn = jdbcWrapper.getConnector(params),
+      statement = statement.map(
+        buildUnloadStatement(
+          _,
+          Utils.fixUrlForCopyCommand(tempDir),
+          if (params.sfCompress) "gzip" else "none",
+          Some(
+            CloudCredentialsUtils
+              .getSnowflakeCredentialsString(sqlContext, params)
+          ),
+          format
+        )
+      )
+    )
 
     if (numRows == 0) {
       // For no records, create an empty RDD
