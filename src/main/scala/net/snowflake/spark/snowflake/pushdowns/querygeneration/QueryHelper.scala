@@ -79,6 +79,6 @@ private[querygeneration] case class QueryHelper(
 
   val sourceStatement: SnowflakeSQLStatement =
     if(children.nonEmpty)
-      mkStatement(children, conjunctionStatement)
+      mkStatement(children.map(_.getStatement(true)), conjunctionStatement)
     else conjunctionStatement
 }

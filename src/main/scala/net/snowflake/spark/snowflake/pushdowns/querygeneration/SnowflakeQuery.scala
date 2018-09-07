@@ -1,5 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
+import net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
@@ -36,7 +37,7 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
   }
 
   def expressionToStatement(expr: Expression): SnowflakeSQLStatement =
-    convertExpression(expr,helper.colSet) //todo
+    convertStatement(expr,helper.colSet)
 
   /** Converts this query into a String representing the SQL.
     *
@@ -122,9 +123,8 @@ case class SourceQuery(relation: SnowflakeRelation,
       relation.params.query.getOrElse(relation.params.table.get.toString),
       alias = "sf_connector_query_alias"),
     conjunctionStatement = blockStatement(
-      EmptySnowflakeSQLStatement() +
         relation.params.query.map(ConstantString) // user input query, don't parse
-          .getOrElse(Identifier(relation.params.table.get.name)),
+          .getOrElse(Identifier(relation.params.table.get.name)) !,
       "sf_connector_query_alias"
     )
   )
@@ -166,7 +166,7 @@ case class FilterQuery(conditions: Seq[Expression],
     .mkString(" AND ")
 
   override val suffixStatement: SnowflakeSQLStatement =
-    ConstantString("WHERE") +
+    ConstantString("WHERE") + mkStatement(conditions.map(expressionToStatement), "AND")
 }
 
 /** The query for a projection operation.
@@ -214,6 +214,12 @@ case class AggregateQuery(columns: Seq[NamedExpression],
         .map(group => expressionToString(group))
         .mkString(", ")
     } else ""
+
+  override val suffixStatement: SnowflakeSQLStatement =
+    if(groups.nonEmpty)
+      ConstantString("GROUP BY") +
+        mkStatement(groups.map(expressionToStatement), ",")
+    else EmptySnowflakeSQLStatement()
 }
 
 /** The query for Sort and Limit operations.
@@ -246,6 +252,13 @@ case class SortLimitQuery(limit: Option[Expression],
       .map(l => " LIMIT " + expressionToString(l))
       .getOrElse("")
   }
+
+  override val suffixStatement: SnowflakeSQLStatement =
+    (if(orderBy.nonEmpty)
+      ConstantString("ORDER BY") + mkStatement(orderBy.map(expressionToStatement), ",")
+    else EmptySnowflakeSQLStatement()) +
+      limit.map(ConstantString("LIMIT") + expressionToStatement(_))
+        .getOrElse(EmptySnowflakeSQLStatement())
 }
 
 /** The query for join operations.
@@ -289,6 +302,10 @@ case class JoinQuery(left: SnowflakeQuery,
     str + conditions.map(cond => expressionToString(cond)).mkString(" AND ")
   }
 
+  override val suffixStatement: SnowflakeSQLStatement =
+    conditions.map(ConstantString("ON") + expressionToStatement(_))
+      .getOrElse(EmptySnowflakeSQLStatement())
+
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this).orElse(left.find(query)).orElse(right.find(query))
 }
@@ -319,6 +336,15 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
         left.helper.outputWithQualifier ++ right.helper.outputWithQualifier))
       .getQuery(useAlias = false))
 
+  override val suffixStatement: SnowflakeSQLStatement =
+    ConstantString("WHERE") + anti + "EXISTS" + blockStatement(
+      FilterQuery(
+        conditions = cond,
+        child = right,
+        alias = alias.next,
+        fields = Some(left.helper.outputWithQualifier ++ right.helper.outputWithQualifier)
+      ).getStatement()
+    )
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this).orElse(left.find(query)).orElse(right.find(query))
 }
@@ -352,6 +378,15 @@ case class UnionQuery(children: Seq[LogicalPlan],
 
     if (useAlias)
       block(query) + s""" AS "$alias""""
+    else query
+  }
+
+  override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {
+    val query =
+      if (queries.nonEmpty)
+        mkStatement(queries.map(c => blockStatement(c.getStatement())), "UNION ALL")
+      else EmptySnowflakeSQLStatement()
+    if(useAlias) blockStatement(query, alias)
     else query
   }
 

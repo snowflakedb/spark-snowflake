@@ -559,18 +559,24 @@ private[snowflake] class SnowflakeSQLStatement(
     varArray.zipWithIndex.foreach {
       case (element, index) => {
         element match {
-          case ele: VariableElement[String] => //StringVariable, Identifier
+          case ele: StringVariable =>
             statement.setString(index + 1, ele.variable)
-          case ele: VariableElement[Int] =>
+          case ele: Identifier =>
+            statement.setString(index + 1, ele.variable)
+          case ele: IntVariable =>
             statement.setInt(index + 1, ele.variable)
-          case ele: VariableElement[Long] =>
+          case ele: LongVariable =>
             statement.setLong(index + 1, ele.variable)
-          case ele: VariableElement[Float] =>
+          case ele: ShortVariable =>
+            statement.setShort(index + 1, ele.variable)
+          case ele: FloatVariable =>
             statement.setFloat(index + 1, ele.variable)
-          case ele: VariableElement[Double] =>
+          case ele: DoubleVariable =>
             statement.setDouble(index + 1, ele.variable)
-          case ele: VariableElement[Boolean] =>
+          case ele: BooleanVariable =>
             statement.setBoolean(index +1, ele.variable)
+          case ele: ByteVariable =>
+            statement.setByte(index + 1, ele.variable)
           case _ =>
             throw new IllegalArgumentException("Unexpected Element Type: " + element.getClass.getName)
         }
@@ -655,9 +661,13 @@ private[snowflake] case class IntVariable(override val variable: Int) extends Va
 
 private[snowflake] case class LongVariable(override val variable: Long) extends VariableElement[Long]
 
+private[snowflake] case class ShortVariable(override val variable: Short) extends VariableElement[Short]
+
 private[snowflake] case class FloatVariable(override val variable: Float) extends VariableElement[Float]
 
 private[snowflake] case class DoubleVariable(override val variable: Double) extends VariableElement[Double]
 
-private[Boolean] case class BooleanVariable(override val variable: Boolean) extends VariableElement[Boolean]
+private[snowflake] case class BooleanVariable(override val variable: Boolean) extends VariableElement[Boolean]
+
+private[snowflake] case class ByteVariable(override val variable: Byte) extends VariableElement[Byte]
 

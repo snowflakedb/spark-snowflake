@@ -220,17 +220,17 @@ package object querygeneration {
     str.toString()
   }
 
-  private[querygeneration] final def mkStatement(
-                                                  seq: Seq[SnowflakeQuery],
-                                                  delimiter: String
-                                                ): SnowflakeSQLStatement =
-    mkStatement(seq, delimiter)
-
-  private[querygeneration] final def mkStatement(
-                                                  seq: Seq[SnowflakeQuery],
-                                                  delimiter: SnowflakeSQLStatement
-                                                ): SnowflakeSQLStatement =
-    mkStatement(seq.map(_.getStatement(true)), delimiter)
+//  private[querygeneration] final def mkStatement(
+//                                                  seq: Seq[SnowflakeQuery],
+//                                                  delimiter: String
+//                                                ): SnowflakeSQLStatement =
+//    mkStatement(seq, delimiter)
+//
+//  private[querygeneration] final def mkStatement(
+//                                                  seq: Seq[SnowflakeQuery],
+//                                                  delimiter: SnowflakeSQLStatement
+//                                                ): SnowflakeSQLStatement =
+//    mkStatement(seq.map(_.getStatement(true)), delimiter)
 
 
   private[querygeneration] final def mkStatement(

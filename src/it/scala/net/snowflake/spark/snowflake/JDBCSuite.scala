@@ -95,9 +95,9 @@ class JDBCSuite extends IntegrationSuiteBase {
 //
 //    (ConstantString("insert into test_table values (") + st1 + st2).execute(conn)
 
-    val stmt = conn.prepareStatement("select \"STR\" from identifier(?)")
+    val stmt = conn.prepareStatement("select DATEADD(day, ? , TO_DATE('1970-01-01'));")
 //    stmt.setString(1, "\"STR\"")
-    stmt.setString(1, "test_table")
+    stmt.setLong(1,12321);
 
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(stmt)
 

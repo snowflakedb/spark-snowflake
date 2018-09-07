@@ -1,8 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, SnowflakeSQLStatement, StringVariable}
+import net.snowflake.spark.snowflake._
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, Expression, Literal, Or}
-import org.apache.spark.sql.types.{DateType, StringType}
+import org.apache.spark.sql.types._
 
 /**
   * Extractor for basic (attributes and literals) expressions.
@@ -108,8 +108,20 @@ private[querygeneration] object BasicStatement {
             if (str == "null") ConstantString(str.toUpperCase) !
             else StringVariable(str) !    //else "'" + str + "'"
           }
-          case DateType => s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
-          case _        => l.toString()
+          case DateType =>
+            ConstantString("DATEADD(day,") + IntVariable(l.value.asInstanceOf[Int]) +
+          ", TO_DATE('1970-01-01'))" //s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
+          case IntegerType => IntVariable(l.value.asInstanceOf[Int]) !
+          case LongType => LongVariable(l.value.asInstanceOf[Long]) !
+          case ShortType => ShortVariable(l.value.asInstanceOf[Short]) !
+          case BooleanType => BooleanVariable(l.value.asInstanceOf[Boolean]) !
+          case FloatType => FloatVariable(l.value.asInstanceOf[Float]) !
+          case DoubleType => DoubleVariable(l.value.asInstanceOf[Double]) !
+          case ByteType => ByteVariable(l.value.asInstanceOf[Byte]) !
+          case TimestampType => LongVariable(l.value.asInstanceOf[Long]) !
+          case _        => ConstantString(l.toString()) !
+
+            //decimal
         }
 
       case _ => null
