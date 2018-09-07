@@ -424,8 +424,14 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
 
     def tableMetaData(name: String): ResultSetMetaData =
-      (ConstantString("select * from (") + Identifier(name) + ") where 1 = 0")
-        .execute(connection).getMetaData
+      try {
+        (ConstantString("select * from") + Identifier(name) + "where 1 = 0")
+          .execute(connection).getMetaData
+      } catch {
+        case _: Exception =>
+          (ConstantString("select * from") + name + "where 1 = 0") //todo refactor this
+            .execute(connection).getMetaData
+      }
 
     def tableSchema(name: String): StructType = resolveTable(connection, name)
 
@@ -507,8 +513,8 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def dropPipe(name: String): Boolean = throw new NotImplementedError()
 
     def pipeExists(name: String): Boolean = throw new NotImplementedError()
-
   }
+
 
 }
 
