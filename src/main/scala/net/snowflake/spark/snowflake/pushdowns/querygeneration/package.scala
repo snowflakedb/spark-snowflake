@@ -92,7 +92,7 @@ package object querygeneration {
   private[querygeneration] final def wrapStatement(
                                                     name: String
                                                   ): SnowflakeSQLStatement =
-    ConstantString(identifier) + name + identifier
+    ConstantString(identifier + name + identifier) !
 
 
 

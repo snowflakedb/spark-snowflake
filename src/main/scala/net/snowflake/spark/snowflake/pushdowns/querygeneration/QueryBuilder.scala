@@ -83,7 +83,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     val schema = StructType(getOutput.map(attr =>
       StructField(attr.name, attr.dataType, attr.nullable)))
 
-    source.relation.buildScanFromSQL[T](query, Some(schema))
+    source.relation.buildScanFromSQL[T](query, Some(schema), Some(statement))
   }
 
   private def checkTree(): Unit = {

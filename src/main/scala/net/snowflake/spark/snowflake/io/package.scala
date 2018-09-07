@@ -36,13 +36,14 @@ package object io {
                sql: String,
                jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper,
                source: SupportedSource = SupportedSource.INTERNAL,
-               format: SupportedFormat = SupportedFormat.CSV
+               format: SupportedFormat = SupportedFormat.CSV,
+               statement: Option[SnowflakeSQLStatement] = None
              ): RDD[String] =
     source match {
       case SupportedSource.INTERNAL =>
-        new SFInternalRDD(sqlContext, params, sql, jdbcWrapper, format)
+        new SFInternalRDD(sqlContext, params, sql, jdbcWrapper, format, statement)
       case SupportedSource.EXTERNAL =>
-        new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format).getRDD()
+        new ExternalStageReader(sqlContext, params, sql, jdbcWrapper, format).getRDD() //todo
     }
 
 

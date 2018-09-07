@@ -292,7 +292,9 @@ case class JoinQuery(left: SnowflakeQuery,
         left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
       outputAttributes = None,
       alias = alias,
-      conjunction = conj)
+      conjunction = conj,
+      conjunctionStatement = ConstantString(conj) !
+    )
 
   override val suffix = {
     val str = conditions match {

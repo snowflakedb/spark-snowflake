@@ -585,6 +585,7 @@ private[snowflake] class SnowflakeSQLStatement(
 
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
 
+
   }
 
 
@@ -600,6 +601,27 @@ private[snowflake] class SnowflakeSQLStatement(
       case x: VariableElement[_] => {
         if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
         buffer.append(x.variable)
+      }
+    }
+
+    buffer.toString()
+  }
+
+  def statementString: String =  {
+    val buffer = new StringBuilder
+    val sql = list.reverse
+
+    sql.foreach {
+      case x: ConstantString => {
+        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+        buffer.append(x)
+      }
+      case x: VariableElement[_] => {
+        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+        buffer.append(x.value)
+        buffer.append("(")
+        buffer.append(x.variable)
+        buffer.append(")")
       }
     }
 
