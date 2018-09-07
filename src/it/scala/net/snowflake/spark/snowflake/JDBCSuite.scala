@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
 class JDBCSuite extends IntegrationSuiteBase {
@@ -72,6 +72,22 @@ class JDBCSuite extends IntegrationSuiteBase {
     )
     assert(conn.dropStage(name))
 
+  }
+
+  test("test schema") {
+    val name = s"spark_test_table_$randomSuffix"
+    val schema =
+      new StructType(
+        Array(
+          StructField("STR", StringType, false)
+        )
+      )
+
+    conn.createTable(name, schema, true, false)
+
+    conn.tableSchema(name).equals(schema)
+
+    conn.dropTable(name)
   }
 
   test("test") {

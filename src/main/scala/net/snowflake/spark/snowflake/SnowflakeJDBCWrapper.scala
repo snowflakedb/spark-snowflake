@@ -36,6 +36,7 @@ import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
+import DefaultJDBCWrapper.DataBaseOperations
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -74,35 +75,30 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table contains an unsupported type.
     */
   def resolveTable(conn: Connection, table: String): StructType = {
-    val rs = executePreparedQueryInterruptibly(conn, s"SELECT * FROM ($table) as sf_connector_query_alias WHERE 1=0")
-    try {
-      val rsmd = rs.getMetaData
-      val ncols = rsmd.getColumnCount
-      val fields = new Array[StructField](ncols)
-      var i = 0
-      while (i < ncols) {
-        val columnName = rsmd.getColumnLabel(i + 1)
-        val dataType = rsmd.getColumnType(i + 1)
-        val typeName = rsmd.getColumnTypeName(i + 1)
-        val fieldSize = rsmd.getPrecision(i + 1)
-        val fieldScale = rsmd.getScale(i + 1)
-        val isSigned = rsmd.isSigned(i + 1)
-        val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-        val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
-        fields(i) = StructField(
-          // Add quotes around column names if Snowflake would usually require them.
-          if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
-            columnName
-          else
-            s""""$columnName"""",
-          columnType,
-          nullable)
-        i = i + 1
-      }
-      new StructType(fields)
-    } finally {
-      rs.close()
+    val rsmd = conn.tableMetaData(table)
+    val ncols = rsmd.getColumnCount
+    val fields = new Array[StructField](ncols)
+    var i = 0
+    while (i < ncols) {
+      val columnName = rsmd.getColumnLabel(i + 1)
+      val dataType = rsmd.getColumnType(i + 1)
+      val typeName = rsmd.getColumnTypeName(i + 1)
+      val fieldSize = rsmd.getPrecision(i + 1)
+      val fieldScale = rsmd.getScale(i + 1)
+      val isSigned = rsmd.isSigned(i + 1)
+      val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
+      fields(i) = StructField(
+        // Add quotes around column names if Snowflake would usually require them.
+        if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
+          columnName
+        else
+          s""""$columnName"""",
+        columnType,
+        nullable)
+      i = i + 1
     }
+    new StructType(fields)
   }
 
   /**
@@ -227,14 +223,10 @@ private[snowflake] class JDBCWrapper {
   /**
     * Returns true if the table already exists in the JDBC database.
     */
-  @deprecated
-  def tableExists(conn: Connection, table: String): Boolean = {
-    // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems, considering "table" could also include the database name.
-    Try {
-      executePreparedQueryInterruptibly(conn, s"SELECT 1 FROM $table LIMIT 1").next()
-    }.isSuccess
-  }
+  def tableExists(conn: Connection, table: String): Boolean = conn.tableExists(table)
+
+  // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
+  // SQL database systems, considering "table" could also include the database name.
 
   def executePreparedInterruptibly(statement: PreparedStatement): Boolean = {
     executeInterruptibly(statement,
@@ -431,6 +423,11 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         (EmptySnowflakeSQLStatement() + "drop table" + Identifier(name)).execute(connection)
       }.isSuccess
 
+    def tableMetaData(name: String): ResultSetMetaData =
+      (ConstantString("select * from (") + Identifier(name) + ") where 1 = 0")
+        .execute(connection).getMetaData
+
+    def tableSchema(name: String): StructType = resolveTable(connection, name)
 
     /**
       * Create an internal stage if location is None,
@@ -574,7 +571,7 @@ private[snowflake] class SnowflakeSQLStatement(
           case ele: DoubleVariable =>
             statement.setDouble(index + 1, ele.variable)
           case ele: BooleanVariable =>
-            statement.setBoolean(index +1, ele.variable)
+            statement.setBoolean(index + 1, ele.variable)
           case ele: ByteVariable =>
             statement.setByte(index + 1, ele.variable)
           case _ =>
@@ -607,7 +604,7 @@ private[snowflake] class SnowflakeSQLStatement(
     buffer.toString()
   }
 
-  def statementString: String =  {
+  def statementString: String = {
     val buffer = new StringBuilder
     val sql = list.reverse
 
