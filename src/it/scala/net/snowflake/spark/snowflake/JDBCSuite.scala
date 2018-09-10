@@ -90,35 +90,60 @@ class JDBCSuite extends IntegrationSuiteBase {
     conn.dropTable(name)
   }
 
-  test("test") {
-
-//    val df =
-//      sqlContext
-//        .read
-//        .format(SNOWFLAKE_SOURCE_NAME)
-//        .options(connectorOptionsNoTable)
-//        .option("dbtable", "test_table")
-//        .load()
+//  test("push down with values"){
 //
-//    df.where("num > 1").show()
-
-    // insert into test_table values("abc"), ("123")
-
-//    val st1 = StringVariable("abc") + ConstantString("),(") +
-//      StringVariable("123") + ConstantString(")")
+//    val name = s"spark_test_table_$randomSuffix"
+//    val schema =
+//      new StructType(
+//        Array(
+//          StructField("num", IntegerType, false)
+//        )
+//      )
 //
-//    val st2 = ConstantString(",(") + StringVariable("456") + ConstantString(")")
+//    conn.createTable(name, schema, true, false)
 //
-//    (ConstantString("insert into test_table values (") + st1 + st2).execute(conn)
+//    sqlContext.read.format(SNOWFLAKE_SOURCE_NAME)
+//      .options(connectorOptionsNoTable)
+//      .option("dbtable", name).option("autopushdown", "off")
+//      .load().select("NUM").where("NUM > 0")
+//      .collect()
+//
+//    conn.dropTable(name)
+//
+//  }
 
-    val stmt = conn.prepareStatement("select DATEADD(day, ? , TO_DATE('1970-01-01'));")
-//    stmt.setString(1, "\"STR\"")
-    stmt.setLong(1,12321);
-
-    DefaultJDBCWrapper.executePreparedQueryInterruptibly(stmt)
-
-
-  }
+//  test("test") {
+//
+//
+//
+//
+//    //    val df =
+////      sqlContext
+////        .read
+////        .format(SNOWFLAKE_SOURCE_NAME)
+////        .options(connectorOptionsNoTable)
+////        .option("dbtable", "test_table")
+////        .load()
+////
+////    df.where("num > 1").show()
+//
+//    // insert into test_table values("abc"), ("123")
+//
+////    val st1 = StringVariable("abc") + ConstantString("),(") +
+////      StringVariable("123") + ConstantString(")")
+////
+////    val st2 = ConstantString(",(") + StringVariable("456") + ConstantString(")")
+////
+////    (ConstantString("insert into test_table values (") + st1 + st2).execute(conn)
+//
+//    val stmt = conn.prepareStatement("select DATEADD(day, ? , TO_DATE('1970-01-01'));")
+////    stmt.setString(1, "\"STR\"")
+//    stmt.setLong(1,12321);
+//
+//    DefaultJDBCWrapper.executePreparedQueryInterruptibly(stmt)
+//
+//
+//  }
 
 
 }

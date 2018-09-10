@@ -603,7 +603,7 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       case x: VariableElement[_] => {
         if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
-        buffer.append(x.variable)
+        buffer.append(x.sql)
       }
     }
 
@@ -674,13 +674,17 @@ private[snowflake] sealed trait VariableElement[T] extends StatementElement {
 
   val variable: T
 
+  def sql: String = variable.toString
+
 }
 
 private[snowflake] case class Identifier(override val variable: String) extends VariableElement[String] {
   override val value: String = "identifier(?)"
 }
 
-private[snowflake] case class StringVariable(override val variable: String) extends VariableElement[String]
+private[snowflake] case class StringVariable(override val variable: String) extends VariableElement[String] {
+  override def sql: String = s"""'$variable'"""
+}
 
 private[snowflake] case class IntVariable(override val variable: Int) extends VariableElement[Int]
 

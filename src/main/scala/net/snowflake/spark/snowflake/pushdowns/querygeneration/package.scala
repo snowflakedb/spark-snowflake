@@ -220,20 +220,8 @@ package object querygeneration {
     str.toString()
   }
 
-//  private[querygeneration] final def mkStatement(
-//                                                  seq: Seq[SnowflakeQuery],
-//                                                  delimiter: String
-//                                                ): SnowflakeSQLStatement =
-//    mkStatement(seq, delimiter)
-//
-//  private[querygeneration] final def mkStatement(
-//                                                  seq: Seq[SnowflakeQuery],
-//                                                  delimiter: SnowflakeSQLStatement
-//                                                ): SnowflakeSQLStatement =
-//    mkStatement(seq.map(_.getStatement(true)), delimiter)
 
-
-  private[querygeneration] final def mkStatement(
+  final def mkStatement(
                                                   seq: Seq[SnowflakeSQLStatement],
                                                   delimiter: SnowflakeSQLStatement
                                                 ): SnowflakeSQLStatement =
@@ -242,7 +230,7 @@ package object querygeneration {
         if(left.isEmpty) stmt else left + delimiter + stmt
     }
 
-  private[querygeneration] final def mkStatement(
+  final def mkStatement(
                                                   seq: Seq[SnowflakeSQLStatement],
                                                   delimiter: String
                                                 ): SnowflakeSQLStatement =

@@ -105,7 +105,7 @@ private[snowflake] case class SnowflakeRelation(
 
     val conn = jdbcWrapper.getConnector(params)
     val resultSchema = schema.getOrElse(try {
-      jdbcWrapper.resolveTable(conn, sql) // todo
+      jdbcWrapper.resolveTable(conn, sql)
     } finally {
       conn.close()
     })
@@ -154,7 +154,7 @@ private[snowflake] case class SnowflakeRelation(
       // Unload data from Snowflake into a temporary directory in S3:
       val prunedSchema = pruneSchema(schema, requiredColumns)
 
-      getRDD[Row](standardQuery(requiredColumns, filters), prunedSchema)
+      getRDD[Row](standardQuery(requiredColumns, filters), prunedSchema, Some(standardStatement(requiredColumns, filters)))
     }
   }
 
@@ -200,6 +200,24 @@ private[snowflake] case class SnowflakeRelation(
     val tableNameOrSubquery =
       params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
     s"SELECT $columnList FROM $tableNameOrSubquery $whereClause"
+  }
+
+  // Build a query out of required columns and filters. (Used by buildScan)
+  private def standardStatement(
+                                 requiredColumns: Array[String],
+                                 filters: Array[Filter]
+                               ): SnowflakeSQLStatement = {
+
+    assert(!requiredColumns.isEmpty)
+    // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted
+    // (unless already quoted):
+    val columnList = requiredColumns
+      .map(col => if (isQuoted(col)) col else "\"" + col.toUpperCase + "\"")
+      .mkString(", ")
+    val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
+    val tableNameOrSubquery: StatementElement =
+      params.table.map(table => Identifier(table.name)).getOrElse(ConstantString(params.query.get))
+    ConstantString("SELECT") + columnList + "FROM" + tableNameOrSubquery + whereClause
   }
 }
 
