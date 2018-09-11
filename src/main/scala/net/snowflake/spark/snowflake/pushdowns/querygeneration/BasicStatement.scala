@@ -53,15 +53,27 @@ private[querygeneration] object BasicStatement {
           case DateType =>
             ConstantString("DATEADD(day,") + IntVariable(l.value.asInstanceOf[Int]) +
           ", TO_DATE('1970-01-01'))" //s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
-          case IntegerType => IntVariable(l.value.asInstanceOf[Int]) !
-          case LongType => LongVariable(l.value.asInstanceOf[Long]) !
-          case ShortType => ShortVariable(l.value.asInstanceOf[Short]) !
-          case BooleanType => BooleanVariable(l.value.asInstanceOf[Boolean]) !
-          case FloatType => FloatVariable(l.value.asInstanceOf[Float]) !
-          case DoubleType => DoubleVariable(l.value.asInstanceOf[Double]) !
-          case ByteType => ByteVariable(l.value.asInstanceOf[Byte]) !
-          case TimestampType => LongVariable(l.value.asInstanceOf[Long]) !
-          case _        => ConstantString(l.toString()) !
+
+          case _ =>
+            l.value match {
+              case v: Int => IntVariable(v) !
+              case v: Long => LongVariable(v) !
+              case v: Short => ShortVariable(v) !
+              case v: Boolean => BooleanVariable(v) !
+              case v: Float => FloatVariable(v) !
+              case v: Double => DoubleVariable(v) !
+              case v: Byte => ByteVariable(v) !
+              case _ => ConstantString(l.value.toString) !
+            }
+//          case IntegerType => IntVariable(l.value.asInstanceOf[Int]) !
+//          case LongType => LongVariable(l.value.asInstanceOf[Long]) !
+//          case ShortType => ShortVariable(l.value.asInstanceOf[Short]) !
+//          case BooleanType => BooleanVariable(l.value.asInstanceOf[Boolean]) !
+//          case FloatType => DoubleVariable(l.value.asInstanceOf[Double]) ! //FloatType => Double
+//          case DoubleType => DoubleVariable(l.value.asInstanceOf[Double]) !
+//          case ByteType => ByteVariable(l.value.asInstanceOf[Byte]) !
+//          case TimestampType => LongVariable(l.value.asInstanceOf[Long]) !
+//          case _        => ConstantString(l.toString()) !
 
             //decimal
         }

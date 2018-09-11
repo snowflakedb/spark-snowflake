@@ -56,15 +56,19 @@ private[snowflake] object FilterPushdown {
           .replace("\\", "\\\\")) !
         case DateType => StringVariable(value.asInstanceOf[Date].toString) + "::DATE"
         case TimestampType => StringVariable(value.asInstanceOf[Timestamp].toString) + "::TIMESTAMP(3)"
-        case IntegerType => IntVariable(value.asInstanceOf[Int]) !
-        case LongType => LongVariable(value.asInstanceOf[Long]) !
-        case ShortType => ShortVariable(value.asInstanceOf[Short]) !
-        case BooleanType => BooleanVariable(value.asInstanceOf[Boolean]) !
-        case FloatType => FloatVariable(value.asInstanceOf[Float]) !
-        case DoubleType => DoubleVariable(value.asInstanceOf[Double]) !
-        case ByteType => ByteVariable(value.asInstanceOf[Byte]) !
-        case _  => ConstantString(value.toString) !
+        case _ =>
+          value match {
+            case v: Int => IntVariable(v) !
+            case v: Long => LongVariable(v) !
+            case v: Short => ShortVariable(v) !
+            case v: Boolean => BooleanVariable(v) !
+            case v: Float => FloatVariable(v) !
+            case v: Double => DoubleVariable(v) !
+            case v: Byte => ByteVariable(v) !
+            case _ => ConstantString(value.toString) !
+          }
       }
+
     }
 
     // Builds an escaped value, based on the value itself

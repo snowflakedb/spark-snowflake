@@ -598,6 +598,13 @@ private[snowflake] class SnowflakeSQLStatement(
 
   }
 
+  override def equals(obj: scala.Any): Boolean =
+    obj match {
+      case other: SnowflakeSQLStatement =>
+        if(this.statementString == other.statementString) true else false
+      case _ => false
+    }
+
 
   override def toString: String = {
     val buffer = new StringBuilder
