@@ -74,8 +74,10 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table specification is garbage.
     * @throws SQLException if the table contains an unsupported type.
     */
-  def resolveTable(conn: Connection, table: String): StructType = {
-    val rsmd = conn.tableMetaData(table)
+  def resolveTable(conn: Connection, table: String): StructType =
+    resolveTableFromMeta(conn, conn.tableMetaData(table))
+
+  def resolveTableFromMeta(conn: Connection, rsmd: ResultSetMetaData): StructType = {
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
     var i = 0
@@ -425,15 +427,20 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
     def tableMetaData(name: String): ResultSetMetaData =
       try {
-        (ConstantString("select * from") + Identifier(name) + "where 1 = 0")
-          .execute(connection).getMetaData
+        tableMetaDataFromStatement(Identifier(name) !)
       } catch {
         case _: Exception =>
-          (ConstantString("select * from") + name + "where 1 = 0") //todo refactor this
-            .execute(connection).getMetaData
+          tableMetaDataFromStatement(ConstantString(name) !)
       }
 
+    def tableMetaDataFromStatement(statement: SnowflakeSQLStatement): ResultSetMetaData =
+      (ConstantString("select * from") + statement + "where 1 = 0")
+        .execute(connection).getMetaData
+
     def tableSchema(name: String): StructType = resolveTable(connection, name)
+
+    def tableSchema(statement: SnowflakeSQLStatement): StructType =
+      resolveTableFromMeta(connection, tableMetaDataFromStatement(statement))
 
     /**
       * Create an internal stage if location is None,

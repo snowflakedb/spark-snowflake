@@ -26,10 +26,9 @@ import org.slf4j.{Logger, LoggerFactory}
 private[io] class ExternalStageReader(
                                        val sqlContext: SQLContext,
                                        val params: MergedParameters,
-                                       val sql: String,
+                                       val statement: SnowflakeSQLStatement,
                                        val jdbcWrapper: JDBCWrapper,
-                                       val format: SupportedFormat = SupportedFormat.CSV,
-                                       val statement: Option[SnowflakeSQLStatement] = None
+                                       val format: SupportedFormat = SupportedFormat.CSV
                                      ) extends DataUnloader {
   override val log: Logger = LoggerFactory.getLogger(getClass)
 
@@ -38,22 +37,10 @@ private[io] class ExternalStageReader(
     val tempDir = params.createPerQueryTempDir()
 
     val numRows = setup(
-      sql =
-        buildUnloadStmt(
-          sql,
-          Utils.fixUrlForCopyCommand(tempDir),
-          if (params.sfCompress) "gzip" else "none",
-          Some(
-            CloudCredentialsUtils
-              .getSnowflakeCredentialsString(sqlContext, params)
-          ),
-          format
-        ),
-
       conn = jdbcWrapper.getConnector(params),
-      statement = statement.map(
+      statement =
         buildUnloadStatement(
-          _,
+          statement,
           Utils.fixUrlForCopyCommand(tempDir),
           if (params.sfCompress) "gzip" else "none",
           Some(
@@ -62,7 +49,6 @@ private[io] class ExternalStageReader(
           ),
           format
         )
-      )
     )
 
     if (numRows == 0) {

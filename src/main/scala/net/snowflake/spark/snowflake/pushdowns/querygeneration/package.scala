@@ -18,17 +18,6 @@ package object querygeneration {
 
   private[querygeneration] final val log = LoggerFactory.getLogger(getClass)
 
-  /** Query blocks. */
-  private[querygeneration] final def block(text: String): String = {
-    "(" + text + ")"
-  }
-
-  /** Same as block() but with an alias. */
-  private[querygeneration] final def block(text: String,
-                                           alias: String): String = {
-    "(" + text + ") AS " + wrap(alias)
-  }
-
   private[querygeneration] final def blockStatement(
                                                     stmt: SnowflakeSQLStatement
                                                    ): SnowflakeSQLStatement =
@@ -46,17 +35,8 @@ package object querygeneration {
     * @param attr The Spark Attribute object to be added.
     * @param fields The Seq[Attribute] containing the valid fields to be used in the expression,
     *               usually derived from the output of a subquery.
-    * @return A string representing the attribute expression.
+    * @return A SnowflakeSQLStatement representing the attribute expression.
     */
-  private[querygeneration] final def addAttribute(
-      attr: Attribute,
-      fields: Seq[Attribute]): String = {
-    fields.find(e => e.exprId == attr.exprId) match {
-      case Some(resolved) =>
-        qualifiedAttribute(resolved.qualifier, resolved.name)
-      case None => qualifiedAttribute(attr.qualifier, attr.name)
-    }
-  }
   private[querygeneration] final def addAttributeStatement(
                                                             attr: Attribute,
                                                             fields: Seq[Attribute]
@@ -69,7 +49,7 @@ package object querygeneration {
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
   private[querygeneration] final def qualifiedAttribute(alias: Option[String],
-                                                        name: String) = {
+                                                        name: String): String = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
       case None            => ""
@@ -94,28 +74,11 @@ package object querygeneration {
                                                   ): SnowflakeSQLStatement =
     ConstantString(identifier + name + identifier) !
 
-
-
-
   /** This performs the conversion from Spark expressions to SQL runnable by Snowflake.
     * We should have as many entries here as possible, or the translation will not be able ot happen.
     *
     * @note (A MatchError may be raised for unsupported Spark expressions).
     */
-  private[querygeneration] final def convertExpression(
-      expression: Expression,
-      fields: Seq[Attribute]): String = {
-    (expression, fields) match {
-      case AggregationExpression(sql) => sql
-      case BasicExpression(sql)       => sql
-      case BooleanExpression(sql)     => sql
-      case DateExpression(sql)        => sql
-      case MiscExpression(sql)        => sql
-      case NumericExpression(sql)     => sql
-      case StringExpression(sql)      => sql
-    }
-  }
-
   private[querygeneration] final def convertStatement(
                                                        expression: Expression,
                                                        fields: Seq[Attribute]
@@ -129,12 +92,6 @@ package object querygeneration {
       case NumericStatement(stmt) => stmt
       case StringStatement(stmt) => stmt
     }
-  }
-
-  private[querygeneration] final def convertExpressions(
-      fields: Seq[Attribute],
-      expressions: Expression*): String = {
-    expressions.map(e => convertExpression(e, fields)).mkString(", ")
   }
 
   private[querygeneration] final def convertStatements(

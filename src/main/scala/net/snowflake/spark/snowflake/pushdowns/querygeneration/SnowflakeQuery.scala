@@ -1,6 +1,5 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
@@ -28,13 +27,7 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
   val helper: QueryHelper
 
   /** What comes after the FROM clause. */
-  val suffix: String = ""
-
   val suffixStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement()
-
-  def expressionToString(expr: Expression): String = {
-    convertExpression(expr, helper.colSet)
-  }
 
   def expressionToStatement(expr: Expression): SnowflakeSQLStatement =
     convertStatement(expr,helper.colSet)
@@ -44,22 +37,12 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
     * @param useAlias Whether or not to alias this translated block of SQL.
     * @return SQL statement for this query.
     */
-  def getQuery(useAlias: Boolean = false): String = {
-    log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
-
-    val query =
-      s"""SELECT ${helper.columns.getOrElse("*")} FROM ${helper.source}$suffix"""
-
-    if (useAlias)
-      block(query) + s""" AS "${helper.alias}""""
-    else query
-  }
 
   def getStatement(useAlias: Boolean = false): SnowflakeSQLStatement = {
     log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
 
     val stmt =
-      ConstantString("SELECT") + helper.columns.getOrElse("*") + "FROM" +
+      ConstantString("SELECT") + helper.columns.getOrElse(ConstantString("*") !) + "FROM" +
         helper.sourceStatement + suffixStatement
 
     if (useAlias)
@@ -119,9 +102,6 @@ case class SourceQuery(relation: SnowflakeRelation,
     projections = None,
     outputAttributes = Some(refColumns),
     alias = alias,
-    conjunction = block(
-      relation.params.query.getOrElse(relation.params.table.get.toString),
-      alias = "sf_connector_query_alias"),
     conjunctionStatement = blockStatement(
         relation.params.query.map(ConstantString) // user input query, don't parse
           .getOrElse(Identifier(relation.params.table.get.name)) !,
@@ -160,10 +140,6 @@ case class FilterQuery(conditions: Seq[Expression],
       outputAttributes = None,
       alias = alias,
       fields = fields)
-
-  override val suffix = " WHERE " + conditions
-    .map(cond => expressionToString(cond))
-    .mkString(" AND ")
 
   override val suffixStatement: SnowflakeSQLStatement =
     ConstantString("WHERE") + mkStatement(conditions.map(expressionToStatement), "AND")
@@ -208,13 +184,6 @@ case class AggregateQuery(columns: Seq[NamedExpression],
       outputAttributes = None,
       alias = alias)
 
-  override val suffix =
-    if (!groups.isEmpty) {
-      " GROUP BY " + groups
-        .map(group => expressionToString(group))
-        .mkString(", ")
-    } else ""
-
   override val suffixStatement: SnowflakeSQLStatement =
     if(groups.nonEmpty)
       ConstantString("GROUP BY") +
@@ -241,17 +210,6 @@ case class SortLimitQuery(limit: Option[Expression],
       projections = None,
       outputAttributes = None,
       alias = alias)
-
-  override val suffix = {
-    val order_clause =
-      if (orderBy.nonEmpty)
-        " ORDER BY " + orderBy.map(e => expressionToString(e)).mkString(", ")
-      else ""
-
-    order_clause + limit
-      .map(l => " LIMIT " + expressionToString(l))
-      .getOrElse("")
-  }
 
   override val suffixStatement: SnowflakeSQLStatement =
     (if(orderBy.nonEmpty)
@@ -292,17 +250,8 @@ case class JoinQuery(left: SnowflakeQuery,
         left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
       outputAttributes = None,
       alias = alias,
-      conjunction = conj,
       conjunctionStatement = ConstantString(conj) !
     )
-
-  override val suffix = {
-    val str = conditions match {
-      case Some(e) => " ON "
-      case None => ""
-    }
-    str + conditions.map(cond => expressionToString(cond)).mkString(" AND ")
-  }
 
   override val suffixStatement: SnowflakeSQLStatement =
     conditions.map(ConstantString("ON") + expressionToStatement(_))
@@ -328,15 +277,6 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
   val cond = if (conditions.isEmpty) Seq.empty else Seq(conditions.get)
 
   val anti = if (isAntiJoin) " NOT " else " "
-
-  override val suffix = " WHERE" + anti + "EXISTS" + block(
-    FilterQuery(
-      conditions = cond,
-      child = right,
-      alias = alias.next,
-      fields = Some(
-        left.helper.outputWithQualifier ++ right.helper.outputWithQualifier))
-      .getQuery(useAlias = false))
 
   override val suffixStatement: SnowflakeSQLStatement =
     ConstantString("WHERE") + anti + "EXISTS" + blockStatement(
@@ -369,19 +309,6 @@ case class UnionQuery(children: Seq[LogicalPlan],
     QueryHelper(children = queries,
       outputAttributes = None,
       alias = alias)
-
-  override def getQuery(useAlias: Boolean = false): String = {
-    log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
-
-    val query =
-      if (queries.nonEmpty)
-        queries.map(c => block(c.getQuery())).mkString(" UNION ALL  ")
-      else ""
-
-    if (useAlias)
-      block(query) + s""" AS "$alias""""
-    else query
-  }
 
   override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {
     val query =

@@ -14,7 +14,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
   * @param projections Contains optional projection columns for this query.
   * @param outputAttributes Optional manual override for output.
   * @param alias The alias for this subquery.
-  * @param conjunction Conjunction phrase to be used in between subquery children, or simple phrase
+  * @param conjunctionStatement Conjunction phrase to be used in between subquery children, or simple phrase
   *                    when there are no subqueries.
   */
 private[querygeneration] case class QueryHelper(
@@ -22,9 +22,9 @@ private[querygeneration] case class QueryHelper(
     projections: Option[Seq[NamedExpression]] = None,
     outputAttributes: Option[Seq[Attribute]],
     alias: String,
-    conjunction: String = "",
-    fields: Option[Seq[Attribute]] = None,
-    conjunctionStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement()) {
+    conjunctionStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement(),
+    fields: Option[Seq[Attribute]] = None
+    ) {
 
   val colSet =
     if (fields.isEmpty)
@@ -47,9 +47,8 @@ private[querygeneration] case class QueryHelper(
       }))
     .map(p => renameColumns(p, alias))
 
-  val columns: Option[String] = processedProjections map { p =>
-    p.map(e => convertExpression(e, colSet)).mkString(", ")
-  }
+  val columns: Option[SnowflakeSQLStatement] =
+    processedProjections.map(p => mkStatement(p.map(convertStatement(_, colSet)), ","))
 
   val output: Seq[Attribute] = {
     outputAttributes.getOrElse(
@@ -69,13 +68,6 @@ private[querygeneration] case class QueryHelper(
       AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
         a.exprId,
         Some(alias)))
-
-  val source =
-    if (children.nonEmpty)
-      children
-        .map(c => c.getQuery(useAlias = true))
-        .mkString(s""" $conjunction """)
-    else conjunction
 
   val sourceStatement: SnowflakeSQLStatement =
     if(children.nonEmpty)

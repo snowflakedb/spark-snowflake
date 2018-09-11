@@ -46,10 +46,9 @@ private[io] class SFInternalPartition(
 private[io] class SFInternalRDD(
                                  @transient val sqlContext: SQLContext,
                                  @transient val params: MergedParameters,
-                                 @transient val sql: String,
+                                 @transient val statement: SnowflakeSQLStatement,
                                  @transient val jdbcWrapper: JDBCWrapper,
-                                 val format: SupportedFormat = SupportedFormat.CSV,
-                                 @transient val statement: Option[SnowflakeSQLStatement] = None
+                                 val format: SupportedFormat = SupportedFormat.CSV
                                ) extends RDD[String](sqlContext.sparkContext, Nil) with DataUnloader {
 
   @transient override val log = LoggerFactory.getLogger(getClass)
@@ -67,10 +66,9 @@ private[io] class SFInternalRDD(
     .executeWithConnection({ c =>
       setup(
         preStatements = Seq.empty,
-        sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, format),
         conn = c,
         keepOpen = true,
-        statement = statement.map(buildUnloadStatement(_, s"@$tempStage", compress, None, format))
+        statement = buildUnloadStatement(statement, s"@$tempStage", compress, None, format)
       )
     })
     .asInstanceOf[Long]
