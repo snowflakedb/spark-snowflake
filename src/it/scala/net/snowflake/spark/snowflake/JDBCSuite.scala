@@ -89,70 +89,19 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     conn.dropTable(name)
   }
-
-  test("push down with values"){
-    (ConstantString("copy into") + Identifier("test_table") + "FROM @test_stage/" +
-      s"""FILE_FORMAT = (
-      TYPE=CSV
-        FIELD_DELIMITER='|'
-        NULL_IF=()
-        FIELD_OPTIONALLY_ENCLOSED_BY='"'
-        TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3')""").execute(conn)
-
-  }
-
-//    val name = s"spark_test_table_$randomSuffix"
-//    val schema =
-//      new StructType(
-//        Array(
-//          StructField("num", IntegerType, false)
-//        )
-//      )
 //
-//    conn.createTable(name, schema, true, false)
-//
-//    sqlContext.read.format(SNOWFLAKE_SOURCE_NAME)
-//      .options(connectorOptionsNoTable)
-//      .option("dbtable", name).option("autopushdown", "off")
-//      .load().select("NUM").where("NUM > 0")
-//      .collect()
-//
-//    conn.dropTable(name)
-//
-////  }
-
-//  test("test") {
-//
-//
-//
-//
-//    //    val df =
-////      sqlContext
-////        .read
-////        .format(SNOWFLAKE_SOURCE_NAME)
-////        .options(connectorOptionsNoTable)
-////        .option("dbtable", "test_table")
-////        .load()
-////
-////    df.where("num > 1").show()
-//
-//    // insert into test_table values("abc"), ("123")
-//
-////    val st1 = StringVariable("abc") + ConstantString("),(") +
-////      StringVariable("123") + ConstantString(")")
-////
-////    val st2 = ConstantString(",(") + StringVariable("456") + ConstantString(")")
-////
-////    (ConstantString("insert into test_table values (") + st1 + st2).execute(conn)
-//
-//    val stmt = conn.prepareStatement("select DATEADD(day, ? , TO_DATE('1970-01-01'));")
-////    stmt.setString(1, "\"STR\"")
-//    stmt.setLong(1,12321);
-//
-//    DefaultJDBCWrapper.executePreparedQueryInterruptibly(stmt)
-//
+//  test("push down with values"){
+//    (ConstantString("copy into") + Identifier("test_table") + "FROM @test_stage/" +
+//      s"""FILE_FORMAT = (
+//      TYPE=CSV
+//        FIELD_DELIMITER='|'
+//        NULL_IF=()
+//        FIELD_OPTIONALLY_ENCLOSED_BY='"'
+//        TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3')""").execute(conn)
 //
 //  }
+
+
 
 
 }

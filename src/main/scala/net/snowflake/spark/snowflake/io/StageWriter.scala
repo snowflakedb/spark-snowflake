@@ -178,14 +178,12 @@ private[io] object StageWriter {
       val copyStatement =
         copySql(sqlContext, data, schema, saveMode, params,
           targetTable, file, tempStage, format, conn)
-
-      println(copyStatement.statementString)
       //copy
       log.debug(Utils.sanitizeQueryText(copyStatement.toString))
       //todo: handle on_error parameter on spark side
 
       //report the number of skipped files.
-      val resultSet = copyStatement.execute(conn)
+      val resultSet = copyStatement.execute(conn) //todo: replace table name to Identifier(?) after bug fixed
       if (params.continueOnError) {
         var rowSkipped: Long = 0l
         while (resultSet.next()) {
@@ -328,10 +326,8 @@ private[io] object StageWriter {
     val onError = if (params.continueOnError)
       ConstantString("ON_ERROR = CONTINUE") ! else EmptySnowflakeSQLStatement()
 
-    /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
-      * function to individually set each file_format and copy option. */
-
-    ConstantString("copy into") + table.toStatement + mappingToString +
+    //todo: replace table name to Identifier(?) after bug fixed
+    ConstantString("copy into") + table.name + mappingToString +
       mappingFromString + formatString + truncateCol + purge + onError
   }
 

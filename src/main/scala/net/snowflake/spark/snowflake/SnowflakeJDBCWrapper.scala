@@ -517,10 +517,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       */
     def dropStage(name: String): Boolean =
       Try {
-        val statement = ConstantString("drop stage") + Identifier(name)
-        println(s"---------> ${statement.toString}")
-        statement.execute(connection)
-        //(EmptySnowflakeSQLStatement() + "drop stage" + Identifier(name)).execute(connection)
+        (ConstantString("drop stage") + Identifier(name)).execute(connection)
       }.isSuccess
 
 
@@ -591,10 +588,7 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       buffer.append(" ")
     })
-
-    println(s"----->${buffer.toString()}")
     val statement = conn.prepareStatement(buffer.toString())
-    println(s"----->ok")
     varArray.zipWithIndex.foreach {
       case (element, index) => {
         element match {
