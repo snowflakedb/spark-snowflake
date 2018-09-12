@@ -90,8 +90,17 @@ class JDBCSuite extends IntegrationSuiteBase {
     conn.dropTable(name)
   }
 
-//  test("push down with values"){
-//
+  test("push down with values"){
+    (ConstantString("copy into") + Identifier("test_table") + "FROM @test_stage/" +
+      s"""FILE_FORMAT = (
+      TYPE=CSV
+        FIELD_DELIMITER='|'
+        NULL_IF=()
+        FIELD_OPTIONALLY_ENCLOSED_BY='"'
+        TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3')""").execute(conn)
+
+  }
+
 //    val name = s"spark_test_table_$randomSuffix"
 //    val schema =
 //      new StructType(
@@ -110,7 +119,7 @@ class JDBCSuite extends IntegrationSuiteBase {
 //
 //    conn.dropTable(name)
 //
-//  }
+////  }
 
 //  test("test") {
 //

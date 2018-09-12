@@ -43,8 +43,8 @@ private[io] trait DataUnloader {
     try {
       // Prologue
       val prologueSql = Utils.genPrologueSql(params)
-      log.debug(Utils.sanitizeQueryText(prologueSql))
-      jdbcWrapper.executeInterruptibly(conn, prologueSql)
+      log.debug(Utils.sanitizeQueryText(prologueSql.toString))
+      prologueSql.execute(conn)
 
       Utils.executePreActions(jdbcWrapper, conn, params, params.table)
 
@@ -86,11 +86,11 @@ private[io] trait DataUnloader {
                             statement: SnowflakeSQLStatement,
                             location: String,
                             compression: String,
-                            credentialsString: Option[String],
+                            credentialsString: Option[SnowflakeSQLStatement],
                             format: SupportedFormat = SupportedFormat.CSV
                           ): SnowflakeSQLStatement = {
 
-    val credentials = credentialsString.getOrElse("")
+    val credentials = credentialsString.getOrElse(EmptySnowflakeSQLStatement())
 
     // Save the last SELECT so it can be inspected
     Utils.setLastCopyUnload(statement.toString)

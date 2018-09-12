@@ -262,7 +262,7 @@ object Utils {
   // date/timestamp formats we want.
   // Since we want to distinguish TIMESTAMP_NTZ from others, we can't use
   // the TIMESTAMP_FORMAT option of COPY.
-  private [snowflake] def genPrologueSql(params: MergedParameters) : String = {
+  private [snowflake] def genPrologueSql(params: MergedParameters) : SnowflakeSQLStatement = {
     // Determine the timezone we want to use
     var tz = params.sfTimezone
     var timezoneSetString = ""
@@ -280,29 +280,30 @@ object Utils {
       timezoneSetString = s"timezone = '${tz.get}',"
     }
     log.debug(s"sfTimezone: '$tz'   timezoneSetString '$timezoneSetString'")
-    s"""
-       |alter session set
-       |  $timezoneSetString
-       |  date_output_format = 'YYYY-MM-DD',
-       |  timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
-       |  timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
-       |  timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3';
-    """.stripMargin.trim
+
+    ConstantString("alter session set") + timezoneSetString +
+    ConstantString(
+      s"""
+         |timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
+         |timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
+         |timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3';
+       """.stripMargin)
   }
   // Issue a set of changes reverting genPrologueSql
-  private [snowflake] def genEpilogueSql(params: MergedParameters) : String = {
+  private [snowflake] def genEpilogueSql(params: MergedParameters) : SnowflakeSQLStatement = {
     var timezoneUnsetString = ""
     // For all cases except for "snowflake", we unset the timezone
     if (!params.isTimezoneSnowflake)
       timezoneUnsetString = "timezone,"
-    s"""
-       |alter session unset
-       |  $timezoneUnsetString
-       |  date_output_format,
-       |  timestamp_ntz_output_format,
-       |  timestamp_ltz_output_format,
-       |  timestamp_tz_output_format;
-     """.stripMargin.trim
+
+    ConstantString("alter session unset") + timezoneUnsetString +
+    ConstantString(
+      s"""
+         |date_output_format,
+         |timestamp_ntz_output_format,
+         |timestamp_ltz_output_format,
+         |timestamp_tz_output_format;
+       """.stripMargin)
   }
 
   private [snowflake] def executePreActions(

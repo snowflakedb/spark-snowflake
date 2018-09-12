@@ -65,17 +65,6 @@ private[querygeneration] object BasicStatement {
               case v: Byte => ByteVariable(v) !
               case _ => ConstantString(l.value.toString) !
             }
-//          case IntegerType => IntVariable(l.value.asInstanceOf[Int]) !
-//          case LongType => LongVariable(l.value.asInstanceOf[Long]) !
-//          case ShortType => ShortVariable(l.value.asInstanceOf[Short]) !
-//          case BooleanType => BooleanVariable(l.value.asInstanceOf[Boolean]) !
-//          case FloatType => DoubleVariable(l.value.asInstanceOf[Double]) ! //FloatType => Double
-//          case DoubleType => DoubleVariable(l.value.asInstanceOf[Double]) !
-//          case ByteType => ByteVariable(l.value.asInstanceOf[Byte]) !
-//          case TimestampType => LongVariable(l.value.asInstanceOf[Long]) !
-//          case _        => ConstantString(l.toString()) !
-
-            //decimal
         }
 
       case _ => null

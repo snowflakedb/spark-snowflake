@@ -27,21 +27,21 @@ class CloudCredentialsUtilsSuite extends FunSuite {
 
   test("credentialsString with regular S3 keys") {
     val creds = new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).replaceAll("\\s+", " ")
+    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).toString.replaceAll("\\s+", " ")
     assert( result ===
       "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY/WITH/SLASHES' )")
   }
 
   test("credentialsString with STS temporary keys") {
     val creds = new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).replaceAll("\\s+", " ")
+    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).toString.replaceAll("\\s+", " ")
     assert(result ===
       "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY' AWS_TOKEN='SESSION/Token' )")
   }
 
   test("credentialsString with Azure storage SAS token") {
     val creds = new StorageCredentialsSharedAccessSignature("SAS_TOKEN")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAzure(creds).replaceAll("\\s+", " ")
+    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAzure(creds).toString.replaceAll("\\s+", " ")
     assert(result ===
       "CREDENTIALS = ( AZURE_SAS_TOKEN='SAS_TOKEN' )")
   }

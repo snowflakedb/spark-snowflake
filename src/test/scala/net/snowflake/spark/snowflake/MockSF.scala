@@ -149,7 +149,7 @@ class MockSF(
   }
 
   def verifyThatExpectedQueriesWereIssuedForUnload(expectedQueries: Seq[Regex]): Unit = {
-    val queriesWithPrologueAndEpilogue= Seq(Utils.genPrologueSql(mergedParams).r) ++
+    val queriesWithPrologueAndEpilogue= Seq(Utils.genPrologueSql(mergedParams).toString.r) ++
       expectedQueries
     verifyThatExpectedQueriesWereIssued(queriesWithPrologueAndEpilogue)
   }

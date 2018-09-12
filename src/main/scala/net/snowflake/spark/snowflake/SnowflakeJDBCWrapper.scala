@@ -399,11 +399,36 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                      overwrite: Boolean = false,
                      temporary: Boolean = false
                    ): Unit =
-      (EmptySnowflakeSQLStatement() + "create" +
+      (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
         (if (temporary) "temporary" else "") + "table" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
         s"(${schemaString(schema)})").execute(connection)
+
+    def createTableLike(
+                         newTable: String,
+                         originalTable: String
+                       ): Unit = {
+      (ConstantString("create or replace table") + Identifier(newTable) +
+        "like" + Identifier(originalTable)).execute(connection)
+    }
+
+    def truncateTable(table: String): Unit =
+      (ConstantString("truncate") + table).execute(connection)
+
+    def swapTable(
+                   newTable: String,
+                   originalTable: String
+                 ): Unit =
+      (ConstantString("alter table") + Identifier(newTable) + "swap with" +
+        Identifier(originalTable)).execute(connection)
+
+    def renameTable(
+                     newName: String,
+                     oldName: String
+                   ): Unit =
+      (ConstantString("alter table") + Identifier(oldName) + "rename to" +
+        Identifier(newName)).execute(connection)
 
     /**
       * @param name table name
@@ -465,7 +490,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                      temporary: Boolean = false
                    ): Unit = {
 
-      (EmptySnowflakeSQLStatement() + "create" +
+      (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
         (if (temporary) "temporary" else "") + "stage" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
@@ -492,7 +517,10 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       */
     def dropStage(name: String): Boolean =
       Try {
-        (EmptySnowflakeSQLStatement() + "drop stage" + Identifier(name)).execute(connection)
+        val statement = ConstantString("drop stage") + Identifier(name)
+        println(s"---------> ${statement.toString}")
+        statement.execute(connection)
+        //(EmptySnowflakeSQLStatement() + "drop stage" + Identifier(name)).execute(connection)
       }.isSuccess
 
 
@@ -564,8 +592,9 @@ private[snowflake] class SnowflakeSQLStatement(
       buffer.append(" ")
     })
 
+    println(s"----->${buffer.toString()}")
     val statement = conn.prepareStatement(buffer.toString())
-
+    println(s"----->ok")
     varArray.zipWithIndex.foreach {
       case (element, index) => {
         element match {
@@ -601,7 +630,7 @@ private[snowflake] class SnowflakeSQLStatement(
   override def equals(obj: scala.Any): Boolean =
     obj match {
       case other: SnowflakeSQLStatement =>
-        if(this.statementString == other.statementString) true else false
+        if (this.statementString == other.statementString) true else false
       case _ => false
     }
 

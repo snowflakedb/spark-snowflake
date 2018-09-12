@@ -128,7 +128,7 @@ private[snowflake] case class SnowflakeRelation(
       // rather than unloading data.
       val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
       val tableNameOrSubquery: SnowflakeSQLStatement =
-        params.query.map(ConstantString("(") + _ + ")").getOrElse(Identifier(params.table.get.name) !)
+        params.query.map(ConstantString("(") + _ + ")").getOrElse(params.table.get.toStatement !)
       val countQuery =
         ConstantString("SELECT count(*) FROM") + tableNameOrSubquery + whereClause
       log.debug(Utils.sanitizeQueryText(countQuery.statementString))
@@ -199,7 +199,7 @@ private[snowflake] case class SnowflakeRelation(
       .mkString(", ")
     val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
     val tableNameOrSubquery: StatementElement =
-      params.table.map(table => Identifier(table.name)).getOrElse(ConstantString(params.query.get))
+      params.table.map(_.toStatement).getOrElse(ConstantString(params.query.get))
     ConstantString("SELECT") + columnList + "FROM" + tableNameOrSubquery + whereClause
   }
 }
