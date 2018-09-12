@@ -39,54 +39,74 @@ private[snowflake] object FilterPushdown {
    * @param filters an array of filters, the conjunction of which is the filter condition for the
    *                scan.
    */
-  def buildWhereClause(schema: StructType, filters: Seq[Filter]): String = {
-    val filterExpressions = filters.flatMap(f => buildFilterExpression(schema, f)).mkString(" AND ")
-    if (filterExpressions.isEmpty) "" else "WHERE " + filterExpressions
+  def buildWhereStatement(schema: StructType, filters: Seq[Filter]): SnowflakeSQLStatement = {
+    val filterStatement =
+      pushdowns.querygeneration
+        .mkStatement(filters.flatMap(buildFilterStatement(schema, _)), "AND")
+    if(filterStatement.isEmpty) EmptySnowflakeSQLStatement() else ConstantString("WHERE") + filterStatement
   }
 
-  /**
-   * Attempt to convert the given filter into a SQL expression. Returns None if the expression
-   * could not be converted.
-   */
-  def buildFilterExpression(schema: StructType, filter: Filter): Option[String] = {
+  def buildFilterStatement(schema: StructType, filter: Filter): Option[SnowflakeSQLStatement] = {
 
     // Builds an escaped value, based on the expected datatype
-    def buildValueWithType(dataType: DataType, value: Any): String = {
+    def buildValueWithType(dataType: DataType, value: Any): SnowflakeSQLStatement = {
       dataType match {
-        case StringType => s"'${value.toString.replace("'", "''").replace("\\", "\\\\")}'"
-        case DateType => s"'${value.asInstanceOf[Date]}'::DATE"
-        case TimestampType => s"'${value.asInstanceOf[Timestamp]}'::TIMESTAMP(3)"
-        case _ => value.toString
+        case StringType => StringVariable(value.toString
+          .replace("'", "''")
+          .replace("\\", "\\\\")) !
+        case DateType => StringVariable(value.asInstanceOf[Date].toString) + "::DATE"
+        case TimestampType => StringVariable(value.asInstanceOf[Timestamp].toString) + "::TIMESTAMP(3)"
+        case _ =>
+          value match {
+            case v: Int => IntVariable(v) !
+            case v: Long => LongVariable(v) !
+            case v: Short => ShortVariable(v) !
+            case v: Boolean => BooleanVariable(v) !
+            case v: Float => FloatVariable(v) !
+            case v: Double => DoubleVariable(v) !
+            case v: Byte => ByteVariable(v) !
+            case _ => ConstantString(value.toString) !
+          }
       }
+
     }
 
     // Builds an escaped value, based on the value itself
-    def buildValue(value: Any): String = {
+    def buildValue(value: Any): SnowflakeSQLStatement = {
       value match {
-        case _: String => s"'${value.toString.replace("'", "''").replace("\\", "\\\\")}'"
-        case _: Date => s"'${value.asInstanceOf[Date]}'::DATE"
-        case _: Timestamp => s"'${value.asInstanceOf[Timestamp]}'::TIMESTAMP(3)"
-        case _ => value.toString
+        case x: String => StringVariable(x
+          .replace("'", "''")
+          .replace("\\", "\\\\")) !
+        case x: Date => StringVariable(x.toString) + "::DATE"
+        case x: Timestamp => StringVariable(x.toString) + "::TIMESTAMP(3)"
+        case x: Int => IntVariable(x) !
+        case x: Long => LongVariable(x) !
+        case x: Short => ShortVariable(x) !
+        case x: Boolean => BooleanVariable(x) !
+        case x: Float => FloatVariable(x) !
+        case x: Double => DoubleVariable(x) !
+        case x: Byte => ByteVariable(x) !
+        case _  => ConstantString(value.toString) !
       }
     }
 
     // Builds a simple comparison string
-    def buildComparison(attr: String, value: Any, comparisonOp: String): Option[String] = {
+    def buildComparison(attr: String, value: Any, comparisonOp: String): Option[SnowflakeSQLStatement] = {
       val dataType = getTypeForAttribute(schema, attr)
       if (dataType.isEmpty) {
         return None
       }
       val sqlEscapedValue = buildValueWithType(dataType.get, value)
-      Some(s"""$attr $comparisonOp $sqlEscapedValue""")
+      Some(ConstantString(attr) + comparisonOp + sqlEscapedValue)
     }
 
-    def buildBinaryFilter(left: Filter, right: Filter, op: String) : Option[String] = {
-      val leftStr = buildFilterExpression(schema, left)
-      val rightStr = buildFilterExpression(schema, right)
+    def buildBinaryFilter(left: Filter, right: Filter, op: String) : Option[SnowflakeSQLStatement] = {
+      val leftStr = buildFilterStatement(schema, left)
+      val rightStr = buildFilterStatement(schema, right)
       if (leftStr.isEmpty || rightStr.isEmpty) {
         None
       } else {
-        Some(s"""((${leftStr.get}) $op (${rightStr.get}))""")
+        Some(ConstantString("((") + leftStr.get + ")" + op + "(" + rightStr.get + "))")
       }
     }
 
@@ -98,33 +118,28 @@ private[snowflake] object FilterPushdown {
       case GreaterThanOrEqual(attr, value) => buildComparison(attr, value, ">=")
       case In(attr, values: Array[Any]) =>
         val dataType = getTypeForAttribute(schema, attr).get
-        val valueStrings = values
-            .map(v => buildValueWithType(dataType, v))
-            .mkString(", ")
-        Some(s"""($attr IN ($valueStrings))""")
-      case IsNull(attr) => Some(s"""($attr IS NULL)""")
-      case IsNotNull(attr) => Some(s"""($attr IS NOT NULL)""")
+        val valueStrings =
+          pushdowns.querygeneration
+            .mkStatement(values.map(v => buildValueWithType(dataType, v)), ", ")
+        Some(ConstantString("(") + attr + "IN" + "(" + valueStrings + "))")
+      case IsNull(attr) => Some(ConstantString("(") + attr + "IS NULL)")
+      case IsNotNull(attr) => Some(ConstantString("(") + attr + "IS NOT NULL)")
       case And(left, right) =>
         buildBinaryFilter(left, right, "AND")
       case Or(left, right) =>
         buildBinaryFilter(left, right, "OR")
       case Not(child) =>
-        val childStr = buildFilterExpression(schema, child)
-        if (childStr.isEmpty) {
-          None
-        } else {
-          Some(s"""(NOT (${childStr.get}))""")
-        }
+        val childStr = buildFilterStatement(schema, child)
+        if (childStr.isEmpty) None else Some(ConstantString("(NOT (") + childStr.get + "))")
       case StringStartsWith(attr, value) =>
-        Some(s"""STARTSWITH($attr, ${buildValue(value)})""")
+        Some(ConstantString("STARTSWITH(") + attr + "," + buildValue(value) + ")")
       case StringEndsWith(attr, value) =>
-        Some(s"""ENDSWITH($attr, ${buildValue(value)})""")
+        Some(ConstantString("ENDSWITH(") + attr + "," + buildValue(value) + ")")
       case StringContains(attr, value) =>
-        Some(s"""CONTAINS($attr, ${buildValue(value)})""")
+        Some(ConstantString("CONTAINS(") + attr + "," + buildValue(value) + ")")
       case _ => None
     }
   }
-
   /**
    * Use the given schema to look up the attribute's data type. Returns None if the attribute could
    * not be resolved.
