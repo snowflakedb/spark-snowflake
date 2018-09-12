@@ -464,7 +464,7 @@ private[io] object StageWriter {
 
               val (cipher, meta) = getCipherAndAZMetaData(masterKey, queryId, smkId)
               val outputFileName =
-                if (params.sfCompress) fileName.concat("gz") else fileName
+                if (params.sfCompress) fileName.concat(".gz") else fileName
 
               val container: CloudBlobContainer = azureClient.getContainerReference(bucketName)
               val blob: CloudBlockBlob = container.getBlockBlobReference(outputFileName)
