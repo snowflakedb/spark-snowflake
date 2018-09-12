@@ -16,8 +16,10 @@
 
 package net.snowflake.spark.snowflake
 
-import org.apache.spark.sql.{Row}
+import java.sql.Timestamp
+import java.text.{DateFormat, SimpleDateFormat}
 
+import org.apache.spark.sql.{Row, SaveMode}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
 /**
@@ -77,6 +79,31 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       Seq(Row(1, TestUtils.toDate(1900,0,1)),
         Row(2, TestUtils.toDate(2013,3,5)),
         Row(3, null)))
+  }
+
+  test("insert timestamp into date") {
+    jdbcUpdate(s"create or replace table $test_table(i date)")
+
+    val spark = sparkSession
+    import spark.implicits._
+
+    val dateFormat: DateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss.SSS")
+
+    val time: Timestamp = new Timestamp(dateFormat.parse("28/10/1996 00:00:00.000").getTime)
+
+    val list = List(time)
+
+    val df = list.toDF()
+
+    df.write.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table)
+      .mode(SaveMode.Append)
+      .save()
+
+    checkTestTable(Seq(Row(new SimpleDateFormat("yyyy-MM-dd").parse("1996-10-28"))))
+
+
   }
 
 
