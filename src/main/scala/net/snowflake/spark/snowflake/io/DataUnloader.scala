@@ -18,10 +18,11 @@ package net.snowflake.spark.snowflake.io
 
 import java.sql.Connection
 
-import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeTelemetry, Utils}
+import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.sql.SQLContext
+import DefaultJDBCWrapper.DataBaseOperations
 
 /**
   * Created by ema on 3/28/17.
@@ -33,23 +34,27 @@ private[io] trait DataUnloader {
   val params: MergedParameters
   val sqlContext: SQLContext
 
-  @transient def setup(preStatements: Seq[String] = Seq.empty, sql: String, conn: Connection, keepOpen: Boolean = false)
-    : Long = {
+  @transient def setup(
+                        preStatements: Seq[String] = Seq.empty,
+                        statement: SnowflakeSQLStatement,
+                        conn: Connection,
+                        keepOpen: Boolean = false
+                      ): Long = {
     try {
       // Prologue
       val prologueSql = Utils.genPrologueSql(params)
-      log.debug(Utils.sanitizeQueryText(prologueSql))
-      jdbcWrapper.executeInterruptibly(conn, prologueSql)
+      log.debug(Utils.sanitizeQueryText(prologueSql.toString))
+      prologueSql.execute(conn)
 
       Utils.executePreActions(jdbcWrapper, conn, params, params.table)
 
       // Run the unload query
-      log.debug(Utils.sanitizeQueryText(sql))
+      log.debug(Utils.sanitizeQueryText(statement.statementString))
 
       preStatements.foreach { stmt =>
         jdbcWrapper.executeInterruptibly(conn, stmt)
       }
-      val res = jdbcWrapper.executeQueryInterruptibly(conn, sql)
+      val res = statement.execute(conn)
 
       // Verify it's the expected format
       val sch = res.getMetaData
@@ -59,68 +64,71 @@ private[io] trait DataUnloader {
       val first = res.next()
       assert(first)
       val numRows = res.getLong(1) // There can be no more records
-      val second  = res.next()
+      val second = res.next()
       assert(!second)
 
       Utils.executePostActions(jdbcWrapper, conn, params, params.table)
       numRows
-    } finally {
-      SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(conn))
+    } catch {
+      case x: Exception => {
+        println(x)
+        throw x
+      }
+    }
+    finally {
+      SnowflakeTelemetry.send(conn.getTelemetry)
       if (!keepOpen) conn.close()
     }
   }
 
   @transient
-  def buildUnloadStmt(
-                       query: String,
-                       location: String,
-                       compression: String,
-                       credentialsString: Option[String],
-                       format:SupportedFormat = SupportedFormat.CSV
-                     ): String = {
+  def buildUnloadStatement(
+                            statement: SnowflakeSQLStatement,
+                            location: String,
+                            compression: String,
+                            credentialsString: Option[SnowflakeSQLStatement],
+                            format: SupportedFormat = SupportedFormat.CSV
+                          ): SnowflakeSQLStatement = {
 
-    val credentials = credentialsString.getOrElse("")
+    val credentials = credentialsString.getOrElse(EmptySnowflakeSQLStatement())
 
     // Save the last SELECT so it can be inspected
-    Utils.setLastCopyUnload(query)
+    Utils.setLastCopyUnload(statement.toString)
 
-    /** TODO(etduwx): Refactor this to be a collection of different options, and use a mapper
-    function to individually set each file_format and copy option. */
+    val (formatStmt, queryStmt): (SnowflakeSQLStatement, SnowflakeSQLStatement) =
+      format match {
+        case SupportedFormat.CSV =>
+          (
+            ConstantString(
+              s"""
+                 |FILE_FORMAT = (
+                 |    TYPE=CSV
+                 |    COMPRESSION='$compression'
+                 |    FIELD_DELIMITER='|'
+                 |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+                 |    NULL_IF= ()
+                 |  )
+                 |  """.stripMargin
+            ) !,
+            ConstantString("FROM (") + statement + ")"
+          )
+        case SupportedFormat.JSON =>
+          (
+            ConstantString(
+              s"""
+                 |FILE_FORMAT = (
+                 |    TYPE=JSON
+                 |    COMPRESSION='$compression'
+                 |)
+                 |""".stripMargin
+            ) !,
+            ConstantString("FROM (SELECT object_construct(*) FROM (") + statement + "))"
+          )
+      }
 
-    val (formatString, queryString): (String, String) = format match {
-      case SupportedFormat.CSV =>
-        (
-          s"""
-             |FILE_FORMAT = (
-             |    TYPE=CSV
-             |    COMPRESSION='$compression'
-             |    FIELD_DELIMITER='|'
-             |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-             |    NULL_IF= ()
-             |  )
-             |  """.stripMargin,
-          s"""FROM ($query)"""
-        )
-      case SupportedFormat.JSON =>
-        (
-          s"""
-             |FILE_FORMAT = (
-             |    TYPE=JSON
-             |    COMPRESSION='$compression'
-             |)
-             |""".stripMargin,
-          s"""FROM (SELECT object_construct(*) FROM ($query))"""
-        )
 
-    }
-
-    s"""
-       |COPY INTO '$location'
-       |$queryString
-       |$credentials
-       |$formatString
-       |MAX_FILE_SIZE = ${params.s3maxfilesize}
-       |""".stripMargin.trim
+    ConstantString(s"COPY INTO '$location'") + queryStmt + credentials +
+      formatStmt + "MAX_FILE_SIZE = " + params.s3maxfilesize
 
 
   }

@@ -19,8 +19,8 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     )
   )
 
-  val tableName1 = s"spark_test_table_$randomSuffix"
-  val tableName2 = s"spark_test_table_$randomSuffix"
+  val tableName1 = s"spark_test_table_1$randomSuffix"
+  val tableName2 = s"spark_test_table_2$randomSuffix"
   override def beforeAll(): Unit = {
     super.beforeAll()
 
