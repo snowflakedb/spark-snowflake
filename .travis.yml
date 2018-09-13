@@ -9,10 +9,15 @@ cache:
 # Spark 1.5.0 only supports Java 7+.
 matrix:
   include:
+    # Scala 2.10 tests:
+    - jdk: openjdk8
+      scala: 2.10.5
+      env: HADOOP_VERSION="2.6.0" SPARK_VERSION="2.1.0"
+
     # Scala 2.11 tests:
     - jdk: openjdk8
       scala: 2.11.12
-      env: HADOOP_VERSION="2.8.0" SPARK_VERSION="2.3.0" INTEGRATION_TESTS="true"
+      env: HADOOP_VERSION="2.6.0" SPARK_VERSION="2.1.0" INTEGRATION_TESTS="true"
 
 #env:
 #  global:
