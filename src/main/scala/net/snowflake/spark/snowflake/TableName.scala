@@ -25,4 +25,6 @@ package net.snowflake.spark.snowflake
  */
 private[snowflake] case class TableName(name: String) {
   override def toString: String = name
+
+  def toStatement: Identifier =Identifier(name)
 }

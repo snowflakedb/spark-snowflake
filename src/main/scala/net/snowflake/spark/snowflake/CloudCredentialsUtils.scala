@@ -30,10 +30,10 @@ private[snowflake] object CloudCredentialsUtils {
    * Generates a credentials string for use in Snowflake COPY in-out statements.
    */
   def getSnowflakeCredentialsString(sqlContext: SQLContext,
-                                    params: MergedParameters): String = {
+                                    params: MergedParameters): SnowflakeSQLStatement = {
     params.rootTempDirStorageType match {
       case FSType.LocalFile =>
-        "-- file URL, no creds needed"
+        throw new UnsupportedOperationException("only supports Azure and S3 stage")
       case FSType.Azure =>
         val creds = getAzureCreds(params)
         getSnowflakeCredentialsStringForAzure(creds)
@@ -41,11 +41,11 @@ private[snowflake] object CloudCredentialsUtils {
         val creds = getAWSCreds(sqlContext, params)
         getSnowflakeCredentialsStringForAWS(creds)
       case _ =>
-        ""
+        EmptySnowflakeSQLStatement()
     }
   }
 
-  def getSnowflakeCredentialsStringForAWS(creds : AWSCredentials) : String = {
+  def getSnowflakeCredentialsStringForAWS(creds : AWSCredentials) : SnowflakeSQLStatement = {
     val awsAccessKey = creds.getAWSAccessKeyId
     val awsSecretKey = creds.getAWSSecretKey
     var tokenString = creds match {
@@ -53,23 +53,24 @@ private[snowflake] object CloudCredentialsUtils {
         s"AWS_TOKEN='${sessionCreds.getSessionToken}'"
       case otherCreds => ""
     }
-    s"""
+
+    ConstantString(s"""
        |CREDENTIALS = (
        |    AWS_KEY_ID='$awsAccessKey'
        |    AWS_SECRET_KEY='$awsSecretKey'
        |    $tokenString
        |)
-       |""".stripMargin.trim
+       |""".stripMargin.trim) !
   }
 
   def getSnowflakeCredentialsStringForAzure(
-        creds : StorageCredentialsSharedAccessSignature) : String = {
+        creds : StorageCredentialsSharedAccessSignature) : SnowflakeSQLStatement = {
     val sasToken = creds.getToken()
-    s"""
+    ConstantString(s"""
        |CREDENTIALS = (
        |    AZURE_SAS_TOKEN='$sasToken'
        |)
-       |""".stripMargin.trim
+       |""".stripMargin.trim) !
   }
 
   def getAWSCreds(sqlContext: SQLContext,

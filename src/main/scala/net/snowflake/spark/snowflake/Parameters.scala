@@ -537,6 +537,21 @@ object Parameters {
 
     def streamingFastMode: Boolean = isTrue(parameters(PARAM_STREAMING_FAST_MODE))
 
+    def storagePath: Option[String] = {
+      val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
+      val s3_url = "s3[an]://([^/]+)/(.*)".r
+      parameters.get(PARAM_TEMPDIR) match {
+        case Some(azure_url(container, account, endpoint, path)) =>
+          Some(s"azure://$account.$endpoint/$container/$path")
+        case Some(s3_url(bucket, prefix)) =>
+          Some(s"s3://$bucket/$prefix")
+        case None => None
+        case Some(str) =>
+          throw new UnsupportedOperationException(
+           s"Only Support azure or s3 storage: $str"
+          )
+      }
+    }
   }
 }
 

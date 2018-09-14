@@ -2,10 +2,10 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.util.NoSuchElementException
 
-import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation}
+import net.snowflake.spark.snowflake.{SnowflakePushdownException, SnowflakeRelation, SnowflakeSQLStatement}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -33,12 +33,9 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   lazy val tryBuild: Option[QueryBuilder] =
     if (treeRoot == null) None else Some(this)
 
-  /** Represents the top-level (outermost) query represented by the generated tree. */
-  lazy val query: String = {
+  lazy val statement: SnowflakeSQLStatement = {
     checkTree()
-    val query = treeRoot.getQuery()
-    // log.info(s"""Generated query: '${prettyPrint(query)}'""")
-    query
+    treeRoot.getStatement()
   }
 
   /** Fetch the output attributes for Spark. */
@@ -78,7 +75,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     val schema = StructType(getOutput.map(attr =>
       StructField(attr.name, attr.dataType, attr.nullable)))
 
-    source.relation.buildScanFromSQL[T](query, Some(schema))
+    source.relation.buildScanFromSQL[T](statement, Some(schema))
   }
 
   private def checkTree(): Unit = {

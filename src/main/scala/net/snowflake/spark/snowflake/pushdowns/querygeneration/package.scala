@@ -1,11 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Expression,
-  NamedExpression
-}
+import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.types.MetadataBuilder
 import org.slf4j.LoggerFactory
 
@@ -22,16 +18,16 @@ package object querygeneration {
 
   private[querygeneration] final val log = LoggerFactory.getLogger(getClass)
 
-  /** Query blocks. */
-  private[querygeneration] final def block(text: String): String = {
-    "(" + text + ")"
-  }
+  private[querygeneration] final def blockStatement(
+                                                    stmt: SnowflakeSQLStatement
+                                                   ): SnowflakeSQLStatement =
+    ConstantString("(") + stmt + ")"
 
-  /** Same as block() but with an alias. */
-  private[querygeneration] final def block(text: String,
-                                           alias: String): String = {
-    "(" + text + ") AS " + wrap(alias)
-  }
+  private[querygeneration] final def blockStatement(
+                                                     stmt: SnowflakeSQLStatement,
+                                                     alias: String
+                                                   ): SnowflakeSQLStatement =
+    blockStatement(stmt) + "AS" + wrapStatement(alias)
 
   /** This adds an attribute as part of a SQL expression, searching in the provided
     * fields for a match, so the subquery qualifiers are correct.
@@ -39,21 +35,21 @@ package object querygeneration {
     * @param attr The Spark Attribute object to be added.
     * @param fields The Seq[Attribute] containing the valid fields to be used in the expression,
     *               usually derived from the output of a subquery.
-    * @return A string representing the attribute expression.
+    * @return A SnowflakeSQLStatement representing the attribute expression.
     */
-  private[querygeneration] final def addAttribute(
-      attr: Attribute,
-      fields: Seq[Attribute]): String = {
+  private[querygeneration] final def addAttributeStatement(
+                                                            attr: Attribute,
+                                                            fields: Seq[Attribute]
+                                                          ): SnowflakeSQLStatement =
     fields.find(e => e.exprId == attr.exprId) match {
       case Some(resolved) =>
-        qualifiedAttribute(resolved.qualifier, resolved.name)
-      case None => qualifiedAttribute(attr.qualifier, attr.name)
+        qualifiedAttributeStatement(resolved.qualifier, resolved.name)
+      case None => qualifiedAttributeStatement(attr.qualifier, attr.name)
     }
-  }
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
   private[querygeneration] final def qualifiedAttribute(alias: Option[String],
-                                                        name: String) = {
+                                                        name: String): String = {
     val str = alias match {
       case Some(qualifier) => wrap(qualifier) + "."
       case None            => ""
@@ -63,34 +59,46 @@ package object querygeneration {
     else str + wrap(name)
   }
 
+  private[querygeneration] final def qualifiedAttributeStatement(
+                                                                  alias: Option[String],
+                                                                  name: String
+                                                                ): SnowflakeSQLStatement =
+    ConstantString(qualifiedAttribute(alias, name)) !
+
   private[querygeneration] final def wrap(name: String): String = {
     identifier + name + identifier
   }
+
+  private[querygeneration] final def wrapStatement(
+                                                    name: String
+                                                  ): SnowflakeSQLStatement =
+    ConstantString(identifier + name + identifier) !
 
   /** This performs the conversion from Spark expressions to SQL runnable by Snowflake.
     * We should have as many entries here as possible, or the translation will not be able ot happen.
     *
     * @note (A MatchError may be raised for unsupported Spark expressions).
     */
-  private[querygeneration] final def convertExpression(
-      expression: Expression,
-      fields: Seq[Attribute]): String = {
+  private[querygeneration] final def convertStatement(
+                                                       expression: Expression,
+                                                       fields: Seq[Attribute]
+                                                     ): SnowflakeSQLStatement = {
     (expression, fields) match {
-      case AggregationExpression(sql) => sql
-      case BasicExpression(sql)       => sql
-      case BooleanExpression(sql)     => sql
-      case DateExpression(sql)        => sql
-      case MiscExpression(sql)        => sql
-      case NumericExpression(sql)     => sql
-      case StringExpression(sql)      => sql
+      case AggregationStatement(stmt) => stmt
+      case BasicStatement(stmt) => stmt
+      case BooleanStatement(stmt) => stmt
+      case DateStatement(stmt) => stmt
+      case MiscStatement(stmt) => stmt
+      case NumericStatement(stmt) => stmt
+      case StringStatement(stmt) => stmt
     }
   }
 
-  private[querygeneration] final def convertExpressions(
-      fields: Seq[Attribute],
-      expressions: Expression*): String = {
-    expressions.map(e => convertExpression(e, fields)).mkString(", ")
-  }
+  private[querygeneration] final def convertStatements(
+                                                        fields: Seq[Attribute],
+                                                        expressions: Expression*
+                                                      ): SnowflakeSQLStatement =
+    mkStatement(expressions.map(convertStatement(_, fields)), ",")
 
   private[querygeneration] def renameColumns(
       origOutput: Seq[NamedExpression],
@@ -168,4 +176,20 @@ package object querygeneration {
 
     str.toString()
   }
+
+
+  final def mkStatement(
+                                                  seq: Seq[SnowflakeSQLStatement],
+                                                  delimiter: SnowflakeSQLStatement
+                                                ): SnowflakeSQLStatement =
+    seq.foldLeft(EmptySnowflakeSQLStatement()){
+      case(left, stmt) =>
+        if(left.isEmpty) stmt else left + delimiter + stmt
+    }
+
+  final def mkStatement(
+                                                  seq: Seq[SnowflakeSQLStatement],
+                                                  delimiter: String
+                                                ): SnowflakeSQLStatement =
+    mkStatement(seq, ConstantString(delimiter) !)
 }

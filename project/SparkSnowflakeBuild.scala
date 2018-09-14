@@ -58,8 +58,8 @@ object SparkSnowflakeBuild extends Build {
         "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       libraryDependencies ++= Seq(
         "org.slf4j" % "slf4j-api" % "1.7.5",
-        "net.snowflake" % "snowflake-jdbc" % "3.6.3",
         "net.snowflake" % "snowflake-ingest-sdk" % "0.9.1" excludeAll(ExclusionRule(organization = "com.fasterxml.jackson.core")),
+        "net.snowflake" % "snowflake-jdbc" % "3.6.8",
         "com.google.guava" % "guava" % "14.0.1" % "test",
         "org.scalatest" %% "scalatest" % "3.0.5" % Test,
         "org.mockito" % "mockito-core" % "1.10.19" % "test",

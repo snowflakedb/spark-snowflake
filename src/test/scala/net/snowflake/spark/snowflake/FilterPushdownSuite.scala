@@ -26,14 +26,14 @@ class FilterPushdownSuite extends FunSuite {
 
   // Fake filter class to detect fallback logic
   test("buildWhereClause with empty list of filters") {
-    assert(buildWhereClause(StructType(Nil), Seq.empty) === "")
+    assert(buildWhereStatement(StructType(Nil), Seq.empty).toString === "")
   }
 
   test("buildWhereClause with string literals that contain Unicode characters") {
     // scalastyle:off
-    val whereClause = buildWhereClause(testSchema, Seq(EqualTo("test_string", "Unicode's樂趣")))
+    val whereClause = buildWhereStatement(testSchema, Seq(EqualTo("test_string", "Unicode's樂趣")))
     // Here, the apostrophe in the string needs to be replaced with two single quotes, ''
-    assert(whereClause === """WHERE test_string = 'Unicode''s樂趣'""")
+    assert(whereClause.toString === "WHERE test_string = 'Unicode''s樂趣'")
     // scalastyle:on
   }
 
@@ -52,7 +52,7 @@ class FilterPushdownSuite extends FunSuite {
       StringContains("test_string", "infix"),
       In("test_int", Array(2,3,4))
     )
-    val whereClause = buildWhereClause(testSchema, filters)
+    val whereClause = buildWhereStatement(testSchema, filters)
     // scalastyle:off
     val expectedWhereClause =
       """
@@ -62,13 +62,13 @@ class FilterPushdownSuite extends FunSuite {
         |AND test_double < 1.7976931348623157E308
         |AND test_float >= 1.0
         |AND test_int <= 43
-        |AND STARTSWITH(test_string, 'prefix')
-        |AND ENDSWITH(test_string, 'suffix')
-        |AND CONTAINS(test_string, 'infix')
-        |AND (test_int IN (2, 3, 4))
+        |AND STARTSWITH( test_string , 'prefix' )
+        |AND ENDSWITH( test_string , 'suffix' )
+        |AND CONTAINS( test_string , 'infix' )
+        |AND ( test_int IN ( 2 , 3 , 4 ))
         |""".stripMargin.lines.mkString(" ").trim
     // scalastyle:on
-    assert(whereClause === expectedWhereClause)
+    assert(whereClause.toString === expectedWhereClause)
   }
 
   test("buildWhereClause for different datatypes") {
@@ -84,7 +84,7 @@ class FilterPushdownSuite extends FunSuite {
       EqualTo("test_timestamp", TestUtils.toTimestamp(2013, 3, 5, 12, 1, 2, 987)),
       StringStartsWith("test_timestamp", "2013-04-05")
     )
-    val whereClause = buildWhereClause(testSchema, filters)
+    val whereClause = buildWhereStatement(testSchema, filters)
     // scalastyle:off
     val expectedWhereClause =
     """
@@ -93,12 +93,12 @@ class FilterPushdownSuite extends FunSuite {
       |AND test_double = 1000.0
       |AND test_float = 1.0
       |AND test_int = 43
-      |AND test_date = '2013-04-05'::DATE
-      |AND test_timestamp = '2013-04-05 12:01:02.987'::TIMESTAMP(3)
-      |AND STARTSWITH(test_timestamp, '2013-04-05')
+      |AND test_date = '2013-04-05' ::DATE
+      |AND test_timestamp = '2013-04-05 12:01:02.987' ::TIMESTAMP(3)
+      |AND STARTSWITH( test_timestamp , '2013-04-05' )
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
-    assert(whereClause === expectedWhereClause)
+    assert(whereClause.toString === expectedWhereClause)
   }
 
   test("buildWhereClause for unknown attributes") {
@@ -107,7 +107,7 @@ class FilterPushdownSuite extends FunSuite {
       EqualTo("test_foo", true),  // should be removed
       EqualTo("test_int", 7)
     )
-    val whereClause = buildWhereClause(testSchema, filters)
+    val whereClause = buildWhereStatement(testSchema, filters)
     // scalastyle:off
     val expectedWhereClause =
     """
@@ -115,7 +115,7 @@ class FilterPushdownSuite extends FunSuite {
       |AND test_int = 7
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
-    assert(whereClause === expectedWhereClause)
+    assert(whereClause.toString === expectedWhereClause)
   }
 
   test("buildWhereClause for logical constructs") {
@@ -132,16 +132,16 @@ class FilterPushdownSuite extends FunSuite {
           EqualTo("test_float", 3.13),
           Not(EqualTo("test_int", 7))))
     )
-    val whereClause = buildWhereClause(testSchema, filters)
+    val whereClause = buildWhereStatement(testSchema, filters)
     // scalastyle:off
     val expectedWhereClause =
     """
-      |WHERE ((test_bool = true) OR (test_int = 7))
-      |AND (((NOT ((test_int IS NULL)))) OR ((test_float IS NOT NULL)))
-      |AND ((test_bool = true) OR (((test_float = 3.13) AND ((NOT (test_int = 7))))))
+      |WHERE (( test_bool = true ) OR ( test_int = 7 ))
+      |AND (( (NOT ( ( test_int IS NULL) )) ) OR ( ( test_float IS NOT NULL) ))
+      |AND (( test_bool = true ) OR ( (( test_float = 3.13 ) AND ( (NOT ( test_int = 7 )) )) ))
     """.stripMargin.lines.mkString(" ").trim
     // scalastyle:on
-    assert(whereClause === expectedWhereClause)
+    assert(whereClause.toString === expectedWhereClause)
   }
 
   private val testSchema: StructType = StructType(Seq(

@@ -23,7 +23,7 @@ import net.snowflake.client.jdbc._
 import net.snowflake.client.jdbc.cloud.storage.StageInfo
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlob, CloudBlobClient, CloudBlobContainer}
 import net.snowflake.spark.snowflake.io.SFInternalStage._
-import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils}
+import net.snowflake.spark.snowflake.{JDBCWrapper, SnowflakeConnectorUtils, SnowflakeSQLStatement}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark._
@@ -44,12 +44,12 @@ private[io] class SFInternalPartition(
 }
 
 private[io] class SFInternalRDD(
-                                        @transient val sqlContext: SQLContext,
-                                        @transient val params: MergedParameters,
-                                        @transient val sql: String,
-                                        @transient val jdbcWrapper: JDBCWrapper,
-                                        val format: SupportedFormat = SupportedFormat.CSV
-) extends RDD[String](sqlContext.sparkContext, Nil) with DataUnloader {
+                                 @transient val sqlContext: SQLContext,
+                                 @transient val params: MergedParameters,
+                                 @transient val statement: SnowflakeSQLStatement,
+                                 @transient val jdbcWrapper: JDBCWrapper,
+                                 val format: SupportedFormat = SupportedFormat.CSV
+                               ) extends RDD[String](sqlContext.sparkContext, Nil) with DataUnloader {
 
   @transient override val log = LoggerFactory.getLogger(getClass)
   @transient private val stageManager =
@@ -64,10 +64,12 @@ private[io] class SFInternalRDD(
 
   private[io] val rowCount = stageManager
     .executeWithConnection({ c =>
-      setup(preStatements = Seq.empty,
-            sql = buildUnloadStmt(sql, s"@$tempStage", compress, None, format),
-            conn = c,
-            keepOpen = true)
+      setup(
+        preStatements = Seq.empty,
+        conn = c,
+        keepOpen = true,
+        statement = buildUnloadStatement(statement, s"@$tempStage", compress, None, format)
+      )
     })
     .asInstanceOf[Long]
 
