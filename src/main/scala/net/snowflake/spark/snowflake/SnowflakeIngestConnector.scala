@@ -63,6 +63,24 @@ object SnowflakeIngestConnector {
     failedFiles
   }
 
+  /**
+    * list of (fileName, loading Succeed or not
+    */
+  def createHistoryChecker(ingestManager: SimpleIngestManager): () => List[(String, Boolean)] = {
+    var beginMark: String = null
+    () => {
+      val response = ingestManager.getHistory(null, null, beginMark)
+      beginMark = Option[String](response.getNextBeginMark).getOrElse(beginMark)
+      if(response != null && response.files != null){
+        response.files.toList.flatMap(entry => {
+          if(entry.getPath != null && entry.isComplete){
+            List((entry.getPath, entry.getStatus == IngestStatus.LOADED))
+          }else Nil
+        })
+      }else Nil
+    }
+  }
+
   def createIngestManager(
                            account: String,
                            user: String,
