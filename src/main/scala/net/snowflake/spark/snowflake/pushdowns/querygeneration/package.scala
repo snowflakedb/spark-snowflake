@@ -66,13 +66,13 @@ package object querygeneration {
     ConstantString(qualifiedAttribute(alias, name)) !
 
   private[querygeneration] final def wrap(name: String): String = {
-    identifier + name + identifier
+    identifier + name.toUpperCase + identifier
   }
 
   private[querygeneration] final def wrapStatement(
                                                     name: String
                                                   ): SnowflakeSQLStatement =
-    ConstantString(identifier + name + identifier) !
+    ConstantString(identifier + name.toUpperCase + identifier) !
 
   /** This performs the conversion from Spark expressions to SQL runnable by Snowflake.
     * We should have as many entries here as possible, or the translation will not be able ot happen.
