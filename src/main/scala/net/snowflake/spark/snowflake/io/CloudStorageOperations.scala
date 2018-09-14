@@ -250,8 +250,8 @@ object CloudStorageOperations {
                            stage: Option[String] = None
                          ): (CloudStorage, String) = {
     val propolueSql = Utils.genPrologueSql(param)
-    log.debug(propolueSql)
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn, propolueSql)
+    log.debug(propolueSql.statementString)
+    propolueSql.execute(conn)
 
 
     val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
