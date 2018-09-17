@@ -208,12 +208,9 @@ private[io] object StageWriter {
       case e: SQLException =>
         // snowflake-todo: try to provide more error information,
         // possibly from actual SQL output
+        if (targetTable == tempTable) conn.dropTable(tempTable.name)
         log.error("Error occurred while loading files to Snowflake: " + e)
         throw e
-    }
-    finally {
-      if (targetTable == targetTable)
-        conn.dropTable(tempTable.name)
     }
   }
 
