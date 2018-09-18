@@ -123,7 +123,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore("Test streaming writer") {
+  test("Test streaming writer") {
 
     val spark = sqlContext.sparkSession
     import spark.implicits._

@@ -33,14 +33,15 @@ class SnowflakeIngestService(
   lazy implicit val ingestManager: SimpleIngestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName)
 
-  var notClosed: Boolean = true
+  private var notClosed: Boolean = true
 
-  val ingestedFileList: IngestedFileList = init()
+  private val ingestedFileList: IngestedFileList = init()
 
-  lazy val checker = SnowflakeIngestConnector.createHistoryChecker(ingestManager)
+  private lazy val checker = SnowflakeIngestConnector.createHistoryChecker(ingestManager)
 
   //run clean function periodically
-  val process = Future {
+  private val process = Future {
+    Thread.sleep(SLEEP_TIME)
     while (notClosed) {
       val time = System.currentTimeMillis()
       ingestedFileList.checkResponseList(checker())
@@ -166,9 +167,15 @@ sealed trait IngestLog {
 
   val conn: Connection
 
-  def save: Unit =
-    storage.upload(fileName, Some(IngestLogManager.LOG_DIR), false)(conn)
-      .write(toString.getBytes("UTF-8"))
+  def save: Unit = {
+    println(s"----------> $fileName")
+    println(toString)
+    val output = storage.upload(fileName, Some(IngestLogManager.LOG_DIR), false)(conn)
+    output.write(toString.getBytes("UTF-8"))
+    output.close()
+
+  }
+
 }
 
 case class FailedFileList(
