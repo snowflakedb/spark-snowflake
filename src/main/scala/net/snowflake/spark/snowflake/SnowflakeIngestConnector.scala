@@ -3,6 +3,8 @@ package net.snowflake.spark.snowflake
 import java.nio.file.{Files, Paths}
 import java.security.{KeyFactory, KeyPair, PrivateKey, PublicKey}
 import java.security.spec.{PKCS8EncodedKeySpec, X509EncodedKeySpec}
+import java.text.SimpleDateFormat
+import java.util.{Date, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
@@ -71,14 +73,39 @@ object SnowflakeIngestConnector {
     () => {
       val response = ingestManager.getHistory(null, null, beginMark)
       beginMark = Option[String](response.getNextBeginMark).getOrElse(beginMark)
-      if(response != null && response.files != null){
+      if (response != null && response.files != null) {
         response.files.toList.flatMap(entry => {
-          if(entry.getPath != null && entry.isComplete){
+          if (entry.getPath != null && entry.isComplete) {
             List((entry.getPath, entry.getStatus))
-          }else Nil
+          } else Nil
         })
-      }else Nil
+      } else Nil
     }
+  }
+
+  def checkHistoryByRange(ingestManager: SimpleIngestManager,
+                          start: Long,
+                          end: Long): List[(String, IngestStatus)] = {
+    val response = ingestManager
+      .getHistoryRange(null,
+        timestampToDate(start),
+        timestampToDate(end))
+    if(response != null && response.files != null){
+      response.files.toList.flatMap(entry => {
+        if (entry.getPath != null && entry.isComplete) {
+          List((entry.getPath, entry.getStatus))
+        } else Nil
+      })
+    } else Nil
+  }
+  /**
+    * timestamp to ISO-8601 Date
+    */
+  private def timestampToDate(time: Long): String = {
+    val tz = TimeZone.getTimeZone("UTC")
+    val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    df.setTimeZone(tz)
+    df.format(new Date(time - 1000)) // 1 sec before
   }
 
   def createIngestManager(
@@ -94,24 +121,26 @@ object SnowflakeIngestConnector {
 
   /**
     * Ingest files and wait ingest history
-    * @param files a list of file names
-    * @param sec time out in second
+    *
+    * @param files   a list of file names
+    * @param sec     time out in second
     * @param manager Ingest Manager
     * @return a list of failed file name, or None in case of time out
     */
   def ingestFilesAndCheck(files: List[String], sec: Long)
-                 (implicit manager: SimpleIngestManager): Option[List[String]] = {
+                         (implicit manager: SimpleIngestManager): Option[List[String]] = {
     ingestFiles(files)
 
-    lazy val checker = Future{ waitForFileHistory(files) }
+    lazy val checker = Future {
+      waitForFileHistory(files)
+    }
 
-    try{
+    try {
       Some(Await.result(checker, sec second))
     }
     catch {
-      case _:TimeoutException => None
+      case _: TimeoutException => None
     }
-
 
 
   }
@@ -119,8 +148,6 @@ object SnowflakeIngestConnector {
   def ingestFiles(files: List[String])
                  (implicit manager: SimpleIngestManager): Unit =
     manager.ingestFiles(files.map(new StagedFileWrapper(_)).asJava, null)
-
-
 
 
   def createIngestManager(
