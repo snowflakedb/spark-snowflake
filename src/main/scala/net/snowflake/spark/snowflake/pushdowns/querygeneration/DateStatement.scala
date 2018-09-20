@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, DateAdd, Expression, Month, Quarter, Year}
+  import org.apache.spark.sql.catalyst.expressions.{Attribute, DateAdd, Expression, Month, Quarter, ToDate, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -15,7 +15,7 @@ private[querygeneration] object DateStatement {
           ConstantString("DATEADD(day,") + convertStatement(days, fields) + "," +
             convertStatement(startDate, fields) + ")"
 
-        case _: Month | _: Quarter | _: Year  =>
+        case _: Month | _: Quarter | _: Year| _: ToDate =>
           ConstantString(expr.prettyName.toUpperCase) +
             blockStatement(convertStatements(fields, expr.children: _*))
 
