@@ -5,6 +5,7 @@ import java.net.ServerSocket
 import java.nio.charset.Charset
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
 import org.apache.spark.sql.Row
 
 import scala.util.Random
@@ -84,7 +85,7 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   //manual test only
-  ignore("test") {
+  test("test") {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
@@ -195,6 +196,11 @@ class StreamingSuite extends IntegrationSuiteBase {
 //    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
 //      s"drop stage $streamingStage")
 
+  }
+
+  test("test log"){
+    val storage: CloudStorage = CloudStorageOperations.createStorageClient(params, conn, false, Some("spark_streaming_test_stage"))._1
+    val log = IngestLogManager.readIngestList(storage, conn)
   }
 
 }
