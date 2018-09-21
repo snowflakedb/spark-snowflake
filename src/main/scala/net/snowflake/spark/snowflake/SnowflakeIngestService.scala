@@ -16,6 +16,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 
 class SnowflakeIngestService(
@@ -81,6 +82,7 @@ class SnowflakeIngestService(
               ))
       } else ingestedFileList.checkResponseList(checker())
     }
+    conn.dropPipe(pipeName)
   }
 
   def close(): Unit = {
@@ -120,12 +122,12 @@ object IngestLogManager {
         c = inputStream.read()
       }
       try {
-        val node = mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8"))).asInstanceOf[ArrayNode]
+        val node = mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8")))
         val failedIndex: Int = node.get(FAILED_FILE_INDEX).asInt()
         val failedList: FailedFileList = readFailedFileList(failedIndex, storage, conn)
         val arrNode = node.get(LIST).asInstanceOf[ArrayNode]
         var list: List[(String, Long)] = Nil
-        (0 to arrNode.size()).foreach(i => {
+        (0 until arrNode.size()).foreach(i => {
           list = arrNode.get(i).get(NAME).asText() -> arrNode.get(i).get(TIME).asLong() :: list
         })
         IngestedFileList(storage, conn, Some(failedList), Some(list))
@@ -148,14 +150,13 @@ object IngestLogManager {
       try {
         val list = mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8"))).asInstanceOf[ArrayNode]
         var set = mutable.HashSet.empty[String]
-        (0 to list.size()).foreach(i => {
+        (0 until list.size()).foreach(i => {
           set += list.get(i).asText()
         })
         FailedFileList(storage, conn, index, Some(set))
       } catch {
         case e: Exception => throw new IllegalArgumentException(s"log file: $fileName is broken: $e")
       }
-
     } else FailedFileList(storage, conn, index)
   }
 
