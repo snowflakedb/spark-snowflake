@@ -40,9 +40,7 @@ private[querygeneration] case class QueryHelper(
       p.map(e =>
         colSet.find(c => c.exprId == e.exprId) match {
           case Some(a) =>
-            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
-              a.exprId,
-              None)
+            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId)
           case None => e
       }))
     .map(p => renameColumns(p, alias))
@@ -65,9 +63,7 @@ private[querygeneration] case class QueryHelper(
 
   val outputWithQualifier = output.map(
     a =>
-      AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
-        a.exprId,
-        Some(alias)))
+      AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId, Seq[String](alias)))
 
   val sourceStatement: SnowflakeSQLStatement =
     if(children.nonEmpty)
