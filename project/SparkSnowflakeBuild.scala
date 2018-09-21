@@ -44,10 +44,10 @@ object SparkSnowflakeBuild extends Build {
       name := "spark-snowflake",
       organization := "net.snowflake",
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
-      crossScalaVersions := Seq("2.11.12"),
-      sparkVersion := "2.3.0",
+      crossScalaVersions := Seq("2.10.5", "2.11.12"),
+      sparkVersion := "2.1.0",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.8.0"),
+      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.6.0"),
       javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
       spName := "snowflake/spark-snowflake",
       sparkComponents ++= Seq("sql", "hive"),
@@ -67,8 +67,10 @@ object SparkSnowflakeBuild extends Build {
         "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
         "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
         "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-        "org.apache.hadoop" % "hadoop-aws" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
-        "org.apache.hadoop" % "hadoop-azure" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force(),
+        "org.apache.hadoop" % "hadoop-aws" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
+        "org.apache.hadoop" % "hadoop-azure" % "2.8.0" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force(),
+
+
 
         "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
         "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),

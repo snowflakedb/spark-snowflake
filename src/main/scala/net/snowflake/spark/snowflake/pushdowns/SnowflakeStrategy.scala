@@ -23,7 +23,7 @@ class SnowflakeStrategy extends Strategy {
 
       buildQueryRDD(plan.transform({
         case Project(Nil, child)     => child
-        case SubqueryAlias(_, child) => child
+        case SubqueryAlias(_, child, _) => child
       })).getOrElse(Nil)
     } catch {
       case _: Exception => Nil
