@@ -7,6 +7,7 @@ import java.nio.charset.Charset
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
 import org.apache.spark.sql.Row
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.util.Random
 
@@ -79,13 +80,14 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   override def afterAll(): Unit = {
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"drop table $table")
+//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+//      s"drop table $table")
+    conn.dropTable(table)
     super.afterAll()
   }
 
   //manual test only
-  test("test") {
+  ignore("test") {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
@@ -198,9 +200,17 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  test("test log"){
+  ignore("test log"){
     val storage: CloudStorage = CloudStorageOperations.createStorageClient(params, conn, false, Some("spark_streaming_test_stage"))._1
-    val log = IngestLogManager.readIngestList(storage, conn)
+    //val log = IngestLogManager.readIngestList(storage, conn)
+
+    val failed = IngestLogManager.readFailedFileList(0, storage, conn)
+    failed.addFiles(List("a","b","c"))
+
+    val failed1 = IngestLogManager.readFailedFileList(0, storage, conn)
+
+    println(failed1.toString)
+
   }
 
 }

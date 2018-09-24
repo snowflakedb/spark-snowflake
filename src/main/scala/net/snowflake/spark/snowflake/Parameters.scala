@@ -138,9 +138,10 @@ object Parameters {
       throw new IllegalArgumentException(
         "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'")
     }
-    if (!userParameters.contains(PARAM_SF_PASSWORD)) {
+    if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
+      (!userParameters.contains(PARAM_PRIVATE_KEY_PATH))) {
       throw new IllegalArgumentException(
-        "A snowflake passsword must be provided with '" + PARAM_SF_PASSWORD + "' parameter, e.g. 'password'")
+        "A snowflake passsword or private key path must be provided with '" + PARAM_SF_PASSWORD + " or " + PARAM_PRIVATE_KEY_PATH + "' parameter, e.g. 'password'")
     }
     if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
           PARAM_SF_QUERY)) {
