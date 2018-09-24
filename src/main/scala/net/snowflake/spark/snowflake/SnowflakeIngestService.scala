@@ -90,6 +90,7 @@ class SnowflakeIngestService(
     println(s"closing ingest service")
     notClosed = false
     Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
+    conn.dropPipe(pipeName)
     println(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
   }
 
