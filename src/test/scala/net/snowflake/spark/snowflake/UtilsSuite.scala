@@ -63,4 +63,10 @@ class UtilsSuite extends FunSuite with Matchers {
       removeCreds("s3n://ACCESSKEY:SECRETKEY@bucket/path/to/temp/dir") ===
       "s3n://bucket/path/to/temp/dir")
   }
+
+  test("ensureQuoted quotes identifiers correctly") {
+    Utils.ensureQuoted("identifier without quotes") shouldBe "\"identifier without quotes\""
+    Utils.ensureQuoted("\"identifier with quotes\"") shouldBe "\"identifier with quotes\""
+    Utils.ensureQuoted("`identifier with backticks`") shouldBe "`identifier with backticks`"
+  }
 }
