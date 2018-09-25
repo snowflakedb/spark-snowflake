@@ -89,4 +89,26 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     conn.dropTable(name)
   }
+
+  test("copy from query") {
+    val name = s"spark_test_table_$randomSuffix"
+    val schema =
+      new StructType(
+        Array(
+          StructField("num", IntegerType, false),
+          StructField("str", StringType, false)
+        )
+      )
+
+    conn.createTable(name, schema, true, false)
+
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"""select num, str from $name where num = 0 and str = 'test'""")
+      .load().show()
+
+    conn.dropTable(name)
+
+  }
 }
