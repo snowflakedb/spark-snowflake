@@ -103,8 +103,8 @@ case class SourceQuery(relation: SnowflakeRelation,
     outputAttributes = Some(refColumns),
     alias = alias,
     conjunctionStatement = blockStatement(
-        relation.params.query.map(ConstantString) // user input query, don't parse
-          .getOrElse(relation.params.table.get.toStatement) !,
+        relation.params.query.map(ConstantString("(") + _ + ")") // user input query, don't parse
+          .getOrElse(relation.params.table.get.toStatement !) ,
       "sf_connector_query_alias"
     )
   )

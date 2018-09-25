@@ -199,7 +199,7 @@ private[snowflake] case class SnowflakeRelation(
       .mkString(", ")
     val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
     val tableNameOrSubquery: StatementElement =
-      params.table.map(_.toStatement).getOrElse(ConstantString(params.query.get))
+      params.table.map(_.toStatement).getOrElse(ConstantString("(" + params.query.get + ")"))
     ConstantString("SELECT") + columnList + "FROM" + tableNameOrSubquery + whereClause
   }
 }
