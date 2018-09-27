@@ -24,7 +24,7 @@ private[querygeneration] object MiscStatement {
           blockStatement(
             cases + " ELSE " + convertStatement(elseValue.get, fields) + " END")
         else blockStatement(cases + " END")
-      case Cast(child, t, _) =>
+      case Cast(child, t) =>
         getCastType(t) match {
           case None =>
             convertStatement(child, fields)
@@ -60,9 +60,9 @@ private[querygeneration] object MiscStatement {
         ConstantString("BITSHIFTRIGHT") +
           blockStatement(convertStatements(fields, col, num))
 
-      case SortOrder(child, Ascending, _, _) =>
+      case SortOrder(child, Ascending, _) =>
         blockStatement(convertStatement(child, fields)) + "ASC"
-      case SortOrder(child, Descending, _, _) =>
+      case SortOrder(child, Descending, _) =>
         blockStatement(convertStatement(child, fields)) + "DESC"
 
       case ScalarSubquery(subquery, _, _) =>
