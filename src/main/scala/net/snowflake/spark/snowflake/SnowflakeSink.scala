@@ -1,7 +1,10 @@
 package net.snowflake.spark.snowflake
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
@@ -71,6 +74,19 @@ class SnowflakeSink(
   private var schema: Option[StructType] = None
 
 
+  //telemetry
+  private var lastMetricSendTime: Long = 0
+  private val mapper = new ObjectMapper()
+  private val metric: ObjectNode = mapper.createObjectNode()
+
+  private val APP_NAME = "application_name"
+  private val START_TIME = "start_time"
+  private val END_TIME = "end_time"
+  private val LOAD_RATE = "load_rate"
+  private val DATA_BATCH = "data_batch"
+
+  private val telemetrySendTime: Long = 60 * 60 * 1000 // 1 h
+
 
   /**
     * Create pipe
@@ -102,6 +118,14 @@ class SnowflakeSink(
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
           ingestService.close()
+
+          //telemetry
+          val time = System.currentTimeMillis()
+          metric.put(END_TIME, time)
+          metric.get(LOAD_RATE).asInstanceOf[ObjectNode].put(END_TIME, time)
+
+          SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric),time))
+          SnowflakeTelemetry.send(conn.getTelemetry)
         }
       }
     )
@@ -198,8 +222,32 @@ class SnowflakeSink(
 
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if(schema.isEmpty) schema = Some(data.schema)
 
+    def registerDataBatchToTelemetry():Unit = {
+      val time = System.currentTimeMillis()
+      if(lastMetricSendTime == 0){ //init
+        metric.put(APP_NAME, data.sparkSession.sparkContext.appName)
+        metric.put(START_TIME, time)
+        lastMetricSendTime = time
+        val rate = metric.putObject(LOAD_RATE)
+        rate.put(START_TIME, time)
+        rate.put(DATA_BATCH, 0)
+      }
+      val rate = metric.get(LOAD_RATE).asInstanceOf[ObjectNode]
+      rate.put(DATA_BATCH, rate.get(DATA_BATCH).asInt() + 1)
+
+      if(time - lastMetricSendTime > telemetrySendTime){
+        rate.put(END_TIME, time)
+        SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric.deepCopy()), time))
+        SnowflakeTelemetry.send(conn.getTelemetry)
+        lastMetricSendTime = time
+        rate.put(START_TIME, time)
+        rate.put(DATA_BATCH, 0)
+      }
+
+    }
+
+    if(schema.isEmpty) schema = Some(data.schema)
 
       //prepare data
       val rdd =
@@ -213,6 +261,12 @@ class SnowflakeSink(
         CloudStorageOperations
           .saveToStorage(rdd, format, Some(batchId.toString), compress)
     ingestService.ingestFiles(fileList)
+
+    registerDataBatchToTelemetry()
   }
+
+
+
+
 
 }
