@@ -307,7 +307,7 @@ case class UnionQuery(children: Seq[LogicalPlan],
 
   override val helper: QueryHelper =
     QueryHelper(children = queries,
-      outputAttributes = None,
+      outputAttributes = Some(queries.head.helper.output),
       alias = alias)
 
   override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {
