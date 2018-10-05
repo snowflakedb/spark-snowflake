@@ -45,7 +45,7 @@ object SparkSnowflakeBuild extends Build {
       organization := "net.snowflake",
       scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
       crossScalaVersions := Seq("2.11.12"),
-      sparkVersion := "2.3.0",
+      sparkVersion := "2.4.0-SNAPSHOT",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
       testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.8.0"),
       javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
@@ -56,6 +56,8 @@ object SparkSnowflakeBuild extends Build {
       credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
       resolvers +=
         "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+      resolvers +=
+        "Apache Development Snapshot Repository" at "https://repository.apache.org/snapshots",
       libraryDependencies ++= Seq(
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "net.snowflake" % "snowflake-jdbc" % "3.6.8",
