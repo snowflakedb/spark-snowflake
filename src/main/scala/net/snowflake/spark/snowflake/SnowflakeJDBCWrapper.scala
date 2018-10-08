@@ -539,6 +539,8 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def execute(statement: SnowflakeSQLStatement): Unit =
       statement.execute(connection)
 
+    def execute(query: String): Unit = DefaultJDBCWrapper.executeInterruptibly(connection, query)
+
     def copyFromSnowflake(): Unit = {}
 
     def copyToSnowflake(): Unit = {}
