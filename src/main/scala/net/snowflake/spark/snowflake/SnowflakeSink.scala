@@ -226,7 +226,7 @@ class SnowflakeSink(
     def registerDataBatchToTelemetry():Unit = {
       val time = System.currentTimeMillis()
       if(lastMetricSendTime == 0){ //init
-        metric.put(APP_NAME, data.sparkSession.sparkContext.appName)
+        metric.put(APP_NAME, (data.sparkSession.sparkContext.appName + START_TIME.toString).hashCode) //use hashcode, hide app name
         metric.put(START_TIME, time)
         lastMetricSendTime = time
         val rate = metric.putObject(LOAD_RATE)
