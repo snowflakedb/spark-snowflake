@@ -61,14 +61,7 @@ private[snowflake] class SnowflakeWriter(
 
     val output: DataFrame = removeUselessColumns(data, params)
     val strRDD = dataFrameToRDD(sqlContext, output, params, format)
-    io.writeRDD(
-      sqlContext,
-      params,
-      strRDD,
-      output.schema,
-      saveMode,
-      format
-    )
+    io.writeRDD(params, strRDD, output.schema, saveMode, format)
   }
 
   def dataFrameToRDD(

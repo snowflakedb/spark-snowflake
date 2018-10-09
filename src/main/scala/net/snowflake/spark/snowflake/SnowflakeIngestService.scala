@@ -82,7 +82,7 @@ class SnowflakeIngestService(
               ))
       } else ingestedFileList.checkResponseList(checker())
     }
-    conn.dropPipe(pipeName) // todo: add try catch
+    conn.dropPipe(pipeName)
   }
 
   def close(): Unit = {

@@ -40,6 +40,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.Utils
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
@@ -208,23 +209,9 @@ object CloudStorageOperations {
                                     dir: Option[String] = None,
                                     temporary: Boolean = false
                                   ): CloudStorage = {
-    def stageNotExists(stage: String): Boolean = {
-      val sql = s"desc stage $stage"
-      Try {
-        DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
-      }.isFailure
-    }
-
-    if (stageNotExists(stageName)) {
-      val sql =
-        s"""
-           |create ${if (temporary) "temporary" else ""} stage $stageName
-           """.stripMargin
-      DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
-    }
-
+    if(!conn.stageExists(stageName))conn.createStage(stageName,temporary = true)
     @transient val stageManager =
-      new SFInternalStage(false, DefaultJDBCWrapper, param, Some(stageName))
+      new SFInternalStage(false, DefaultJDBCWrapper, param, Some(stageName), conn = Some(conn))
 
     stageManager.stageType match {
       case StageType.S3 =>

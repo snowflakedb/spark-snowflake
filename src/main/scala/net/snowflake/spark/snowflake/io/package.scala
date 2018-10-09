@@ -50,27 +50,13 @@ package object io {
     * Write a String RDD to Snowflake through given source
     */
   def writeRDD(
-                sqlContext: SQLContext,
                 params: MergedParameters,
                 rdd: RDD[String],
                 schema: StructType,
                 saveMode: SaveMode,
                 format: SupportedFormat = SupportedFormat.CSV,
-                mapper: Option[Map[String, String]] = None,
-                jdbcWrapper: JDBCWrapper = DefaultJDBCWrapper
-
-              ): Unit = {
-
-    StageWriter.writeToStage(
-      rdd,
-      schema,
-      sqlContext,
-      saveMode,
-      params,
-      jdbcWrapper,
-      format
-    )
-
-  }
+                mapper: Option[Map[String, String]] = None
+              ): Unit =
+    StageWriter.writeToStage(rdd, schema, saveMode, params, format)
 
 }

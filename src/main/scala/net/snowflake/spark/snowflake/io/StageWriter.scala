@@ -15,29 +15,14 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.io.OutputStream
-import java.net.URI
 import java.sql.{Connection, SQLException}
-import java.util.zip.GZIPOutputStream
-
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.ObjectMetadata
-import net.snowflake.client.jdbc.internal.amazonaws.auth.AWSCredentials
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
-import javax.crypto.{Cipher, CipherOutputStream}
-import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{CloudBlobClient, CloudBlobContainer, CloudBlockBlob}
-import net.snowflake.spark.snowflake.io.SFInternalStage._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
-import net.snowflake.spark.snowflake.s3upload.StreamTransferManager
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{SQLContext, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.slf4j.LoggerFactory
 
 import scala.util.Random
@@ -49,18 +34,10 @@ private[io] object StageWriter {
   def writeToStage(
                     rdd: RDD[String],
                     schema: StructType,
-                    sqlContext: SQLContext,
                     saveMode: SaveMode,
                     params: MergedParameters,
-                    jdbcWrapper: JDBCWrapper,
                     format: SupportedFormat
                   ): Unit = {
-
-    val source: SupportedSource =
-      if (params.usingExternalStage) SupportedSource.EXTERNAL
-      else SupportedSource.INTERNAL
-
-
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
         "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
@@ -68,67 +45,21 @@ private[io] object StageWriter {
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(prologueSql.toString)
 
+    val conn = DefaultJDBCWrapper.getConnector(params)
 
-    source match {
-      case SupportedSource.EXTERNAL =>
-        Utils.checkFileSystem(
-          new URI(params.rootTempDir),
-          sqlContext.sparkContext.hadoopConfiguration)
+    try {
+      prologueSql.execute(conn)
 
-        if (params.checkBucketConfiguration) {
-          // For now it is only needed for AWS, so put the following under the
-          // check. checkBucketConfiguration implies we are using S3.
-          val creds = CloudCredentialsUtils.getAWSCreds(sqlContext, params)
+      val (storage, stage) =
+        CloudStorageOperations.createStorageClient(params, conn, true, None)
 
-          val s3ClientFactory: AWSCredentials => AmazonS3Client
-          = awsCredentials => new AmazonS3Client(awsCredentials)
+      val filesToCopy = storage.upload(rdd, format, None, true)
 
-          Utils.checkThatBucketHasObjectLifecycleConfiguration(
-            params.rootTempDir,
-            params.rootTempDirStorageType,
-            s3ClientFactory(creds))
-        }
+      writeToTable(conn, schema, saveMode, params,
+        filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")), stage, format)
 
-        implicit val conn = jdbcWrapper.getConnector(params)
-
-        try {
-          prologueSql.execute
-
-          val filesToCopy =
-            unloadData(sqlContext, rdd, params, source, None)
-
-          val tempStage = createTempStage(filesToCopy._1, params, conn, jdbcWrapper)
-
-          writeToTable(sqlContext, conn, rdd, schema, saveMode, params,
-            jdbcWrapper, filesToCopy._2, tempStage, format)
-
-          //purge files after loading
-          if (params.purge()) {
-            val fs = FileSystem.get(URI.create(filesToCopy._1), sqlContext.sparkContext.hadoopConfiguration)
-            fs.delete(new Path(filesToCopy._1), true)
-          }
-
-        } finally {
-          SnowflakeTelemetry.send(jdbcWrapper.getTelemetry(conn))
-          conn.close()
-        }
-      case SupportedSource.INTERNAL =>
-        val stageManager = new SFInternalStage(true, jdbcWrapper, params)
-
-        try {
-          stageManager.executeWithConnection(prologueSql.execute(_))
-          val tempStage = stageManager.setupStageArea()
-
-          val file =
-            unloadData(sqlContext, rdd, params, source, Some(stageManager))._2
-
-          stageManager.executeWithConnection(
-            writeToTable(sqlContext, _, rdd, schema, saveMode, params,
-              jdbcWrapper, file, tempStage, format)
-          )
-        } finally {
-          stageManager.closeConnection()
-        }
+    } finally {
+      conn.close()
     }
 
   }
@@ -138,13 +69,10 @@ private[io] object StageWriter {
     * load data from stage to table
     */
   private def writeToTable(
-                            sqlContext: SQLContext,
                             conn: Connection,
-                            data: RDD[String],
                             schema: StructType,
                             saveMode: SaveMode,
                             params: MergedParameters,
-                            jdbcWrapper: JDBCWrapper,
                             file: String,
                             tempStage: String,
                             format: SupportedFormat
@@ -158,7 +86,7 @@ private[io] object StageWriter {
     try {
       //purge tables when overwriting
       if (saveMode == SaveMode.Overwrite &&
-        jdbcWrapper.tableExists(conn, table.toString)) {
+        DefaultJDBCWrapper.tableExists(conn, table.toString)) {
         if (params.useStagingTable) {
           if (params.truncateTable) {
             conn.createTableLike(tempTable.name, table.name)
@@ -172,12 +100,11 @@ private[io] object StageWriter {
       conn.createTable(targetTable.name, schema)
 
       //pre actions
-      Utils.executePreActions(jdbcWrapper, conn, params, Option(targetTable))
+      Utils.executePreActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
 
       // Load the temporary data into the new file
       val copyStatement =
-        copySql(sqlContext, data, schema, saveMode, params,
-          targetTable, file, tempStage, format, conn)
+        copySql(schema, saveMode, params, targetTable, file, tempStage, format, conn)
       //copy
       log.debug(Utils.sanitizeQueryText(copyStatement.toString))
       //todo: handle on_error parameter on spark side
@@ -196,10 +123,10 @@ private[io] object StageWriter {
       Utils.setLastCopyLoad(copyStatement.toString)
 
       //post actions
-      Utils.executePostActions(jdbcWrapper, conn, params, Option(targetTable))
+      Utils.executePostActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (jdbcWrapper.tableExists(conn, table.toString))
+        if (DefaultJDBCWrapper.tableExists(conn, table.toString))
           conn.swapTable(table.name, tempTable.name)
         else
         conn.renameTable(table.name, tempTable.name)
@@ -218,8 +145,6 @@ private[io] object StageWriter {
     * Generate the COPY SQL command
     */
   private def copySql(
-                       sqlContext: SQLContext,
-                       data: RDD[String],
                        schema: StructType,
                        saveMode: SaveMode,
                        params: MergedParameters,
@@ -329,230 +254,6 @@ private[io] object StageWriter {
       mappingFromString + formatString + truncateCol + purge + onError
   }
 
-
-  /**
-    * Serialize temporary data to cloud storage (S3 or Azure), ready for
-    * Snowflake COPY
-    *
-    * @return the pair (URL, prefix) of the files that should be loaded,
-    *         usually (tempDir, "part"),
-    *         if at least one record was written,
-    *         and None otherwise.
-    */
-  private def unloadData(sqlContext: SQLContext,
-                         data: RDD[String],
-                         params: MergedParameters,
-                         source: SupportedSource,
-                         stageMngr: Option[SFInternalStage]
-                        ): (String, String) = {
-
-    @transient val stageManager = stageMngr.orNull
-
-    source match {
-      case SupportedSource.INTERNAL =>
-        @transient val keyIds = stageManager.getKeyIds
-        val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
-        val masterKey = stageManager.masterKey
-        val stageLocation = stageManager.stageLocation
-        val (bucketName, path) = extractBucketNameAndPath(stageLocation)
-
-        val is256 = stageManager.is256Encryption
-
-
-        stageManager.stageType match {
-
-          case StageType.S3 =>
-
-            val awsID = stageManager.awsId
-            val awsKey = stageManager.awsKey
-            val awsToken = stageManager.awsToken
-
-            data.foreachPartition(rows => {
-
-              val randStr = Random.alphanumeric take 10 mkString ""
-              var fileName = path + {
-                if (!path.endsWith("/")) "/" else ""
-              } + randStr + ".csv"
-
-              val amazonClient = createS3Client(is256,
-                masterKey,
-                queryId,
-                smkId,
-                awsID.get,
-                awsKey.get,
-                awsToken.get)
-              val (fileCipher: Cipher, meta: ObjectMetadata) =
-                if (!is256)
-                  getCipherAndS3Metadata(masterKey, queryId, smkId)
-                else (_: Cipher, new ObjectMetadata())
-
-              if (params.sfCompress)
-                meta.setContentEncoding("GZIP")
-              val parallelism = params.parallelism.getOrElse(1)
-
-              val streamManager = new StreamTransferManager(
-                bucketName,
-                fileName,
-                amazonClient,
-                meta,
-                1, //numStreams
-                parallelism, //numUploadThreads.
-                5 * parallelism, //queueCapacity
-                50) //partSize: Max 10000 parts, 50MB * 10K = 500GB per partition limit
-
-              try {
-                // TODO: Can we parallelize this write? Currently we don't because the Row Iterator is not thread safe.
-
-                val uploadOutStream = streamManager.getMultiPartOutputStreams.get(0)
-                var outStream: OutputStream = uploadOutStream
-
-                if (!is256)
-                  outStream = new CipherOutputStream(outStream, fileCipher)
-
-                if (params.sfCompress) {
-                  fileName = fileName + ".gz"
-                  outStream = new GZIPOutputStream(outStream)
-                }
-
-                SnowflakeConnectorUtils.log.debug("Begin upload.")
-
-                while (rows.hasNext) {
-                  outStream.write(rows.next.getBytes("UTF-8"))
-                  outStream.write('\n')
-                  uploadOutStream.checkSize()
-                }
-
-                outStream.close()
-
-                SnowflakeConnectorUtils.log.debug(
-                  "Completed S3 upload for partition.")
-
-                streamManager.complete()
-
-              } catch {
-                case ex: Exception =>
-                  streamManager.abort()
-                  SnowflakeConnectorUtils.handleS3Exception(ex)
-              }
-            })
-
-            ("s3n://" + stageLocation, "")
-
-          case StageType.AZURE =>
-
-            val azureSAS = stageManager.azureSAS
-            val azureAccount = stageManager.azureAccountName
-            val azureEndpoint = stageManager.azureEndpoint
-
-
-            data.foreachPartition(rows => {
-
-              val randStr = Random.alphanumeric take 10 mkString ""
-              val fileName = path + {
-                if (!path.endsWith("/")) "/" else ""
-              } + randStr + ".csv"
-
-              val azureClient: CloudBlobClient =
-                createAzureClient(
-                  azureAccount.get,
-                  azureEndpoint.get,
-                  azureSAS
-                )
-
-              val (cipher, meta) = getCipherAndAZMetaData(masterKey, queryId, smkId)
-              val outputFileName =
-                if (params.sfCompress) fileName.concat(".gz") else fileName
-
-              val container: CloudBlobContainer = azureClient.getContainerReference(bucketName)
-              val blob: CloudBlockBlob = container.getBlockBlobReference(outputFileName)
-              blob.setMetadata(meta)
-
-              val EncryptedStream = new CipherOutputStream(blob.openOutputStream(), cipher)
-
-              val outputStream: OutputStream =
-                if (params.sfCompress) new GZIPOutputStream(EncryptedStream)
-                else EncryptedStream
-
-              while (rows.hasNext) {
-                outputStream.write(rows.next.getBytes("UTF-8"))
-                outputStream.write('\n')
-              }
-              outputStream.close()
-            })
-
-            (s"wasb://$azureAccount.$azureEndpoint/$stageLocation", "")
-
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Only support S3 or Azure stage, stage type: ${stageManager.stageType} ")
-        }
-
-      case SupportedSource.EXTERNAL =>
-        val tempDir = params.createPerQueryTempDir()
-        // Save, possibly with compression. Always use Gzip for now
-        if (params.sfCompress) {
-          data.saveAsTextFile(tempDir, classOf[GzipCodec])
-        } else {
-          data.saveAsTextFile(tempDir)
-        }
-
-        // Verify there was at least one file created.
-        // The saved filenames are going to be of the form part*
-        val fs = FileSystem
-          .get(URI.create(tempDir), sqlContext.sparkContext.hadoopConfiguration)
-        fs.listStatus(new Path(tempDir))
-          .iterator
-          .map(_.getPath.getName)
-          .filter(_.startsWith("part"))
-          .take(1)
-          .toSeq
-          .headOption
-          .getOrElse(throw new Exception("No part files were written!"))
-        // Note - temp dir already has "/", no need to add it
-        (tempDir, "part")
-    }
-
-
-  }
-
-  /**
-    * create temporary external stage for given path
-    */
-  @deprecated
-  private[io] def createTempStage(
-                                   path: String,
-                                   params: MergedParameters,
-                                   conn: Connection,
-                                   jdbcWrapper: JDBCWrapper
-                                 ): String = {
-    def convertURL(url: String): String = {
-      val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
-      val s3_url = "s3[an]://(.+)".r
-
-      url match {
-        case azure_url(container, account, endpoint, path) =>
-          s"azure://$account.$endpoint/$container/$path"
-        case s3_url(path) =>
-          s"s3://$path"
-        case _ =>
-          throw new IllegalArgumentException(s"invalid url: $url")
-      }
-
-    }
-
-    val stageName = s"tmp_spark_stage_${Random.alphanumeric take 10 mkString ""}"
-    val urlString = convertURL(path)
-    conn.createStage(
-      stageName,
-      Some(urlString),
-      params.awsAccessKey,
-      params.awsSecretKey,
-      params.azureSAS,
-      true,
-      true)
-
-    stageName
-  }
 
 
 }
