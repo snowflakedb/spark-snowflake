@@ -94,25 +94,11 @@ class SnowflakeSink(
   def init(): String = {
 
     //create table
-    val schemaSql = DefaultJDBCWrapper.schemaString(schema.get)
-    val createTableSql =
-      s"""
-         |create table if not exists $tableName ($schemaSql)
-         """.stripMargin
-    log.debug(createTableSql)
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn, createTableSql)
+    conn.createTable(tableName.name, schema.get, overwrite = false)
 
     val pipe = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
-
-    val createPipeStatement =
-      s"""
-         |create or replace pipe $pipe
-         |as ${copySql(format)}
-         |""".stripMargin
-    log.debug(createPipeStatement)
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn, createPipeStatement)
-
+    conn.createPipe(pipe, ConstantString(copySql(format))!, true)
     sqlContext.sparkContext.addSparkListener(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {

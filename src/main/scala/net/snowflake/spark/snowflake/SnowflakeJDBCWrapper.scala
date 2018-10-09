@@ -546,11 +546,26 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def copyToSnowflake(): Unit = {}
 
     //pipe operations
-    def createPipe(name: String): Unit = throw new NotImplementedError()
+    def createPipe(
+                    name: String,
+                    copyQuery: SnowflakeSQLStatement,
+                    overwrite: Boolean = false): Unit = {
+      (
+        ConstantString("create") +
+          (if(overwrite) "or replace pipe" else "pipe if not exists") +
+          Identifier(name) + "as" + copyQuery
+      ).execute(connection)
+    }
 
-    def dropPipe(name: String): Boolean = throw new NotImplementedError()
+    def dropPipe(name: String): Boolean =
+      Try {
+        (ConstantString("drop pipe") + Identifier(name)).execute(connection)
+      }.isSuccess
 
-    def pipeExists(name: String): Boolean = throw new NotImplementedError()
+    def pipeExists(name: String): Boolean =
+      Try {
+        (ConstantString("desc pipe") + Identifier(name)).execute(connection)
+      }.isSuccess
   }
 
 
