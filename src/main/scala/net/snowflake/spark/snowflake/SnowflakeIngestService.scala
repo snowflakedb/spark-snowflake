@@ -82,7 +82,7 @@ class SnowflakeIngestService(
               ))
       } else ingestedFileList.checkResponseList(checker())
     }
-    conn.dropPipe(pipeName)
+    conn.dropPipe(pipeName) // todo: add try catch
   }
 
   def close(): Unit = {
@@ -114,8 +114,8 @@ object IngestLogManager {
 
   def readIngestList(storage: CloudStorage, conn: Connection): IngestedFileList = {
     val fileName = s"$LOG_DIR/$INGEST_FILE_LIST_NAME"
-    if (storage.fileExists(fileName)(conn)) {
-      val inputStream = storage.download(fileName, false)(conn)
+    if (storage.fileExists(fileName)) {
+      val inputStream = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {
@@ -140,8 +140,8 @@ object IngestLogManager {
 
   def readFailedFileList(index: Int, storage: CloudStorage, conn: Connection): FailedFileList = {
     val fileName = s"$LOG_DIR/failed_file_list_$index.json"
-    if (storage.fileExists(fileName)(conn)) {
-      val inputStream = storage.download(fileName, false)(conn)
+    if (storage.fileExists(fileName)) {
+      val inputStream = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {
@@ -174,7 +174,7 @@ sealed trait IngestLog {
   def save: Unit = {
     println(s"----------> $fileName")
     println(toString)
-    val output = storage.upload(fileName, Some(IngestLogManager.LOG_DIR), false)(conn)
+    val output = storage.upload(fileName, Some(IngestLogManager.LOG_DIR), false)
     output.write(toString.getBytes("UTF-8"))
     output.close()
 
@@ -271,7 +271,7 @@ case class IngestedFileList(
           }
       }
     }
-    if (toClean.nonEmpty) storage.deleteFiles(toClean)(conn)
+    if (toClean.nonEmpty) storage.deleteFiles(toClean)
     if (failed.nonEmpty) failedFiles = failedFiles.addFiles(failed)
     save
   }

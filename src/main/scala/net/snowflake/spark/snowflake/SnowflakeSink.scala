@@ -5,7 +5,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobEnd}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
@@ -124,7 +124,7 @@ class SnowflakeSink(
           metric.put(END_TIME, time)
           metric.get(LOAD_RATE).asInstanceOf[ObjectNode].put(END_TIME, time)
 
-          SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric),time))
+          SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric), time))
           SnowflakeTelemetry.send(conn.getTelemetry)
         }
       }

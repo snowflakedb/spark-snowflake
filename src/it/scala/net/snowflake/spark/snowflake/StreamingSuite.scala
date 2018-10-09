@@ -80,8 +80,6 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   override def afterAll(): Unit = {
-//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-//      s"drop table $table")
     conn.dropTable(table)
     super.afterAll()
   }
@@ -132,6 +130,8 @@ class StreamingSuite extends IntegrationSuiteBase {
     import spark.implicits._
     val streamingStage = "streaming_test_stage"
 
+    conn.createStage(name = streamingStage, overwrite = true)
+
     DefaultJDBCWrapper.executeQueryInterruptibly(conn,
       s"create or replace table $table (value string)")
 
@@ -169,7 +169,6 @@ class StreamingSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
-
     query.awaitTermination(120000)
 
     checkTestTable(Seq(
@@ -194,9 +193,6 @@ class StreamingSuite extends IntegrationSuiteBase {
       Row("three"),
       Row("two")
     ))
-
-//    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-//      s"drop stage $streamingStage")
 
   }
 
