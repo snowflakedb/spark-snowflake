@@ -264,7 +264,7 @@ object Utils {
   // the TIMESTAMP_FORMAT option of COPY.
   private [snowflake] def genPrologueSql(params: MergedParameters) : SnowflakeSQLStatement = {
     // Determine the timezone we want to use
-    var tz = params.sfTimezone
+    val tz = params.sfTimezone
     var timezoneSetString = ""
     if (params.isTimezoneSpark) {
       // Use the Spark-level one

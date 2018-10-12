@@ -3,6 +3,7 @@ package net.snowflake.spark.snowflake.io
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 
@@ -22,12 +23,29 @@ private[io] object StageReader {
 
     Utils.genPrologueSql(params).execute(conn)
 
-    buildUnloadStatement(
+    Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
+
+    val res = buildUnloadStatement(
       params,
       statement,
       s"@$stage",
       compressFormat,
       format).execute(conn)
+
+
+    // Verify it's the expected format
+    val sch = res.getMetaData
+    assert(sch.getColumnCount == 3)
+    assert(sch.getColumnName(1) == "rows_unloaded")
+    assert(sch.getColumnTypeName(1) == "NUMBER") // First record must be in
+    val first = res.next()
+    assert(first)
+    val second = res.next()
+    assert(!second)
+
+    Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
+
+    SnowflakeTelemetry.send(conn.getTelemetry)
 
     storage.download(
       sqlContext.sparkContext,
@@ -35,6 +53,7 @@ private[io] object StageReader {
       compress
     )
   }
+
 
   private def buildUnloadStatement(
                                     params: MergedParameters,

@@ -27,6 +27,7 @@ class SnowflakeRDD(
     fileNames.grouped(FILES_PER_PARTITION).zipWithIndex.map {
       case (names, index) => SnowflakePartition(names, id, index)
     }.toArray
+
 }
 
 

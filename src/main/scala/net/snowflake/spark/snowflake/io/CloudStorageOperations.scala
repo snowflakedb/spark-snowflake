@@ -209,7 +209,7 @@ object CloudStorageOperations {
                                     dir: Option[String] = None,
                                     temporary: Boolean = false
                                   ): CloudStorage = {
-    if(!conn.stageExists(stageName))conn.createStage(stageName,temporary = false)
+    if(!conn.stageExists(stageName))conn.createStage(stageName,temporary = true)
     @transient val stageManager =
       new SFInternalStage(false, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1])
 
