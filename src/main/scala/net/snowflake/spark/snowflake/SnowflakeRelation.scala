@@ -165,16 +165,11 @@ private[snowflake] case class SnowflakeRelation(
                                    statement: SnowflakeSQLStatement,
                                    resultSchema: StructType
                                  ): RDD[T] = {
-
-    val source: SupportedSource =
-      if (params.usingExternalStage) SupportedSource.EXTERNAL
-      else SupportedSource.INTERNAL
-
     val format: SupportedFormat =
       if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
-    val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, jdbcWrapper, source, format)
+    val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
 
     format match {
       case SupportedFormat.CSV =>

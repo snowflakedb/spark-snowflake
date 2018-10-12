@@ -126,11 +126,11 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
-    if(params.getPrivateKeyPath.isDefined){
+    if (params.getPrivateKeyPath.isDefined) {
       val privateKeyPath = params.getPrivateKeyPath.get
       val privateKey = SnowflakeIngestConnector.privateKeyReader(privateKeyPath)
       jdbcProperties.put("privateKey", privateKey)
-    }else jdbcProperties.put("password", params.sfPassword)
+    } else jdbcProperties.put("password", params.sfPassword)
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
     if (params.sfAccount.isDefined) {
@@ -455,12 +455,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
 
     def tableMetaData(name: String): ResultSetMetaData =
-      try {
-        tableMetaDataFromStatement(Identifier(name) !)
-      } catch {
-        case _: Exception =>
-          tableMetaDataFromStatement(ConstantString(name) !)
-      }
+      tableMetaDataFromStatement(ConstantString(name) !)
 
     def tableMetaDataFromStatement(statement: SnowflakeSQLStatement): ResultSetMetaData =
       (ConstantString("select * from") + statement + "where 1 = 0")
@@ -552,9 +547,9 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                     overwrite: Boolean = false): Unit = {
       (
         ConstantString("create") +
-          (if(overwrite) "or replace pipe" else "pipe if not exists") +
+          (if (overwrite) "or replace pipe" else "pipe if not exists") +
           Identifier(name) + "as" + copyQuery
-      ).execute(connection)
+        ).execute(connection)
     }
 
     def dropPipe(name: String): Boolean =

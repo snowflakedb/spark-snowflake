@@ -25,7 +25,7 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeSQLException}
+import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeConnectionV1, SnowflakeSQLException}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
@@ -36,11 +36,11 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, 
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper
+import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeSQLStatement, Utils}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.Utils
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
@@ -209,9 +209,9 @@ object CloudStorageOperations {
                                     dir: Option[String] = None,
                                     temporary: Boolean = false
                                   ): CloudStorage = {
-    if(!conn.stageExists(stageName))conn.createStage(stageName,temporary = true)
+    if(!conn.stageExists(stageName))conn.createStage(stageName,temporary = false)
     @transient val stageManager =
-      new SFInternalStage(false, DefaultJDBCWrapper, param, Some(stageName), conn = Some(conn))
+      new SFInternalStage(false, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1])
 
     stageManager.stageType match {
       case StageType.S3 =>
@@ -237,11 +237,6 @@ object CloudStorageOperations {
                            tempStage: Boolean = true,
                            stage: Option[String] = None
                          ): (CloudStorage, String) = {
-    val propolueSql = Utils.genPrologueSql(param)
-    log.debug(propolueSql.statementString)
-    propolueSql.execute(conn)
-
-
     val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
     val stageName = stage
@@ -368,7 +363,7 @@ private class SingleElementIterator(fileName: String) extends Iterator[String] {
   }
 }
 
-private object StorageInfo {
+private[io] object StorageInfo {
   @inline val BUCKET_NAME = "bucketName"
   @inline val AWS_ID = "awsId"
   @inline val AWS_KEY = "awsKey"
@@ -391,14 +386,15 @@ sealed trait CloudStorage {
   protected def getStageInfo(
                               isWrite: Boolean,
                               fileName: String = ""
-                            ): Map[String, String] = new HashMap[String, String]
+                            ): (Map[String, String], List[String]) =
+    (new HashMap[String, String], List())
 
   def upload(
               fileName: String,
               dir: Option[String],
               compress: Boolean
             ): OutputStream =
-    createUploadStream(fileName, dir, compress, getStageInfo(true))
+    createUploadStream(fileName, dir, compress, getStageInfo(true)._1)
 
 
   def upload(
@@ -407,7 +403,7 @@ sealed trait CloudStorage {
               dir: Option[String],
               compress: Boolean = true
             ): List[String] =
-    uploadRDD(data, format, dir, compress, getStageInfo(true))
+    uploadRDD(data, format, dir, compress, getStageInfo(true)._1)
 
   protected def uploadRDD(
                            data: RDD[String],
@@ -450,6 +446,22 @@ sealed trait CloudStorage {
 
   def download(fileName: String, compress: Boolean): InputStream
 
+  def download(
+                sc: SparkContext,
+                format: SupportedFormat = SupportedFormat.CSV,
+                compress: Boolean = true
+              ): RDD[String] = {
+    val(stageInfo, fileList) = getStageInfo(false)
+    new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo))
+  }
+
+
+  protected def createDownloadStream(
+                                    fileName: String,
+                                    compress: Boolean,
+                                    storageInfo: Map[String, String]
+                                  ): InputStream
+
   def deleteFile(fileName: String): Unit
 
   def deleteFiles(fileNames: List[String]): Unit =
@@ -465,9 +477,9 @@ case class InternalAzureStorage(
                                ) extends CloudStorage {
 
 
-  private def getStageInfos(isWrite: Boolean, fileName:String = "", conn: Option[Connection] = None):
+  private def getStageInfos(isWrite: Boolean, fileName:String = "", conn: Connection):
   (String, String, String, String, String, String, String, String) = {
-    @transient val stageManager = new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName, conn)
+    @transient val stageManager = new SFInternalStage(isWrite, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1], fileName)
     @transient val keyIds = stageManager.getKeyIds
     val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
     val masterKey = stageManager.masterKey
@@ -486,15 +498,14 @@ case class InternalAzureStorage(
   override protected def getStageInfo(
                                        isWrite: Boolean,
                                        fileName: String = ""
-                                     ): Map[String, String] = {
+                                     ): (Map[String, String], List[String]) = {
     @transient val stageManager =
       new SFInternalStage(
         isWrite,
-        DefaultJDBCWrapper,
         param,
-        Some(stageName),
-        fileName,
-        Some(connection))
+        stageName,
+        connection.asInstanceOf[SnowflakeConnectionV1],
+        fileName)
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]()
@@ -516,7 +527,7 @@ case class InternalAzureStorage(
       if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
     storageInfo += StorageInfo.PREFIX -> prefix
 
-    storageInfo
+    (storageInfo, List())
   }
 
 
@@ -559,7 +570,7 @@ case class InternalAzureStorage(
   override def download(fileName: String, compress: Boolean): InputStream = {
 
     val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, _, _, prefix)
-    = getStageInfos(false, fileName, Option(connection))
+    = getStageInfos(false, fileName, connection)
 
     println(s"download fileName:${prefix.concat(fileName)}")
     val blob =
@@ -587,7 +598,7 @@ case class InternalAzureStorage(
   override def deleteFile(fileName: String): Unit = {
 
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(true, conn = Option(connection))
+    = getStageInfos(true, conn = connection)
 
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -597,7 +608,7 @@ case class InternalAzureStorage(
 
   override def deleteFiles(fileNames: List[String]): Unit = {
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(true, conn = Option(connection))
+    = getStageInfos(true, conn = connection)
 
     val container =
       CloudStorageOperations
@@ -612,12 +623,14 @@ case class InternalAzureStorage(
 
   override def fileExists(fileName: String): Boolean = {
     val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(false, conn = Option(connection))
+    = getStageInfos(false, conn = connection)
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).exists()
   }
+
+  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
 }
 
 case class ExternalAzureStorage(
@@ -691,6 +704,8 @@ case class ExternalAzureStorage(
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).exists()
+
+  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
 }
 
 case class InternalS3Storage(
@@ -700,10 +715,10 @@ case class InternalS3Storage(
                               parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                             ) extends CloudStorage {
 
-  private def getStageInfos(isWrite: Boolean, fileName: String = "", conn: Option[Connection] = None):
+  private def getStageInfos(isWrite: Boolean, fileName: String = "", conn: Connection):
   (String, String, String, Option[String], String, String, String, String) = {
     @transient val stageManager =
-      new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName, conn)
+      new SFInternalStage(isWrite, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1], fileName)
     //todo move stage creation from stage manager to this class
 
     @transient val keyIds = stageManager.getKeyIds
@@ -725,9 +740,9 @@ case class InternalS3Storage(
   override protected def getStageInfo(
                                        isWrite: Boolean,
                                        fileName: String = ""
-                                     ): Map[String, String] = {
+                                     ): (Map[String, String], List[String]) = {
     @transient val stageManager =
-      new SFInternalStage(isWrite, DefaultJDBCWrapper, param, Some(stageName), fileName, Some(connection))
+      new SFInternalStage(isWrite, param, stageName, connection.asInstanceOf[SnowflakeConnectionV1], fileName)
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]
@@ -748,7 +763,9 @@ case class InternalS3Storage(
     val prefix: String =
       if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
     storageInfo += StorageInfo.PREFIX -> prefix
-    storageInfo
+    val fileList: List[String] =
+      if(isWrite) List() else stageManager.getKeyIds.map(_._1).toList
+    (storageInfo, fileList)
   }
 
   override protected def createUploadStream(
@@ -806,7 +823,7 @@ case class InternalS3Storage(
 
 
   override def download(fileName: String, compress: Boolean): InputStream = {
-    val (bucketName, awsId, awsKey, awsToken, masterKey, _, _, prefix) = getStageInfos(false, fileName, Option(connection))
+    val (bucketName, awsId, awsKey, awsToken, masterKey, _, _, prefix) = getStageInfos(false, fileName, connection)
 
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
@@ -824,14 +841,14 @@ case class InternalS3Storage(
   }
 
   override def deleteFile(fileName: String): Unit = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(true, conn = Option(connection))
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(true, conn = connection)
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObject(bucketName, prefix.concat(fileName))
   }
 
   override def deleteFiles(fileNames: List[String]): Unit = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(true, conn = Option(connection))
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(true, conn = connection)
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
       .deleteObjects(
@@ -841,9 +858,40 @@ case class InternalS3Storage(
   }
 
   override def fileExists(fileName: String): Boolean = {
-    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(false, conn = Option(connection))
+    val (bucketName, awsId, awsKey, awsToken, _, _, _, prefix) = getStageInfos(false, conn = connection)
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
+  }
+
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    val s3Client: AmazonS3Client =
+      CloudStorageOperations
+        .createS3Client(
+          storageInfo(StorageInfo.AWS_ID),
+          storageInfo(StorageInfo.AWS_KEY),
+          storageInfo.get(StorageInfo.AWS_TOKEN),
+          parallelism
+        )
+    val dateObject =
+      s3Client.getObject(
+        storageInfo(StorageInfo.BUCKET_NAME),
+        storageInfo(StorageInfo.PREFIX).concat(fileName)
+      )
+
+    var inputStream: InputStream = dateObject.getObjectContent
+    inputStream = CloudStorageOperations.getDecryptedStream(
+      inputStream,
+      storageInfo(StorageInfo.MASTER_KEY),
+      dateObject.getObjectMetadata.getUserMetadata,
+      StageType.S3
+    )
+
+    if(compress) new GZIPInputStream(inputStream)
+    else inputStream
   }
 }
 
@@ -919,6 +967,8 @@ case class ExternalS3Storage(
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
+
+  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
 }
 
 //todo: google cloud, local file for testing?
