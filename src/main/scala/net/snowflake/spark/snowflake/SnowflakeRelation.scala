@@ -109,7 +109,6 @@ private[snowflake] case class SnowflakeRelation(
     } finally {
       conn.close()
     })
-
     getRDD[T](statement, resultSchema)
   }
 

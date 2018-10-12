@@ -23,7 +23,6 @@ import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLife
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration.Rule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.s3native.S3NInMemoryFileSystem
 import org.apache.hadoop.mapreduce.InputFormat
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -92,7 +91,6 @@ class BaseTest extends FunSuite
     System.setProperty("user.timezone", "GMT")
 
     sc = new TestContext
-    sc.hadoopConfiguration.set("fs.s3n.impl", classOf[S3NInMemoryFileSystem].getName)
     // We need to use a DirectOutputCommitter to work around an issue which occurs with renames
     // while using the mocked S3 filesystem.
     sc.hadoopConfiguration.set("spark.sql.sources.outputCommitterClass",

@@ -28,7 +28,6 @@ import scala.util.Properties
 
 object SparkSnowflakeBuild extends Build {
   val testSparkVersion = settingKey[String]("Spark version to test against")
-  val testHadoopVersion = settingKey[String]("Hadoop version to test against")
 
   // Define a custom test configuration so that unit test helper classes can be re-used under
   // the integration tests configuration; see http://stackoverflow.com/a/20635808.
@@ -47,10 +46,9 @@ object SparkSnowflakeBuild extends Build {
       crossScalaVersions := Seq("2.11.12"),
       sparkVersion := "2.3.0",
       testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.value),
-      testHadoopVersion := sys.props.get("hadoop.testVersion").getOrElse("2.8.0"),
       javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
       spName := "snowflake/spark-snowflake",
-      sparkComponents ++= Seq("sql", "hive"),
+      sparkComponents ++= Seq("sql"),
       spIgnoreProvided := true,
       licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
       credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -65,15 +63,9 @@ object SparkSnowflakeBuild extends Build {
         "org.mockito" % "mockito-core" % "1.10.19" % "test",
         "org.apache.commons" % "commons-lang3" % "3.5",
 
-        "org.apache.hadoop" % "hadoop-client" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
-        "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" exclude("javax.servlet", "servlet-api") force(),
-        "org.apache.hadoop" % "hadoop-common" % testHadoopVersion.value % "test" classifier "tests" force(),
-        "org.apache.hadoop" % "hadoop-aws" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
-        "org.apache.hadoop" % "hadoop-azure" % testHadoopVersion.value excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")) exclude("org.apache.hadoop", "hadoop-common") force(),
-
-        "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
-        "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force(),
-        "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" exclude("org.apache.hadoop", "hadoop-client") force()
+        "org.apache.spark" %% "spark-core" % testSparkVersion.value % "test" force(),
+        "org.apache.spark" %% "spark-sql" % testSparkVersion.value % "test" force(),
+        "org.apache.spark" %% "spark-hive" % testSparkVersion.value % "test" force()
       ),
       ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := {
         if (scalaBinaryVersion.value == "2.10") false

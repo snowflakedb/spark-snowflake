@@ -18,11 +18,9 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
-import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.slf4j.LoggerFactory
-
-import scala.util.Try
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
