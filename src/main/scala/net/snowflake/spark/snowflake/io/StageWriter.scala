@@ -121,7 +121,6 @@ private[io] object StageWriter {
         log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
       }
       Utils.setLastCopyLoad(copyStatement.toString)
-
       //post actions
       Utils.executePostActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
 
@@ -129,10 +128,10 @@ private[io] object StageWriter {
         if (DefaultJDBCWrapper.tableExists(conn, table.toString))
           conn.swapTable(table.name, tempTable.name)
         else
-        conn.renameTable(table.name, tempTable.name)
+          conn.renameTable(table.name, tempTable.name)
       }
     } catch {
-      case e: SQLException =>
+      case e: Exception =>
         // snowflake-todo: try to provide more error information,
         // possibly from actual SQL output
         if (targetTable == tempTable) conn.dropTable(tempTable.name)
@@ -253,7 +252,6 @@ private[io] object StageWriter {
     ConstantString("copy into") + table.name + mappingToString +
       mappingFromString + formatString + truncateCol + purge + onError
   }
-
 
 
 }

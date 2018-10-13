@@ -73,7 +73,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
         .mode(SaveMode.Append).save()
     }
-    
+
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
       df.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
