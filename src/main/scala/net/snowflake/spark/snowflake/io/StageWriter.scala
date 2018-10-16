@@ -125,8 +125,10 @@ private[io] object StageWriter {
       Utils.executePostActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (DefaultJDBCWrapper.tableExists(conn, table.toString))
+        if (conn.tableExists(table.toString)){
           conn.swapTable(table.name, tempTable.name)
+          conn.dropTable(tempTable.name)
+        }
         else
           conn.renameTable(table.name, tempTable.name)
       }

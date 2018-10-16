@@ -200,13 +200,4 @@ class JDBCSuite extends IntegrationSuiteBase {
     conn.dropTable(name)
   }
 
-  test("test") {
-    sparkSession
-      .read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option("dbtable", "test123")
-      .load()
-      .show()
-  }
 }
