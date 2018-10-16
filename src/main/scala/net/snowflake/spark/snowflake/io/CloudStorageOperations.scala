@@ -477,26 +477,6 @@ case class InternalAzureStorage(
                                  stageName: String,
                                  @transient override protected val connection: Connection
                                ) extends CloudStorage {
-
-
-  private def getStageInfos(isWrite: Boolean, fileName: String = "", conn: Connection):
-  (String, String, String, String, String, String, String, String) = {
-    @transient val stageManager = new SFInternalStage(isWrite, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1], fileName)
-    @transient val keyIds = stageManager.getKeyIds
-    val (_, queryId, smkId) = if (keyIds.nonEmpty) keyIds.head else ("", "", "")
-    val masterKey = stageManager.masterKey
-    val stageLocation = stageManager.stageLocation
-    val url = "([^/]+)/?(.*)".r
-    val url(container, path) = stageLocation
-    val azureSAS = stageManager.azureSAS.get
-    val azureAccount = stageManager.azureAccountName.get
-    val azureEndPoint = stageManager.azureEndpoint.get
-    val prefix: String =
-      if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
-
-    (container, azureAccount, azureEndPoint, azureSAS, masterKey, queryId, smkId, prefix)
-  }
-
   override protected def getStageInfo(
                                        isWrite: Boolean,
                                        fileName: String = ""
@@ -528,8 +508,9 @@ case class InternalAzureStorage(
     val prefix: String =
       if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
     storageInfo += StorageInfo.PREFIX -> prefix
-
-    (storageInfo, List())
+    val fileList: List[String] =
+      if (isWrite) List() else stageManager.getKeyIds.map(_._1).toList
+    (storageInfo, fileList)
   }
 
 
@@ -569,70 +550,73 @@ case class InternalAzureStorage(
   }
 
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
-
-    val (containerName, azureAccount, azureEndpoint, azureSAS, masterKey, _, _, prefix)
-    = getStageInfos(false, fileName, connection)
-
-    println(s"download fileName:${prefix.concat(fileName)}")
-    val blob =
-      CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-        .getContainerReference(containerName)
-        .getBlockBlobReference(prefix.concat(fileName))
-
-    val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
-    blob.download(azureStream)
-    blob.downloadAttributes()
-
-    val inputStream: InputStream =
-      CloudStorageOperations.getDecryptedStream(
-        new ByteArrayInputStream(azureStream.toByteArray),
-        masterKey,
-        blob.getMetadata,
-        StageType.AZURE
-      )
-
-    if (compress) new GZIPInputStream(inputStream)
-    else inputStream
-  }
-
   override def deleteFile(fileName: String): Unit = {
 
-    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(true, conn = connection)
+    val (storageInfo, _) = getStageInfo(true)
 
     CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-      .getContainerReference(containerName)
-      .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
+      .createAzureClient(
+        storageInfo(StorageInfo.AZURE_ACCOUNT),
+        storageInfo(StorageInfo.AZURE_END_POINT),
+        storageInfo.get(StorageInfo.AZURE_SAS)
+      ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
+      .deleteIfExists()
   }
 
   override def deleteFiles(fileNames: List[String]): Unit = {
-    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(true, conn = connection)
+    val (storageInfo, _) = getStageInfo(true)
 
-    val container =
-      CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-        .getContainerReference(containerName)
+    val container = CloudStorageOperations
+      .createAzureClient(
+        storageInfo(StorageInfo.AZURE_ACCOUNT),
+        storageInfo(StorageInfo.AZURE_END_POINT),
+        storageInfo.get(StorageInfo.AZURE_SAS)
+      ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
 
-    fileNames
-      .map(prefix.concat)
+    fileNames.map(storageInfo(StorageInfo.PREFIX).concat)
       .foreach(container.getBlockBlobReference(_).deleteIfExists())
   }
 
 
   override def fileExists(fileName: String): Boolean = {
-    val (containerName, azureAccount, azureEndpoint, azureSAS, _, _, _, prefix)
-    = getStageInfos(false, conn = connection)
-    CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-      .getContainerReference(containerName)
-      .getBlockBlobReference(prefix.concat(fileName)).exists()
+    val (storageInfo, _) = getStageInfo(false)
+    CloudStorageOperations.createAzureClient(
+      storageInfo(StorageInfo.AZURE_ACCOUNT),
+      storageInfo(StorageInfo.AZURE_END_POINT),
+      storageInfo.get(StorageInfo.AZURE_SAS)
+    ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      .getBlockBlobReference(
+        storageInfo(StorageInfo.PREFIX).concat(fileName)
+      ).exists()
   }
 
-  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    val blob = CloudStorageOperations.createAzureClient(
+      storageInfo(StorageInfo.AZURE_ACCOUNT),
+      storageInfo(StorageInfo.AZURE_END_POINT),
+      storageInfo.get(StorageInfo.AZURE_SAS)
+    ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
+
+    val azureStorage: ByteArrayOutputStream = new ByteArrayOutputStream()
+    blob.download(azureStorage)
+    blob.downloadAttributes()
+
+    val inputStream: InputStream =
+      CloudStorageOperations.getDecryptedStream(
+        new ByteArrayInputStream(azureStorage.toByteArray),
+        storageInfo(StorageInfo.MASTER_KEY),
+        blob.getMetadata,
+        StageType.AZURE
+      )
+
+    if (compress) new GZIPInputStream(inputStream) else inputStream
+  }
 }
 
 case class ExternalAzureStorage(
@@ -918,15 +902,6 @@ case class ExternalS3Storage(
     else outputStream
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
-    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
-    val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
-    val inputStream: InputStream = dataObject.getObjectContent
-    if (compress) new GZIPInputStream(inputStream)
-    else inputStream
-
-  }
-
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
       .createS3Client(awsId, awsKey, awsToken, parallelism)
@@ -945,7 +920,17 @@ case class ExternalS3Storage(
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
 
-  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    val s3Client: AmazonS3Client =
+      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
+    val inputStream: InputStream = dataObject.getObjectContent
+    if (compress) new GZIPInputStream(inputStream) else inputStream
+  }
 }
 
 //todo: google cloud, local file for testing?
