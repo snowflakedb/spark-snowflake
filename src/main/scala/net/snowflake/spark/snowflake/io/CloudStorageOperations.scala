@@ -35,8 +35,9 @@ import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.file.CloudFileDirectory
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
-import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, SnowflakeSQLStatement, Utils}
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
@@ -44,13 +45,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
 
-import scala.util.{Random, Try}
+import scala.util.Random
 import scala.collection.immutable.HashMap
+import scala.collection.JavaConversions._
 
-
-//todo: replace all storage operations by the methods in this class
-
-//todo: split get and put
 
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
@@ -451,7 +449,8 @@ sealed trait CloudStorage {
   def download(
                 sc: SparkContext,
                 format: SupportedFormat = SupportedFormat.CSV,
-                compress: Boolean = true
+                compress: Boolean = true,
+                subDir: String = ""
               ): RDD[String] = {
     val (stageInfo, fileList) = getStageInfo(false)
     new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo))
@@ -650,24 +649,6 @@ case class ExternalAzureStorage(
     if (compress) new GZIPOutputStream(blob.openOutputStream()) else blob.openOutputStream()
   }
 
-  override def download(fileName: String, compress: Boolean): InputStream = {
-
-    println(s"download fileName:${prefix.concat(fileName)}")
-    val blob =
-      CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
-        .getContainerReference(containerName)
-        .getBlockBlobReference(prefix.concat(fileName))
-
-    val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
-    blob.download(azureStream)
-    blob.downloadAttributes()
-
-    val inputStream: InputStream = new ByteArrayInputStream(azureStream.toByteArray)
-    if (compress) new GZIPInputStream(inputStream)
-    else inputStream
-  }
-
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
@@ -691,7 +672,46 @@ case class ExternalAzureStorage(
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).exists()
 
-  override protected def createDownloadStream(fileName: String, compress: Boolean, storageInfo: Map[String, String]): InputStream = null
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    val blob = CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .getBlockBlobReference(prefix.concat(fileName))
+
+    val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    blob.download(azureStream)
+
+    val inputStream: InputStream =
+      new ByteArrayInputStream(azureStream.toByteArray)
+
+    if (compress) new GZIPInputStream(inputStream) else inputStream
+
+  }
+
+  override def download(
+                         sc: SparkContext,
+                         format: SupportedFormat,
+                         compress: Boolean,
+                         subDir: String): RDD[String] = {
+    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+  }
+
+  private def getFileNames(subDir: String): List[String] = {
+    CloudStorageOperations
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .getContainerReference(containerName)
+      .listBlobs(prefix + subDir + "/")
+      .toList
+      .map(x=>{
+        val key = x.getUri.toString
+        val index = key.lastIndexOf('/')
+        subDir + "/" + key.substring(index+1)
+      })
+  }
 }
 
 case class InternalS3Storage(
@@ -931,6 +951,31 @@ case class ExternalS3Storage(
     val inputStream: InputStream = dataObject.getObjectContent
     if (compress) new GZIPInputStream(inputStream) else inputStream
   }
+
+  override def download(
+                         sc: SparkContext,
+                         format: SupportedFormat,
+                         compress: Boolean,
+                         subDir: String
+                       ): RDD[String] =
+    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+
+
+  private def getFileNames(subDir: String): List[String] =
+    CloudStorageOperations
+      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .listObjects(bucketName, prefix + subDir)
+      .getObjectSummaries
+      .toList
+      .map(x=>{
+        val key = x.getKey
+        val fullName = s"$prefix(.*)".r
+        key match {
+          case fullName(name) => name
+          case _ => throw new Exception("file name is incorrect")
+        }
+      })
+
 }
 
 //todo: google cloud, local file for testing?

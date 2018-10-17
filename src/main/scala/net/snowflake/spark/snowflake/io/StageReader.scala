@@ -7,6 +7,8 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 
+import scala.util.Random
+
 private[io] object StageReader {
 
   def readFromStage(
@@ -25,10 +27,12 @@ private[io] object StageReader {
 
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
 
+    val prefix = Random.alphanumeric take 10 mkString ""
+
     val res = buildUnloadStatement(
       params,
       statement,
-      s"@$stage",
+      s"@$stage/$prefix/",
       compressFormat,
       format).execute(conn)
 
@@ -50,7 +54,8 @@ private[io] object StageReader {
     storage.download(
       sqlContext.sparkContext,
       format,
-      compress
+      compress,
+      prefix
     )
   }
 

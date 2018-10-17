@@ -15,7 +15,7 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.sql.{Connection, SQLException}
+import java.sql.Connection
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
