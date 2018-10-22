@@ -4,6 +4,7 @@ package net.snowflake.spark.snowflake
 import java.nio.charset.Charset
 import java.sql.Connection
 
+import net.snowflake.client.jdbc.internal.apache.commons.logging.LogFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ArrayNode
 import net.snowflake.ingest.SimpleIngestManager
@@ -87,33 +88,34 @@ class SnowflakeIngestService(
 
   def close(): Unit = {
     val ct = System.currentTimeMillis()
-    println(s"closing ingest service")
+    IngestContextManager.logger.debug("closing ingest service")
     notClosed = false
     Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
     conn.dropPipe(pipeName)
-    println(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
+    IngestContextManager.logger.debug(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
   }
 
   /**
-    * recover from logging files or create new data
+    * recover from context files or create new data
     */
   private def init(): IngestedFileList =
-    IngestLogManager.readIngestList(storage, conn)
+    IngestContextManager.readIngestList(storage, conn)
 
 
 }
 
-object IngestLogManager {
-  val LOG_DIR = "log"
+object IngestContextManager {
+  val CONTEXT_DIR = "context"
   val INGEST_FILE_LIST_NAME = "ingested_file_list.json"
   val FAILED_FILE_INDEX = "failed_file_index"
   val LIST = "list"
   val NAME = "name"
   val TIME = "time"
   val mapper = new ObjectMapper()
+  val logger = LogFactory.getLog(getClass)
 
   def readIngestList(storage: CloudStorage, conn: Connection): IngestedFileList = {
-    val fileName = s"$LOG_DIR/$INGEST_FILE_LIST_NAME"
+    val fileName = s"$CONTEXT_DIR/$INGEST_FILE_LIST_NAME"
     if (storage.fileExists(fileName)) {
       val inputStream = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
@@ -133,13 +135,13 @@ object IngestLogManager {
         })
         IngestedFileList(storage, conn, Some(failedList), Some(list))
       } catch {
-        case e: Exception => throw new IllegalArgumentException(s"log file: $fileName is broken: $e")
+        case e: Exception => throw new IllegalArgumentException(s"context file: $fileName is broken: $e")
       }
     } else IngestedFileList(storage, conn)
   }
 
   def readFailedFileList(index: Int, storage: CloudStorage, conn: Connection): FailedFileList = {
-    val fileName = s"$LOG_DIR/failed_file_list_$index.json"
+    val fileName = s"$CONTEXT_DIR/failed_file_list_$index.json"
     if (storage.fileExists(fileName)) {
       val inputStream = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
@@ -156,14 +158,14 @@ object IngestLogManager {
         })
         FailedFileList(storage, conn, index, Some(set))
       } catch {
-        case e: Exception => throw new IllegalArgumentException(s"log file: $fileName is broken: $e")
+        case e: Exception => throw new IllegalArgumentException(s"context file: $fileName is broken: $e")
       }
     } else FailedFileList(storage, conn, index)
   }
 
 }
 
-sealed trait IngestLog {
+sealed trait IngestContext {
 
   val storage: CloudStorage
 
@@ -172,9 +174,8 @@ sealed trait IngestLog {
   val conn: Connection
 
   def save: Unit = {
-    println(s"----------> $fileName")
-    println(toString)
-    val output = storage.upload(fileName, Some(IngestLogManager.LOG_DIR), false)
+    IngestContextManager.logger.debug(s"$fileName:$toString")
+    val output = storage.upload(fileName, Some(IngestContextManager.CONTEXT_DIR), false)
     output.write(toString.getBytes("UTF-8"))
     output.close()
 
@@ -187,7 +188,7 @@ case class FailedFileList(
                            override val conn: Connection,
                            fileIndex: Int = 0,
                            files: Option[mutable.HashSet[String]] = None
-                         ) extends IngestLog {
+                         ) extends IngestContext {
   val MAX_FILE_SIZE: Int = 1000 //how many file names
 
   private var fileSet: mutable.HashSet[String] =
@@ -206,7 +207,7 @@ case class FailedFileList(
   }
 
   override def toString: String = {
-    val node = IngestLogManager.mapper.createArrayNode()
+    val node = IngestContextManager.mapper.createArrayNode()
     fileSet.foreach(node.add)
     node.toString
   }
@@ -218,8 +219,8 @@ case class IngestedFileList(
                              override val conn: Connection,
                              failedFileList: Option[FailedFileList] = None,
                              ingestList: Option[List[(String, Long)]] = None
-                           ) extends IngestLog {
-  override val fileName: String = IngestLogManager.INGEST_FILE_LIST_NAME
+                           ) extends IngestContext {
+  override val fileName: String = IngestContextManager.INGEST_FILE_LIST_NAME
 
   private var failedFiles: FailedFileList = failedFileList.getOrElse(FailedFileList(storage, conn))
 
@@ -237,15 +238,15 @@ case class IngestedFileList(
   }
 
   override def toString: String = {
-    val node = IngestLogManager.mapper.createObjectNode()
-    node.put(IngestLogManager.FAILED_FILE_INDEX, failedFiles.fileIndex)
+    val node = IngestContextManager.mapper.createObjectNode()
+    node.put(IngestContextManager.FAILED_FILE_INDEX, failedFiles.fileIndex)
 
-    val arr = node.putArray(IngestLogManager.LIST)
+    val arr = node.putArray(IngestContextManager.LIST)
     fileList.foreach {
       case (name, time) => {
-        val n = IngestLogManager.mapper.createObjectNode()
-        n.put(IngestLogManager.NAME, name)
-        n.put(IngestLogManager.TIME, time)
+        val n = IngestContextManager.mapper.createObjectNode()
+        n.put(IngestContextManager.NAME, name)
+        n.put(IngestContextManager.TIME, time)
         arr.add(n)
       }
     }

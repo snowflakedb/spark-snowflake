@@ -196,14 +196,14 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore("test log"){
+  ignore("test context"){
     val storage: CloudStorage = CloudStorageOperations.createStorageClient(params, conn, false, Some("spark_streaming_test_stage"))._1
     //val log = IngestLogManager.readIngestList(storage, conn)
 
-    val failed = IngestLogManager.readFailedFileList(0, storage, conn)
+    val failed = IngestContextManager.readFailedFileList(0, storage, conn)
     failed.addFiles(List("a","b","c"))
 
-    val failed1 = IngestLogManager.readFailedFileList(0, storage, conn)
+    val failed1 = IngestContextManager.readFailedFileList(0, storage, conn)
 
     println(failed1.toString)
 
