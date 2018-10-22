@@ -48,6 +48,11 @@ class SnowflakeSink(
     "Streaming stage name must be specified with 'streaming_stage' parameter"
   )
 
+  require(
+    param.rootTempDir.isEmpty,
+    "Spark Streaming only supports internal stages, please unset tempDir parameter."
+  )
+
   private implicit val conn = DefaultJDBCWrapper.getConnector(param)
 
   private val stageName: String = param.streamingStage.get
