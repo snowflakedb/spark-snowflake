@@ -84,6 +84,8 @@ class SnowflakeIngestService(
       } else ingestedFileList.checkResponseList(checker())
     }
     conn.dropPipe(pipeName)
+    ingestedFileList.remove
+
   }
 
   def close(): Unit = {
@@ -91,7 +93,6 @@ class SnowflakeIngestService(
     IngestContextManager.logger.debug("closing ingest service")
     notClosed = false
     Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
-    conn.dropPipe(pipeName)
     IngestContextManager.logger.debug(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
   }
 
@@ -282,6 +283,8 @@ case class IngestedFileList(
   def isEmpty: Boolean = fileList.isEmpty
 
   def nonEmpty: Boolean = fileList.nonEmpty
+
+  def remove: Unit = storage.deleteFile(IngestContextManager.CONTEXT_DIR + "/" + fileName)
 
 }
 

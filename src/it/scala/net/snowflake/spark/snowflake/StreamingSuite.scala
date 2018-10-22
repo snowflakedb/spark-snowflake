@@ -163,7 +163,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     val query = output.writeStream
       .outputMode("append")
       .option("checkpointLocation", checkpoint)
-      .options(connectorOptionsNoTable)
+      .options(connectorOptionsNoExternalStageNoTable)
       .option("dbtable", table)
       .option("streaming_stage", streamingStage)
       .format(SNOWFLAKE_SOURCE_NAME)
