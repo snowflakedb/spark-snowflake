@@ -1,8 +1,6 @@
 package net.snowflake.spark.snowflake
 
-import java.nio.file.{Files, Paths}
-import java.security.{KeyFactory, KeyPair, PrivateKey, PublicKey}
-import java.security.spec.{PKCS8EncodedKeySpec, X509EncodedKeySpec}
+import java.security.{KeyPair, PrivateKey}
 import java.text.SimpleDateFormat
 import java.util.{Date, TimeZone}
 
@@ -18,21 +16,6 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object SnowflakeIngestConnector {
-
-  def privateKeyReader(fileName: String): PrivateKey = {
-    val keyBytes: Array[Byte] = Files.readAllBytes(Paths.get(fileName))
-    val spec: PKCS8EncodedKeySpec = new PKCS8EncodedKeySpec(keyBytes)
-    KeyFactory.getInstance("RSA").generatePrivate(spec)
-  }
-
-  def publicKeyReader(fileName: String): PublicKey = {
-    val keyBytes: Array[Byte] = Files.readAllBytes(Paths.get(fileName))
-    val spec: X509EncodedKeySpec = new X509EncodedKeySpec(keyBytes)
-    KeyFactory.getInstance("RSA").generatePublic(spec)
-  }
-
-  def createKeyPair(privateKeyName: String, publicKeyName: String): KeyPair =
-    new KeyPair(publicKeyReader(publicKeyName), privateKeyReader(privateKeyName))
 
   /**
     * Check ingest load history, return a list of all failed file name
@@ -113,11 +96,11 @@ object SnowflakeIngestConnector {
                            user: String,
                            pipe: String,
                            host: String,
-                           keyPair: KeyPair,
+                           privateKey: PrivateKey,
                            port: Int = 443,
                            scheme: String = "https"
                          ): SimpleIngestManager =
-    new SimpleIngestManager(account, user, pipe, keyPair, scheme, host, port)
+    new SimpleIngestManager(account, user, pipe, privateKey, scheme, host, port)
 
   /**
     * Ingest files and wait ingest history
@@ -171,18 +154,13 @@ object SnowflakeIngestConnector {
         val accountPattern(account) = host
 
         require(
-          param.getPublicKeyPath.isDefined,
-          "Public key location must be specified with 'public_key_path' parameter"
+          param.privateKey.isDefined,
+          "PEM Private key must be specified with 'pem_private_key' parameter"
         )
 
-        val publicKey = param.getPublicKeyPath.get
 
-        require(
-          param.getPrivateKeyPath.isDefined,
-          "Private key location must be specified with 'private_key_path' parameter"
-        )
 
-        val privateKey = param.getPrivateKeyPath.get
+        val privateKey = param.privateKey.get
 
         val pipe = s"${param.sfDatabase}.${param.sfSchema}.$pipeName"
 
@@ -191,7 +169,7 @@ object SnowflakeIngestConnector {
           param.sfUser,
           pipe,
           host,
-          SnowflakeIngestConnector.createKeyPair(privateKey, publicKey),
+          privateKey,
           port,
           scheme
         )

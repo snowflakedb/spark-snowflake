@@ -120,7 +120,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
-    jdbcProperties.put("password", params.sfPassword)
+    params.privateKey match {
+      case Some(privateKey) =>
+        jdbcProperties.put("privateKey", params.privateKey)
+      case None =>
+        jdbcProperties.put("password", params.sfPassword)
+    }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
 
     // Optional properties

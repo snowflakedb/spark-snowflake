@@ -39,8 +39,8 @@ class SnowflakeSink(
   )
 
   require(
-    param.getPublicKeyPath.isDefined && param.getPrivateKeyPath.isDefined,
-    "key pair's path must be specified in Snowflake streaming"
+    param.privateKey.isDefined,
+    "Private key must be specified in Snowflake streaming"
   )
 
   require(

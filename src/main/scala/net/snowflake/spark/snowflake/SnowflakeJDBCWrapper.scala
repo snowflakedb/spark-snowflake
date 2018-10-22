@@ -126,11 +126,13 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
-    if (params.getPrivateKeyPath.isDefined) {
-      val privateKeyPath = params.getPrivateKeyPath.get
-      val privateKey = SnowflakeIngestConnector.privateKeyReader(privateKeyPath)
-      jdbcProperties.put("privateKey", privateKey)
-    } else jdbcProperties.put("password", params.sfPassword)
+
+    params.privateKey match {
+      case Some(privateKey) =>
+        jdbcProperties.put("privateKey", privateKey)
+      case None =>
+        jdbcProperties.put("password", params.sfPassword)
+    }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
     if (params.sfAccount.isDefined) {

@@ -17,9 +17,13 @@
 
 package net.snowflake.spark.snowflake
 
+import java.security.spec.PKCS8EncodedKeySpec
+import java.security.{KeyFactory, PrivateKey}
+
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
+import org.apache.commons.codec.binary.Base64
 import org.slf4j.LoggerFactory
 
 /**
@@ -74,8 +78,7 @@ object Parameters {
   val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
   val PARAM_STREAMING_STAGE    = knownParam("streaming_stage")
-  val PARAM_PUBLIC_KEY_PATH    = knownParam("public_key_path")
-  val PARAM_PRIVATE_KEY_PATH   = knownParam("private_key_path")
+  val PARAM_PEM_PRIVATE_KEY    = knownParam("pem_private_key")
 
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
@@ -137,9 +140,9 @@ object Parameters {
         "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'")
     }
     if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-      (!userParameters.contains(PARAM_PRIVATE_KEY_PATH))) {
+      (!userParameters.contains(PARAM_PEM_PRIVATE_KEY))) {
       throw new IllegalArgumentException(
-        "A snowflake passsword or private key path must be provided with '" + PARAM_SF_PASSWORD + " or " + PARAM_PRIVATE_KEY_PATH + "' parameter, e.g. 'password'")
+        "A snowflake passsword or private key path must be provided with '" + PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' parameter, e.g. 'password'")
     }
     if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
           PARAM_SF_QUERY)) {
@@ -521,9 +524,26 @@ object Parameters {
 
     def isSslON: Boolean = isTrue(sfSSL)
 
-    def getPublicKeyPath: Option[String] = parameters.get(PARAM_PUBLIC_KEY_PATH)
+    /**
+      * Generate private key form pem key value
+      * @return private key object
+      */
+    def privateKey: Option[PrivateKey] =
+      parameters.get(PARAM_PEM_PRIVATE_KEY).map(key => {
+        java.security.Security.addProvider(
+          new net.snowflake.client.jdbc.internal.org.bouncycastle.jce.provider.BouncyCastleProvider
+        )
+        try{
+          val encoded = Base64.decodeBase64(key)
+          val kf = KeyFactory.getInstance("RSA")
+          val keySpec = new PKCS8EncodedKeySpec(encoded)
+          kf.generatePrivate(keySpec)
+        }
+        catch{
+          case _: Exception => throw new IllegalArgumentException("Input PEM private key is invalid")
+        }
 
-    def getPrivateKeyPath: Option[String] = parameters.get(PARAM_PRIVATE_KEY_PATH)
+      })
 
     def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
 
