@@ -276,11 +276,11 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .save()
 
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+
       val loadedDf = sqlContext.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)
-        .option("tempdir", tempDir)
         .load()
       checkAnswer(loadedDf, TestUtils.expectedData)
     } finally {

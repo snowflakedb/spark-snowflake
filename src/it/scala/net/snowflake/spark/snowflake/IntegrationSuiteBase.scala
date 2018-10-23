@@ -17,15 +17,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.net.URI
 import java.sql.Connection
+import java.time.ZonedDateTime
+import java.util.TimeZone
 
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
 import scala.util.Random
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveContext
@@ -39,7 +38,7 @@ import scala.collection.mutable
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
 trait IntegrationSuiteBase
-    extends QueryTest
+  extends QueryTest
     with Matchers
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
@@ -71,7 +70,7 @@ trait IntegrationSuiteBase
   protected def loadConfig(): Map[String, String] = {
     (configsFromFile.keySet ++ configsFromEnv.keySet) map { key =>
       (key -> configsFromFile.getOrElse(key,
-                                        configsFromEnv.getOrElse(key, "")))
+        configsFromEnv.getOrElse(key, "")))
     } toMap
   }
 
@@ -80,8 +79,11 @@ trait IntegrationSuiteBase
     scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
   }
 
-  protected var connectorOptions: Map[String, String]        = _
+  protected var connectorOptions: Map[String, String] = _
   protected var connectorOptionsNoTable: Map[String, String] = _
+
+  protected var connectorOptionsNoExternalStageNoTable: Map[String, String] = _
+
 
   // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString: String = _
@@ -98,29 +100,19 @@ trait IntegrationSuiteBase
     })
   }
 
-  // AWS access variables
-  protected var AWS_ACCESS_KEY_ID: String     = _
-  protected var AWS_SECRET_ACCESS_KEY: String = _
-  // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
-  private var AWS_S3_SCRATCH_SPACE: String = _
-
-  protected var AZURE_SAS: String = _
-
   /**
     * Random suffix appended appended to table and directory names in order to avoid collisions
     * between separate Travis builds.
     */
   protected val randomSuffix: String = Math.abs(Random.nextLong()).toString
 
-  protected var tempDir: String = _
-
   /**
     * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
     * no-matter what temp directory was generated and requested.
     */
-  protected var sc: SparkContext       = _
+  protected var sc: SparkContext = _
   protected var sqlContext: SQLContext = _
-  protected var conn: Connection       = _
+  protected var conn: Connection = _
 
   protected var sparkSession: SparkSession = _
 
@@ -138,7 +130,8 @@ trait IntegrationSuiteBase
     super.beforeAll()
 
     // Always run in UTC
-    System.setProperty("user.timezone", "GMT")
+    TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
+    log.debug(s"time zone:${ZonedDateTime.now()}")
 
     val conf = new SparkConf()
     conf.setMaster("local")
@@ -149,41 +142,12 @@ trait IntegrationSuiteBase
     // Initialize variables
     connectorOptions = loadConfig()
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
+    connectorOptionsNoExternalStageNoTable = connectorOptionsNoTable.filterKeys(_ != "tempdir")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
     connectorOptionsString = connectorOptionsNoTable.map {
       case (key, value) => s"""$key "$value""""
     }.mkString(" , ")
-
-    AWS_ACCESS_KEY_ID = getConfigValue("awsAccessKey", false)
-    AWS_SECRET_ACCESS_KEY = getConfigValue("awsSecretKey", false)
-    AWS_S3_SCRATCH_SPACE = getConfigValue("tempDir", false)
-
-    AZURE_SAS = getConfigValue("temporary_azure_sas_token", false)
-
-    if (AWS_S3_SCRATCH_SPACE != null) {
-      require(AWS_S3_SCRATCH_SPACE.startsWith("s3n://") || AWS_S3_SCRATCH_SPACE
-                .startsWith("file://") || AWS_S3_SCRATCH_SPACE.startsWith("wasb://"),
-              "must use s3n://, file://, or wasb:// URL")
-      tempDir = params.rootTempDir + randomSuffix + "/"
-    }
-
-    // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
-    sc.hadoopConfiguration.setBoolean("fs.s3.impl.disable.cache", true)
-    sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
-
-    if (AWS_SECRET_ACCESS_KEY != null && AWS_ACCESS_KEY_ID != null) {
-      sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
-      sc.hadoopConfiguration
-        .set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
-    }
-
-    if (AZURE_SAS != null) {
-      sc.hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      sc.hadoopConfiguration.set("fs.AbstractFileSystem.wasb.impl", "org.apache.hadoop.fs.azure.Wasb")
-      sc.hadoopConfiguration.set(getAzureURL(getConfigValue("tempdir")), AZURE_SAS)
-
-    }
 
 
     conn = DefaultJDBCWrapper.getConnector(params)
@@ -201,27 +165,12 @@ trait IntegrationSuiteBase
 
   override def afterAll(): Unit = {
     try {
-      if (AWS_ACCESS_KEY_ID != null && AWS_SECRET_ACCESS_KEY != null && tempDir != null) {
-        val conf = new Configuration(false)
-        conf.set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY_ID)
-        conf.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
-        // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
-
-        conf.setBoolean("fs.s3.impl.disable.cache", true)
-        conf.setBoolean("fs.s3n.impl.disable.cache", true)
-        val fs = FileSystem.get(URI.create(tempDir), conf)
-        fs.delete(new Path(tempDir), true)
-        fs.close()
-      }
+      conn.close()
     } finally {
       try {
-        conn.close()
+        sc.stop()
       } finally {
-        try {
-          sc.stop()
-        } finally {
-          super.afterAll()
-        }
+        super.afterAll()
       }
     }
   }
@@ -262,18 +211,18 @@ trait IntegrationSuiteBase
     * Save the given DataFrame to Snowflake, then load the results back into a DataFrame and check
     * that the returned DataFrame matches the one that we saved.
     *
-    * @param tableName the table name to use
-    * @param df the DataFrame to save
+    * @param tableName               the table name to use
+    * @param df                      the DataFrame to save
     * @param expectedSchemaAfterLoad if specified, the expected schema after loading the data back
     *                                from Snowflake. This should be used in cases where you expect
     *                                the schema to differ due to reasons like case-sensitivity.
-    * @param saveMode the [[SaveMode]] to use when writing data back to Snowflake
+    * @param saveMode                the [[SaveMode]] to use when writing data back to Snowflake
     */
   def testRoundtripSaveAndLoad(
-      tableName: String,
-      df: DataFrame,
-      expectedSchemaAfterLoad: Option[StructType] = None,
-      saveMode: SaveMode = SaveMode.ErrorIfExists): Unit = {
+                                tableName: String,
+                                df: DataFrame,
+                                expectedSchemaAfterLoad: Option[StructType] = None,
+                                saveMode: SaveMode = SaveMode.ErrorIfExists): Unit = {
     try {
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)

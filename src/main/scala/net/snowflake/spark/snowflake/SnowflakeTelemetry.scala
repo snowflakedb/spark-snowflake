@@ -178,4 +178,5 @@ object SnowflakeTelemetry {
 object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
   val SPARK_PLAN = Value("spark_plan")
+  val SPARK_STREAMING = Value("spark_streaming")
 }

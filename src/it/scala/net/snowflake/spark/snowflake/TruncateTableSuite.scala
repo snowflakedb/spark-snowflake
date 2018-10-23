@@ -3,6 +3,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SaveMode}
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.util.Random
 
@@ -152,6 +153,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     //check schema
     assert(checkSchema2())
+
   }
   test("don't truncate table without staging table") {
 

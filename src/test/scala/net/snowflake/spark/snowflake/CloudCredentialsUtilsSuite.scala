@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.internal.amazonaws.AmazonClientException
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
-import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.FunSuite
 

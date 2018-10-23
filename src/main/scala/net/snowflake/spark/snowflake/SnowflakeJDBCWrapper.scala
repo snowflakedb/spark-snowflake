@@ -126,7 +126,13 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
-    jdbcProperties.put("password", params.sfPassword)
+
+    params.privateKey match {
+      case Some(privateKey) =>
+        jdbcProperties.put("privateKey", privateKey)
+      case None =>
+        jdbcProperties.put("password", params.sfPassword)
+    }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
     if (params.sfAccount.isDefined) {
@@ -451,12 +457,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       }.isSuccess
 
     def tableMetaData(name: String): ResultSetMetaData =
-      try {
-        tableMetaDataFromStatement(Identifier(name) !)
-      } catch {
-        case _: Exception =>
-          tableMetaDataFromStatement(ConstantString(name) !)
-      }
+      tableMetaDataFromStatement(ConstantString(name) !)
 
     def tableMetaDataFromStatement(statement: SnowflakeSQLStatement): ResultSetMetaData =
       (ConstantString("select * from") + statement + "where 1 = 0")
@@ -542,11 +543,26 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def copyToSnowflake(): Unit = {}
 
     //pipe operations
-    def createPipe(name: String): Unit = throw new NotImplementedError()
+    def createPipe(
+                    name: String,
+                    copyQuery: SnowflakeSQLStatement,
+                    overwrite: Boolean = false): Unit = {
+      (
+        ConstantString("create") +
+          (if (overwrite) "or replace pipe" else "pipe if not exists") +
+          Identifier(name) + "as" + copyQuery
+        ).execute(connection)
+    }
 
-    def dropPipe(name: String): Boolean = throw new NotImplementedError()
+    def dropPipe(name: String): Boolean =
+      Try {
+        (ConstantString("drop pipe") + Identifier(name)).execute(connection)
+      }.isSuccess
 
-    def pipeExists(name: String): Boolean = throw new NotImplementedError()
+    def pipeExists(name: String): Boolean =
+      Try {
+        (ConstantString("desc pipe") + Identifier(name)).execute(connection)
+      }.isSuccess
   }
 
 

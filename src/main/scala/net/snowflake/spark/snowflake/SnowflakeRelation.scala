@@ -49,15 +49,6 @@ private[snowflake] case class SnowflakeRelation(
 
   val log = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
-  private lazy val creds = CloudCredentialsUtils
-    .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
-
-  if (sqlContext != null && params.usingExternalStage) {
-    Utils.checkFileSystem(
-      new URI(params.rootTempDir),
-      sqlContext.sparkContext.hadoopConfiguration)
-  }
-
   override lazy val schema: StructType = {
     userSchema.getOrElse {
       val tableNameOrSubquery =
@@ -92,15 +83,6 @@ private[snowflake] case class SnowflakeRelation(
                                      statement: SnowflakeSQLStatement,
                                      schema: Option[StructType]
                                    ): RDD[T] = {
-    if (params.checkBucketConfiguration
-      && params.usingExternalStage
-      && params.rootTempDirStorageType == FSType.S3) {
-      Utils.checkThatBucketHasObjectLifecycleConfiguration(
-        params.rootTempDir,
-        params.rootTempDirStorageType,
-        new AmazonS3Client(creds))
-    }
-
     log.debug(Utils.sanitizeQueryText(statement.statementString))
 
     val conn = jdbcWrapper.getConnector(params)
@@ -109,7 +91,6 @@ private[snowflake] case class SnowflakeRelation(
     } finally {
       conn.close()
     })
-
     getRDD[T](statement, resultSchema)
   }
 
@@ -117,12 +98,6 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
-    if (params.checkBucketConfiguration && params.usingExternalStage) {
-      Utils.checkThatBucketHasObjectLifecycleConfiguration(
-        params.rootTempDir,
-        params.rootTempDirStorageType,
-        new AmazonS3Client(creds))
-    }
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Snowflake
       // rather than unloading data.
@@ -165,16 +140,11 @@ private[snowflake] case class SnowflakeRelation(
                                    statement: SnowflakeSQLStatement,
                                    resultSchema: StructType
                                  ): RDD[T] = {
-
-    val source: SupportedSource =
-      if (params.usingExternalStage) SupportedSource.EXTERNAL
-      else SupportedSource.INTERNAL
-
     val format: SupportedFormat =
       if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
-    val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, jdbcWrapper, source, format)
+    val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
 
     format match {
       case SupportedFormat.CSV =>

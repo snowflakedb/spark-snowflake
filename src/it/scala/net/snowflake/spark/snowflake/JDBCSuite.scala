@@ -75,6 +75,33 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   }
 
+  test("create and drop pipe") {
+    val schema =
+      new StructType(
+        Array(
+          StructField("num", IntegerType, false)
+        )
+      )
+
+    val pipe_name = s"spark_test_pipe_$randomSuffix"
+    val stage_name = s"spark_test_stage_$randomSuffix"
+    val table_name = s"spark_test_table_$randomSuffix"
+    conn.createTable(table_name, schema, true, false)
+    conn.createStage(stage_name)
+
+    assert(!conn.pipeExists(pipe_name))
+    conn.createPipe(pipe_name, ConstantString("copy into") + table_name + s"from @$stage_name", false)
+    assert(conn.pipeExists(pipe_name))
+    conn.createPipe(pipe_name, ConstantString("copy into") + table_name + s"from @$stage_name", true)
+    assert(conn.pipeExists(pipe_name))
+    conn.dropPipe(pipe_name)
+    assert(!conn.pipeExists(pipe_name))
+
+    conn.dropTable(table_name)
+    conn.dropStage(stage_name)
+
+  }
+
   test("test schema") {
     val name = s"spark_test_table_$randomSuffix"
     val schema =
@@ -172,4 +199,5 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     conn.dropTable(name)
   }
+
 }
