@@ -6,8 +6,12 @@ cache:
 matrix:
   include:
   - jdk: openjdk8
+    scala: 2.10.5
+    env: SPARK_VERSION="2.2.0"
+
+  - jdk: openjdk8
     scala: 2.11.12
-    env: HADOOP_VERSION="2.8.0" SPARK_VERSION="2.4.0-SNAPSHOT" INTEGRATION_TESTS="true"
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true"
 script:
 - "./dev/run-tests-travis.sh"
 after_success:
