@@ -2,28 +2,16 @@ language: scala
 sudo: false
 cache:
   directories:
-    - $HOME/.ivy2
-
-# There's no nicer way to specify this matrix; see
-# https://github.com/travis-ci/travis-ci/issues/1519.
-# Spark 1.5.0 only supports Java 7+.
+  - "$HOME/.ivy2"
 matrix:
   include:
-    # Scala 2.11 tests:
-    - jdk: openjdk8
-      scala: 2.11.12
-      env: HADOOP_VERSION="2.8.0" SPARK_VERSION="2.3.0" INTEGRATION_TESTS="true"
-
-#env:
-#  global:
-    # IT_SNOWFLAKE_CONF_BASE64
-    # - secure: "something"
-
+  - jdk: openjdk8
+    scala: 2.11.12
+    env: HADOOP_VERSION="2.8.0" SPARK_VERSION="2.4.0-SNAPSHOT" INTEGRATION_TESTS="true"
 script:
-  - ./dev/run-tests-travis.sh
-
+- "./dev/run-tests-travis.sh"
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
-
+- bash <(curl -s https://codecov.io/bash)
 before_install:
-  - openssl aes-256-cbc -K $encrypted_332205430f72_key -iv $encrypted_332205430f72_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
+- openssl aes-256-cbc -K $encrypted_3e088c9f7248_key -iv $encrypted_3e088c9f7248_iv
+  -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
