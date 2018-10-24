@@ -165,7 +165,7 @@ private[snowflake] class JDBCWrapper {
     }
 
     val sparkAppName = SparkContext.getOrCreate().getConf.get("spark.app.name", "")
-    val scalaVersion = scala.tools.nsc.Properties.versionString
+    val scalaVersion = util.Properties.versionString
     val javaVersion = System.getProperty("java.version", "UNKNOWN")
     val snowflakeClientInfo =
       s""" {
