@@ -474,7 +474,7 @@ sealed trait CloudStorage {
 case class InternalAzureStorage(
                                  param: MergedParameters,
                                  stageName: String,
-                                 @transient override protected val connection: Connection
+                                 @transient override val connection: Connection
                                ) extends CloudStorage {
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -624,7 +624,7 @@ case class ExternalAzureStorage(
                                  azureEndpoint: String,
                                  azureSAS: String,
                                  pref: String = "",
-                                 @transient override protected val connection: Connection
+                                 @transient override val connection: Connection
                                ) extends CloudStorage {
 
   lazy val prefix: String =
