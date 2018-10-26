@@ -55,7 +55,7 @@ object SparkSnowflakeBuild extends Build {
       resolvers +=
         "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       libraryDependencies ++= Seq(
-        "net.snowflake" % "snowflake-ingest-sdk" % "0.9.2" excludeAll (ExclusionRule(organization = "com.fasterxml.jackson.core")),
+        "net.snowflake" % "snowflake-ingest-sdk" % "0.9.4",
         "net.snowflake" % "snowflake-jdbc" % "3.6.15",
         "com.google.guava" % "guava" % "14.0.1" % Test,
         "org.scalatest" %% "scalatest" % "3.0.5" % Test,
