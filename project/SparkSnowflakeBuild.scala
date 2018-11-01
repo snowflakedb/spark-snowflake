@@ -58,7 +58,7 @@ object SparkSnowflakeBuild extends Build {
         "Apache Development Snapshot Repository" at "https://repository.apache.org/snapshots",
 
       libraryDependencies ++= Seq(
-        "net.snowflake" % "snowflake-ingest-sdk" % "0.9.4",
+        "net.snowflake" % "snowflake-ingest-sdk" % "0.9.5",
         "net.snowflake" % "snowflake-jdbc" % "3.6.15",
         "com.google.guava" % "guava" % "14.0.1" % Test,
         "org.scalatest" %% "scalatest" % "3.0.5" % Test,
