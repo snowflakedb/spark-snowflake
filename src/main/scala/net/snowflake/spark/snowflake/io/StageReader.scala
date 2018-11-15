@@ -83,6 +83,7 @@ private[io] object StageReader {
                  |    COMPRESSION='$compression'
                  |    FIELD_DELIMITER='|'
                  |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+                 |    ESCAPE_UNENCLOSED_FIELD = none
                  |    NULL_IF= ()
                  |  )
                  |  """.stripMargin
