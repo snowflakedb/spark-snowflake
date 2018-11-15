@@ -21,6 +21,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   val tableName1 = s"spark_test_table_1$randomSuffix"
   val tableName2 = s"spark_test_table_2$randomSuffix"
+  val tableName3 = s"spark_test_table_3$randomSuffix"
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -33,6 +34,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $tableName1")
     jdbcUpdate(s"drop table if exists $tableName2")
+    jdbcUpdate(s"drop table if exists $tableName3")
     super.afterAll()
   }
 
@@ -111,6 +113,19 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     assert(result(1).getMap[String, Int](2)("b") == 2)
     assert(result(2).getStruct(3).getString(0) == "ghi")
 
+  }
+
+  test("unload object and array") {
+    jdbcUpdate(s"create or replace table $tableName3(o object, a array)")
+    jdbcUpdate(s"insert into $tableName3 select object_construct('a', '1 | 2 | 3'), array_construct('a | b', 'c | d')")
+
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable",tableName3)
+      .load()
+
+    df.show  //todo
   }
 
 }
