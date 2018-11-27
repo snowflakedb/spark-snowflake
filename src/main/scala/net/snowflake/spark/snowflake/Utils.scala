@@ -420,6 +420,12 @@ object Utils {
   }
 
   /**
+    * wrap a name with double quotes without capitalize letters
+    */
+  def quotedNameIgnoreCase(name: String): String =
+    if(isQuoted(name)) name else s""""$name""""
+
+  /**
     * Check whether the giving DataFrame contains variant type or not
     */
   def containVariant(schema: StructType): Boolean =

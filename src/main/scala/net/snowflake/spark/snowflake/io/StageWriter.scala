@@ -97,7 +97,7 @@ private[io] object StageWriter {
       }
 
       //create table
-      conn.createTable(targetTable.name, schema)
+      conn.createTable(targetTable.name, schema, params)
 
       //pre actions
       Utils.executePreActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
@@ -162,15 +162,15 @@ private[io] object StageWriter {
     def getMappingToString(list: Option[List[(Int, String)]]): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.JSON =>
-          val tableSchema = DefaultJDBCWrapper.resolveTable(conn, table.name)
+          val tableSchema = DefaultJDBCWrapper.resolveTable(conn, table.name, params)
           if (list.isEmpty || list.get.isEmpty)
             ConstantString("(") + tableSchema.fields.map(_.name).mkString(",") + ")"
           else ConstantString("(") +
-            list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ") + ")"
+            list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ") + ")"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) EmptySnowflakeSQLStatement()
           else ConstantString("(") +
-            list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ") + ")"
+            list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ") + ")"
       }
 
 

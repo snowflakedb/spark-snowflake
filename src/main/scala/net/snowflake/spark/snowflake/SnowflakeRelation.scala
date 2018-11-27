@@ -55,7 +55,7 @@ private[snowflake] case class SnowflakeRelation(
         params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
       val conn = jdbcWrapper.getConnector(params)
       try {
-        jdbcWrapper.resolveTable(conn, tableNameOrSubquery)
+        jdbcWrapper.resolveTable(conn, tableNameOrSubquery, params)
       } finally {
         conn.close()
       }
@@ -87,7 +87,7 @@ private[snowflake] case class SnowflakeRelation(
 
     val conn = jdbcWrapper.getConnector(params)
     val resultSchema = schema.getOrElse(try {
-      conn.tableSchema(statement)
+      conn.tableSchema(statement, params)
     } finally {
       conn.close()
     })
@@ -165,7 +165,7 @@ private[snowflake] case class SnowflakeRelation(
     // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted
     // (unless already quoted):
     val columnList = requiredColumns
-      .map(col => if (isQuoted(col)) col else "\"" + col.toUpperCase + "\"")
+      .map(Utils.quotedNameIgnoreCase)
       .mkString(", ")
     val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
     val tableNameOrSubquery: StatementElement =

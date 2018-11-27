@@ -115,7 +115,7 @@ class MockSF(
     override def answer(invocation: InvocationOnMock): StructType = {
       existingTablesAndSchemas(invocation.getArguments()(1).asInstanceOf[String])
     }
-  }).when(jdbcWrapper).resolveTable(any[Connection], anyString())
+  }).when(jdbcWrapper).resolveTable(any[Connection], anyString(), mergedParams)
 
 
   def verifyThatConnectionsWereClosed(): Unit = {

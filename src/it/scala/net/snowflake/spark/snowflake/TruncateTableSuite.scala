@@ -191,7 +191,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
   }
 
   def checkSchema2(): Boolean = {
-    val st = DefaultJDBCWrapper.resolveTable(conn, table)
+    val st = DefaultJDBCWrapper.resolveTable(conn, table, params)
     val st1 = new StructType(
       Array(
         StructField("NUM1", DecimalType(38, 0), nullable = false),
@@ -202,7 +202,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
   }
 
   def checkSchema1(): Boolean = {
-    val st = DefaultJDBCWrapper.resolveTable(conn, table)
+    val st = DefaultJDBCWrapper.resolveTable(conn, table, params)
     val st1 = new StructType(
       Array(
         StructField("NUM1", DecimalType(38, 0), nullable = false),
