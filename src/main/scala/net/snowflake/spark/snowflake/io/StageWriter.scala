@@ -166,11 +166,19 @@ private[io] object StageWriter {
           if (list.isEmpty || list.get.isEmpty)
             ConstantString("(") + tableSchema.fields.map(_.name).mkString(",") + ")"
           else ConstantString("(") +
-            list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ") + ")"
+            list.get.map(
+              x =>
+                if(params.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(x._2)
+                else Utils.ensureQuoted(x._2)
+            ).mkString(", ") + ")"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) EmptySnowflakeSQLStatement()
           else ConstantString("(") +
-            list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ") + ")"
+            list.get.map(
+              x =>
+                if(params.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(x._2)
+                else Utils.ensureQuoted(x._2)
+            ).mkString(", ") + ")"
       }
 
 

@@ -165,7 +165,11 @@ private[snowflake] case class SnowflakeRelation(
     // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted
     // (unless already quoted):
     val columnList = requiredColumns
-      .map(Utils.quotedNameIgnoreCase)
+      .map(
+        col=>
+          if(params.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(col)
+          else Utils.ensureQuoted(col)
+      )
       .mkString(", ")
     val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
     val tableNameOrSubquery: StatementElement =
