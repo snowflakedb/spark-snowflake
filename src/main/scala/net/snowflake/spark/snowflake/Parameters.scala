@@ -80,6 +80,9 @@ object Parameters {
   val PARAM_STREAMING_STAGE    = knownParam("streaming_stage")
   val PARAM_PEM_PRIVATE_KEY    = knownParam("pem_private_key")
 
+  //Internal use only?
+  val PARAM_BIND_VARIABLE      = knownParam("bind_variable")
+
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
 
@@ -113,7 +116,8 @@ object Parameters {
     PARAM_PREACTIONS  -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
-    PARAM_SF_SSL -> "on"
+    PARAM_SF_SSL -> "on",
+    PARAM_BIND_VARIABLE -> "on"
   )
 
   /**
@@ -523,6 +527,8 @@ object Parameters {
     def awsSecretKey: Option[String] = parameters.get(PARAM_AWS_SECRET_KEY)
 
     def isSslON: Boolean = isTrue(sfSSL)
+
+    def bindVariableEnabled: Boolean = isTrue(parameters(PARAM_BIND_VARIABLE))
 
     /**
       * Generate private key form pem key value

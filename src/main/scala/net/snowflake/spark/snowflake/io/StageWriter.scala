@@ -48,7 +48,7 @@ private[io] object StageWriter {
     val conn = DefaultJDBCWrapper.getConnector(params)
 
     try {
-      prologueSql.execute(conn)
+      prologueSql.execute(params.bindVariableEnabled)(conn)
 
       val (storage, stage) =
         CloudStorageOperations.createStorageClient(params, conn, true, None)
@@ -110,7 +110,7 @@ private[io] object StageWriter {
       //todo: handle on_error parameter on spark side
 
       //report the number of skipped files.
-      val resultSet = copyStatement.execute(conn) //todo: replace table name to Identifier(?) after bug fixed
+      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn) //todo: replace table name to Identifier(?) after bug fixed
       if (params.continueOnError) {
         var rowSkipped: Long = 0l
         while (resultSet.next()) {
