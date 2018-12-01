@@ -23,7 +23,7 @@ private[io] object StageReader {
     val compress = params.sfCompress
     val compressFormat = if (params.sfCompress) "gzip" else "none"
 
-    Utils.genPrologueSql(params).execute(conn)
+    Utils.genPrologueSql(params).execute(params.bindVariableEnabled)(conn)
 
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
 
@@ -34,7 +34,7 @@ private[io] object StageReader {
       statement,
       s"@$stage/$prefix/",
       compressFormat,
-      format).execute(conn)
+      format).execute(params.bindVariableEnabled)(conn)
 
 
     // Verify it's the expected format

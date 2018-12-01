@@ -405,46 +405,51 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                      schema: StructType,
                      params: MergedParameters,
                      overwrite: Boolean = false,
-                     temporary: Boolean = false
+                     temporary: Boolean = false,
+                     bindVariableEnabled: Boolean = true
                    ): Unit =
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
         (if (temporary) "temporary" else "") + "table" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
-        s"(${schemaString(schema, params)})").execute(connection)
+        s"(${schemaString(schema, params)})").execute(bindVariableEnabled)(connection)
 
     def createTableLike(
                          newTable: String,
-                         originalTable: String
+                         originalTable: String,
+                         bindVariableEnabled: Boolean = true
                        ): Unit = {
       (ConstantString("create or replace table") + Identifier(newTable) +
-        "like" + Identifier(originalTable)).execute(connection)
+        "like" + Identifier(originalTable)).execute(bindVariableEnabled)(connection)
     }
 
-    def truncateTable(table: String): Unit =
-      (ConstantString("truncate") + table).execute(connection)
+    def truncateTable(table: String, bindVariableEnabled: Boolean = true): Unit =
+      (ConstantString("truncate") + table).execute(bindVariableEnabled)(connection)
 
     def swapTable(
                    newTable: String,
-                   originalTable: String
+                   originalTable: String,
+                   bindVariableEnabled: Boolean = true
                  ): Unit =
       (ConstantString("alter table") + Identifier(newTable) + "swap with" +
-        Identifier(originalTable)).execute(connection)
+        Identifier(originalTable)).execute(bindVariableEnabled)(connection)
 
     def renameTable(
                      newName: String,
-                     oldName: String
+                     oldName: String,
+                     bindVariableEnabled: Boolean = true
                    ): Unit =
       (ConstantString("alter table") + Identifier(oldName) + "rename to" +
-        Identifier(newName)).execute(connection)
+        Identifier(newName)).execute(bindVariableEnabled)(connection)
 
     /**
       * @param name table name
       * @return true if table exists, otherwise false
       */
-    def tableExists(name: String): Boolean =
+    def tableExists(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (EmptySnowflakeSQLStatement() + "desc table" + Identifier(name)).execute(connection)
+        (EmptySnowflakeSQLStatement() + "desc table" + Identifier(name))
+          .execute(bindVariableEnabled)(connection)
       }.isSuccess
 
     /**
@@ -453,17 +458,19 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @param name table name
       * @return true if table dropped, false if the given table not exists
       */
-    def dropTable(name: String): Boolean =
+    def dropTable(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (EmptySnowflakeSQLStatement() + "drop table" + Identifier(name)).execute(connection)
+        (EmptySnowflakeSQLStatement() + "drop table" + Identifier(name))
+          .execute(bindVariableEnabled)(connection)
       }.isSuccess
 
     def tableMetaData(name: String): ResultSetMetaData =
       tableMetaDataFromStatement(ConstantString(name) !)
 
-    def tableMetaDataFromStatement(statement: SnowflakeSQLStatement): ResultSetMetaData =
+    def tableMetaDataFromStatement(statement: SnowflakeSQLStatement,
+                                   bindVariableEnabled: Boolean = true): ResultSetMetaData =
       (ConstantString("select * from") + statement + "where 1 = 0")
-        .execute(connection).getMetaData
+        .execute(bindVariableEnabled)(connection).getMetaData
 
     def tableSchema(name: String, params: MergedParameters): StructType =
       resolveTable(connection, name, params)
@@ -491,7 +498,8 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                      awsSecretKey: Option[String] = None,
                      azureSAS: Option[String] = None,
                      overwrite: Boolean = false,
-                     temporary: Boolean = false
+                     temporary: Boolean = false,
+                     bindVariableEnabled: Boolean = true
                    ): Unit = {
 
       (ConstantString("create") +
@@ -509,7 +517,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
               })
           case None => EmptySnowflakeSQLStatement()
         })
-        ).execute(connection)
+        ).execute(bindVariableEnabled)(connection)
 
     }
 
@@ -519,9 +527,9 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @param name stage name
       * @return true if stage dropped, false if the given stage not exists.
       */
-    def dropStage(name: String): Boolean =
+    def dropStage(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("drop stage") + Identifier(name)).execute(connection)
+        (ConstantString("drop stage") + Identifier(name)).execute(bindVariableEnabled)(connection)
       }.isSuccess
 
 
@@ -530,14 +538,14 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @param name stage name
       * @return true is stage exists, otherwise false
       */
-    def stageExists(name: String): Boolean = {
+    def stageExists(name: String, bindVariableEnabled: Boolean = true): Boolean = {
       Try {
-        (EmptySnowflakeSQLStatement() + "desc stage" + Identifier(name)).execute(connection)
+        (EmptySnowflakeSQLStatement() + "desc stage" + Identifier(name)).execute(bindVariableEnabled)(connection)
       }.isSuccess
     }
 
-    def execute(statement: SnowflakeSQLStatement): Unit =
-      statement.execute(connection)
+    def execute(statement: SnowflakeSQLStatement, bindVariableEnabled: Boolean = true): Unit =
+      statement.execute(bindVariableEnabled)(connection)
 
     def execute(query: String): Unit = DefaultJDBCWrapper.executeInterruptibly(connection, query)
 
@@ -549,22 +557,24 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def createPipe(
                     name: String,
                     copyQuery: SnowflakeSQLStatement,
-                    overwrite: Boolean = false): Unit = {
+                    overwrite: Boolean = false,
+                    bindVariableEnabled: Boolean = true
+                  ): Unit = {
       (
         ConstantString("create") +
           (if (overwrite) "or replace pipe" else "pipe if not exists") +
           Identifier(name) + "as" + copyQuery
-        ).execute(connection)
+        ).execute(bindVariableEnabled)(connection)
     }
 
-    def dropPipe(name: String): Boolean =
+    def dropPipe(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("drop pipe") + Identifier(name)).execute(connection)
+        (ConstantString("drop pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
       }.isSuccess
 
-    def pipeExists(name: String): Boolean =
+    def pipeExists(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("desc pipe") + Identifier(name)).execute(connection)
+        (ConstantString("desc pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
       }.isSuccess
   }
 
@@ -595,7 +605,28 @@ private[snowflake] class SnowflakeSQLStatement(
 
   def isEmpty: Boolean = list.isEmpty
 
-  def execute(implicit conn: Connection): ResultSet = {
+  def execute(bindVariableEnabled: Boolean)
+             (implicit conn: Connection) : ResultSet =
+    if(bindVariableEnabled) executeWithBindVariable(conn)
+    else executeWithoutBindVaribale(conn)
+
+  private def executeWithoutBindVaribale(conn: Connection): ResultSet = {
+    val sql = list.reverse
+    val query = sql.foldLeft(new StringBuilder){
+      case(buffer, statement) => {
+        buffer.append(
+          if(statement.isInstanceOf[ConstantString]) statement
+          else statement.sql
+        )
+        buffer.append(" ")
+      }
+    }.toString()
+
+    val statement = conn.prepareStatement(query)
+    DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+  }
+
+  private def executeWithBindVariable(conn: Connection): ResultSet = {
     val sql = list.reverse
     val varArray: Array[StatementElement] = new Array[StatementElement](numOfVar)
     var indexOfVar: Int = 0
@@ -721,6 +752,8 @@ private[snowflake] sealed trait StatementElement {
 
   def toStatement: SnowflakeSQLStatement =
     new SnowflakeSQLStatement(isVariable, List[StatementElement](this))
+
+  def sql: String = value
 }
 
 private[snowflake] case class ConstantString(override val value: String) extends StatementElement
@@ -732,7 +765,7 @@ private[snowflake] sealed trait VariableElement[T] extends StatementElement {
 
   val variable: T
 
-  def sql: String = variable.toString
+  override def sql: String = variable.toString
 
 }
 

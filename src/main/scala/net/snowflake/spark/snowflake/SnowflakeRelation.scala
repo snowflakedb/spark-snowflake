@@ -109,7 +109,7 @@ private[snowflake] case class SnowflakeRelation(
       log.debug(Utils.sanitizeQueryText(countQuery.statementString))
       val conn = jdbcWrapper.getConnector(params)
       try {
-        val results = countQuery.execute(conn)
+        val results = countQuery.execute(params.bindVariableEnabled)(conn)
         if (results.next()) {
           val numRows = results.getLong(1)
           val parallelism =
