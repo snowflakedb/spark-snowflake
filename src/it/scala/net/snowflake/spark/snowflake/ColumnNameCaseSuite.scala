@@ -37,7 +37,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     val df1 = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable","column_123")
-        .option("keep_original_column_name_case","on")
+        .option("keep_column_case","on")
         .load()
 
 
