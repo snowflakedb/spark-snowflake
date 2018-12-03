@@ -62,7 +62,7 @@ class SnowflakeSink(
 
   private val tableName = param.table.get
 
-  private lazy val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString)
+  private lazy val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString, param)
 
   private lazy val pipeName: String = init()
 
@@ -99,7 +99,7 @@ class SnowflakeSink(
   def init(): String = {
 
     //create table
-    conn.createTable(tableName.name, schema.get, overwrite = false)
+    conn.createTable(tableName.name, schema.get, param, overwrite = false)
 
     val pipe = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
@@ -133,7 +133,7 @@ class SnowflakeSink(
     def getMappingToString(list: Option[List[(Int, String)]]): String =
       format match {
         case SupportedFormat.JSON =>
-          val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name)
+          val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
           if (list.isEmpty || list.get.isEmpty)
             s"(${schema.fields.map(x => Utils.ensureQuoted(x.name)).mkString(",")})"
           else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"

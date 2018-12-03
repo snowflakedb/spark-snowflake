@@ -79,6 +79,7 @@ object Parameters {
   val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
   val PARAM_STREAMING_STAGE    = knownParam("streaming_stage")
   val PARAM_PEM_PRIVATE_KEY    = knownParam("pem_private_key")
+  val PARAM_KEEP_COLUMN_CASE   = knownParam("keep_column_case")
 
   //Internal use only?
   val PARAM_BIND_VARIABLE      = knownParam("bind_variable")
@@ -117,6 +118,7 @@ object Parameters {
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
     PARAM_SF_SSL -> "on",
+    PARAM_KEEP_COLUMN_CASE -> "off",
     PARAM_BIND_VARIABLE -> "on"
   )
 
@@ -527,6 +529,9 @@ object Parameters {
     def awsSecretKey: Option[String] = parameters.get(PARAM_AWS_SECRET_KEY)
 
     def isSslON: Boolean = isTrue(sfSSL)
+
+    def keepOriginalColumnNameCase: Boolean =
+      isTrue(parameters(PARAM_KEEP_COLUMN_CASE))
 
     def bindVariableEnabled: Boolean = isTrue(parameters(PARAM_BIND_VARIABLE))
 

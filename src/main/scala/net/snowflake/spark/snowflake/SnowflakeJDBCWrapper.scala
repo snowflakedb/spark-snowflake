@@ -74,10 +74,10 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table specification is garbage.
     * @throws SQLException if the table contains an unsupported type.
     */
-  def resolveTable(conn: Connection, table: String): StructType =
-    resolveTableFromMeta(conn, conn.tableMetaData(table))
+  def resolveTable(conn: Connection, table: String, params: MergedParameters): StructType =
+    resolveTableFromMeta(conn, conn.tableMetaData(table), params)
 
-  def resolveTableFromMeta(conn: Connection, rsmd: ResultSetMetaData): StructType = {
+  def resolveTableFromMeta(conn: Connection, rsmd: ResultSetMetaData, params: MergedParameters): StructType = {
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
     var i = 0
@@ -91,11 +91,10 @@ private[snowflake] class JDBCWrapper {
       val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
       fields(i) = StructField(
+        if(params.keepOriginalColumnNameCase) columnName
         // Add quotes around column names if Snowflake would usually require them.
-        if (columnName.matches("[_A-Z]([_0-9A-Z])*"))
-          columnName
-        else
-          s""""$columnName"""",
+        else if (columnName.matches("[_A-Z]([_0-9A-Z])*")) columnName
+        else s""""$columnName"""",
         columnType,
         nullable)
       i = i + 1
@@ -191,9 +190,11 @@ private[snowflake] class JDBCWrapper {
   /**
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
-  def schemaString(schema: StructType): String = {
+  def schemaString(schema: StructType, param: MergedParameters): String = {
     schema.fields.map(field => {
-      val name: String = Utils.ensureQuoted(field.name)
+      val name: String =
+        if(param.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(field.name)
+        else Utils.ensureQuoted(field.name)
       val `type`: String = schemaConversion(field)
       val nullable: String = if (field.nullable) "" else "NOT NULL"
       s"""$name ${`type`} $nullable"""
@@ -402,6 +403,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def createTable(
                      name: String,
                      schema: StructType,
+                     params: MergedParameters,
                      overwrite: Boolean = false,
                      temporary: Boolean = false,
                      bindVariableEnabled: Boolean = true
@@ -410,7 +412,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         (if (overwrite) "or replace" else "") +
         (if (temporary) "temporary" else "") + "table" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
-        s"(${schemaString(schema)})").execute(bindVariableEnabled)(connection)
+        s"(${schemaString(schema, params)})").execute(bindVariableEnabled)(connection)
 
     def createTableLike(
                          newTable: String,
@@ -470,10 +472,11 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       (ConstantString("select * from") + statement + "where 1 = 0")
         .execute(bindVariableEnabled)(connection).getMetaData
 
-    def tableSchema(name: String): StructType = resolveTable(connection, name)
+    def tableSchema(name: String, params: MergedParameters): StructType =
+      resolveTable(connection, name, params)
 
-    def tableSchema(statement: SnowflakeSQLStatement): StructType =
-      resolveTableFromMeta(connection, tableMetaDataFromStatement(statement))
+    def tableSchema(statement: SnowflakeSQLStatement, params: MergedParameters): StructType =
+      resolveTableFromMeta(connection, tableMetaDataFromStatement(statement), params)
 
     /**
       * Create an internal stage if location is None,

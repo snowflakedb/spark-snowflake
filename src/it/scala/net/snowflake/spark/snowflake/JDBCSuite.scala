@@ -18,7 +18,7 @@ class JDBCSuite extends IntegrationSuiteBase {
         )
       )
 
-    conn.createTable(name, schema, true, false)
+    conn.createTable(name, schema, params, true, false)
 
     assert(conn.tableExists(name))
 
@@ -26,15 +26,15 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     assert(!conn.tableExists(name))
 
-    conn.createTable(name, schema, false, false)
+    conn.createTable(name, schema, params, false, false)
 
     assert(conn.dropTable(name))
 
-    conn.createTable(name, schema, true, true)
+    conn.createTable(name, schema, params, true, true)
 
     assert(conn.dropTable(name))
 
-    conn.createTable(name, schema, false, true)
+    conn.createTable(name, schema, params, false, true)
 
     assert(conn.dropTable(name))
 
@@ -86,7 +86,7 @@ class JDBCSuite extends IntegrationSuiteBase {
     val pipe_name = s"spark_test_pipe_$randomSuffix"
     val stage_name = s"spark_test_stage_$randomSuffix"
     val table_name = s"spark_test_table_$randomSuffix"
-    conn.createTable(table_name, schema, true, false)
+    conn.createTable(table_name, schema, params, true, false)
     conn.createStage(stage_name)
 
     assert(!conn.pipeExists(pipe_name))
@@ -111,9 +111,9 @@ class JDBCSuite extends IntegrationSuiteBase {
         )
       )
 
-    conn.createTable(name, schema, true, false)
+    conn.createTable(name, schema, params, true, false)
 
-    conn.tableSchema(name).equals(schema)
+    conn.tableSchema(name, params).equals(schema)
 
     conn.dropTable(name)
   }
@@ -128,7 +128,7 @@ class JDBCSuite extends IntegrationSuiteBase {
         )
       )
 
-    conn.createTable(name, schema, true, false)
+    conn.createTable(name, schema, params,true, false)
 
     sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -151,7 +151,7 @@ class JDBCSuite extends IntegrationSuiteBase {
           StructField("NUM", IntegerType, false)
         )
       )
-    conn.createTable(name, schema, true, false)
+    conn.createTable(name, schema, params,true, false)
     conn.execute(s"insert into $name values('a',1),('b',2)")
     conn.execute(s"create or replace function test_function(n int) returns table (a int, b string) as $$$$ select num, str from $name where num = n$$$$")
 
@@ -179,7 +179,7 @@ class JDBCSuite extends IntegrationSuiteBase {
           StructField("NUM", IntegerType, false)
         )
       )
-    conn.createTable(name, schema, true, false)
+    conn.createTable(name, schema, params,true, false)
     conn.execute(s"insert into $name values('a',1),('b',2)")
 
     val df = sparkSession.read
