@@ -1,1 +1,1 @@
-version in ThisBuild := "2.4.11-spark_2.3"
+version in ThisBuild := "2.4.11-spark_2.2"
