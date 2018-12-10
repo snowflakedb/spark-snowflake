@@ -125,7 +125,11 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .option("dbtable",tableName3)
       .load()
 
-    df.show  //todo
+    val result = df.collect()
+
+    assert(result(0).get(0).toString == "{\"a\":\"1 | 2 | 3\"}")
+    assert(result(0).get(1).toString == "[\"a | b\",\"c | d\"]")
+
   }
 
 }
