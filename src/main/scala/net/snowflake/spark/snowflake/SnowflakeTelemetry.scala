@@ -17,19 +17,17 @@ object SnowflakeTelemetry {
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 
-  //For test only
   private[snowflake] var output: ObjectNode = _
-  private var debugMode: Boolean = false
-
-  private[snowflake] def enableDebugMode(): Unit = debugMode = true
 
   def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
-    //for test only
-    if (debugMode) {
-      println("---------->>>Telemetry Output<<<----------")
-      println(s"Type: ${log._1._1} \nData: ${log._1._2.toString}")
-      println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-    }
+    logger.debug(
+      s"""
+        |Telemetry Output
+        |Type: ${log._1._1}
+        |Data: ${log._1._2.toString}
+      """.stripMargin
+    )
+
     this.synchronized{
       output = mapper.createObjectNode()
       output.put("type", log._1._1.toString)
@@ -48,8 +46,13 @@ object SnowflakeTelemetry {
     }
     tmp.foreach{
       case(log, timestamp) => {
-        if (debugMode)
-          println(s"Send ----------> timestamp:$timestamp log:${log.toString}")
+        logger.debug(
+          s"""
+             |Send Telemetry
+             |timestamp:$timestamp
+             |log:${log.toString}"
+           """.stripMargin
+        )
         telemetry.addLogToBatch(log,timestamp)
       }
     }

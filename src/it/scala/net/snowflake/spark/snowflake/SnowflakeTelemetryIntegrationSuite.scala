@@ -106,9 +106,6 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
         jdbcUpdate(s"drop table if exists $test_table2")
         throw (e)
     }
-
-    SnowflakeTelemetry.enableDebugMode()
-
   }
 
   //these test suits are unstable because the properties of json is unordered.

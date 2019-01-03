@@ -271,6 +271,8 @@ class SnowflakeSink(
     SnowflakeTelemetry.addLog((TelemetryTypes.SPARK_STREAMING_START, message), streamingStartTime)
     SnowflakeTelemetry.send(conn.getTelemetry)
 
+    log.info("Streaming started")
+
   }
 
   private def sendEndTelemetry(): Unit = {
@@ -283,6 +285,7 @@ class SnowflakeSink(
     SnowflakeTelemetry.addLog((TelemetryTypes.sPARK_STREAMING_END, message), endTime)
     SnowflakeTelemetry.send(conn.getTelemetry)
 
+    log.info("Streaming stopped")
   }
 
 
