@@ -78,6 +78,8 @@ class SnowflakeSink(
 
   private var schema: Option[StructType] = None
 
+  private val streamingStartTime: Long = System.currentTimeMillis()
+
 
   //telemetry
   private var lastMetricSendTime: Long = 0
@@ -92,6 +94,8 @@ class SnowflakeSink(
 
   private val telemetrySendTime: Long = 60 * 60 * 1000 // 1 h
 
+  //streaming start event
+  sendStartTelemetry()
 
   /**
     * Create pipe
@@ -117,6 +121,9 @@ class SnowflakeSink(
 
           SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric), time))
           SnowflakeTelemetry.send(conn.getTelemetry)
+
+          //streaming termination event
+          sendEndTelemetry()
         }
       }
     )
@@ -217,7 +224,7 @@ class SnowflakeSink(
     def registerDataBatchToTelemetry():Unit = {
       val time = System.currentTimeMillis()
       if(lastMetricSendTime == 0){ //init
-        metric.put(APP_NAME, (data.sparkSession.sparkContext.appName + START_TIME.toString).hashCode) //use hashcode, hide app name
+        metric.put(APP_NAME, (data.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode) //use hashcode, hide app name
         metric.put(START_TIME, time)
         lastMetricSendTime = time
         val rate = metric.putObject(LOAD_RATE)
@@ -256,7 +263,27 @@ class SnowflakeSink(
     registerDataBatchToTelemetry()
   }
 
+  private def sendStartTelemetry(): Unit = {
+    val message: ObjectNode = mapper.createObjectNode()
+    message.put(APP_NAME, (sqlContext.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode)
+    message.put(START_TIME, streamingStartTime)
 
+    SnowflakeTelemetry.addLog((TelemetryTypes.SPARK_STREAMING_START, message), streamingStartTime)
+    SnowflakeTelemetry.send(conn.getTelemetry)
+
+  }
+
+  private def sendEndTelemetry(): Unit = {
+    val endTime: Long = System.currentTimeMillis()
+    val message: ObjectNode = mapper.createObjectNode()
+    message.put(APP_NAME, (sqlContext.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode)
+    message.put(START_TIME, streamingStartTime)
+    message.put(END_TIME, endTime)
+
+    SnowflakeTelemetry.addLog((TelemetryTypes.sPARK_STREAMING_END, message), endTime)
+    SnowflakeTelemetry.send(conn.getTelemetry)
+
+  }
 
 
 

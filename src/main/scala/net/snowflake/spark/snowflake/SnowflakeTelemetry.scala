@@ -179,4 +179,6 @@ object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
   val SPARK_PLAN = Value("spark_plan")
   val SPARK_STREAMING = Value("spark_streaming")
+  val SPARK_STREAMING_START = Value("spark_streaming_start")
+  val sPARK_STREAMING_END = Value("spark_streaming_end")
 }
