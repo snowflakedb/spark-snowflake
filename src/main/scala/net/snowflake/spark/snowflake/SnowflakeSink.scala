@@ -282,7 +282,7 @@ class SnowflakeSink(
     message.put(START_TIME, streamingStartTime)
     message.put(END_TIME, endTime)
 
-    SnowflakeTelemetry.addLog((TelemetryTypes.sPARK_STREAMING_END, message), endTime)
+    SnowflakeTelemetry.addLog((TelemetryTypes.SPARK_STREAMING_END, message), endTime)
     SnowflakeTelemetry.send(conn.getTelemetry)
 
     log.info("Streaming stopped")

@@ -1,15 +1,24 @@
 package net.snowflake.spark.snowflake.io
 
+import java.sql.Connection
+
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
 
 private[io] object StageReader {
+
+  private val mapper: ObjectMapper = new ObjectMapper()
+  private val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  private val OUTPUT_BYTES: String = "output_bytes"
 
   def readFromStage(
                      sqlContext: SQLContext,
@@ -42,8 +51,13 @@ private[io] object StageReader {
     assert(sch.getColumnCount == 3)
     assert(sch.getColumnName(1) == "rows_unloaded")
     assert(sch.getColumnTypeName(1) == "NUMBER") // First record must be in
+    assert(sch.getColumnName(3) == "output_bytes")
     val first = res.next()
     assert(first)
+
+    //report egress usage
+    sendEgressUsage(res.getLong(3), conn)
+
     val second = res.next()
     assert(!second)
 
@@ -109,4 +123,17 @@ private[io] object StageReader {
 
 
   }
+
+  private def sendEgressUsage(bytes: Long, conn: Connection): Unit = {
+    val metric: ObjectNode = mapper.createObjectNode()
+    metric.put(OUTPUT_BYTES, bytes)
+
+    SnowflakeTelemetry.addLog((TelemetryTypes.SPARK_EGRESS, metric), System.currentTimeMillis())
+    SnowflakeTelemetry.send(conn.getTelemetry)
+
+    logger.debug(s"Data Egress Usage: $bytes bytes".stripMargin
+    )
+
+  }
+
 }
