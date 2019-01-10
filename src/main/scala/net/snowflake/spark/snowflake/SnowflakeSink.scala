@@ -92,7 +92,7 @@ class SnowflakeSink(
   private val LOAD_RATE = "load_rate"
   private val DATA_BATCH = "data_batch"
 
-  private val telemetrySendTime: Long = 60 * 60 * 1000 // 1 h
+  private val telemetrySendTime: Long = 10 * 60 * 1000 // 10 min
 
   //streaming start event
   sendStartTelemetry()
