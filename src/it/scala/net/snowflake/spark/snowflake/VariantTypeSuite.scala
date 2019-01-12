@@ -132,4 +132,21 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   }
 
+  test("load data") {
+
+    val time1 = System.currentTimeMillis()
+
+    val df = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_10_m")
+      .load()
+
+    df.collect()
+
+    val time2 = System.currentTimeMillis()
+
+    println(s"------------->${(time2 - time1)/1000}")
+
+  }
+
 }
