@@ -26,7 +26,10 @@ class SnowflakeStrategy extends Strategy {
         case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
-      case _: Exception => Nil
+      case e: Exception => {
+        log.error(s"Pushdown failed :${e.getMessage}")
+        Nil
+      }
     }
 
   /** Attempts to get a SparkPlan from the provided LogicalPlan.
