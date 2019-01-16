@@ -589,6 +589,8 @@ private[snowflake] class SnowflakeSQLStatement(
                                                 val list: List[StatementElement] = Nil
                                               ) {
 
+  private val log = LoggerFactory.getLogger(getClass)
+
   def +(element: StatementElement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
       numOfVar + element.isVariable,
@@ -640,7 +642,12 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       buffer.append(" ")
     })
-    val statement = conn.prepareStatement(buffer.toString())
+
+    val query: String = buffer.toString
+
+    log.debug(s"sql query generated: $query")
+
+    val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {
       case (element, index) => {
         element match {

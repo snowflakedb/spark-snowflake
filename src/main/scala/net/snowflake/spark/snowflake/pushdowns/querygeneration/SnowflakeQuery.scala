@@ -180,7 +180,7 @@ case class AggregateQuery(columns: Seq[NamedExpression],
 
   override val helper: QueryHelper =
     QueryHelper(children = Seq(child),
-      projections = Some(columns),
+      projections = if(columns.isEmpty) None else Some(columns),
       outputAttributes = None,
       alias = alias)
 
