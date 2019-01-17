@@ -56,6 +56,7 @@ lazy val root = Project("spark-snowflake", file("."))
 
     testOptions in Test += Tests.Argument("-oF"),
     fork in Test := true,
+    javaOptions in Test ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M"),
 
     //Release settings
     com.typesafe.sbt.SbtPgp.autoImportImpl.usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
