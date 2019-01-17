@@ -22,12 +22,15 @@ import scala.util.Properties
 
 val sparkVersion = "2.4.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
-val it = "it, test"
+//val it = "it, test"
+
+lazy val ItTest = config("it") extend(Test)
 
 lazy val root = (project in file("."))
-  .configs(IntegrationTest)
-  .settings(Defaults.coreDefaultSettings: _*)
-  .settings(Defaults.itSettings: _*)
+  .configs(ItTest)
+//  .settings(Defaults.coreDefaultSettings: _*)
+//  .settings(Defaults.itSettings: _*)
+  .settings(inConfig(ItTest)(Defaults.testSettings) : _*)
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
@@ -43,17 +46,15 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.5",
       "net.snowflake" % "snowflake-jdbc" % "3.6.15",
-      "com.google.guava" % "guava" % "14.0.1" % it,
-      "org.scalatest" %% "scalatest" % "3.0.5" % it,
-      "org.mockito" % "mockito-core" % "1.10.19" % it,
+      "com.google.guava" % "guava" % "14.0.1" % Test,
+      "org.scalatest" %% "scalatest" % "3.0.5" % Test,
+      "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5",
 
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided",
-      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided"
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
+      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
-    testOptions in IntegrationTest += Tests.Argument("-oF"),
-    fork in IntegrationTest := true,
 
     testOptions in Test += Tests.Argument("-oF"),
     fork in Test := true,
@@ -103,19 +104,19 @@ lazy val root = (project in file("."))
 
   )
 
-testGrouping in IntegrationTest := Seq[Group](
-  Group(
-    "aws",
-    (definedTests in IntegrationTest).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("deployment"->"s3"))
-    )
-  ),
-  Group(
-    "azure",
-    (definedTests in IntegrationTest).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("deployment"->"azure"))
-    )
-  )
-)
+//testGrouping in ItTest := Seq[Group](
+//  Group(
+//    "aws",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("deployment"->"s3"))
+//    )
+//  ),
+//  Group(
+//    "azure",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("deployment"->"azure"))
+//    )
+//  )
+//)
