@@ -16,13 +16,12 @@
 
 import sbt._
 import Keys._
-import Tests._
+import sbtrelease.ReleasePlugin.autoImport._
 
 import scala.util.Properties
 
 val sparkVersion = "2.4.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
-//val it = "it, test"
 
 lazy val ItTest = config("it") extend(Test)
 
@@ -38,7 +37,6 @@ lazy val root = Project("spark-snowflake", file("."))
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
     crossScalaVersions := Seq("2.11.12"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
-    scalaVersion := "2.12.8",
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     resolvers +=
@@ -100,8 +98,7 @@ lazy val root = Project("spark-snowflake", file("."))
         val workspace = Properties.envOrElse("WORKSPACE", ".")
         new File(s"""$workspace/.bintray""")
       } else bintrayCredentialsFile.value
-    },
-
+    }
   )
 
 //testGrouping in ItTest := Seq[Group](
