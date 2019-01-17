@@ -132,7 +132,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   }
 
-  test("load data") {
+  ignore("load data") {
 
     val time1 = System.currentTimeMillis()
 
