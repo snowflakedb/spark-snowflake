@@ -26,11 +26,11 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
 
 lazy val ItTest = config("it") extend(Test)
 
-lazy val root = (project in file("."))
+lazy val root = Project("spark-snowflake", file("."))
   .configs(ItTest)
-//  .settings(Defaults.coreDefaultSettings: _*)
-//  .settings(Defaults.itSettings: _*)
   .settings(inConfig(ItTest)(Defaults.testSettings) : _*)
+  .settings(Defaults.coreDefaultSettings: _*)
+  .settings(Defaults.itSettings: _*)
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
