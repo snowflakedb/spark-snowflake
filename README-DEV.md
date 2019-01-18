@@ -4,7 +4,7 @@
 
 To build your own .jar, simply issue (adapt your Scala version if needd)
 
-    $ build/sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 package
+    $ sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 package
      
 This will create spark-snowflakedb*.jar that you can use with Spark.
 
@@ -15,7 +15,7 @@ This will create spark-snowflakedb*.jar that you can use with Spark.
 
 Simply run
   
-    build/sbt test
+    sbt test
     
 ### Running integration tests
 
@@ -30,7 +30,7 @@ Notes about integration tests
 Once these requirements are met, run e.g.
     
     export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf 
-    build/sbt -Dspark.version=2.0.0 it:test
+    sbt -Dspark.version=2.4.0 it:test
   
 ### Running code coverage tests
 
