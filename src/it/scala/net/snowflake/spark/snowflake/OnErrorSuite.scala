@@ -6,7 +6,7 @@ import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class OnErrorSuite extends IntegrationSuiteBase{
-  lazy val table = "test_table"//s"spark_test_table_$randomSuffix"
+  lazy val table = s"spark_test_table_$randomSuffix"
 
   lazy val schema = new StructType(
     Array(
