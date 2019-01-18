@@ -39,12 +39,12 @@ line highlighting.
 
 Example use:
 
-    build/sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 clean coverage test
+    sbt -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 clean coverage test
 
 And with integration tests:
 
     export IT_SNOWFLAKE_CONF=$PWD/snowflake.conf
-    build/sbt -Dspark.version=2.0.0 -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 \
+    sbt -Dspark.version=2.0.0 -Dscala-2.11 -DSPARK_SCALA_VERSION=2.11.6 \
       clean coverage test it:test
 
 To see the results:      
