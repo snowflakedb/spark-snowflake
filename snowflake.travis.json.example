@@ -1,0 +1,28 @@
+{
+  "common": {
+    "sfCompress": "on",
+    "sfSSL": "on",
+    "dbtable": "xxxx",
+    "runOption": "snowflake-stage",
+    "sfTimeZone": "GMT",
+    "sfDatabase": "xxxxx",
+    "sfSchema": "xxx",
+    "sfWarehouse": "xxx",
+    "sfUser": "xxxx",
+    "pem_private_key": "xxxx"
+    },
+  "account_info": [
+    {
+      "name": "aws",
+      "config": {
+        "sfURL": "xxxxx.snowflakecomputing.com"
+      }
+    },
+    {
+      "name": "azure",
+      "config": {
+        "sfURL": "xxxx.east-us-2.azure.snowflakecomputing.com"
+      }
+    }
+  ]
+}
