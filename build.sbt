@@ -16,6 +16,7 @@
 
 import sbt._
 import Keys._
+import sbt.Tests.{Group, SubProcess}
 import sbtrelease.ReleasePlugin.autoImport._
 
 import scala.util.Properties
@@ -102,19 +103,19 @@ lazy val root = Project("spark-snowflake", file("."))
     }
   )
 
-//testGrouping in ItTest := Seq[Group](
-//  Group(
-//    "aws",
-//    (definedTests in ItTest).value,
-//    SubProcess(
-//      ForkOptions().withEnvVars(Map[String, String]("deployment"->"s3"))
-//    )
-//  ),
-//  Group(
-//    "azure",
-//    (definedTests in ItTest).value,
-//    SubProcess(
-//      ForkOptions().withEnvVars(Map[String, String]("deployment"->"azure"))
-//    )
-//  )
-//)
+testGrouping in ItTest := Seq[Group](
+  Group(
+    "aws",
+    (definedTests in ItTest).value,
+    SubProcess(
+      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
+    )
+  ),
+  Group(
+    "azure",
+    (definedTests in ItTest).value,
+    SubProcess(
+      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
+    )
+  )
+)

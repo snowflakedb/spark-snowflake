@@ -21,6 +21,7 @@ import java.sql.Connection
 import java.time.ZonedDateTime
 import java.util.TimeZone
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
@@ -33,6 +34,8 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
+import scala.io.Source
+import scala.collection.JavaConversions._
 
 /**
   * Base class for writing integration tests which run against a real Snowflake cluster.
@@ -47,6 +50,8 @@ trait IntegrationSuiteBase
 
   /** We read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
+  private final val CONFIG_JSON_FILE = "snowflake.travis.json"
+  private final val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   protected final val MISSING_PARAM_ERROR = "Missing required configuration value: "
 
   protected lazy val configsFromEnv: Map[String, String] = {
@@ -67,12 +72,9 @@ trait IntegrationSuiteBase
   }
 
   // Merges maps, preferring file values over env ones
-  protected def loadConfig(): Map[String, String] = {
-    (configsFromFile.keySet ++ configsFromEnv.keySet) map { key =>
-      (key -> configsFromFile.getOrElse(key,
-        configsFromEnv.getOrElse(key, "")))
-    } toMap
-  }
+  protected def loadConfig(): Map[String, String] =
+    loadJsonConfig().getOrElse(configsFromFile) ++ configsFromEnv
+
 
   // Used for internal integration testing in SF env.
   protected def readConfigValueFromEnv(name: String): Option[String] = {
@@ -241,6 +243,48 @@ trait IntegrationSuiteBase
     } finally {
       conn.createStatement.executeUpdate(s"drop table if exists $tableName")
       conn.commit()
+    }
+  }
+
+  /**
+    * read snowflake.travis.json
+    */
+  def loadJsonConfig(): Option[Map[String, String]] = {
+
+    var result: Map[String, String] = Map()
+    def read(node: JsonNode): Unit =
+      node.fields().foreach(
+        entry => result = result + (entry.getKey -> entry.getValue.asText())
+      )
+
+    try{
+      val file = Source.fromFile(CONFIG_JSON_FILE).mkString
+      val mapper: ObjectMapper = new ObjectMapper()
+      val json = mapper.readTree(file)
+      val commonConfig = json.get("common")
+      val accountConfig = json.get("account_info")
+      val accountName: String =
+        Option(System.getenv(SNOWFLAKE_TEST_ACCOUNT)).getOrElse("aws")
+
+      log.info(s"test account: $accountName")
+
+      read(commonConfig)
+
+      read(
+        (
+          for(i <- 0 until accountConfig.size()
+              if accountConfig.get(i).get("name").asText() == accountName)
+            yield accountConfig.get(i).get("config")
+          ).get(0)
+      )
+
+      log.info(s"load config from $CONFIG_JSON_FILE")
+      Some(result)
+    }
+    catch {
+      case _: Throwable =>
+        log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
+        None
     }
   }
 }

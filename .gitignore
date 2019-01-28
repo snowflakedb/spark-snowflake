@@ -8,3 +8,4 @@ build/*.jar
 metastore_db/*
 *.log
 check/
+snowflake.travis.json
