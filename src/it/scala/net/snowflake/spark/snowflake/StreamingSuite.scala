@@ -196,12 +196,46 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore("test context"){
+  ignore("kafka") {
+
+    val spark = sqlContext.sparkSession
+    val streamingStage = "streaming_test_stage"
+
+    conn.createStage(name = streamingStage, overwrite = true)
+
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"create or replace table $table (key string, value string)")
+
+    val checkpoint = "check"
+    removeDirectory(new File(checkpoint))
+
+    val df = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "localhost:9092")
+      .option("subscribe", "test")
+      .load()
+
+    val query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .writeStream
+      .outputMode("append")
+      .option("checkpointLocation", "check")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", table)
+      .option("streaming_stage", streamingStage)
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .start()
+
+      query.awaitTermination()
+
+  }
+
+  ignore("test context") {
     val storage: CloudStorage = CloudStorageOperations.createStorageClient(params, conn, false, Some("spark_streaming_test_stage"))._1
     //val log = IngestLogManager.readIngestList(storage, conn)
 
     val failed = IngestContextManager.readFailedFileList(0, storage, conn)
-    failed.addFiles(List("a","b","c"))
+    failed.addFiles(List("a", "b", "c"))
 
     val failed1 = IngestContextManager.readFailedFileList(0, storage, conn)
 

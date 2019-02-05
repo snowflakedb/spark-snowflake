@@ -107,7 +107,7 @@ class SnowflakeSink(
 
     val pipe = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
-    conn.createPipe(pipe, ConstantString(copySql(format))!, true)
+    conn.createPipe(pipe, ConstantString(copySql(format)) !, true)
     sqlContext.sparkContext.addSparkListener(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
@@ -221,9 +221,9 @@ class SnowflakeSink(
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
 
-    def registerDataBatchToTelemetry():Unit = {
+    def registerDataBatchToTelemetry(): Unit = {
       val time = System.currentTimeMillis()
-      if(lastMetricSendTime == 0){ //init
+      if (lastMetricSendTime == 0) { //init
         metric.put(APP_NAME, (data.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode) //use hashcode, hide app name
         metric.put(START_TIME, time)
         lastMetricSendTime = time
@@ -234,7 +234,7 @@ class SnowflakeSink(
       val rate = metric.get(LOAD_RATE).asInstanceOf[ObjectNode]
       rate.put(DATA_BATCH, rate.get(DATA_BATCH).asInt() + 1)
 
-      if(time - lastMetricSendTime > telemetrySendTime){
+      if (time - lastMetricSendTime > telemetrySendTime) {
         rate.put(END_TIME, time)
         SnowflakeTelemetry.addLog(((TelemetryTypes.SPARK_STREAMING, metric.deepCopy()), time))
         SnowflakeTelemetry.send(conn.getTelemetry)
@@ -245,22 +245,23 @@ class SnowflakeSink(
 
     }
 
-    if(schema.isEmpty) schema = Some(data.schema)
-
-      //prepare data
-      val rdd =
-        DefaultSnowflakeWriter.dataFrameToRDD(
-          sqlContext,
-          streamingToNonStreaming(sqlContext, data),
-          param,
-          format)
-      //write to storage
-      val fileList =
-        CloudStorageOperations
-          .saveToStorage(rdd, format, Some(batchId.toString), compress)
+    if (schema.isEmpty) schema = Some(data.schema)
+    //prepare data
+    val rdd =
+      DefaultSnowflakeWriter.dataFrameToRDD(
+        sqlContext,
+        streamingToNonStreaming(sqlContext, data),
+        param,
+        format)
+    if (!rdd.isEmpty()){
+    //write to storage
+    val fileList =
+      CloudStorageOperations
+        .saveToStorage(rdd, format, Some(batchId.toString), compress)
     ingestService.ingestFiles(fileList)
 
     registerDataBatchToTelemetry()
+    }
   }
 
   private def sendStartTelemetry(): Unit = {
@@ -287,7 +288,6 @@ class SnowflakeSink(
 
     log.info("Streaming stopped")
   }
-
 
 
 }
