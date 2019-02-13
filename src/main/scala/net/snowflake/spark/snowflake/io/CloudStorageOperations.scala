@@ -66,7 +66,7 @@ object CloudStorageOperations {
   private final val AZ_KEY = "EncryptedKey"
   private final val AZ_MATDESC = "matdesc"
 
-  private val log = LoggerFactory.getLogger(getClass)
+  val log = LoggerFactory.getLogger(getClass)
 
   private[io] final def getDecryptedStream(
                                             stream: InputStream,
@@ -427,6 +427,11 @@ sealed trait CloudStorage {
           outputStream.write('\n')
         }
         outputStream.close()
+
+        CloudStorageOperations.log.info(
+          s"upload file $directory/$fileName to stage"
+        )
+
         new SingleElementIterator(s"$directory/$fileName")
       }
     }
