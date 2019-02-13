@@ -55,7 +55,11 @@ class SnowflakeSink(
 
   private implicit val conn = DefaultJDBCWrapper.getConnector(param)
 
-  private val stageName: String = param.streamingStage.get
+  private val stageName: String = {
+    val name = param.streamingStage.get
+    conn.createStage(name, overwrite = false, temporary = false)
+    name
+  }
 
   private implicit val storage: CloudStorage =
     CloudStorageOperations.createStorageClient(param, conn, false, Some(stageName))._1
