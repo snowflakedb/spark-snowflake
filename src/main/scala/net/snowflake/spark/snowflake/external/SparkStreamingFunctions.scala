@@ -7,7 +7,6 @@ object SparkStreamingFunctions {
   def streamingToNonStreaming(sqlContext: SQLContext, dataFrame: DataFrame): DataFrame =
     sqlContext.internalCreateDataFrame(
       dataFrame.queryExecution.toRdd,
-      dataFrame.schema,
-      isStreaming = false
+      dataFrame.schema
     )
 }
