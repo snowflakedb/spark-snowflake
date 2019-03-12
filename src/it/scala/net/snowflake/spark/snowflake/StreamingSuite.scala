@@ -8,6 +8,8 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
 import org.apache.spark.sql.Row
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.streaming.IngestContextManager
+import org.apache.spark.sql.streaming.Trigger
 
 import scala.util.Random
 
@@ -227,6 +229,61 @@ class StreamingSuite extends IntegrationSuiteBase {
       .start()
 
       query.awaitTermination()
+
+  }
+
+  ignore("kafka1") {
+
+    val spark = sqlContext.sparkSession
+    val streamingStage = "streaming_test_stage"
+    val streamingTable = "streaming_test_table"
+
+    conn.createStage(name = streamingStage, overwrite = true)
+
+    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
+      s"create or replace table $streamingTable (key string, value string)")
+
+    val checkpoint = "check"
+    removeDirectory(new File(checkpoint))
+
+    val df = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "localhost:9092")
+      .option("subscribe", "test")
+      .load()
+
+    println("-------------------------------------------------")
+
+    var query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .writeStream
+      .outputMode("append")
+      .option("checkpointLocation", "check")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", streamingTable)
+      .option("streaming_stage", streamingStage)
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .trigger(Trigger.ProcessingTime(1000))
+      .start()
+
+    Thread.sleep(20000)
+
+    println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+    query.stop()
+
+    query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .writeStream
+      .outputMode("append")
+      .option("checkpointLocation", "check")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", streamingTable)
+      .option("streaming_stage", streamingStage)
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .trigger(Trigger.ProcessingTime(1000))
+      .start()
+
+    Thread.sleep(600000)
+    spark.close()
 
   }
 

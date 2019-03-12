@@ -1,19 +1,19 @@
-package net.snowflake.spark.snowflake
+package net.snowflake.spark.snowflake.streaming
 
-import java.security.{KeyPair, PrivateKey}
+import java.security.PrivateKey
 import java.text.SimpleDateFormat
 import java.util.{Date, TimeZone}
 
-import scala.collection.JavaConverters._
-import scala.collection.JavaConversions._
 import net.snowflake.ingest.SimpleIngestManager
 import net.snowflake.ingest.connection.IngestStatus
 import net.snowflake.ingest.utils.StagedFileWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
-import scala.concurrent.{Await, Future, TimeoutException}
-import scala.concurrent.duration._
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future, TimeoutException}
 
 object SnowflakeIngestConnector {
 
