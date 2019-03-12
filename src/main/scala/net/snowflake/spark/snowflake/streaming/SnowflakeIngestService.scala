@@ -1,5 +1,4 @@
-package net.snowflake.spark.snowflake
-
+package net.snowflake.spark.snowflake.streaming
 
 import java.nio.charset.Charset
 import java.sql.Connection
@@ -9,15 +8,15 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMappe
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ArrayNode
 import net.snowflake.ingest.SimpleIngestManager
 import net.snowflake.ingest.connection.IngestStatus
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.CloudStorage
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 
 class SnowflakeIngestService(
@@ -40,6 +39,8 @@ class SnowflakeIngestService(
   private val ingestedFileList: IngestedFileList = init()
 
   private lazy val checker = SnowflakeIngestConnector.createHistoryChecker(ingestManager)
+
+  private var pipeDropped = false
 
   //run clean function periodically
   private val process = Future {
@@ -85,6 +86,7 @@ class SnowflakeIngestService(
     }
     conn.dropPipe(pipeName)
     ingestedFileList.remove
+    pipeDropped = true
 
   }
 
@@ -93,6 +95,12 @@ class SnowflakeIngestService(
     IngestContextManager.logger.debug("closing ingest service")
     notClosed = false
     Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
+    if(!pipeDropped){
+      IngestContextManager.logger.error(
+        s"closing ingest service time out, please drop pipe: $pipeName manually"
+      )
+    }
+
     IngestContextManager.logger.debug(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
   }
 

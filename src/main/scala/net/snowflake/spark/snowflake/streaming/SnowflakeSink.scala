@@ -1,16 +1,17 @@
-package net.snowflake.spark.snowflake
+package net.snowflake.spark.snowflake.streaming
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobEnd}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryListener}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.slf4j.LoggerFactory
 
 class SnowflakeSink(
@@ -64,26 +65,23 @@ class SnowflakeSink(
   private implicit val storage: CloudStorage =
     CloudStorageOperations.createStorageClient(param, conn, false, Some(stageName))._1
 
-  private val tableName = param.table.get
-
-  private lazy val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString, param)
-
-  private lazy val pipeName: String = init()
+  private val pipeName: String = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
   private lazy val format: SupportedFormat =
     if (Utils.containVariant(schema.get)) SupportedFormat.JSON
     else SupportedFormat.CSV
 
-  private lazy val ingestService: SnowflakeIngestService =
-    new SnowflakeIngestService(param, pipeName, storage, conn)
-
+  private lazy val ingestService: SnowflakeIngestService = {
+    val service = openIngestionService(param, pipeName, format, schema.get, storage, conn)
+    init()
+    service
+  }
 
   private val compress: Boolean = param.sfCompress
 
   private var schema: Option[StructType] = None
 
   private val streamingStartTime: Long = System.currentTimeMillis()
-
 
   //telemetry
   private var lastMetricSendTime: Long = 0
@@ -104,19 +102,12 @@ class SnowflakeSink(
   /**
     * Create pipe
     */
-  def init(): String = {
-
-    //create table
-    conn.createTable(tableName.name, schema.get, param, overwrite = false)
-
-    val pipe = s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
-
-    conn.createPipe(pipe, ConstantString(copySql(format)) !, true)
+  def init(): Unit = {
     sqlContext.sparkContext.addSparkListener(
       new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           super.onApplicationEnd(applicationEnd)
-          ingestService.close()
+          closeAllIngestionService()
 
           //telemetry
           val time = System.currentTimeMillis()
@@ -131,95 +122,16 @@ class SnowflakeSink(
         }
       }
     )
-    pipe
-  }
 
-  /**
-    * Generate the COPY SQL command for creating pipe only
-    */
-  private def copySql(
-                       format: SupportedFormat
-                     ): String = {
+    sqlContext.sparkSession.streams.addListener(new StreamingQueryListener {
+      override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
 
-    def getMappingToString(list: Option[List[(Int, String)]]): String =
-      format match {
-        case SupportedFormat.JSON =>
-          val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
-          if (list.isEmpty || list.get.isEmpty)
-            s"(${schema.fields.map(x => Utils.ensureQuoted(x.name)).mkString(",")})"
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
-        case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) ""
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
-      }
+      override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
 
-    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
-      format match {
-        case SupportedFormat.JSON =>
-          if (list.isEmpty || list.get.isEmpty) {
-            val names =
-              tableSchema
-                .fields
-                .map(x => "parse_json($1):".concat(Utils.ensureQuoted(x.name)))
-                .mkString(",")
-            s"from (select $names $from tmp)"
-          }
-          else
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
-        case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) from
-          else
-            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.ensureQuoted(x._1.toString))).mkString(", ")} $from tmp)"
-      }
-
-    val fromString = s"FROM @$stageName"
-
-    val mappingList: Option[List[(Int, String)]] = param.columnMap match {
-      case Some(map) =>
-        Some(map.toList.map {
-          case (key, value) =>
-            try {
-              (tableSchema.fieldIndex(key) + 1, value)
-            } catch {
-              case e: Exception => {
-                log.error("Error occurred while column mapping: " + e)
-                throw e
-              }
-            }
-        })
-
-      case None => None
+      override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit =
+        closeIngestionService(pipeName)
     }
-
-    val mappingToString = getMappingToString(mappingList)
-
-    val mappingFromString = getMappingFromString(mappingList, fromString)
-
-    val formatString =
-      format match {
-        case SupportedFormat.CSV =>
-          s"""
-             |FILE_FORMAT = (
-             |    TYPE=CSV
-             |    FIELD_DELIMITER='|'
-             |    NULL_IF=()
-             |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-             |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
-             |  )
-           """.stripMargin
-        case SupportedFormat.JSON =>
-          s"""
-             |FILE_FORMAT = (
-             |    TYPE = JSON
-             |)
-           """.stripMargin
-      }
-
-    s"""
-       |COPY INTO $tableName $mappingToString
-       |$mappingFromString
-       |$formatString
-    """.stripMargin.trim
+    )
   }
 
 
