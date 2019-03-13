@@ -9,7 +9,7 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   var df: DataFrame = _
-  var dbtable = "column_mapping_test"
+  var dbtable = s"column_mapping_test_$randomSuffix"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
