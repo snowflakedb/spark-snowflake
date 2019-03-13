@@ -385,6 +385,8 @@ private[snowflake] class JDBCWrapper {
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
+  private val LOGGER = LoggerFactory.getLogger(getClass.getName)
+
   implicit class DataBaseOperations(connection: Connection) {
 
     /**
@@ -576,6 +578,23 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       Try {
         (ConstantString("desc pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
       }.isSuccess
+
+    def pipeDefinition(name: String, bindVariableEnabled: Boolean = true): Option[String] = {
+      var definition:String = null
+
+      try {
+        val result:ResultSet =
+          (ConstantString("desc pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
+//        definition = result.getString("definition")
+
+        result.next()
+        definition = result.getString("definition")
+      } catch {
+        case e: Exception => LOGGER.debug(s"pipe $name doesn't exist")
+      }
+
+      Option[String](definition)
+    }
   }
 
 

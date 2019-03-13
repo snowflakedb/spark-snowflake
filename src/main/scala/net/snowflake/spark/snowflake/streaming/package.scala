@@ -2,12 +2,10 @@ package net.snowflake.spark.snowflake
 
 import java.sql.Connection
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.{CloudStorage, SupportedFormat}
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
@@ -50,7 +48,12 @@ package object streaming {
 
     if(pipeDropped) {
       conn.createTable(param.table.get.name, schema, param, overwrite = false)
-      conn.createPipe(pipeName, ConstantString(copySql(param, conn, format)) !, true)
+
+      val copy = ConstantString(copySql(param, conn, format)) !
+
+      if(verifyPipe(conn, pipeName, copy.toString)) {
+        LOGGER.info(s"reuse pipe: $pipeName")
+      } else conn.createPipe(pipeName, copy, true)
 
       val ingestion = new SnowflakeIngestService(param, pipeName, storage, conn)
       pipeList.put(
@@ -176,6 +179,17 @@ package object streaming {
        |$formatString
     """.stripMargin.trim
   }
+
+  private[streaming] def verifyPipe(
+                                     conn: Connection,
+                                     pipeName: String,
+                                     copyStatement: String
+                                   ): Boolean =
+    conn.pipeDefinition(pipeName) match {
+      case Some(str) => str.trim.equals(copyStatement.trim)
+      case _ => false
+    }
+
 
 
 }
