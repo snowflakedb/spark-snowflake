@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import sbt._
-import Keys._
 import sbt.Tests.{Group, SubProcess}
-import sbtrelease.ReleasePlugin.autoImport._
 
 import scala.util.Properties
 
@@ -26,11 +23,11 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
 
 lazy val ItTest = config("it") extend(Test)
 
-lazy val root = Project("spark-snowflake", file("."))
+lazy val root = project.withId("spark-snowflake").in(file("."))
   .configs(ItTest)
-  .settings(inConfig(ItTest)(Defaults.testSettings) : _*)
-  .settings(Defaults.coreDefaultSettings: _*)
-  .settings(Defaults.itSettings: _*)
+  .settings(inConfig(ItTest)(Defaults.testSettings))
+  .settings(Defaults.coreDefaultSettings)
+  .settings(Defaults.itSettings)
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
@@ -53,16 +50,15 @@ lazy val root = Project("spark-snowflake", file("."))
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
-
     ),
 
-    testOptions in Test += Tests.Argument("-oF"),
-    fork in Test := true,
-    javaOptions in Test ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M"),
+    Test / testOptions += Tests.Argument("-oF"),
+    Test / fork := true,
+    Test / javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M"),
 
-    //Release settings
-    com.typesafe.sbt.SbtPgp.autoImportImpl.usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
-    com.typesafe.sbt.pgp.PgpKeys.pgpPassphrase in Global := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(pw => pw.toCharArray),
+    // Release settings
+    usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
+    Global / pgpPassphrase := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(_.toCharArray),
 
     publishMavenStyle := true,
     releaseCrossBuild := true,
@@ -93,28 +89,28 @@ lazy val root = Project("spark-snowflake", file("."))
           </developer>
         </developers>,
 
-    bintrayReleaseOnPublish in ThisBuild := true,
+    ThisBuild / bintrayReleaseOnPublish := true,
     bintrayOrganization := Some("snowflakedb"),
     bintrayCredentialsFile := {
       val user = Properties.envOrNone("JENKINS_BINTRAY_USER")
       if (user.isDefined) {
         val workspace = Properties.envOrElse("WORKSPACE", ".")
-        new File(s"""$workspace/.bintray""")
+        new File(s"$workspace/.bintray")
       } else bintrayCredentialsFile.value
     }
   )
 
-testGrouping in ItTest := Seq[Group](
+ItTest / testGrouping := Seq[Group](
   Group(
     "aws",
-    (definedTests in ItTest).value,
+    (ItTest / definedTests).value,
     SubProcess(
       ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
     )
   ),
   Group(
     "azure",
-    (definedTests in ItTest).value,
+    (ItTest / definedTests).value,
     SubProcess(
       ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
     )
