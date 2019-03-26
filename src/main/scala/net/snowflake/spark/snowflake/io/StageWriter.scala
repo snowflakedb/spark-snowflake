@@ -131,12 +131,16 @@ private[io] object StageWriter {
         }
         else
           conn.renameTable(table.name, tempTable.name)
+      } else {
+        conn.commit() 
       }
     } catch {
       case e: Exception =>
         // snowflake-todo: try to provide more error information,
         // possibly from actual SQL output
-        if (targetTable == tempTable) conn.dropTable(tempTable.name)
+        if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+          if (targetTable == tempTable) conn.dropTable(tempTable.name)
+        }
         log.error("Error occurred while loading files to Snowflake: " + e)
         throw e
     }
