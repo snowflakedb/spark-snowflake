@@ -10,6 +10,7 @@ import org.apache.spark.sql.Row
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.streaming.IngestContextManager
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 import scala.util.Random
 
@@ -298,6 +299,75 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     println(failed1.toString)
 
+  }
+  ignore("kafka2"){
+
+    import org.apache.spark.sql.functions._
+    val KafkaLoggingTopic = sparkSession.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "localhost:9092")
+      .option("subscribe", "test")
+      .load()
+
+    val spark = sparkSession
+    import spark.implicits._
+
+    val KafkaLoggingTopicDF = KafkaLoggingTopic.select($"value".cast("string")).as("event")
+
+    val loggingSchema = new StructType()
+      .add("url", StringType)
+      .add("method", StringType)
+      .add("action", StringType)
+      .add("timestamp", StringType)
+      .add("esbTransactionId", IntegerType)
+      .add("esbTransactionGuid", StringType)
+      .add("executionTime", IntegerType)
+      .add("serverName", StringType)
+      .add("sourceIp", StringType)
+      .add("eventName", StringType)
+      .add("operationName", StringType)
+      .add("header",new StructType()
+        .add("request", StringType)
+        .add("response", StringType)
+      )
+      .add("body",  new StructType()
+        .add("request", StringType)
+        .add("response", StringType)
+      )
+      .add("indexed", new StructType()
+        .add("openTimeout", StringType)
+        .add("readTimeout", StringType)
+        .add("threadId", StringType)
+      )
+      .add("details", new StructType()
+        .add("soapAction", StringType)
+        .add("artifactType", StringType)
+        .add("reason", StringType)
+        .add("requestId", StringType)
+        .add("success", StringType)
+        .add("backendOwner", StringType)
+      )
+      .add("syslog", new StructType()
+        .add("appName", StringType)
+        .add("facility", StringType)
+        .add("host", StringType)
+        .add("priority", StringType)
+        .add("severity", StringType)
+        .add("timestamp", StringType)
+      )
+
+    val loggingSchemaDF = KafkaLoggingTopicDF.select(from_json('value, loggingSchema) as 'event).select("event.*")
+
+    loggingSchemaDF.writeStream
+      .outputMode("append")
+      .options(connectorOptionsNoTable)
+      .option("checkpointLocation", "check")
+      //.trigger(ProcessingTime("1 seconds"))
+      .option("dbtable","streaming_test")
+      .option("streaming_stage", "streaming_test")
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .start()
+      .awaitTermination()
   }
 
 }
