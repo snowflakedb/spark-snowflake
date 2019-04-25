@@ -33,6 +33,7 @@ package object streaming {
                              ): SnowflakeIngestService = {
     LOGGER.debug(s"create new ingestion service, pipe name: $pipeName")
 
+
     var pipeDropped = false
     val checkPrevious: Future[Boolean] = Future{
       while(pipeList.contains(pipeName)) {
@@ -104,11 +105,11 @@ package object streaming {
         case SupportedFormat.JSON =>
           val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
           if (list.isEmpty || list.get.isEmpty)
-            s"(${schema.fields.map(x => Utils.ensureQuoted(x.name)).mkString(",")})"
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+            s"(${schema.fields.map(x => Utils.quotedNameIgnoreCase(x.name)).mkString(",")})"
+          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) ""
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
       }
 
     def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
@@ -118,16 +119,16 @@ package object streaming {
             val names =
               tableSchema
                 .fields
-                .map(x => "parse_json($1):".concat(Utils.ensureQuoted(x.name)))
+                .map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(x.name)))
                 .mkString(",")
             s"from (select $names $from tmp)"
           }
           else
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) from
           else
-            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.ensureQuoted(x._1.toString))).mkString(", ")} $from tmp)"
+            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase(x._1.toString))).mkString(", ")} $from tmp)"
       }
 
     val fromString = s"FROM @$stageName"

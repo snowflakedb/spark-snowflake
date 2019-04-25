@@ -25,7 +25,8 @@ class SnowflakeSink(
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private val param = Parameters.mergeParameters(parameters)
+  private val param = Parameters.mergeParameters(
+    parameters + ("keep_column_case" -> "on")) // always keep column name case
 
   //discussion: Do we want to support overwrite mode?
   //In Spark Streaming, there are only three mode append, complete, update
