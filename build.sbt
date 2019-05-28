@@ -104,19 +104,19 @@ lazy val root = Project("spark-snowflake", file("."))
     }
   )
 
-testGrouping in ItTest := Seq[Group](
-  Group(
-    "aws",
-    (definedTests in ItTest).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
-    )
-  ),
-  Group(
-    "azure",
-    (definedTests in ItTest).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
-    )
-  )
-)
+//testGrouping in ItTest := Seq[Group](
+//  Group(
+//    "aws",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
+//    )
+//  ),
+//  Group(
+//    "azure",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
+//    )
+//  )
+//)

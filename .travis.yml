@@ -10,7 +10,10 @@ matrix:
     env: SPARK_VERSION="2.4.0"
   - jdk: openjdk8
     scala: 2.12.8
-    env: SPARK_VERSION="2.4.0" INTEGRATION_TESTS="true"
+    env: SPARK_VERSION="2.4.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws"
+  - jdk: openjdk8
+    scala: 2.12.8
+    env: SPARK_VERSION="2.4.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure"
 script:
 - "./dev/run-tests-travis.sh"
 after_success:
