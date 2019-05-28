@@ -81,6 +81,9 @@ object Parameters {
   val PARAM_PEM_PRIVATE_KEY    = knownParam("pem_private_key")
   val PARAM_KEEP_COLUMN_CASE   = knownParam("keep_column_case")
 
+  val PARAM_COLUMN_MAPPING     = knownParam("column_mapping")
+  val PARAM_COLUMN_MISMATCH_BEHAVIOR = knownParam("column_mismatch_behavior")
+
   //Internal use only?
   val PARAM_BIND_VARIABLE      = knownParam("bind_variable")
 
@@ -119,7 +122,9 @@ object Parameters {
     PARAM_AUTO_PUSHDOWN -> "on",
     PARAM_SF_SSL -> "on",
     PARAM_KEEP_COLUMN_CASE -> "off",
-    PARAM_BIND_VARIABLE -> "on"
+    PARAM_BIND_VARIABLE -> "on",
+    PARAM_COLUMN_MAPPING -> "order",
+    PARAM_COLUMN_MISMATCH_BEHAVIOR -> "error"
   )
 
   /**
@@ -201,6 +206,8 @@ object Parameters {
     * Adds validators and accessors to string map
     */
   case class MergedParameters(parameters: Map[String, String]) {
+
+    private var generatedColumnMap: Option[Map[String, String]] = None
 
     override def toString: String = {
       "Snowflake Data Source"
@@ -400,6 +407,13 @@ object Parameters {
       */
     def sfTimezone: Option[String] = parameters.get(PARAM_SF_TIMEZONE)
 
+    /**
+      * set column map
+      */
+    def setColumnMap(map: Map[String, String]): Unit = {
+      assert(parameters.get(PARAM_COLUMN_MAP).isEmpty, "Column map is already declared")
+      generatedColumnMap = Some(map)
+    }
 
     /**
       * Retrieve Column mapping data.
@@ -407,7 +421,7 @@ object Parameters {
       */
     def columnMap: Option[Map[String,String]] = {
       parameters.get(PARAM_COLUMN_MAP) match {
-        case None => None
+        case None => generatedColumnMap
         case Some(source: String) => Some(Utils.parseMap(source))
       }
     }
@@ -555,6 +569,39 @@ object Parameters {
         }
 
       })
+
+    def columnMapping: String = {
+      parameters(PARAM_COLUMN_MAPPING).toLowerCase match {
+        case "name" => "name"
+        case "order" => "order"
+        case value => {
+          log.error(
+            s"""
+              |wrong input value of column_mapping parameter: $value,
+              |it only supports "name" and "order",
+              |using default setting "order"
+              |""".stripMargin)
+          "order"
+        }
+      }
+    }
+
+    def columnMismatchBehavior: String = {
+      parameters(PARAM_COLUMN_MISMATCH_BEHAVIOR).toLowerCase() match {
+        case "error" => "error"
+        case "ignore" => "ignore"
+        case value => {
+          log.error(
+            s"""
+               |wrong input values of column_mismatch_behavior parameter: $value
+               |it only supports "error" and "ignore",
+               |using default setting "error"
+               """.stripMargin
+          )
+          "ignore"
+        }
+      }
+    }
 
     def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
 
