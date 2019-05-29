@@ -366,7 +366,7 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.SMALLINT => IntegerType
       case java.sql.Types.SQLXML => StringType // Snowflake-todo: ?
       case java.sql.Types.STRUCT => StringType // Snowflake-todo: ?
-      //      case java.sql.Types.TIME          => TimestampType
+      case java.sql.Types.TIME => StringType
       case java.sql.Types.TIMESTAMP => TimestampType
       case java.sql.Types.TINYINT => IntegerType
       //      case java.sql.Types.VARBINARY     => BinaryType
