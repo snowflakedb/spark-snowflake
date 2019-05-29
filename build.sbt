@@ -32,8 +32,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     name := "spark-snowflake",
     organization := "net.snowflake",
     version := "2.4.13-spark_2.4",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
-    crossScalaVersions := Seq("2.11.12"),
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
+    crossScalaVersions := Seq("2.11.12","2.12.8"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -41,7 +41,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.5",
-      "net.snowflake" % "snowflake-jdbc" % "3.6.24",
+      "net.snowflake" % "snowflake-jdbc" % "3.8.0",
       "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
@@ -100,19 +100,19 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     }
   )
 
-ItTest / testGrouping := Seq[Group](
-  Group(
-    "aws",
-    (ItTest / definedTests).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
-    )
-  ),
-  Group(
-    "azure",
-    (ItTest / definedTests).value,
-    SubProcess(
-      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
-    )
-  )
-)
+//testGrouping in ItTest := Seq[Group](
+//  Group(
+//    "aws",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
+//    )
+//  ),
+//  Group(
+//    "azure",
+//    (definedTests in ItTest).value,
+//    SubProcess(
+//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
+//    )
+//  )
+//)

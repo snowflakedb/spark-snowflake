@@ -207,7 +207,7 @@ object CloudStorageOperations {
                                     dir: Option[String] = None,
                                     temporary: Boolean = false
                                   ): CloudStorage = {
-    if (!conn.stageExists(stageName)) conn.createStage(stageName, temporary = true)
+    if (!conn.stageExists(stageName)) conn.createStage(stageName, temporary = temporary)
     @transient val stageManager =
       new SFInternalStage(false, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1])
 
@@ -448,7 +448,7 @@ sealed trait CloudStorage {
                                   ): OutputStream
 
   def download(fileName: String, compress: Boolean): InputStream =
-    createDownloadStream(fileName, compress, getStageInfo(false)._1)
+    createDownloadStream(fileName, compress, getStageInfo(false, fileName)._1)
 
 
   def download(
@@ -875,6 +875,8 @@ case class InternalS3Storage(
       dateObject.getObjectMetadata.getUserMetadata,
       StageType.S3
     )
+
+
 
     if (compress) new GZIPInputStream(inputStream)
     else inputStream

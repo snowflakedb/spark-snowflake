@@ -2,12 +2,10 @@ package net.snowflake.spark.snowflake
 
 import java.sql.Connection
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.{CloudStorage, SupportedFormat}
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
@@ -35,6 +33,7 @@ package object streaming {
                              ): SnowflakeIngestService = {
     LOGGER.debug(s"create new ingestion service, pipe name: $pipeName")
 
+
     var pipeDropped = false
     val checkPrevious: Future[Boolean] = Future{
       while(pipeList.contains(pipeName)) {
@@ -50,7 +49,12 @@ package object streaming {
 
     if(pipeDropped) {
       conn.createTable(param.table.get.name, schema, param, overwrite = false)
-      conn.createPipe(pipeName, ConstantString(copySql(param, conn, format)) !, true)
+
+      val copy = ConstantString(copySql(param, conn, format)) !
+
+      if(verifyPipe(conn, pipeName, copy.toString)) {
+        LOGGER.info(s"reuse pipe: $pipeName")
+      } else conn.createPipe(pipeName, copy, true)
 
       val ingestion = new SnowflakeIngestService(param, pipeName, storage, conn)
       pipeList.put(
@@ -101,11 +105,11 @@ package object streaming {
         case SupportedFormat.JSON =>
           val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
           if (list.isEmpty || list.get.isEmpty)
-            s"(${schema.fields.map(x => Utils.ensureQuoted(x.name)).mkString(",")})"
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+            s"(${schema.fields.map(x => Utils.quotedNameIgnoreCase(x.name)).mkString(",")})"
+          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) ""
-          else s"(${list.get.map(x => Utils.ensureQuoted(x._2)).mkString(", ")})"
+          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
       }
 
     def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
@@ -115,16 +119,16 @@ package object streaming {
             val names =
               tableSchema
                 .fields
-                .map(x => "parse_json($1):".concat(Utils.ensureQuoted(x.name)))
+                .map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(x.name)))
                 .mkString(",")
             s"from (select $names $from tmp)"
           }
           else
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.ensureQuoted(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) from
           else
-            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.ensureQuoted(x._1.toString))).mkString(", ")} $from tmp)"
+            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase(x._1.toString))).mkString(", ")} $from tmp)"
       }
 
     val fromString = s"FROM @$stageName"
@@ -176,6 +180,17 @@ package object streaming {
        |$formatString
     """.stripMargin.trim
   }
+
+  private[streaming] def verifyPipe(
+                                     conn: Connection,
+                                     pipeName: String,
+                                     copyStatement: String
+                                   ): Boolean =
+    conn.pipeDefinition(pipeName) match {
+      case Some(str) => str.trim.equals(copyStatement.trim)
+      case _ => false
+    }
+
 
 
 }
