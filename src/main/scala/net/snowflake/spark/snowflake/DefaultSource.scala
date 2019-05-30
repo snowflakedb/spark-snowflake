@@ -37,7 +37,10 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider
-    with StreamSinkProvider{
+    with StreamSinkProvider
+    with DataSourceRegister {
+
+  override val shortName = "snowflake"
 
   private val log = LoggerFactory.getLogger(getClass)
 
