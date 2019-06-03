@@ -48,7 +48,7 @@ package object querygeneration {
     }
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
-  private[querygeneration] final def qualifiedAttribute(alias: Seq[String],
+  private[querygeneration] final def qualifiedAttribute(alias: Option[String],
                                                         name: String): String = {
     val str = if(alias.isEmpty) ""
     else alias.map(wrap).mkString(".") + "."
@@ -59,7 +59,7 @@ package object querygeneration {
   }
 
   private[querygeneration] final def qualifiedAttributeStatement(
-                                                                  alias: Seq[String],
+                                                                  alias: Option[String],
                                                                   name: String
                                                                 ): SnowflakeSQLStatement =
     ConstantString(qualifiedAttribute(alias, name)) !
@@ -118,9 +118,9 @@ package object querygeneration {
 
       expr match {
         case a @ Alias(child: Expression, name: String) =>
-          Alias(child, altName)(a.exprId, Seq.empty[String], Some(metadata))
+          Alias(child, altName)(a.exprId, None, Some(metadata))
         case _ =>
-          Alias(expr, altName)(expr.exprId, Seq.empty[String], Some(metadata))
+          Alias(expr, altName)(expr.exprId, None, Some(metadata))
       }
     }
   }
