@@ -25,7 +25,6 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.lit
 
 import scala.collection.mutable
 
@@ -58,28 +57,48 @@ private[snowflake] class SnowflakeWriter(
             saveMode: SaveMode,
             params: MergedParameters
           ): Unit = {
+
+    def removeQuote(schema: StructType): StructType =
+      new StructType(schema.map(field=>
+        StructField(
+          if(field.name.startsWith("\"") && field.name.endsWith("\""))
+            field.name.substring(1, field.name.length - 1)
+          else field.name,
+          field.dataType,field.nullable)).toArray)
+
     val format: SupportedFormat =
       if(Utils.containVariant(data.schema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
-    var schema: StructType = null
+    var toSchema: Option[StructType] = None
     if(params.columnMap.isEmpty && params.columnMapping == "name") {
       val conn = jdbcWrapper.getConnector(params)
       try {
-        schema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+        toSchema = Some(removeQuote(jdbcWrapper.resolveTable(conn, params.table.get.name, params)))
         params.setColumnMap(
           generateColumnMap(
             data.schema,
-            schema,
+            toSchema.get,
             params.columnMismatchBehavior == "error")
         )
 
       } finally conn.close()
     }
 
-    var output: DataFrame = removeUselessColumns(data, params)
-    if(schema != null) output = addNulls(data, schema, params)
-//    if(params.columnTypeMatching == "loose") output = castToString(output, schema, params)
+    params.columnMap match {
+      case Some(map) =>
+        if (map.isEmpty) {
+          throw new UnsupportedOperationException(
+            s"""
+               |No column name matched between Snowflake Table and Spark Dataframe.
+               |Please check the column names or manually assign the ColumnMap
+         """.stripMargin
+          )
+        }
+      case _ => //do nothing
+    }
+
+    val output: DataFrame = removeUselessColumns(data, params)
     val strRDD = dataFrameToRDD(sqlContext, output, params, format)
     io.writeRDD(params, strRDD, output.schema, saveMode, format)
   }
@@ -127,61 +146,26 @@ private[snowflake] class SnowflakeWriter(
       case _ => dataFrame
     }
 
-  private def addNulls(dataFrame: DataFrame, toSchema: StructType, params: MergedParameters): DataFrame = {
-    params.columnMap match {
-      case Some(map) =>
-        if(map.size == toSchema.size) dataFrame
-        else {
-          var list: List[StructField] = Nil
-          val nameSet = mutable.HashSet[String]()
-          var newMap:Map[String, String] = map
-          var result = dataFrame
-
-          map.foreach{
-            case(_, to) => nameSet.add(to)
-          }
-          toSchema.foreach(field => {
-            if(!nameSet.contains(field.name)) list = field :: list
-          })
-
-          if(list.isEmpty) dataFrame //impossible
-          else {
-            list.foreach(field => {
-                val name = s"SF_SP_NULL_COLUMN_${field.name}"
-                newMap += name -> field.name
-                result = result.withColumn(name, lit(null).cast(field.dataType))
-              }
-            )
-            params.setColumnMap(newMap)
-            result
-          }
-        }
-      case _ => dataFrame
-    }
-  }
-
-//  private def castToString(dataFrame: DataFrame, toSchema: StructType, params: MergedParameters): DataFrame = {
-//    params.columnMap match {
-//      case Some(map)=>
-//      case _ =>
-//    }
-//  }
-
   private def generateColumnMap(
                                  from: StructType,
                                  to: StructType,
                                  reportError: Boolean): Map[String, String] = {
+
+    def containsColumn(name: String, list: StructType): Boolean =
+      list.exists(_.name.equalsIgnoreCase(name))
+
     val result = mutable.HashMap[String, String]()
-    val fromNameSet = mutable.HashMap[String, String]()
-    val toNameSet = mutable.HashMap[String, String]()
+    val fromNameMap = mutable.HashMap[String, String]()
+    val toNameMap = mutable.HashMap[String, String]()
 
     //check duplicated name after to lower
     from.foreach(field =>
-      fromNameSet.put(field.name.toLowerCase, field.name) match {
-        case Some(name) =>
-          throw new UnsupportedOperationException(
+      fromNameMap.put(field.name.toLowerCase, field.name) match {
+        case Some(_) =>
+          // if Snowflake table doesn't contain this column, ignore it
+          if (containsColumn(field.name, to)) throw new UnsupportedOperationException(
             s"""
-               |Duplicated column names in Spark DataFrame: $name, ${field.name}
+               |Duplicated column names in Spark DataFrame: ${fromNameMap(field.name.toLowerCase)}, ${field.name}
              """.stripMargin
           )
         case _ => //nothing
@@ -189,11 +173,12 @@ private[snowflake] class SnowflakeWriter(
     )
 
     to.foreach(field =>
-      toNameSet.put(field.name.toLowerCase, field.name) match {
-        case Some(name) =>
-          throw new UnsupportedOperationException(
+      toNameMap.put(field.name.toLowerCase, field.name) match {
+        case Some(_) =>
+          // if Spark DataFrame doesn't contain this column, ignore it
+          if (containsColumn(field.name, from)) throw new UnsupportedOperationException(
             s"""
-               |Duplicated column names in Snowflake table: $name, ${field.name}
+               |Duplicated column names in Snowflake table: ${toNameMap(field.name.toLowerCase)}, ${field.name}
              """.stripMargin
           )
         case _ => //nothing
@@ -202,16 +187,16 @@ private[snowflake] class SnowflakeWriter(
 
     //check mismatch
     if(reportError)
-      if(fromNameSet.size != toNameSet.size) throw new UnsupportedOperationException(
+      if(fromNameMap.size != toNameMap.size) throw new UnsupportedOperationException(
         s"""
-           |column number of Spark Dataframe (${fromNameSet.size}) doesn't match column number of Snowflake Table (${toNameSet.size})
+           |column number of Spark Dataframe (${fromNameMap.size}) doesn't match column number of Snowflake Table (${toNameMap.size})
          """.stripMargin
       )
 
 
-    fromNameSet.foreach{
+    fromNameMap.foreach{
       case(index, name) =>
-        if(toNameSet.contains(index)) result.put(name, toNameSet(index))
+        if(toNameMap.contains(index)) result.put(name, toNameMap(index))
         else if (reportError) throw new UnsupportedOperationException(
           s"""
              |can't find column $name in Snowflake Table
