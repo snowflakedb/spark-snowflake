@@ -85,7 +85,7 @@ object SnowflakeTelemetry {
     val children = mapper.createArrayNode()
 
     plan match {
-      case LogicalRelation(sfRelation: SnowflakeRelation, _, _, _) =>
+      case LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
         isSFPlan = true
         action = "SnowflakeRelation"
         val schema = mapper.createArrayNode()
