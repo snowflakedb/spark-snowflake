@@ -46,8 +46,6 @@ private[snowflake] class JDBCWrapper {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private val SPARK_SNOWFLAKEDB_VERSION = Option(getClass.getPackage.getImplementationVersion).getOrElse("<UNKNOWN>")
-
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
     val threadFactory = new ThreadFactory {
@@ -169,7 +167,7 @@ private[snowflake] class JDBCWrapper {
     val snowflakeClientInfo =
       s""" {
          | "spark.version" : "${esc(SPARK_VERSION)}",
-         | "spark.snowflakedb.version" : "${esc(SPARK_SNOWFLAKEDB_VERSION)}",
+         | "spark.snowflakedb.version" : "${esc(Utils.VERSION)}",
          | "spark.app.name" : "${esc(sparkAppName)}",
          | "scala.version" : "${esc(scalaVersion)}",
          | "java.version" : "${esc(javaVersion)}"
@@ -181,7 +179,7 @@ private[snowflake] class JDBCWrapper {
 
     // Set info on the connection level
     conn.setClientInfo("spark-version", SPARK_VERSION)
-    conn.setClientInfo("spark-snowflakedb-version", SPARK_SNOWFLAKEDB_VERSION)
+    conn.setClientInfo("spark-snowflakedb-version", Utils.VERSION)
     log.debug(conn.getClientInfo.toString)
 
     conn
@@ -664,7 +662,7 @@ private[snowflake] class SnowflakeSQLStatement(
 
     val query: String = buffer.toString
 
-    log.debug(s"sql query generated: $query")
+    log.info(s"sql query generated: $query")
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {
