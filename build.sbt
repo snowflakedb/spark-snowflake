@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import sbt.Tests.{Group, SubProcess}
-
 import scala.util.Properties
 
 val sparkVersion = "2.4.0"
@@ -31,7 +29,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := "2.4.13-spark_2.4",
+    version := "2.4.14-spark_2.4",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
     crossScalaVersions := Seq("2.11.12","2.12.8"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
@@ -100,19 +98,3 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     }
   )
 
-//testGrouping in ItTest := Seq[Group](
-//  Group(
-//    "aws",
-//    (definedTests in ItTest).value,
-//    SubProcess(
-//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"aws"))
-//    )
-//  ),
-//  Group(
-//    "azure",
-//    (definedTests in ItTest).value,
-//    SubProcess(
-//      ForkOptions().withEnvVars(Map[String, String]("SNOWFLAKE_TEST_ACCOUNT"->"azure"))
-//    )
-//  )
-//)
