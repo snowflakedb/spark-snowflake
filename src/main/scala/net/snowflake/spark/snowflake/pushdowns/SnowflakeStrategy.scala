@@ -17,10 +17,15 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
   */
 class SnowflakeStrategy extends Strategy {
 
-  def apply(plan: LogicalPlan): Seq[SparkPlan] =
+  def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     try {
       planToJson(plan).foreach(addLog(_, System.currentTimeMillis()))
+    } catch {
+      case e: Exception =>
+        log.error(s"Can't cast Spark Plan to JSON: ${e.getMessage}")
+    }
 
+    try {
       buildQueryRDD(plan.transform({
         case Project(Nil, child)     => child
         case SubqueryAlias(_, child) => child
@@ -31,6 +36,8 @@ class SnowflakeStrategy extends Strategy {
         Nil
       }
     }
+  }
+
 
   /** Attempts to get a SparkPlan from the provided LogicalPlan.
     *
