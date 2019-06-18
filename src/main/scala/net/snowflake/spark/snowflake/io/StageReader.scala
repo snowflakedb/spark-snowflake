@@ -84,7 +84,7 @@ private[io] object StageReader {
 
 
     // Save the last SELECT so it can be inspected
-    Utils.setLastCopyUnload(statement.toString)
+    Utils.setLastSelect(statement.toString)
 
     val (formatStmt, queryStmt): (SnowflakeSQLStatement, SnowflakeSQLStatement) =
       format match {
@@ -118,9 +118,11 @@ private[io] object StageReader {
           )
       }
 
-    ConstantString(s"COPY INTO '$location'") + queryStmt +
+    val result = ConstantString(s"COPY INTO '$location'") + queryStmt +
       formatStmt + "MAX_FILE_SIZE = " + params.s3maxfilesize
 
+    Utils.setLastCopyUnload(result.toString)
+    result
 
   }
 

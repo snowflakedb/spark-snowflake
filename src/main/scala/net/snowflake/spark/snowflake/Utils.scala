@@ -224,6 +224,7 @@ object Utils {
   // Stores the last generated Select query
   private var lastCopyUnload : String = _
   private var lastCopyLoad : String = _
+  private var lastSelect: String = _
   private var lastPutCommand : String = _
   private var lastGetCommand : String = _
 
@@ -234,6 +235,12 @@ object Utils {
   def getLastCopyUnload : String = {
     lastCopyUnload
   }
+
+  private[snowflake] def setLastSelect(select: String): Unit = {
+    lastSelect = select
+  }
+
+  def getLastSelect : String = lastSelect
 
   private[snowflake] def setLastCopyLoad(select: String): Unit = {
     lastCopyLoad = select
