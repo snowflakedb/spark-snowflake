@@ -175,14 +175,7 @@ private[snowflake] class JDBCWrapper {
     log.debug(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
-    var conn = DriverManager.getConnection(jdbcURL, jdbcProperties)
-
-    // Set info on the connection level
-    conn.setClientInfo("spark-version", SPARK_VERSION)
-    conn.setClientInfo("spark-snowflakedb-version", Utils.VERSION)
-    log.debug(conn.getClientInfo.toString)
-
-    conn
+    DriverManager.getConnection(jdbcURL, jdbcProperties)
   }
 
   /**
