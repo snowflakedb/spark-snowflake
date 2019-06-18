@@ -204,7 +204,7 @@ trait IntegrationSuiteBase
 
     if (!bypass) {
       assert(
-        Utils.getLastCopyUnload.replaceAll("\\s+", "").toLowerCase == reference.trim
+        Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase == reference.trim
           .replaceAll("\\s+", "").toLowerCase)
     }
   }

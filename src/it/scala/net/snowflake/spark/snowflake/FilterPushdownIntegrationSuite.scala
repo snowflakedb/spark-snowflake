@@ -89,6 +89,6 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
     checkAnswer(loadedDf, expectedAnswer)
     // Verify the query issued is what we expect
     var expectedQuery = s"""SELECT "I", "S" FROM $test_table WHERE $expectedWhere"""
-    assert(Utils.getLastCopyUnload == expectedQuery)
+    assert(Utils.getLastSelect == expectedQuery)
   }
 }
