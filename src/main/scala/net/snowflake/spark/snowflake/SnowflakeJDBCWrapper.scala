@@ -24,8 +24,7 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
-import net.snowflake.client.jdbc.telemetry.Telemetry
-import net.snowflake.client.jdbc.telemetry.Telemetry.createTelemetry
+import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
@@ -371,7 +370,7 @@ private[snowflake] class JDBCWrapper {
   }
 
   @deprecated
-  def getTelemetry(conn: Connection): Telemetry = createTelemetry(conn)
+  def getTelemetry(conn: Connection): Telemetry = TelemetryClient.createTelemetry(conn)
 }
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
@@ -383,7 +382,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     /**
       * @return telemetry connector
       */
-    def getTelemetry: Telemetry = createTelemetry(connection)
+    def getTelemetry: Telemetry = TelemetryClient.createTelemetry(connection)
 
     /**
       * Create a table
