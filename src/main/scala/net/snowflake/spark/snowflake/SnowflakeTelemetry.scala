@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.telemetry.Telemetry
+import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -53,7 +53,7 @@ object SnowflakeTelemetry {
              |log:${log.toString}"
            """.stripMargin
         )
-        telemetry.addLogToBatch(log,timestamp)
+        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log,timestamp)
       }
     }
     if(!telemetry.sendBatch()) logger.error("Telemetry is failed")
