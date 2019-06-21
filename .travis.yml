@@ -6,11 +6,14 @@ cache:
 matrix:
   include:
   - jdk: openjdk8
-    scala: 2.11.12
-    env: SPARK_VERSION="2.3.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws"
+    scala: 2.10.5
+    evn: SPARK_VERSION="2.2.0"
   - jdk: openjdk8
     scala: 2.11.12
-    env: SPARK_VERSION="2.3.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure"
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws"
+  - jdk: openjdk8
+    scala: 2.11.12
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure"
 script:
 - "./dev/run-tests-travis.sh"
 after_success:
