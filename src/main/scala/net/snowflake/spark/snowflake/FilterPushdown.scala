@@ -39,14 +39,18 @@ private[snowflake] object FilterPushdown {
    * @param filters an array of filters, the conjunction of which is the filter condition for the
    *                scan.
    */
-  def buildWhereStatement(schema: StructType, filters: Seq[Filter]): SnowflakeSQLStatement = {
+  def buildWhereStatement(schema: StructType, filters: Seq[Filter], keepNameCase: Boolean = false): SnowflakeSQLStatement = {
     val filterStatement =
       pushdowns.querygeneration
-        .mkStatement(filters.flatMap(buildFilterStatement(schema, _)), "AND")
+        .mkStatement(filters.flatMap(buildFilterStatement(schema, _, keepNameCase)), "AND")
     if(filterStatement.isEmpty) EmptySnowflakeSQLStatement() else ConstantString("WHERE") + filterStatement
   }
 
-  def buildFilterStatement(schema: StructType, filter: Filter): Option[SnowflakeSQLStatement] = {
+  def buildFilterStatement(
+                            schema: StructType,
+                            filter: Filter,
+                            keepNameCase: Boolean
+                          ): Option[SnowflakeSQLStatement] = {
 
     // Builds an escaped value, based on the expected datatype
     def buildValueWithType(dataType: DataType, value: Any): SnowflakeSQLStatement = {
@@ -97,18 +101,26 @@ private[snowflake] object FilterPushdown {
         return None
       }
       val sqlEscapedValue = buildValueWithType(dataType.get, value)
-      Some(ConstantString(attr) + comparisonOp + sqlEscapedValue)
+      Some(ConstantString(wrap(attr)) + comparisonOp + sqlEscapedValue)
     }
 
-    def buildBinaryFilter(left: Filter, right: Filter, op: String) : Option[SnowflakeSQLStatement] = {
-      val leftStr = buildFilterStatement(schema, left)
-      val rightStr = buildFilterStatement(schema, right)
+    def buildBinaryFilter(
+                           left: Filter,
+                           right: Filter,
+                           op: String
+                         ): Option[SnowflakeSQLStatement] = {
+      val leftStr = buildFilterStatement(schema, left, keepNameCase)
+      val rightStr = buildFilterStatement(schema, right, keepNameCase)
       if (leftStr.isEmpty || rightStr.isEmpty) {
         None
       } else {
         Some(ConstantString("((") + leftStr.get + ")" + op + "(" + rightStr.get + "))")
       }
     }
+
+    def wrap(name: String): String =
+      if(keepNameCase) Utils.quotedNameIgnoreCase(name)
+      else name
 
     filter match {
       case EqualTo(attr, value) => buildComparison(attr, value, "=")
@@ -121,25 +133,26 @@ private[snowflake] object FilterPushdown {
         val valueStrings =
           pushdowns.querygeneration
             .mkStatement(values.map(v => buildValueWithType(dataType, v)), ", ")
-        Some(ConstantString("(") + attr + "IN" + "(" + valueStrings + "))")
-      case IsNull(attr) => Some(ConstantString("(") + attr + "IS NULL)")
-      case IsNotNull(attr) => Some(ConstantString("(") + attr + "IS NOT NULL)")
+        Some(ConstantString("(") + wrap(attr) + "IN" + "(" + valueStrings + "))")
+      case IsNull(attr) => Some(ConstantString("(") + wrap(attr) + "IS NULL)")
+      case IsNotNull(attr) => Some(ConstantString("(") + wrap(attr) + "IS NOT NULL)")
       case And(left, right) =>
         buildBinaryFilter(left, right, "AND")
       case Or(left, right) =>
         buildBinaryFilter(left, right, "OR")
       case Not(child) =>
-        val childStr = buildFilterStatement(schema, child)
+        val childStr = buildFilterStatement(schema, child, keepNameCase)
         if (childStr.isEmpty) None else Some(ConstantString("(NOT (") + childStr.get + "))")
       case StringStartsWith(attr, value) =>
-        Some(ConstantString("STARTSWITH(") + attr + "," + buildValue(value) + ")")
+        Some(ConstantString("STARTSWITH(") + wrap(attr) + "," + buildValue(value) + ")")
       case StringEndsWith(attr, value) =>
-        Some(ConstantString("ENDSWITH(") + attr + "," + buildValue(value) + ")")
+        Some(ConstantString("ENDSWITH(") + wrap(attr) + "," + buildValue(value) + ")")
       case StringContains(attr, value) =>
-        Some(ConstantString("CONTAINS(") + attr + "," + buildValue(value) + ")")
+        Some(ConstantString("CONTAINS(") + wrap(attr) + "," + buildValue(value) + ")")
       case _ => None
     }
   }
+
   /**
    * Use the given schema to look up the attribute's data type. Returns None if the attribute could
    * not be resolved.
