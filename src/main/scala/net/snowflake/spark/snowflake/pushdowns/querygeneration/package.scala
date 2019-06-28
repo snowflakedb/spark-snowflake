@@ -4,6 +4,7 @@ import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.types.MetadataBuilder
 import org.slf4j.LoggerFactory
+import net.snowflake.spark.snowflake.pushdowns._
 
 /** Package-level static methods and variable constants. These includes helper functions for
   * adding and converting expressions, formatting blocks and identifiers, logging, and
@@ -55,7 +56,7 @@ package object querygeneration {
 
 
     if (name.startsWith("\"") && name.endsWith("\"")) str + name
-    else str + wrap(name)
+    else str + wrapObjectName(name)
   }
 
   private[querygeneration] final def qualifiedAttributeStatement(
@@ -63,6 +64,13 @@ package object querygeneration {
                                                                   name: String
                                                                 ): SnowflakeSQLStatement =
     ConstantString(qualifiedAttribute(alias, name)) !
+
+  private[querygeneration] final def wrapObjectName(name: String): String =
+    globalParameter match {
+      case Some(params) =>
+        identifier + (if(params.keepOriginalColumnNameCase) name else name.toUpperCase()) + identifier
+      case _ => wrap(name)
+    }
 
   private[querygeneration] final def wrap(name: String): String = {
     identifier + name.toUpperCase + identifier
