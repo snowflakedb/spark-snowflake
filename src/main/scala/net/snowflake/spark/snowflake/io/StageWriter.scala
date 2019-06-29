@@ -79,7 +79,7 @@ private[io] object StageWriter {
                           ): Unit = {
     val table = params.table.get
     val tempTable =
-      TableName(s"${table.name}_staging_${Math.abs(Random.nextInt()).toString}")
+      TableName(s"${table.name.replace('"','_')}_staging_${Math.abs(Random.nextInt()).toString}")
     val targetTable = if (saveMode == SaveMode.Overwrite
       && params.useStagingTable) tempTable else table
 

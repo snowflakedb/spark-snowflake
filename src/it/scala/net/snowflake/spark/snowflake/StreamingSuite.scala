@@ -172,7 +172,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
-    query.awaitTermination(120000)
+    query.awaitTermination(150000)
 
     checkTestTable(Seq(
       Row("0"),
