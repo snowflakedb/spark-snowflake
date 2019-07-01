@@ -19,7 +19,7 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
           } else col.name
 
         Alias(Cast(col, col.dataType), orig_name)(col.exprId,
-          Seq.empty[String],
+          None,
           Some(col.metadata))
       }.map(_.toAttribute)
     }
