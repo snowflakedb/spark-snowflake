@@ -22,7 +22,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   import QueryBuilder.convertProjections
 
   /** This iterator automatically increments every time it is used, and is for aliasing subqueries. */
-  private final val alias = Iterator.from(0).map(n => s"subquery_$n")
+  private final val alias = Iterator.from(0).map(n => s"SUBQUERY_$n")
 
   /** RDD of [InternalRow] to be used by SnowflakePlan. */
   lazy val rdd = toRDD[InternalRow]

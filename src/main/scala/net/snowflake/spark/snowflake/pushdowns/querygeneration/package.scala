@@ -12,7 +12,7 @@ import net.snowflake.spark.snowflake.pushdowns._
   */
 package object querygeneration {
 
-  private[querygeneration] final val ORIG_NAME = "orig_name"
+  private[querygeneration] final val ORIG_NAME = "ORIG_NAME"
 
   /** This wraps all identifiers with the following symbol. */
   private final val identifier = "\""
@@ -111,7 +111,7 @@ package object querygeneration {
       origOutput: Seq[NamedExpression],
       alias: String): Seq[NamedExpression] = {
 
-    val col_names = Iterator.from(0).map(n => s"col_$n")
+    val col_names = Iterator.from(0).map(n => s"COL_$n")
 
     origOutput.map { expr =>
       val metadata =
@@ -145,7 +145,7 @@ package object querygeneration {
     log.debug(s"""Attempting to prettify query $query...""")
 
     val opener = "\\(SELECT"
-    val closer = "\\) AS \\\"subquery_[0-9]{1,10}\\\""
+    val closer = "\\) AS \\\"SUBQUERY_[0-9]{1,10}\\\""
 
     val breakPoints = "(" + "(?=" + opener + ")" + "|" + "(?=" + closer + ")" +
         "|" + "(?<=" + closer + ")" + ")"

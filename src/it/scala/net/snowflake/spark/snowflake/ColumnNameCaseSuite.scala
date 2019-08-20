@@ -6,17 +6,20 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 
 class ColumnNameCaseSuite extends IntegrationSuiteBase {
 
   val table = s"spark_test_table_$randomSuffix"
   val table1 = s"spark_test_table_1_$randomSuffix"
   val table2 = s"spark_test_table_2_$randomSuffix"
+  val table3 = s"spark_test_table_3_$randomSuffix"
 
   override def afterAll(): Unit = {
     conn.dropTable(table)
     conn.dropTable(table1)
     conn.dropTable(table2)
+    conn.dropTable(table3)
     super.afterAll()
   }
 
@@ -103,6 +106,32 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     assert(result.size == 2)
     assert(result.head.name == "2014 two")
     assert(result(1).name == "one")
+  }
+
+  test("Test pushdown query on GROUP BY Operator"){
+    jdbcUpdate(s"""create table $table3 ("col" int)""")
+
+    val df = sparkSession
+      .read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", table3)
+      .option("keep_column_case", "on")
+      .load()
+
+    df.select("col")
+      .groupBy("col")
+      .agg(count("*").alias("new_col"))
+      .count()
+
+    val result =
+      s"""
+         |SELECT ( COUNT ( 1 ) ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
+         |( SELECT * FROM ( $table3 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
+         | "SUBQUERY_0" GROUP BY "SUBQUERY_0"."col" ) AS "SUBQUERY_1"
+         |""".stripMargin.replaceAll("\\s","")
+
+    assert(Utils.getLastSelect.replaceAll("\\s","").equals(result))
   }
 
 }
