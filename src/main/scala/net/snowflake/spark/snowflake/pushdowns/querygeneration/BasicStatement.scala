@@ -53,7 +53,7 @@ private[querygeneration] object BasicStatement {
           case DateType =>
             ConstantString("DATEADD(day,") + IntVariable(l.value.asInstanceOf[Int]) +
           ", TO_DATE('1970-01-01'))" //s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
-          case x: TimestampType => StringVariable(x.toString) + "::TIMESTAMP(3)"
+          case TimestampType =>  ConstantString("to_timestamp_ntz(") + l.toString() + ", 6)"
           case _ =>
             l.value match {
               case v: Int => IntVariable(v) !
