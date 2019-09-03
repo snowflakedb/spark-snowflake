@@ -128,7 +128,27 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= 'TimestampType' ::TIMESTAMP(3) ) ) AND ( "SUBQUERY_0"."time" >= 'TimestampType' ::TIMESTAMP(3) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21"""
     ))
 
+    sparkSession
+      .read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table)
+      .option("keep_column_case", "off")
+      .load()
+      .filter(col("\"time\"") <= lit("2019-07-29 00:00:00.000").cast(TimestampType))
+      .filter(col("\"time\"") >= lit("2019-08-29 00:00:00.000").cast(TimestampType))
+      .select("\"id\"")
+      .groupBy("\"id\"").agg(count("*").alias("abc"))
+      .show()
+
+    println(Utils.getLastSelect)
+    assert(Utils.getLastSelect.equals(
+      s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= 'TimestampType' ::TIMESTAMP(3) ) ) AND ( "SUBQUERY_0"."time" >= 'TimestampType' ::TIMESTAMP(3) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 211"""
+    ))
+
+
     jdbcUpdate(s"drop table $test_table")
+
   }
 
 
