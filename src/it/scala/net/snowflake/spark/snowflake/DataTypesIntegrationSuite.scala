@@ -110,23 +110,30 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
 
   test("filter on timestamp column") {
     jdbcUpdate(s"""create or replace table $test_table ("id" int, "time" timestamp)""")
+    jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1567036800000000, 6))")
+    jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1567036700000000, 6))")
+    jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1567036900000000, 6))")
+    jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1467036800000000, 6))")
 
-    sparkSession
+    val result = sparkSession
       .read
       .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table)
       .option("keep_column_case", "on")
       .load()
-      .filter(col("time") <= lit("2019-07-29 00:00:00.000").cast(TimestampType))
-      .filter(col("time") >= lit("2019-08-29 00:00:00.000").cast(TimestampType))
+      .filter(col("time") >= lit("2019-07-29 00:00:00.000").cast(TimestampType))
+      .filter(col("time") <= lit("2019-08-29 00:00:00.000").cast(TimestampType))
       .select("id")
       .groupBy("id").agg(count("*").alias("abc"))
-      .show()
+      .collect()
 
     assert(Utils.getLastSelect.equals(
-      s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= 'TimestampType' ::TIMESTAMP(3) ) ) AND ( "SUBQUERY_0"."time" >= 'TimestampType' ::TIMESTAMP(3) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21"""
+      s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( ${test_table} ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" >= to_timestamp_ntz( 1564358400000000 , 6) ) ) AND ( "SUBQUERY_0"."time" <= to_timestamp_ntz( 1567036800000000 , 6) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0""""
     ))
+
+    assert(result.length == 1)
+    assert(result(0)(1) == 2)
 
     sparkSession
       .read
@@ -141,11 +148,9 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       .groupBy("\"id\"").agg(count("*").alias("abc"))
       .show()
 
-    println(Utils.getLastSelect)
     assert(Utils.getLastSelect.equals(
-      s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= 'TimestampType' ::TIMESTAMP(3) ) ) AND ( "SUBQUERY_0"."time" >= 'TimestampType' ::TIMESTAMP(3) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 211"""
+      s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= to_timestamp_ntz( 1564358400000000 , 6) ) ) AND ( "SUBQUERY_0"."time" >= to_timestamp_ntz( 1567036800000000 , 6) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21"""
     ))
-
 
     jdbcUpdate(s"drop table $test_table")
 
