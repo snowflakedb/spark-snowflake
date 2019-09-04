@@ -24,9 +24,9 @@ import scala.util.Random
 
 class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
-  private val test_table: String  = s"test_table_1_$randomSuffix"
+  private val test_table: String = s"test_table_1_$randomSuffix"
   private val test_table2: String = s"test_table_2_$randomSuffix"
-  private val table_placeholder   = "table_placeholder"
+  private val table_placeholder = "table_placeholder"
 
   private val numRows1 = 50
   private val numRows2 = 50
@@ -38,28 +38,28 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
     val st1 = new StructType(
       Array(StructField("id", IntegerType, nullable = true),
-            StructField("randInt", IntegerType, nullable = true),
-            StructField("randStr", StringType, nullable = true),
-            StructField("randBool", BooleanType, nullable = true),
-            StructField("randLong", LongType, nullable = true)))
+        StructField("randInt", IntegerType, nullable = true),
+        StructField("randStr", StringType, nullable = true),
+        StructField("randBool", BooleanType, nullable = true),
+        StructField("randLong", LongType, nullable = true)))
 
     val st2 = new StructType(
       Array(StructField("id", IntegerType, nullable = true),
-            StructField("randStr2", StringType, nullable = true),
-            StructField("randStr3", StringType, nullable = true),
-            StructField("randInt2", IntegerType, nullable = true)))
+        StructField("randStr2", StringType, nullable = true),
+        StructField("randStr3", StringType, nullable = true),
+        StructField("randInt2", IntegerType, nullable = true)))
 
     val df1_spark = sqlContext
       .createDataFrame(sc.parallelize(1 to numRows1)
-                         .map[Row](value => {
-                           val rand = new Random(System.nanoTime())
-                           Row(value,
-                               rand.nextInt(),
-                               rand.nextString(10),
-                               rand.nextBoolean(),
-                               rand.nextLong())
-                         }),
-                       st1)
+        .map[Row](value => {
+          val rand = new Random(System.nanoTime())
+          Row(value,
+            rand.nextInt(),
+            rand.nextString(10),
+            rand.nextBoolean(),
+            rand.nextLong())
+        }),
+        st1)
       .cache()
 
     // Contains some nulls
@@ -118,12 +118,13 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   test("Select all columns.") {
     testDF(sql = s"""SELECT * FROM ${table_placeholder}1""",
-           ref = s"""SELECT * FROM ($test_table) AS "sf_connector_query_alias"""")
+      ref = s"""SELECT * FROM ($test_table) AS "sf_connector_query_alias"""")
   }
 
   test("Join") {
     testDF(
-      sql = s"""SELECT b.id, a.randInt from ${table_placeholder}1 as a
+      sql =
+        s"""SELECT b.id, a.randInt from ${table_placeholder}1 as a
          INNER JOIN ${table_placeholder}2 as b on a.randBool = ISNULL(b.randInt2)""".stripMargin,
       ref =
         s"""SELECT ("subquery_5"."subquery_5_col_2") AS "subquery_6_col_0", ("subquery_5"."subquery_5_col_0") AS "subquery_6_col_1" FROM
@@ -164,8 +165,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 ) AS "subquery_0"""")
   }
 
-  /*
-  test("Join and Max Aggregation") {
+  ignore("Join and Max Aggregation") {
     testDF(
       sql =
         s"""SELECT a.id, max(b.randInt2) from ${table_placeholder}1 as a INNER JOIN
@@ -188,15 +188,16 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 ) AS "subquery_5"
  GROUP BY "subquery_5"."subquery_5_col_0"""")
   }
-  */
 
   /** Below tests bypass query check because pushdowns may sometimes swap ordering of multiple join and groupBy
     * predicates, causing failure. The pushdown queries are otherwise correct (as of the writing of this comment).
     */
   test("Join on multiple conditions") {
-    testDF(sql = s"""SELECT b.randStr2 from ${table_placeholder}1 as a
+    testDF(sql =
+      s"""SELECT b.randStr2 from ${table_placeholder}1 as a
          INNER JOIN ${table_placeholder}2 as b on ISNULL(b.randInt2) = a.randBool AND a.randStr=b.randStr2""".stripMargin,
-           ref = s"""SELECT "subquery_6"."RANDSTR2" FROM
+      ref =
+        s"""SELECT "subquery_6"."RANDSTR2" FROM
 	(SELECT * FROM
 		(SELECT "subquery_1"."RANDSTR", "subquery_1"."RANDBOOL" FROM
 			(SELECT * FROM
@@ -215,14 +216,15 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 	) AS "subquery_5"
  ON ((("subquery_5"."RANDINT2" IS NULL) = "subquery_2"."RANDBOOL") AND ("subquery_2"."RANDSTR" = "subquery_5"."RANDSTR2"))
 ) AS "subquery_6"""",
-           bypassQueryCheck = true)
+      bypassQueryCheck = true)
   }
 
   test("Aggregate by multiple columns") {
     testDF(
       sql =
         s"""SELECT max(randLong) as m from ${table_placeholder}1 group by randInt,randBool""",
-      ref = s"""SELECT (max("subquery_1"."RANDLONG")) AS "m" FROM
+      ref =
+        s"""SELECT (max("subquery_1"."RANDLONG")) AS "m" FROM
 	(SELECT "subquery_0"."RANDINT", "subquery_0"."RANDBOOL", "subquery_0"."RANDLONG" FROM
 		(SELECT * FROM ($test_table) AS "sf_connector_query_alias"
 	) AS "subquery_0"
