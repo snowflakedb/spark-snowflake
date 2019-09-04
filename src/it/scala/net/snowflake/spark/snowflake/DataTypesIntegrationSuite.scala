@@ -22,7 +22,7 @@ import java.text.{DateFormat, SimpleDateFormat}
 import org.apache.spark.sql.{Row, SaveMode}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.TimestampType
+import org.apache.spark.sql.types.{DateType, TimestampType}
 
 /**
   * Created by mzukowski on 8/12/16.
@@ -107,6 +107,51 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
 
 
   }
+
+  test("filter on date column") {
+    jdbcUpdate(s"""create or replace table $test_table ("id" int, "time" date)""")
+    jdbcUpdate(s"insert into $test_table values(1, '2019-10-01'),(1, '2019-09-23'),(1,'2019-01-01'),(1,'2020-01-01')")
+
+    val result = sparkSession
+      .read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table)
+      .option("keep_column_case", "on")
+      .load()
+      .filter(col("time") >= lit("2019-09-01").cast(DateType))
+      .filter(col("time") <= lit("2019-11-01").cast(DateType))
+      .select("id")
+      .groupBy("id").agg(count("*").alias("abc"))
+      .collect()
+
+    assert(Utils.getLastSelect.equals(
+    s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" >= DATEADD(day, 18140 , TO_DATE('1970-01-01')) ) ) AND ( "SUBQUERY_0"."time" <= DATEADD(day, 18201 , TO_DATE('1970-01-01')) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0""""
+    ))
+
+    assert(result.length == 1)
+    assert(result(0)(1) == 2)
+
+    sparkSession
+      .read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table)
+      .option("keep_column_case", "off")
+      .load()
+      .filter(col("\"time\"") <= lit("2019-09-01").cast(DateType))
+      .filter(col("\"time\"") >= lit("2019-11-01").cast(DateType))
+      .select("\"id\"")
+      .groupBy("\"id\"").agg(count("*").alias("abc"))
+      .show()
+
+    assert(Utils.getLastSelect.equals(
+      s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) ) AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <= DATEADD(day, 18140 , TO_DATE('1970-01-01')) ) ) AND ( "SUBQUERY_0"."time" >= DATEADD(day, 18201 , TO_DATE('1970-01-01')) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21"""
+    ))
+
+    jdbcUpdate(s"drop table $test_table")
+  }
+
 
   test("filter on timestamp column") {
     jdbcUpdate(s"""create or replace table $test_table ("id" int, "time" timestamp)""")
