@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Concat, Expression, Like, Lower, StringLPad, StringRPad, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper}
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Concat, Expression, Like, Lower, StringLPad, StringRPad, StringReverse, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringStatement {
@@ -23,7 +23,7 @@ private[querygeneration] object StringStatement {
     Option(
       expr match {
         case _: Ascii | _: Lower | _: Substring | _: StringLPad |
-             _: StringRPad | _: StringTranslate |
+             _: StringRPad | _: StringTranslate | _: StringReverse |
              _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
              _: Substring | _: Upper =>
           ConstantString(expr.prettyName.toUpperCase) +
