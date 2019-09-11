@@ -108,7 +108,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
 
   }
 
-  test("filter on date column") {
+  ignore("filter on date column") {
     jdbcUpdate(s"""create or replace table $test_table ("id" int, "time" date)""")
     jdbcUpdate(s"insert into $test_table values(1, '2019-10-01'),(1, '2019-09-23'),(1,'2019-01-01'),(1,'2020-01-01')")
 
@@ -153,7 +153,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
   }
 
 
-  test("filter on timestamp column") {
+  ignore("filter on timestamp column") {
     jdbcUpdate(s"""create or replace table $test_table ("id" int, "time" timestamp)""")
     jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1567036800000000, 6))")
     jdbcUpdate(s"insert into $test_table values(1, to_timestamp_ntz(1567036700000000, 6))")
