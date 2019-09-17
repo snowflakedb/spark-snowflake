@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, IntVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
@@ -69,7 +69,10 @@ private[querygeneration] object MiscStatement {
       }
 
       case WindowExpression(func, spec) =>
-        convertStatement(func, fields) + "OVER" + windowBlock(spec, fields)
+        func match {
+          case _: RowNumber =>
+            ConstantString(func.prettyName.toUpperCase) + "() OVER" + windowBlock(spec, fields)
+        }
 
       case _ => null
     })
@@ -83,18 +86,13 @@ private[querygeneration] object MiscStatement {
         ConstantString("PARTITION BY") +
           mkStatement(spec.partitionSpec.map(convertStatement(_, fields)), ",")
 
-
     val orderBy =
       if (spec.orderSpec.isEmpty) EmptySnowflakeSQLStatement()
       else
         ConstantString("ORDER BY") +
           mkStatement(spec.orderSpec.map(convertStatement(_, fields)), ",")
 
-    val fromTo =
-      if (spec.orderSpec.isEmpty) EmptySnowflakeSQLStatement()
-      else  ConstantString(spec.frameSpecification.toString) !
-
-    blockStatement(partitionBy + orderBy + fromTo)
+    blockStatement(partitionBy + orderBy)
   }
 
   private final def setToExpr(set: Set[Any]): Seq[Expression] = {
