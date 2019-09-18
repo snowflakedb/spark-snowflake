@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, IntVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, DenseRank, Descending, Expression, If, In, InSet, Literal, MakeDecimal, PercentRank, Rank, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
@@ -70,8 +70,13 @@ private[querygeneration] object MiscStatement {
 
       case WindowExpression(func, spec) =>
         func match {
-          case _: RowNumber =>
-            ConstantString(func.prettyName.toUpperCase) + "() OVER" + windowBlock(spec, fields)
+          // These functions in Snowflake support a window frame.
+          // Note that pushdown for these may or may not yet be supported in the connector.
+          case _: Rank | _: DenseRank | _: PercentRank =>
+            convertStatement(func, fields) + " OVER " + windowBlock(spec, fields, true)
+
+          // These do not.
+          case _ => convertStatement(func, fields) + " OVER " + windowBlock(spec, fields, false)
         }
 
       case _ => null
@@ -79,7 +84,8 @@ private[querygeneration] object MiscStatement {
   }
 
   private final def windowBlock(spec: WindowSpecDefinition,
-                                fields: Seq[Attribute]): SnowflakeSQLStatement = {
+                                fields: Seq[Attribute],
+                                useWindowFrame: Boolean): SnowflakeSQLStatement = {
     val partitionBy =
       if (spec.partitionSpec.isEmpty) EmptySnowflakeSQLStatement()
       else
@@ -92,7 +98,11 @@ private[querygeneration] object MiscStatement {
         ConstantString("ORDER BY") +
           mkStatement(spec.orderSpec.map(convertStatement(_, fields)), ",")
 
-    blockStatement(partitionBy + orderBy)
+    val fromTo =
+      if (!useWindowFrame || spec.orderSpec.isEmpty) ""
+      else " " + spec.frameSpecification.sql
+
+    blockStatement(partitionBy + orderBy + fromTo)
   }
 
   private final def setToExpr(set: Set[Any]): Seq[Expression] = {

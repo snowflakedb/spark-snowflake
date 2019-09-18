@@ -17,12 +17,15 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.functions.row_number
 
 class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_simple_$randomSuffix"
   private val test_table2        = s"test_table_simple2_$randomSuffix"
+  private val test_table3        = s"test_table_simple3_$randomSuffix"
 
   // Values used for comparison
   private val row1 = Row(null, "Hello")
@@ -41,10 +44,13 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"create or replace table $test_table(i int, s string)")
     jdbcUpdate(s"create or replace table $test_table2(o int, p int)")
+    jdbcUpdate(s"create or replace table $test_table3(o string, p int)")
     jdbcUpdate(
       s"insert into $test_table values(null, 'Hello'), (2, 'Snowflake'), (3, 'Spark'), (4, null)")
     jdbcUpdate(
       s"insert into $test_table2 values(null, 1), (2, 2), (3, 2), (4, 3)")
+    jdbcUpdate(
+      s"insert into $test_table3 values('hi', 1), ('hi', 2), ('bye', 2), ('bye', 3)")
 
     SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
 
@@ -60,8 +66,15 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       .option("dbtable", s"$test_table2")
       .load()
 
+    val df3 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$test_table3")
+      .load()
+
     df1.createOrReplaceTempView("df1")
     df2.createOrReplaceTempView("df2")
+    df3.createOrReplaceTempView("df3")
   }
 
   test("Basic join") {
@@ -195,6 +208,29 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   }
 
+  test("row_number() window function") {
+
+    val input = sparkSession.sql(
+      s"""
+        |select * from df3
+        |""".stripMargin)
+
+    val windowSpec = Window.partitionBy(new Column("o")).orderBy(new Column("p").desc)
+    val result = input.withColumn("rank", row_number.over(windowSpec)).filter("rank=1")
+
+    testPushdown(
+      s"""SELECT * FROM (SELECT ("SUBQUERY_0"."O") AS "SUBQUERY_1_COL_0",
+          | ("SUBQUERY_0"."P") AS"SUBQUERY_1_COL_1", (ROW_NUMBER() OVER
+          | (PARTITIONBY "SUBQUERY_0"."O" ORDERBY ("SUBQUERY_0"."P") DESC))
+          | AS "SUBQUERY_1_COL_2" FROM (SELECT * FROM ($test_table3)
+          | AS "SF_CONNECTOR_QUERY_ALIAS") AS "SUBQUERY_0") AS "SUBQUERY_1" WHERE
+          | (("SUBQUERY_1"."SUBQUERY_1_COL_2" ISNOTNULL) AND ("SUBQUERY_1"."SUBQUERY_1_COL_2" = 1))
+      """.stripMargin,
+      result,
+      Seq(Row("bye", 3, 1),
+        Row("hi", 2, 1)))
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -203,6 +239,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     try {
       jdbcUpdate(s"drop table if exists $test_table")
       jdbcUpdate(s"drop table if exists $test_table2")
+      jdbcUpdate(s"drop table if exists $test_table3")
     } finally {
       super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
