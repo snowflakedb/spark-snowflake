@@ -92,6 +92,7 @@ private[querygeneration] object MiscStatement {
         ConstantString("PARTITION BY") +
           mkStatement(spec.partitionSpec.map(convertStatement(_, fields)), ",")
 
+
     val orderBy =
       if (spec.orderSpec.isEmpty) EmptySnowflakeSQLStatement()
       else
