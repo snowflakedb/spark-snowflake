@@ -98,6 +98,7 @@ package object querygeneration {
       case MiscStatement(stmt) => stmt
       case NumericStatement(stmt) => stmt
       case StringStatement(stmt) => stmt
+      case WindowStatement(stmt) => stmt
     }
   }
 

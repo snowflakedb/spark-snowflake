@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, IntVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, DenseRank, Descending, Expression, If, In, InSet, Literal, MakeDecimal, PercentRank, Rank, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
@@ -69,14 +69,23 @@ private[querygeneration] object MiscStatement {
       }
 
       case WindowExpression(func, spec) =>
-        convertStatement(func, fields) + "OVER" + windowBlock(spec, fields)
+        func match {
+          // These functions in Snowflake support a window frame.
+          // Note that pushdown for these may or may not yet be supported in the connector.
+          case _: Rank | _: DenseRank | _: PercentRank =>
+            convertStatement(func, fields) + " OVER " + windowBlock(spec, fields, true)
+
+          // These do not.
+          case _ => convertStatement(func, fields) + " OVER " + windowBlock(spec, fields, false)
+        }
 
       case _ => null
     })
   }
 
   private final def windowBlock(spec: WindowSpecDefinition,
-                                fields: Seq[Attribute]): SnowflakeSQLStatement = {
+                                fields: Seq[Attribute],
+                                useWindowFrame: Boolean): SnowflakeSQLStatement = {
     val partitionBy =
       if (spec.partitionSpec.isEmpty) EmptySnowflakeSQLStatement()
       else
@@ -91,8 +100,8 @@ private[querygeneration] object MiscStatement {
           mkStatement(spec.orderSpec.map(convertStatement(_, fields)), ",")
 
     val fromTo =
-      if (spec.orderSpec.isEmpty) EmptySnowflakeSQLStatement()
-      else  ConstantString(spec.frameSpecification.toString) !
+      if (!useWindowFrame || spec.orderSpec.isEmpty) ""
+      else " " + spec.frameSpecification.sql
 
     blockStatement(partitionBy + orderBy + fromTo)
   }

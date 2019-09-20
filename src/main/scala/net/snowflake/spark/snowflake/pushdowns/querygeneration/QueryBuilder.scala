@@ -117,7 +117,8 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
               SortLimitQuery(None, orderExpr, subQuery, alias.next)
 
             case Window(windowExpressions, _, _, _) =>
-              WindowQuery(windowExpressions, subQuery, alias.next)
+              WindowQuery(windowExpressions, subQuery, alias.next,
+                if (plan.output.isEmpty) None else Some(plan.output))
 
             case _ => subQuery
           }
