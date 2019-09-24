@@ -119,7 +119,7 @@ private[querygeneration] object MiscStatement {
   /** Attempts a best effort conversion from a SparkType
     * to a Snowflake type to be used in a Cast.
     */
-  private final def getCastType(t: DataType): Option[String] =
+  private[querygeneration]  final def getCastType(t: DataType): Option[String] =
     Option(t match {
       case StringType    => "VARCHAR"
       case BinaryType    => "BINARY"
