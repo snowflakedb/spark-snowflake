@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, LongVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Expression, Floor, Greatest, Least, Log, Pi, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Expression, Floor, Greatest, Least, Log, Pi, PromotePrecision, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object NumericStatement {
@@ -28,7 +28,16 @@ private[querygeneration] object NumericStatement {
           ConstantString(expr.prettyName.toUpperCase) +
             blockStatement(convertStatements(fields, expr.children:_*))
 
-        case CheckOverflow(child, _) => convertStatement(child, fields)
+        case PromotePrecision(child) => convertStatement(child, fields)
+
+        case CheckOverflow(child, t) =>
+          MiscStatement.getCastType(t) match {
+            case None =>
+              convertStatement(child, fields)
+            case Some(cast) =>
+              ConstantString("CAST") +
+                blockStatement(convertStatement(child, fields) + "AS" + cast)
+          }
 
         case Pi() => ConstantString("PI()") !
 

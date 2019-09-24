@@ -231,6 +231,101 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         Row("hi", 2, 1)))
   }
 
+  test("test binary arithmetic operators on Decimal"){
+    // This test can be run manually in non-pushdown mode,
+    // The expected result is the same, if the query is not pushdown,
+    // pass by the expected sql check.
+    val disablePushDown = false;
+    if (disablePushDown) {
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+    }
+
+    // Test addition(+)
+    var operator = "+"
+    var result =
+      sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(4), Row(5), Row(7)),
+      disablePushDown)
+
+    // Test subtract(+)
+    operator = "-"
+    result =
+      sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(0), Row(1), Row(1)),
+      disablePushDown)
+
+    // Test multiply(*)
+    operator = "*"
+    result =
+      sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(4), Row(6), Row(12)),
+      disablePushDown)
+
+    // Test division(/)
+    operator = "/"
+    result =
+      sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 6) ) ) AS "SUBQUERY_2_COL_0" FROM
+                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(1.000000), Row(1.333333), Row(1.500000)),
+      disablePushDown)
+
+    // Test mod(%)
+    operator = "%"
+    result =
+      sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(0), Row(1), Row(1)),
+      disablePushDown)
+
+    // Set back.
+    if (disablePushDown) {
+      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
