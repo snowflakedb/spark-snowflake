@@ -326,6 +326,80 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("test POWER function"){
+    // This test can be run manually in non-pushdown mode,
+    // The expected result is the same, if the query is not pushdown,
+    // pass by the expected sql check.
+    val disablePushDown = false;
+    if (disablePushDown) {
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+    }
+
+    val result =
+      sparkSession.sql(s"select power(2, p), pow(p, 3), pow(p, p) from df2")
+
+    testPushdown(s"""SELECT ( POWER ( 2.0 , CAST ( "SUBQUERY_0"."P" AS DOUBLE
+                    |) ) ) AS "SUBQUERY_1_COL_0" , ( POWER ( CAST (
+                    |"SUBQUERY_0"."P" AS DOUBLE ) , 3.0 ) ) AS "SUBQUERY_1_COL_1"
+                    |, ( POWER ( CAST ( "SUBQUERY_0"."P" AS DOUBLE ) , CAST
+                    |( "SUBQUERY_0"."P" AS DOUBLE ) ) ) AS "SUBQUERY_1_COL_2"
+                    |FROM ( SELECT * FROM ( $test_table2 ) AS
+                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      Seq(Row(2.0, 1.0, 1.0),
+          Row(4.0, 8.0, 4.0),
+          Row(4.0, 8.0, 4.0),
+          Row(8.0, 27.0, 27.0)),
+      disablePushDown)
+
+    // Set back.
+    if (disablePushDown) {
+      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
+    }
+  }
+
+  test("test EXP function"){
+    // This test can be run manually in non-pushdown mode,
+    // The expected result is the same, if the query is not pushdown,
+    // pass by the expected sql check.
+    val disablePushDown = false;
+    // EXP of Snowflake supports 9 significant digits
+    // EXP of Spark supports 15 significant digits
+    var expResultSet = Seq(Row(1.0,  2.718281828),
+                           Row(1.0,  7.389056099),
+                           Row(1.0,  7.389056099),
+                           Row(1.0, 20.085536923))
+
+    if (disablePushDown) {
+      expResultSet = Seq(
+        Row(1.0,  2.718281828459045),
+        Row(1.0,  7.38905609893065),
+        Row(1.0,  7.38905609893065),
+        Row(1.0, 20.085536923187668))
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+    }
+
+    val result =
+      sparkSession.sql(s"select exp(0), exp(p) from df2")
+
+    testPushdown(s"""SELECT ( 1.0 ) AS "SUBQUERY_1_COL_0" , (
+                    |EXP ( CAST ( "SUBQUERY_0"."P" AS DOUBLE ) ) )
+                    |AS "SUBQUERY_1_COL_1" FROM ( SELECT * FROM (
+                    |$test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+                    |AS "SUBQUERY_0"
+      """.stripMargin,
+      result,
+      expResultSet,
+      disablePushDown)
+
+    // Set back.
+    if (disablePushDown) {
+      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
