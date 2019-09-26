@@ -16,11 +16,10 @@ private[querygeneration] object MiscStatement {
         blockStatement(convertStatement(child, fields), name)
       case Cast(child, t, _) =>
         getCastType(t) match {
-          case None =>
-            convertStatement(child, fields)
           case Some(cast) =>
             ConstantString("CAST") +
               blockStatement(convertStatement(child, fields) + "AS" + cast)
+          case _ => convertStatement(child, fields)
         }
       case If(child, trueValue, falseValue) =>
         ConstantString("IFF") +
