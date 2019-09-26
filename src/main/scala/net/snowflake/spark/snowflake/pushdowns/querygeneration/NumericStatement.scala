@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, LongVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Exp, Expression, Floor, Greatest, Least, Log, Pi, Pow, PromotePrecision, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Exp, Expression, Floor, Greatest, Least, Log, Pi, Pow, PromotePrecision, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh, UnaryMinus}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object NumericStatement {
@@ -27,6 +27,10 @@ private[querygeneration] object NumericStatement {
              _: Sqrt | _: Sinh | _: Greatest | _: Least | _: Exp =>
           ConstantString(expr.prettyName.toUpperCase) +
             blockStatement(convertStatements(fields, expr.children:_*))
+
+        case UnaryMinus(child) =>
+          ConstantString("-") +
+            blockStatement(convertStatement(child, fields))
 
         case Pow(left, right) =>
           ConstantString("POWER") +

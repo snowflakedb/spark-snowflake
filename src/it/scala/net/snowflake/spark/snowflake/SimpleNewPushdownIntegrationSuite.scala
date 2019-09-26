@@ -320,6 +320,25 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       Seq(Row(0), Row(1), Row(1)),
       disablePushDown)
 
+    // Test unary minus( -(number) )
+    operator = "-"
+    result =
+      sparkSession.sql(s"select -o, - o + p, - o - p, - ( o + p ), - 3 + o from df2 where o IS NOT NULL")
+
+    testPushdown(s"""SELECT ( - ( "SUBQUERY_1"."O" ) ) AS "SUBQUERY_2_COL_0" , ( CAST (
+                    |( - ( "SUBQUERY_1"."O" ) + "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) )
+                    |AS "SUBQUERY_2_COL_1" , ( CAST ( ( - ( "SUBQUERY_1"."O" ) - "SUBQUERY_1"."P" )
+                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_2" , ( - ( CAST ( ( "SUBQUERY_1"."O"
+                    |+ "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) ) ) AS "SUBQUERY_2_COL_3" , ( CAST ( (
+                    |-3 + "SUBQUERY_1"."O" ) AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_4" FROM ( SELECT
+                    |* FROM ( SELECT * FROM ( $test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
+                    |"SUBQUERY_0" WHERE ( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin,
+      result,
+      // Data in df2 (o, p) values(2, 2), (3, 2), (4, 3)
+      Seq(Row(-2, 0, -4, -4, -1), Row(-3, -1, -5, -5, 0), Row(-4, -1, -7, -7, 1)),
+      disablePushDown)
+
     // Set back.
     if (disablePushDown) {
       SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
