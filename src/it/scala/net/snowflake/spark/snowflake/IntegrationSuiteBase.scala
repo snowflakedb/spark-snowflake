@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory
 import scala.collection.mutable
 import scala.io.Source
 import scala.collection.JavaConversions._
+import scala.util.matching.Regex
 
 /**
   * Base class for writing integration tests which run against a real Snowflake cluster.
@@ -285,6 +286,31 @@ trait IntegrationSuiteBase
       case _: Throwable =>
         log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
         None
+    }
+  }
+
+  // Utility function to drop some garbage test tables.
+  // Be careful to use this function which drops a bunch of tables.
+  // Suggest you to run with "printOnly = true" to make sure the tables are correct.
+  // And then run with "printOnly = false"
+  // For example, dropTestTables(".*TEST_TABLE_.*\\d+".r, true)
+  def dropTestTables(regex: Regex, printOnly : Boolean): Unit = {
+    val statement = conn.createStatement()
+
+    statement.execute("show tables")
+    val resultset = statement.getResultSet
+    while (resultset.next()) {
+      val tableName = resultset.getString(2)
+      tableName match {
+        case regex() => {
+          if (printOnly) {
+            println(s"will drop table: $tableName")
+          } else {
+            jdbcUpdate(s"drop table $tableName")
+          }
+        }
+        case _ => None
+      }
     }
   }
 }

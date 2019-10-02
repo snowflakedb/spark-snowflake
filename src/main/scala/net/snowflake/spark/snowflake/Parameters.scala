@@ -87,6 +87,13 @@ object Parameters {
   //Internal use only?
   val PARAM_BIND_VARIABLE      = knownParam("bind_variable")
 
+  // Force to use COPY UNLOAD when reading data from Snowflake
+  val PARAM_USE_COPY_UNLOAD    = knownParam("use_copy_unload")
+  // Expected partition size in MB when SELECT is used when reading data from Snowflake
+  val PARAM_EXPECTED_PARTITION_SIZE_IN_MB = knownParam("partition_size_in_mb")
+  val PARAM_TIME_OUTPUT_FORMAT = knownParam("time_output_format")
+  val PARAM_QUERY_RESULT_FORMAT = knownParam("query_result_format")
+
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
 
@@ -124,7 +131,9 @@ object Parameters {
     PARAM_KEEP_COLUMN_CASE -> "off",
     PARAM_BIND_VARIABLE -> "on",
     PARAM_COLUMN_MAPPING -> "order",
-    PARAM_COLUMN_MISMATCH_BEHAVIOR -> "error"
+    PARAM_COLUMN_MISMATCH_BEHAVIOR -> "error",
+    PARAM_EXPECTED_PARTITION_SIZE_IN_MB -> "100",
+    PARAM_USE_COPY_UNLOAD -> "true"
   )
 
   /**
@@ -548,6 +557,31 @@ object Parameters {
       isTrue(parameters(PARAM_KEEP_COLUMN_CASE))
 
     def bindVariableEnabled: Boolean = isTrue(parameters(PARAM_BIND_VARIABLE))
+
+    def useCopyUnload: Boolean = isTrue(parameters(PARAM_USE_COPY_UNLOAD))
+
+    def expectedPartitionSize: Long = {
+      try {
+        (parameters(PARAM_EXPECTED_PARTITION_SIZE_IN_MB).toDouble * 1024 * 1024).toLong
+      } catch {
+        case _: Exception => throw new IllegalArgumentException(
+                                    "Input expected partition size is invalid")
+      }
+    }
+
+    /**
+      * Snowflake time output format
+      */
+    def getTimeOutputFormat: Option[String] = {
+      parameters.get(PARAM_TIME_OUTPUT_FORMAT)
+    }
+
+    /**
+      * Snowflake query result format
+      */
+    def getQueryResultFormat: Option[String] = {
+      parameters.get(PARAM_QUERY_RESULT_FORMAT)
+    }
 
     /**
       * Generate private key form pem key value

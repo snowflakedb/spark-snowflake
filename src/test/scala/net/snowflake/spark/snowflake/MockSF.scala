@@ -41,7 +41,7 @@ class MockSF(
     existingTablesAndSchemas: Map[String, StructType],
     jdbcQueriesThatShouldFail: Seq[Regex] = Seq.empty) {
 
-  val mergedParams = MergedParameters(params)
+  val mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS ++ params)
 
   private[this] val queriesIssued: mutable.Buffer[String] = mutable.Buffer.empty
   def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued.toSeq
