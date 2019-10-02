@@ -4,6 +4,8 @@ import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 
+import scala.util.parsing.json.JSON
+
 class VariantTypeSuite extends IntegrationSuiteBase {
 
   lazy val schema = new StructType(
@@ -127,8 +129,10 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     val result = df.collect()
 
-    assert(result(0).get(0).toString == "{\"a\":\"1 | 2 | 3\"}")
-    assert(result(0).get(1).toString == "[\"a | b\",\"c | d\"]")
+    val json0 = JSON.parseFull(result(0).get(0).toString)
+    assert(json0.isDefined && json0.get.asInstanceOf[Map[String, String]]("a").equals("1 | 2 | 3"))
+    val json1 = JSON.parseFull(result(0).get(1).toString)
+    assert(json1.isDefined && json1.get.asInstanceOf[List[String]].equals(List("a | b", "c | d")))
 
   }
 
