@@ -140,6 +140,20 @@ private[snowflake] class JDBCWrapper {
     if (params.sfRole.isDefined) {
       jdbcProperties.put("role", params.sfRole.get)
     }
+    params.getTimeOutputFormat match {
+      case Some(value) => jdbcProperties.put(Parameters.PARAM_TIME_OUTPUT_FORMAT, value)
+      case _ => // No default value for it.
+    }
+    params.getQueryResultFormat match {
+      case Some(value) => jdbcProperties.put(Parameters.PARAM_QUERY_RESULT_FORMAT, value)
+      case _ => {
+        // If the user doesn't want to use COPY UNLOAD and doesn't set query result result
+        // explicitly, set the query result format automatically as ARROW for better performance.
+        if (!params.useCopyUnload) {
+          jdbcProperties.put(Parameters.PARAM_QUERY_RESULT_FORMAT, "arrow")
+        }
+      }
+    }
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options
@@ -209,7 +223,12 @@ private[snowflake] class JDBCWrapper {
         } else {
           "STRING"
         }
-      //        case BinaryType => "BLOB"
+      case BinaryType =>
+        if (field.metadata.contains("maxlength")) {
+          s"BINARY(${field.metadata.getLong("maxlength")})"
+        } else {
+          "BINARY"
+        }
       case TimestampType => "TIMESTAMP"
       case DateType => "DATE"
       case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
@@ -361,6 +380,7 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.TINYINT => IntegerType
       //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType
+      case java.sql.Types.BINARY => BinaryType
       case _ => null
       // scalastyle:on
     }

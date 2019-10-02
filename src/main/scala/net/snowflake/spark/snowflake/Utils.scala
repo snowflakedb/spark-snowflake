@@ -212,7 +212,7 @@ object Utils {
   def getJDBCConnection(params: Map[String, String]): Connection = {
     var wrapper = new JDBCWrapper()
     val lcParams = params.map { case(key, value) => (key.toLowerCase, value)}
-    val mergedParams = MergedParameters(lcParams)
+    val mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS ++ lcParams)
     wrapper.getConnector(mergedParams)
   }
 

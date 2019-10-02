@@ -384,19 +384,23 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     // The expected result is the same, if the query is not pushdown,
     // pass by the expected sql check.
     val disablePushDown = false;
-    // EXP of Snowflake supports 9 significant digits
-    // EXP of Spark supports 15 significant digits
-    var expResultSet = Seq(Row(1.0,  2.718281828),
-                           Row(1.0,  7.389056099),
-                           Row(1.0,  7.389056099),
+    // EXP of Snowflake supports 9 significant digits for COPY UNLOAD
+    var expResultSet = Seq(Row(1.0, 2.718281828),
+                           Row(1.0, 7.389056099),
+                           Row(1.0, 7.389056099),
                            Row(1.0, 20.085536923))
 
-    if (disablePushDown) {
+    // EXP of Spark supports 15 significant digits
+    // EXP with Snowflake SELECT query supports 15 significant digits
+    if (!params.useCopyUnload || disablePushDown) {
       expResultSet = Seq(
-        Row(1.0,  2.718281828459045),
-        Row(1.0,  7.38905609893065),
-        Row(1.0,  7.38905609893065),
+        Row(1.0, 2.718281828459045),
+        Row(1.0, 7.38905609893065),
+        Row(1.0, 7.38905609893065),
         Row(1.0, 20.085536923187668))
+    }
+
+    if (disablePushDown) {
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
 

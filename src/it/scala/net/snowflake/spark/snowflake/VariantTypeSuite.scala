@@ -1,5 +1,6 @@
 package net.snowflake.spark.snowflake
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
@@ -127,9 +128,11 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     val result = df.collect()
 
-    assert(result(0).get(0).toString == "{\"a\":\"1 | 2 | 3\"}")
-    assert(result(0).get(1).toString == "[\"a | b\",\"c | d\"]")
-
+    val mapper: ObjectMapper = new ObjectMapper()
+    val tree0 = mapper.readTree(result(0).get(0).toString)
+    assert(tree0.findValue("a").asText().equals("1 | 2 | 3"))
+    val tree1 = mapper.readTree(result(0).get(1).toString)
+    assert(tree1.get(0).asText().equals("a | b") && tree1.get(1).asText().equals("c | d"))
   }
 
 }
