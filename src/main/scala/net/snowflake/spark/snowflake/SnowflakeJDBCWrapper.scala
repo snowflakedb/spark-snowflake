@@ -141,6 +141,8 @@ private[snowflake] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
 
+    setupJDBCOptions(params, jdbcProperties)
+
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options
     jdbcProperties.put("client_session_keep_alive", "true")
@@ -177,6 +179,21 @@ private[snowflake] class JDBCWrapper {
     DriverManager.getConnection(jdbcURL, jdbcProperties)
   }
 
+  private def setupJDBCOptions(params: MergedParameters, jdbcProperties: Properties): Unit = {
+    if (params.parameters.get("query_result_format").isDefined) {
+      jdbcProperties.put("query_result_format",
+        params.parameters.get("query_result_format").get)
+    }
+
+    if (params.parameters.get("time_output_format").isDefined) {
+      jdbcProperties.put("time_output_format",
+        params.parameters.get("time_output_format").get)
+    }
+
+    // Note: timestamp_ntz_output_format, timestamp_ltz_output_format,
+    // timestamp_tz_output_format and timezone have been handled in Utils.genPrologueSql()
+  }
+
   /**
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
@@ -209,7 +226,12 @@ private[snowflake] class JDBCWrapper {
         } else {
           "STRING"
         }
-      //        case BinaryType => "BLOB"
+      case BinaryType =>
+        if (field.metadata.contains("maxlength")) {
+          s"BINARY(${field.metadata.getLong("maxlength")})"
+        } else {
+          "BINARY"
+        }
       case TimestampType => "TIMESTAMP"
       case DateType => "DATE"
       case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
@@ -361,6 +383,7 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.TINYINT => IntegerType
       //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType
+      case java.sql.Types.BINARY => BinaryType
       case _ => null
       // scalastyle:on
     }

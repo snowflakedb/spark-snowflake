@@ -31,6 +31,9 @@ import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
 import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import scala.reflect.ClassTag
+import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
+import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
+import scala.collection.JavaConverters._
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
@@ -140,19 +143,46 @@ private[snowflake] case class SnowflakeRelation(
                                    statement: SnowflakeSQLStatement,
                                    resultSchema: StructType
                                  ): RDD[T] = {
-    val format: SupportedFormat =
-      if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
-      else SupportedFormat.CSV
+    if (params.useCopyUnload) {
+      val format: SupportedFormat =
+        if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
+        else SupportedFormat.CSV
 
-    val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
+      val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
 
-    format match {
-      case SupportedFormat.CSV =>
-        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
-      case SupportedFormat.JSON =>
-        rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
+      format match {
+        case SupportedFormat.CSV =>
+          rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
+        case SupportedFormat.JSON =>
+          rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
+      }
+    } else {
+      val conn = DefaultJDBCWrapper.getConnector(params)
+      Utils.genPrologueSql(params).execute(false)(conn)
+      Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
+      Utils.setLastSelect(statement.toString)
+
+      val resultSet = statement.execute(false)(conn)
+
+      Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
+      SnowflakeTelemetry.send(conn.getTelemetry)
+
+      val resultSetSerializables: Array[SnowflakeResultSetSerializable] =
+        asScalaBuffer(resultSet.asInstanceOf[SnowflakeResultSet]
+          .getResultSetSerializables(params.expectedPartitionSize)).toArray
+
+      resultSetSerializables.zipWithIndex.map {
+        case (resultSet, index) => {
+          log.debug("partition  " + index + ": " + resultSet.toString())
+        }
+      }
+
+      new SnowflakeResultSetRDD[T](
+        resultSchema,
+        sqlContext.sparkContext,
+        resultSetSerializables
+      )
     }
-
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
