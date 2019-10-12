@@ -56,7 +56,7 @@ object SnowflakeTelemetry {
         telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log,timestamp)
       }
     }
-    if(!telemetry.sendBatch()) logger.error("Telemetry is failed")
+    telemetry.sendBatchAsync()
   }
 
 
