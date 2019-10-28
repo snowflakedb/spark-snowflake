@@ -17,9 +17,6 @@
 
 package net.snowflake.spark.snowflake
 
-import java.net.URI
-
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -27,13 +24,12 @@ import org.apache.spark.sql._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.{SupportedFormat, SupportedSource}
-import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
+import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
@@ -184,8 +180,11 @@ private[snowflake] case class SnowflakeRelation(
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
     SnowflakeTelemetry.send(conn.getTelemetry)
 
+    // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
+    // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
+    // So JavaConversions.asScalaBuffer is used so far.
     val resultSetSerializables: Array[SnowflakeResultSetSerializable] =
-      asScalaBuffer(resultSet.asInstanceOf[SnowflakeResultSet]
+      JavaConversions.asScalaBuffer(resultSet.asInstanceOf[SnowflakeResultSet]
         .getResultSetSerializables(params.expectedPartitionSize)).toArray
 
     resultSetSerializables.zipWithIndex.map {
