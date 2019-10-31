@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.io
 
 import java.sql.{ResultSet, Timestamp}
+import java.util.Properties
 
 import net.snowflake.client.jdbc.SnowflakeResultSetSerializable
 import org.apache.spark.sql.types.BinaryType
@@ -12,18 +13,19 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
-import net.snowflake.spark.snowflake.{SnowflakeConnectorException, Conversions}
+import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException}
 
 import scala.reflect.ClassTag
 
 class SnowflakeResultSetRDD[T: ClassTag](
                              schema: StructType,
                              sc: SparkContext,
-                             resultSets: Array[SnowflakeResultSetSerializable]
+                             resultSets: Array[SnowflakeResultSetSerializable],
+                             proxyInfo: Option[ProxyInfo]
                            ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] =
-    ResultIterator[T](schema, split.asInstanceOf[SnowflakeResultSetPartition].resultSet)
+    ResultIterator[T](schema, split.asInstanceOf[SnowflakeResultSetPartition].resultSet, proxyInfo)
 
   override protected def getPartitions: Array[Partition] =
     resultSets.zipWithIndex.map {
@@ -35,9 +37,21 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
                                         schema: StructType,
-                                        resultSet: SnowflakeResultSetSerializable
+                                        resultSet: SnowflakeResultSetSerializable,
+                                        proxyInfo: Option[ProxyInfo]
                                       ) extends Iterator[T] {
-  val data: ResultSet = resultSet.getResultSet()
+  val jdbcProperties = {
+    val jdbcProperties = new Properties()
+    // Set up proxy info if it is configured.
+    proxyInfo match {
+      case Some(proxyInfoValue) => {
+        proxyInfoValue.setProxyForJDBC(jdbcProperties)
+      }
+      case None =>
+    }
+    jdbcProperties
+  }
+  val data: ResultSet = resultSet.getResultSet(jdbcProperties)
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
 

@@ -37,7 +37,7 @@ import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCreden
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.file.CloudFileDirectory
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper
+import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, ProxyInfo}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
@@ -262,6 +262,7 @@ object CloudStorageOperations {
           azureAccount = account,
           azureEndpoint = endpoint,
           azureSAS = azureSAS,
+          param.proxyInfo,
           pref = path,
           connection = conn
         ), stageName)
@@ -284,6 +285,7 @@ object CloudStorageOperations {
           bucketName = bucket,
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
+          param.proxyInfo,
           pref = prefix,
           connection = conn
         ), stageName)
@@ -315,7 +317,8 @@ object CloudStorageOperations {
                                   awsId: String,
                                   awsKey: String,
                                   awsToken: Option[String],
-                                  parallelism: Int
+                                  parallelism: Int,
+                                  proxyInfo: Option[ProxyInfo]
                                 ): AmazonS3Client = {
     val awsCredentials = awsToken match {
       case Some(token) => new BasicSessionCredentials(awsId, awsKey, token)
@@ -328,13 +331,21 @@ object CloudStorageOperations {
     clientConfig
       .setMaxErrorRetry(CloudStorageOperations.S3_MAX_RETRIES)
 
+    proxyInfo match {
+      case Some(proxyInfoValue) => {
+        proxyInfoValue.setProxyForS3(clientConfig)
+      }
+      case None =>
+    }
+
     new AmazonS3Client(awsCredentials, clientConfig)
   }
 
   private[io] final def createAzureClient(
                                            storageAccount: String,
                                            endpoint: String,
-                                           sas: Option[String] = None
+                                           sas: Option[String] = None,
+                                           proxyInfo: Option[ProxyInfo]
                                          ): CloudBlobClient = {
     val storageEndpoint: URI =
       new URI("https",
@@ -342,6 +353,12 @@ object CloudStorageOperations {
     val azCreds =
       if (sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
       else StorageCredentialsAnonymous.ANONYMOUS
+    proxyInfo match {
+      case Some(proxyInfoValue) => {
+        proxyInfoValue.setProxyForAzure()
+      }
+      case None =>
+    }
 
     new CloudBlobClient(storageEndpoint, azCreds)
   }
@@ -481,6 +498,9 @@ case class InternalAzureStorage(
                                  stageName: String,
                                  @transient override val connection: Connection
                                ) extends CloudStorage {
+
+  val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+
   override protected def getStageInfo(
                                        isWrite: Boolean,
                                        fileName: String = ""
@@ -534,7 +554,8 @@ case class InternalAzureStorage(
         .createAzureClient(
           storageInfo(StorageInfo.AZURE_ACCOUNT),
           storageInfo(StorageInfo.AZURE_END_POINT),
-          storageInfo.get(StorageInfo.AZURE_SAS)
+          storageInfo.get(StorageInfo.AZURE_SAS),
+          proxyInfo
         )
         .getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
         .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(file))
@@ -562,7 +583,8 @@ case class InternalAzureStorage(
       .createAzureClient(
         storageInfo(StorageInfo.AZURE_ACCOUNT),
         storageInfo(StorageInfo.AZURE_END_POINT),
-        storageInfo.get(StorageInfo.AZURE_SAS)
+        storageInfo.get(StorageInfo.AZURE_SAS),
+        proxyInfo
       ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
       .deleteIfExists()
@@ -575,7 +597,8 @@ case class InternalAzureStorage(
       .createAzureClient(
         storageInfo(StorageInfo.AZURE_ACCOUNT),
         storageInfo(StorageInfo.AZURE_END_POINT),
-        storageInfo.get(StorageInfo.AZURE_SAS)
+        storageInfo.get(StorageInfo.AZURE_SAS),
+        proxyInfo
       ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
 
     fileNames.map(storageInfo(StorageInfo.PREFIX).concat)
@@ -588,7 +611,8 @@ case class InternalAzureStorage(
     CloudStorageOperations.createAzureClient(
       storageInfo(StorageInfo.AZURE_ACCOUNT),
       storageInfo(StorageInfo.AZURE_END_POINT),
-      storageInfo.get(StorageInfo.AZURE_SAS)
+      storageInfo.get(StorageInfo.AZURE_SAS),
+      proxyInfo
     ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(
         storageInfo(StorageInfo.PREFIX).concat(fileName)
@@ -603,7 +627,8 @@ case class InternalAzureStorage(
     val blob = CloudStorageOperations.createAzureClient(
       storageInfo(StorageInfo.AZURE_ACCOUNT),
       storageInfo(StorageInfo.AZURE_END_POINT),
-      storageInfo.get(StorageInfo.AZURE_SAS)
+      storageInfo.get(StorageInfo.AZURE_SAS),
+      proxyInfo
     ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
 
@@ -628,6 +653,7 @@ case class ExternalAzureStorage(
                                  azureAccount: String,
                                  azureEndpoint: String,
                                  azureSAS: String,
+                                 proxyInfo: Option[ProxyInfo],
                                  pref: String = "",
                                  @transient override val connection: Connection
                                ) extends CloudStorage {
@@ -647,7 +673,7 @@ case class ExternalAzureStorage(
 
     val blob =
       CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
         .getContainerReference(containerName)
         .getBlockBlobReference(prefix.concat(file))
 
@@ -656,14 +682,14 @@ case class ExternalAzureStorage(
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
 
   override def deleteFiles(fileNames: List[String]): Unit = {
     val container =
       CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
         .getContainerReference(containerName)
 
     fileNames
@@ -673,7 +699,7 @@ case class ExternalAzureStorage(
 
   override def fileExists(fileName: String): Boolean =
     CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName)).exists()
 
@@ -683,7 +709,7 @@ case class ExternalAzureStorage(
                                                storageInfo: Map[String, String]
                                              ): InputStream = {
     val blob = CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
       .getBlockBlobReference(prefix.concat(fileName))
 
@@ -707,7 +733,7 @@ case class ExternalAzureStorage(
 
   private def getFileNames(subDir: String): List[String] = {
     CloudStorageOperations
-      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS))
+      .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
       .listBlobs(prefix + subDir + "/")
       .toList
@@ -725,6 +751,7 @@ case class InternalS3Storage(
                               @transient override val connection: Connection,
                               parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                             ) extends CloudStorage {
+  val proxyInfo: Option[ProxyInfo] = param.proxyInfo
 
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -773,7 +800,8 @@ case class InternalS3Storage(
         storageInfo(StorageInfo.AWS_ID),
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
-        parallelism
+        parallelism,
+        proxyInfo
       )
 
     val (fileCipher, meta) =
@@ -816,7 +844,8 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_ID),
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism
+      parallelism,
+      proxyInfo
     ).deleteObject(
       storageInfo(StorageInfo.BUCKET_NAME),
       storageInfo(StorageInfo.PREFIX).concat(fileName)
@@ -829,7 +858,8 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_ID),
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism
+      parallelism,
+      proxyInfo
     ).deleteObjects(
       new DeleteObjectsRequest(storageInfo(StorageInfo.BUCKET_NAME))
         .withKeys(fileNames.map(storageInfo(StorageInfo.PREFIX).concat): _*)
@@ -842,7 +872,8 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_ID),
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism
+      parallelism,
+      proxyInfo
     ).doesObjectExist(
       storageInfo(StorageInfo.BUCKET_NAME),
       storageInfo(StorageInfo.PREFIX).concat(fileName)
@@ -860,7 +891,8 @@ case class InternalS3Storage(
           storageInfo(StorageInfo.AWS_ID),
           storageInfo(StorageInfo.AWS_KEY),
           storageInfo.get(StorageInfo.AWS_TOKEN),
-          parallelism
+          parallelism,
+          proxyInfo
         )
     val dateObject =
       s3Client.getObject(
@@ -876,8 +908,6 @@ case class InternalS3Storage(
       StageType.S3
     )
 
-
-
     if (compress) new GZIPInputStream(inputStream)
     else inputStream
   }
@@ -887,6 +917,7 @@ case class ExternalS3Storage(
                               bucketName: String,
                               awsId: String,
                               awsKey: String,
+                              proxyInfo: Option[ProxyInfo],
                               awsToken: Option[String] = None,
                               pref: String = "",
                               @transient override val connection: Connection,
@@ -906,7 +937,8 @@ case class ExternalS3Storage(
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
-    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
+      awsId, awsKey, awsToken, parallelism, proxyInfo)
 
     val meta = new ObjectMetadata()
 
@@ -931,19 +963,20 @@ case class ExternalS3Storage(
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
       .deleteObject(bucketName, prefix.concat(fileName))
 
   override def deleteFiles(fileNames: List[String]): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
       .deleteObjects(
         new DeleteObjectsRequest(bucketName)
           .withKeys(fileNames.map(prefix.concat): _*)
       )
 
   override def fileExists(fileName: String): Boolean = {
-    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
+      awsId, awsKey, awsToken, parallelism,  proxyInfo)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
 
@@ -953,7 +986,7 @@ case class ExternalS3Storage(
                                                storageInfo: Map[String, String]
                                              ): InputStream = {
     val s3Client: AmazonS3Client =
-      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism)
+      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
     val inputStream: InputStream = dataObject.getObjectContent
     if (compress) new GZIPInputStream(inputStream) else inputStream
@@ -970,7 +1003,7 @@ case class ExternalS3Storage(
 
   private def getFileNames(subDir: String): List[String] =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
       .listObjects(bucketName, prefix + subDir)
       .getObjectSummaries
       .toList

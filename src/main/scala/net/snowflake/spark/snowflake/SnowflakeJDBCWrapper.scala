@@ -145,14 +145,22 @@ private[snowflake] class JDBCWrapper {
       case _ => // No default value for it.
     }
     params.getQueryResultFormat match {
-      case Some(value) => jdbcProperties.put(Parameters.PARAM_QUERY_RESULT_FORMAT, value)
+      case Some(value) => jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, value)
       case _ => {
         // If the user doesn't want to use COPY UNLOAD and doesn't set query result result
         // explicitly, set the query result format automatically as ARROW for better performance.
         if (!params.useCopyUnload) {
-          jdbcProperties.put(Parameters.PARAM_QUERY_RESULT_FORMAT, "arrow")
+          jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, "arrow")
         }
       }
+    }
+
+    // Set up proxy info if it is configured.
+    params.proxyInfo match {
+      case Some(proxyInfoValue) => {
+        proxyInfoValue.setProxyForJDBC(jdbcProperties)
+      }
+      case None =>
     }
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
@@ -188,7 +196,32 @@ private[snowflake] class JDBCWrapper {
     log.debug(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
-    DriverManager.getConnection(jdbcURL, jdbcProperties)
+    val conn : Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
+
+    // Setup query result format explicitly because this option is not supported
+    // to be set with JDBC properties
+    if (jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT) != null) {
+      // TODO: Current, Snowflake is in the process of changing "query_result_format"
+      // to "jdbc_query_result_format", so we try to setup both. and it will
+      // can be clean in the future.
+      try {
+        val resultFormat = jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT)
+        conn.createStatement().execute(
+          s"alter session set QUERY_RESULT_FORMAT = '$resultFormat'");
+        conn.createStatement().execute(
+          s"alter session set JDBC_QUERY_RESULT_FORMAT = '$resultFormat'");
+      } catch {
+        case e : SQLException => {
+          log.info(e.getMessage)
+        }
+        case other : Any => {
+          // Rethrow other errors.
+          throw other
+        }
+      }
+    }
+
+    conn
   }
 
   /**
