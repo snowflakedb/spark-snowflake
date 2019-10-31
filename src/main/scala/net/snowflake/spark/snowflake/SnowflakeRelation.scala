@@ -196,7 +196,8 @@ private[snowflake] case class SnowflakeRelation(
     new SnowflakeResultSetRDD[T](
       resultSchema,
       sqlContext.sparkContext,
-      resultSetSerializables
+      resultSetSerializables,
+      params.proxyInfo
     )
   }
 

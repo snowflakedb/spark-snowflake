@@ -375,8 +375,9 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     var i : Int = 0
     while ( i < resultSet.length ) {
       val row = resultSet(i)
-      assert(largeStringValue.equals(row(1))
-        && (BigDecimal(i).compareTo(row(0).asInstanceOf[java.math.BigDecimal]) == 0))
+      assert(largeStringValue.equals(row(1)) &&
+        (Math.abs(BigDecimal(i).doubleValue() -
+           row(0).asInstanceOf[java.math.BigDecimal].doubleValue()) < 0.00000000001))
       i += 1
     }
   }
