@@ -55,9 +55,10 @@ private[io] object StageWriter {
 
       val filesToCopy = storage.upload(rdd, format, None, true)
 
-      writeToTable(conn, schema, saveMode, params,
-        filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")), stage, format)
-
+      if (filesToCopy.size > 0) {
+        writeToTable(conn, schema, saveMode, params,
+          filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")), stage, format)
+      }
     } finally {
       conn.close()
     }
