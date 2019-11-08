@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, IntVariable, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, Cast, DenseRank, Descending, Expression, If, In, InSet, Literal, MakeDecimal, PercentRank, Rank, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhenCodegen, Cast, DenseRank, Descending, Expression, If, In, InSet, Literal, MakeDecimal, PercentRank, Rank, RowNumber, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.types.{Decimal, _}
 
 /** Extractors for everything else. */
@@ -14,6 +14,17 @@ private[querygeneration] object MiscStatement {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         blockStatement(convertStatement(child, fields), name)
+      case CaseWhenCodegen(branches, elseValue) =>
+        val cases = ConstantString("CASE") +
+          mkStatement(branches.map(
+            b=> ConstantString("WHEN") + convertStatement(b._1, fields) + "THEN" +
+              convertStatement(b._2, fields)
+          ), " ")
+        if (elseValue.isDefined)
+          blockStatement(
+            cases + " ELSE " + convertStatement(elseValue.get, fields) + " END")
+        else blockStatement(cases + " END")
+
       case Cast(child, t, _) =>
         getCastType(t) match {
           case Some(cast) =>
@@ -100,7 +111,7 @@ private[querygeneration] object MiscStatement {
 
     val fromTo =
       if (!useWindowFrame || spec.orderSpec.isEmpty) ""
-      else " " + spec.frameSpecification.sql
+      else " " + spec.frameSpecification.toString //Pushdown on Window functions may not work in Spark 2.2
 
     blockStatement(partitionBy + orderBy + fromTo)
   }

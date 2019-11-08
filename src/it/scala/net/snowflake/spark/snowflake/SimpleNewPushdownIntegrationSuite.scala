@@ -231,7 +231,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         Row("hi", 2, 1)))
   }
 
-  test("test binary arithmetic operators on Decimal"){
+  ignore("test binary arithmetic operators on Decimal"){
     // This test can be run manually in non-pushdown mode,
     // The expected result is the same, if the query is not pushdown,
     // pass by the expected sql check.
