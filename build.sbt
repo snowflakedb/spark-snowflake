@@ -29,7 +29,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := "2.5.4-spark_2.4",
+    version := "2.5.5-spark_2.4",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
     crossScalaVersions := Seq("2.11.12","2.12.8"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
