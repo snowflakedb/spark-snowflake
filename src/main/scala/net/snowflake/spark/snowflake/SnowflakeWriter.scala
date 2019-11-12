@@ -136,7 +136,8 @@ private[snowflake] class SnowflakeWriter(
   private def removeUselessColumns(dataFrame: DataFrame, params: MergedParameters): DataFrame =
     params.columnMap match {
       case Some(map) =>
-        val names = map.keys.toSeq
+        // Enclose column name with `(backticks) to support .(dot) in column name
+        val names = map.keys.toSeq.map(name => s"`$name`")
         try{
           dataFrame.select(names.head, names.tail: _*)
         }catch{
