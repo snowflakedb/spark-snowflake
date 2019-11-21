@@ -101,6 +101,10 @@ object Parameters {
   val PARAM_PROXY_PASSWORD     = knownParam("proxy_password")
   val PARAM_NON_PROXY_HOSTS    = knownParam("non_proxy_hosts")
 
+  val PARAM_EXPECTED_PARTITION_COUNT = knownParam("expected_partition_count")
+  val PARAM_MAX_RETRY_COUNT = knownParam("max_retry_count")
+  val PARAM_USE_SF_RETRY = knownParam("use_sf_retry")
+
   val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE     = 1000000
 
@@ -141,7 +145,10 @@ object Parameters {
     PARAM_COLUMN_MISMATCH_BEHAVIOR -> "error",
     PARAM_EXPECTED_PARTITION_SIZE_IN_MB -> "100",
     PARAM_USE_COPY_UNLOAD -> "true",
-    PARAM_USE_PROXY -> "false"
+    PARAM_USE_PROXY -> "false",
+    PARAM_EXPECTED_PARTITION_COUNT -> "1000",
+    PARAM_MAX_RETRY_COUNT -> "10",
+    PARAM_USE_SF_RETRY -> "false"
   )
 
   /**
@@ -451,6 +458,18 @@ object Parameters {
     }
     def nonProxyHosts: Option[String] = {
       parameters.get(PARAM_NON_PROXY_HOSTS)
+    }
+
+    def expectedPartitionCount: Int = {
+      parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
+    }
+
+    def maxRetryCount: Int = {
+      parameters.getOrElse(PARAM_MAX_RETRY_COUNT, "10").toInt
+    }
+
+    def useSFRetry: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_USE_SF_RETRY, "false"))
     }
 
     /**

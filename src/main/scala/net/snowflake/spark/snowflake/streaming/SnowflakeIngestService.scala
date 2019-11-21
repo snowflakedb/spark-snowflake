@@ -126,7 +126,7 @@ object IngestContextManager {
   def readIngestList(storage: CloudStorage, conn: Connection): IngestedFileList = {
     val fileName = s"$CONTEXT_DIR/$INGEST_FILE_LIST_NAME"
     if (storage.fileExists(fileName)) {
-      val inputStream = storage.download(fileName, false)
+      val (inputStream, _) = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {
@@ -152,7 +152,7 @@ object IngestContextManager {
   def readFailedFileList(index: Int, storage: CloudStorage, conn: Connection): FailedFileList = {
     val fileName = s"$CONTEXT_DIR/failed_file_list_$index.json"
     if (storage.fileExists(fileName)) {
-      val inputStream = storage.download(fileName, false)
+      val (inputStream, _) = storage.download(fileName, false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {

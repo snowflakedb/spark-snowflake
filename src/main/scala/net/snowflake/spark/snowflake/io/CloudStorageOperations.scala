@@ -29,6 +29,7 @@ import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeConnectionV1, Sno
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.retry.{PredefinedRetryPolicies, RetryPolicy}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
@@ -41,6 +42,7 @@ import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, ProxyInfo}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import org.apache.commons.io.IOUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
@@ -263,6 +265,9 @@ object CloudStorageOperations {
           azureEndpoint = endpoint,
           azureSAS = azureSAS,
           param.proxyInfo,
+          param.maxRetryCount,
+          param.useSFRetry,
+          param.expectedPartitionCount,
           pref = path,
           connection = conn
         ), stageName)
@@ -286,6 +291,9 @@ object CloudStorageOperations {
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
           param.proxyInfo,
+          param.maxRetryCount,
+          param.useSFRetry,
+          param.expectedPartitionCount,
           pref = prefix,
           connection = conn
         ), stageName)
@@ -318,7 +326,9 @@ object CloudStorageOperations {
                                   awsKey: String,
                                   awsToken: Option[String],
                                   parallelism: Int,
-                                  proxyInfo: Option[ProxyInfo]
+                                  proxyInfo: Option[ProxyInfo],
+                                  maxRetryCount: Int,
+                                  useSFRetry: Boolean
                                 ): AmazonS3Client = {
     val awsCredentials = awsToken match {
       case Some(token) => new BasicSessionCredentials(awsId, awsKey, token)
@@ -329,7 +339,14 @@ object CloudStorageOperations {
     clientConfig
       .setMaxConnections(parallelism)
     clientConfig
-      .setMaxErrorRetry(CloudStorageOperations.S3_MAX_RETRIES)
+        .setMaxErrorRetry(maxRetryCount)
+//    clientConfig
+//      .setUseThrottleRetries(true)
+    clientConfig.setRetryPolicy(
+      new RetryPolicy(PredefinedRetryPolicies.DEFAULT_RETRY_CONDITION,
+        PredefinedRetryPolicies.DEFAULT_BACKOFF_STRATEGY,
+        maxRetryCount,
+        true))
 
     proxyInfo match {
       case Some(proxyInfoValue) => {
@@ -345,7 +362,9 @@ object CloudStorageOperations {
                                            storageAccount: String,
                                            endpoint: String,
                                            sas: Option[String] = None,
-                                           proxyInfo: Option[ProxyInfo]
+                                           proxyInfo: Option[ProxyInfo]//,
+                                           //maxRetryCount: Int,
+                                           //useSFRetry: Boolean
                                          ): CloudBlobClient = {
     val storageEndpoint: URI =
       new URI("https",
@@ -464,26 +483,21 @@ sealed trait CloudStorage {
                                     storageInfo: Map[String, String]
                                   ): OutputStream
 
-  def download(fileName: String, compress: Boolean): InputStream =
+  def download(fileName: String, compress: Boolean): (InputStream, Boolean) =
     createDownloadStream(fileName, compress, getStageInfo(false, fileName)._1)
-
 
   def download(
                 sc: SparkContext,
                 format: SupportedFormat = SupportedFormat.CSV,
                 compress: Boolean = true,
                 subDir: String = ""
-              ): RDD[String] = {
-    val (stageInfo, fileList) = getStageInfo(false)
-    new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo))
-  }
-
+              ): RDD[String]
 
   protected def createDownloadStream(
                                       fileName: String,
                                       compress: Boolean,
                                       storageInfo: Map[String, String]
-                                    ): InputStream
+                                    ): (InputStream, Boolean)
 
   def deleteFile(fileName: String): Unit
 
@@ -500,6 +514,8 @@ case class InternalAzureStorage(
                                ) extends CloudStorage {
 
   val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  val maxRetryCount: Int = param.maxRetryCount
+  val useSFRetry: Boolean = param.useSFRetry
 
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -537,6 +553,15 @@ case class InternalAzureStorage(
     (storageInfo, fileList)
   }
 
+  override def download(
+                         sc: SparkContext,
+                         format: SupportedFormat = SupportedFormat.CSV,
+                         compress: Boolean = true,
+                         subDir: String = ""
+                       ): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(false)
+    new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo), param.expectedPartitionCount)
+  }
 
   override protected def createUploadStream(
                                              fileName: String,
@@ -623,7 +648,7 @@ case class InternalAzureStorage(
                                                fileName: String,
                                                compress: Boolean,
                                                storageInfo: Map[String, String]
-                                             ): InputStream = {
+                                             ): (InputStream, Boolean) = {
     val blob = CloudStorageOperations.createAzureClient(
       storageInfo(StorageInfo.AZURE_ACCOUNT),
       storageInfo(StorageInfo.AZURE_END_POINT),
@@ -632,11 +657,12 @@ case class InternalAzureStorage(
     ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
 
+    // TODO re-try download here for azure
     val azureStorage: ByteArrayOutputStream = new ByteArrayOutputStream()
     blob.download(azureStorage)
     blob.downloadAttributes()
 
-    val inputStream: InputStream =
+    var inputStream: InputStream =
       CloudStorageOperations.getDecryptedStream(
         new ByteArrayInputStream(azureStorage.toByteArray),
         storageInfo(StorageInfo.MASTER_KEY),
@@ -644,7 +670,11 @@ case class InternalAzureStorage(
         StageType.AZURE
       )
 
-    if (compress) new GZIPInputStream(inputStream) else inputStream
+    if (compress) {
+      inputStream = new GZIPInputStream(inputStream)
+    }
+
+    (inputStream, false)
   }
 }
 
@@ -654,6 +684,9 @@ case class ExternalAzureStorage(
                                  azureEndpoint: String,
                                  azureSAS: String,
                                  proxyInfo: Option[ProxyInfo],
+                                 maxRetryCount: Int,
+                                 useSFRetry: Boolean,
+                                 fileCountPerPartition: Int,
                                  pref: String = "",
                                  @transient override val connection: Connection
                                ) extends CloudStorage {
@@ -707,7 +740,7 @@ case class ExternalAzureStorage(
                                                fileName: String,
                                                compress: Boolean,
                                                storageInfo: Map[String, String]
-                                             ): InputStream = {
+                                             ): (InputStream, Boolean) = {
     val blob = CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
@@ -716,11 +749,14 @@ case class ExternalAzureStorage(
     val azureStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     blob.download(azureStream)
 
-    val inputStream: InputStream =
+    var inputStream: InputStream =
       new ByteArrayInputStream(azureStream.toByteArray)
 
-    if (compress) new GZIPInputStream(inputStream) else inputStream
+    if (compress) {
+      inputStream = new GZIPInputStream(inputStream)
+    }
 
+    (inputStream, false)
   }
 
   override def download(
@@ -728,7 +764,7 @@ case class ExternalAzureStorage(
                          format: SupportedFormat,
                          compress: Boolean,
                          subDir: String): RDD[String] = {
-    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]), fileCountPerPartition)
   }
 
   private def getFileNames(subDir: String): List[String] = {
@@ -752,6 +788,8 @@ case class InternalS3Storage(
                               parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
                             ) extends CloudStorage {
   val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  val maxRetryCount: Int = param.maxRetryCount
+  val useSFRetry: Boolean = param.useSFRetry
 
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -784,6 +822,16 @@ case class InternalS3Storage(
     (storageInfo, fileList)
   }
 
+  override def download(
+                sc: SparkContext,
+                format: SupportedFormat = SupportedFormat.CSV,
+                compress: Boolean = true,
+                subDir: String = ""
+              ): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(false)
+    new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo), param.expectedPartitionCount)
+  }
+
   override protected def createUploadStream(
                                              fileName: String,
                                              dir: Option[String],
@@ -801,7 +849,9 @@ case class InternalS3Storage(
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
         parallelism,
-        proxyInfo
+        proxyInfo,
+        maxRetryCount,
+        useSFRetry
       )
 
     val (fileCipher, meta) =
@@ -845,7 +895,9 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
       parallelism,
-      proxyInfo
+      proxyInfo,
+      maxRetryCount,
+      useSFRetry
     ).deleteObject(
       storageInfo(StorageInfo.BUCKET_NAME),
       storageInfo(StorageInfo.PREFIX).concat(fileName)
@@ -859,7 +911,9 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
       parallelism,
-      proxyInfo
+      proxyInfo,
+      maxRetryCount,
+      useSFRetry
     ).deleteObjects(
       new DeleteObjectsRequest(storageInfo(StorageInfo.BUCKET_NAME))
         .withKeys(fileNames.map(storageInfo(StorageInfo.PREFIX).concat): _*)
@@ -873,43 +927,117 @@ case class InternalS3Storage(
       storageInfo(StorageInfo.AWS_KEY),
       storageInfo.get(StorageInfo.AWS_TOKEN),
       parallelism,
-      proxyInfo
+      proxyInfo,
+      maxRetryCount,
+      useSFRetry
     ).doesObjectExist(
       storageInfo(StorageInfo.BUCKET_NAME),
       storageInfo(StorageInfo.PREFIX).concat(fileName)
     )
   }
 
+  private def getObjectInfo(fileName: String,
+                            storageInfo: Map[String, String]): String = {
+    val AWS_ID = storageInfo(StorageInfo.AWS_ID)
+    val AWS_KEY = storageInfo(StorageInfo.AWS_KEY)
+    val AWS_TOKEN = storageInfo.get(StorageInfo.AWS_TOKEN)
+    val BUCKET_NAME = storageInfo(StorageInfo.BUCKET_NAME)
+    val OBJECT_KEY = storageInfo(StorageInfo.PREFIX).concat(fileName)
+
+    s"BUCKET_NAME=$BUCKET_NAME, OBJECT_KEY=$OBJECT_KEY, AWS_ID=$AWS_ID, AWS_KEY=$AWS_KEY, AWS_TOKEN=$AWS_TOKEN"
+  }
+
   override protected def createDownloadStream(
                                                fileName: String,
                                                compress: Boolean,
                                                storageInfo: Map[String, String]
-                                             ): InputStream = {
-    val s3Client: AmazonS3Client =
-      CloudStorageOperations
-        .createS3Client(
-          storageInfo(StorageInfo.AWS_ID),
-          storageInfo(StorageInfo.AWS_KEY),
-          storageInfo.get(StorageInfo.AWS_TOKEN),
-          parallelism,
-          proxyInfo
+                                             ): (InputStream, Boolean) = {
+    StageReader.logger.info(s"NIKEPOC: start download: fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+    // download the file with retry and backoff and then consume.
+    // val maxRetryCount = 10
+    var retryCount = 0
+    var error: Option[Throwable] = None
+    lazy val objectMetadata = getObjectInfo(fileName, storageInfo)
+    //StageReader.logger.info(s"NIKEPOC: objectMetadata=$objectMetadata")
+
+    do {
+      try {
+
+        val s3Client: AmazonS3Client =
+          CloudStorageOperations
+            .createS3Client(
+              storageInfo(StorageInfo.AWS_ID),
+              storageInfo(StorageInfo.AWS_KEY),
+              storageInfo.get(StorageInfo.AWS_TOKEN),
+              parallelism,
+              proxyInfo,
+              maxRetryCount,
+              useSFRetry
+            )
+        val dateObject =
+          s3Client.getObject(
+            storageInfo(StorageInfo.BUCKET_NAME),
+            storageInfo(StorageInfo.PREFIX).concat(fileName)
+            // negative manual injection test to make sure retry mechanism works.
+            //storageInfo(StorageInfo.PREFIX).concat("_FAKE_INJECTION_").concat(fileName)
+          )
+
+        var inputStream: InputStream = dateObject.getObjectContent
+        inputStream = CloudStorageOperations.getDecryptedStream(
+          inputStream,
+          storageInfo(StorageInfo.MASTER_KEY),
+          dateObject.getObjectMetadata.getUserMetadata,
+          StageType.S3
         )
-    val dateObject =
-      s3Client.getObject(
-        storageInfo(StorageInfo.BUCKET_NAME),
-        storageInfo(StorageInfo.PREFIX).concat(fileName)
-      )
 
-    var inputStream: InputStream = dateObject.getObjectContent
-    inputStream = CloudStorageOperations.getDecryptedStream(
-      inputStream,
-      storageInfo(StorageInfo.MASTER_KEY),
-      dateObject.getObjectMetadata.getUserMetadata,
-      StageType.S3
-    )
+        // Download the compressed data completely if snowflake retry
+        if (useSFRetry) {
+          val cachedData = IOUtils.toByteArray(inputStream)
+          inputStream = new ByteArrayInputStream(cachedData)
+          StageReader.logger.info(s"NIKEPOC: finish gzip download: fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+        } else {
+          StageReader.logger.info(s"NIKEPOC: start gzip download(not done): fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+        }
 
-    if (compress) new GZIPInputStream(inputStream)
-    else inputStream
+        if (compress) {
+          inputStream = new GZIPInputStream(inputStream)
+        }
+        //Thread.sleep(1000L * 1)
+
+        // succeed, break loop
+        retryCount = maxRetryCount
+
+        StageReader.logger.info(s"NIKEPOC: finish create inputstream: fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+
+        return (inputStream, useSFRetry)
+      } catch {
+        case e: Throwable => {
+          error = Some(e)
+          val errmsg = e.getMessage
+          StageReader.logger.warn(s"NIKEPOC: hit download error 1: $retryCount : objectMetadata: $objectMetadata")
+          StageReader.logger.warn(s"NIKEPOC: hit download error 1: $retryCount : [ $errmsg ] useSFRetry = $useSFRetry")
+          if (!useSFRetry) {
+            throw e
+          }
+        }
+        retryCount = retryCount + 1
+          // sleep some time and retry
+          Thread.sleep(1000L * retryCount)
+      }
+    } while (useSFRetry && retryCount < maxRetryCount)
+
+    // fail to download data
+    if (error.isDefined) {
+      val errmsg = error.get.getMessage
+      StageReader.logger.warn(s"NIKEPOC: hit download error 2: objectMetadata: $objectMetadata")
+      StageReader.logger.warn(s"NIKEPOC: hit download error 2: [ $errmsg ] useSFRetry = $useSFRetry retryCount=$retryCount")
+      throw error.get
+    } else {
+      val errmsg = "POC hit unhandled exception"
+      StageReader.logger.warn(s"NIKEPOC: hit download error 3: objectMetadata: $objectMetadata")
+      StageReader.logger.warn(s"NIKEPOC: hit download error 3: [ $errmsg ] useSFRetry = $useSFRetry retryCount=$retryCount")
+      throw new Exception(errmsg)
+    }
   }
 }
 
@@ -918,6 +1046,9 @@ case class ExternalS3Storage(
                               awsId: String,
                               awsKey: String,
                               proxyInfo: Option[ProxyInfo],
+                              maxRetryCount: Int,
+                              useSFRetry: Boolean,
+                              fileCountPerPartition: Int,
                               awsToken: Option[String] = None,
                               pref: String = "",
                               @transient override val connection: Connection,
@@ -938,7 +1069,9 @@ case class ExternalS3Storage(
       else fileName
 
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
-      awsId, awsKey, awsToken, parallelism, proxyInfo)
+      awsId, awsKey, awsToken, parallelism, proxyInfo,
+      maxRetryCount,
+      useSFRetry)
 
     val meta = new ObjectMetadata()
 
@@ -963,12 +1096,16 @@ case class ExternalS3Storage(
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo,
+        maxRetryCount,
+        useSFRetry)
       .deleteObject(bucketName, prefix.concat(fileName))
 
   override def deleteFiles(fileNames: List[String]): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo,
+        maxRetryCount,
+        useSFRetry)
       .deleteObjects(
         new DeleteObjectsRequest(bucketName)
           .withKeys(fileNames.map(prefix.concat): _*)
@@ -976,7 +1113,9 @@ case class ExternalS3Storage(
 
   override def fileExists(fileName: String): Boolean = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
-      awsId, awsKey, awsToken, parallelism,  proxyInfo)
+      awsId, awsKey, awsToken, parallelism,  proxyInfo,
+      maxRetryCount,
+      useSFRetry)
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
 
@@ -984,12 +1123,18 @@ case class ExternalS3Storage(
                                                fileName: String,
                                                compress: Boolean,
                                                storageInfo: Map[String, String]
-                                             ): InputStream = {
+                                             ): (InputStream, Boolean) = {
     val s3Client: AmazonS3Client =
-      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo,
+        maxRetryCount,
+        useSFRetry)
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
-    val inputStream: InputStream = dataObject.getObjectContent
-    if (compress) new GZIPInputStream(inputStream) else inputStream
+    var inputStream: InputStream = dataObject.getObjectContent
+    if (compress) {
+      inputStream = new GZIPInputStream(inputStream)
+    }
+
+    (inputStream, false)
   }
 
   override def download(
@@ -998,12 +1143,14 @@ case class ExternalS3Storage(
                          compress: Boolean,
                          subDir: String
                        ): RDD[String] =
-    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]), fileCountPerPartition)
 
 
   private def getFileNames(subDir: String): List[String] =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo,
+        maxRetryCount,
+        useSFRetry)
       .listObjects(bucketName, prefix + subDir)
       .getObjectSummaries
       .toList

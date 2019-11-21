@@ -29,7 +29,7 @@ import scala.util.Random
 
 private[io] object StageWriter {
 
-  private val log = LoggerFactory.getLogger(getClass)
+  val log = LoggerFactory.getLogger(getClass)
 
   def writeToStage(
                     rdd: RDD[String],

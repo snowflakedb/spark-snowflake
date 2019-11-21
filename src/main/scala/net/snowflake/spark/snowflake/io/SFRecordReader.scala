@@ -28,7 +28,6 @@ class SFJsonInputFormat extends FileInputFormat[java.lang.Long, String] {
     new SFRecordReader(SupportedFormat.JSON)
 }
 
-
 private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.CSV)
   extends RecordReader[java.lang.Long, String]
   with Iterator[String]{
@@ -53,7 +52,17 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   private var key: Long = 0
   private var value: String = _
 
+  private var inputFileNames: List[String] = Nil
+  private var downloadFunction: (String) => (InputStream, Boolean) = _
+  private var currentFileDownloadDone : Boolean = false
+  private var currentReadPosition : Long = 0
+  private var currentFileName : String = _
 
+  def setDownloadFunction(func : (String) => (InputStream, Boolean)): Unit = {
+    downloadFunction = func
+  }
+  def addFileName(fileName: String): Unit =
+    inputFileNames = fileName :: inputFileNames
 
   def addStream(stream: InputStream): Unit =
     inputStreams = stream :: inputStreams
@@ -68,6 +77,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     val fs = file.getFileSystem(conf)
     fileSize = fs.getFileStatus(file).getLen
     cur = 0
+    currentReadPosition = 0
     val reader = new BufferedInputStream(fs.open(file), inputBufferSize)
 
     inputStreams =
@@ -102,12 +112,41 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   /**
     * In case of exceptions, using this method to manually close input streams.
     */
-  override def close(): Unit = inputStreams.foreach(_.close())
+  override def close(): Unit = {
+    inputStreams.foreach(_.close())
+    if (currentStream.isDefined) {
+      currentStream.get.close()
+      currentStream = None
+    }
+  }
 
   override def hasNext: Boolean =
-    inputStreams.nonEmpty || currentStream.isDefined
+    inputStreams.nonEmpty || currentStream.isDefined || inputFileNames.nonEmpty
 
   override def next(): String = {
+    if (currentFileDownloadDone) {
+      return next_internal()
+    } else {
+      try
+      {
+        next_internal()
+      } catch {
+        case e: Throwable => {
+          val errmsg = e.getMessage
+          StageReader.logger.error(
+            s"NIKEPOC: SFReader.next hit error: currentFileName=$currentFileName currentReadPosition=$currentReadPosition error: [$errmsg]")
+          throw e
+        }
+      }
+    }
+
+  }
+  private def next_internal(): String = {
+    // negative manual injection test
+//    if (currentReadPosition > 10000) {
+//      throw new Exception("Manually negative test injection for testing only")
+//    }
+
     if (!hasNext) null
     else {
       if (currentStream.isEmpty) nextStream()
@@ -166,6 +205,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     else {
       val c = currentStream.get.read()
       cur += 1
+      currentReadPosition += 1
       if (c == -1) None else Some(c.toByte) // get negative value sometime
     }
   }
@@ -179,7 +219,18 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     if(inputStreams.nonEmpty){
       currentStream = Some(inputStreams.head)
       inputStreams = inputStreams.tail
-    } else{
+      currentReadPosition = 0
+      currentFileName = "_DONT_KNOW_FILE_NAME_"
+    } else if (inputFileNames.nonEmpty) {
+      currentFileName = inputFileNames.head
+      val (tmpInputStream, tmpDownloadDone) = downloadFunction(inputFileNames.head)
+      currentStream = Some(tmpInputStream)
+      currentFileDownloadDone = tmpDownloadDone
+      currentReadPosition = 0
+      inputFileNames = inputFileNames.tail
+    } else {
+      currentFileName = "_DONT_KNOW_FILE_NAME_"
+      currentReadPosition = 0
       currentStream = None
     }
     currentChar = None

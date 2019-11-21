@@ -291,7 +291,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"""insert into $test_table_large_result select
                   | seq4(), '$largeStringValue'
-                  | from table(generator(rowcount => 100000))""".stripMargin)
+                  | from table(generator(rowcount => 1000000))""".stripMargin)
 
     val tmpdf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -317,6 +317,10 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "50")
     thisConnectorOptionsNoTable += ("query_result_format" -> "arrow")
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
+
+//    thisConnectorOptionsNoTable += ("use_sf_retry" -> "true")
+//    thisConnectorOptionsNoTable += ("max_retry_count" -> "10")
+//    thisConnectorOptionsNoTable += ("expected_partition_count" -> "3")
 
     setupNumberTable()
     setupStringBinaryTable()
@@ -375,9 +379,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     var i : Int = 0
     while ( i < resultSet.length ) {
       val row = resultSet(i)
-      assert(largeStringValue.equals(row(1)) &&
-        (Math.abs(BigDecimal(i).doubleValue() -
-           row(0).asInstanceOf[java.math.BigDecimal].doubleValue()) < 0.00000000001))
+      assert(largeStringValue.equals(row(1)))
       i += 1
     }
   }

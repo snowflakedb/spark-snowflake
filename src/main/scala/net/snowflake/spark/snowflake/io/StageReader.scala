@@ -17,7 +17,7 @@ import scala.util.Random
 private[io] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
-  private val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  val logger: Logger = LoggerFactory.getLogger(this.getClass)
   private val OUTPUT_BYTES: String = "output_bytes"
 
   def readFromStage(
