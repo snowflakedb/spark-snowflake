@@ -313,14 +313,14 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     connectorOptionsNoTable.foreach(tup => { thisConnectorOptionsNoTable += tup })
 
     // Setup special options for this test
-    thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
-    thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "50")
+    thisConnectorOptionsNoTable += ("use_copy_unload" -> "true")
+    thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "1000")
     thisConnectorOptionsNoTable += ("query_result_format" -> "arrow")
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
 
-//    thisConnectorOptionsNoTable += ("use_sf_retry" -> "true")
+    thisConnectorOptionsNoTable += ("use_sf_retry" -> "true")
 //    thisConnectorOptionsNoTable += ("max_retry_count" -> "10")
-//    thisConnectorOptionsNoTable += ("expected_partition_count" -> "3")
+    thisConnectorOptionsNoTable += ("expected_partition_count" -> "1")
 
     setupNumberTable()
     setupStringBinaryTable()
@@ -373,8 +373,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testLargeResult") {
+    val start = System.currentTimeMillis()
     val resultSet: Array[Row] = sparkSession.sql(
       "select * from test_table_large_result order by int_c").collect()
+    val end = System.currentTimeMillis()
+    val usedTime = (end - start).toDouble / 1000.0
+    println(s"runtime $usedTime")
 
     var i : Int = 0
     while ( i < resultSet.length ) {

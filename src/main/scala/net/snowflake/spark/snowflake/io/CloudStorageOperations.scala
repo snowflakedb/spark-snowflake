@@ -347,6 +347,7 @@ object CloudStorageOperations {
         PredefinedRetryPolicies.DEFAULT_BACKOFF_STRATEGY,
         maxRetryCount,
         true))
+    clientConfig.setConnectionTimeout(30 * 1000)
 
     proxyInfo match {
       case Some(proxyInfoValue) => {
@@ -992,17 +993,39 @@ case class InternalS3Storage(
 
         // Download the compressed data completely if snowflake retry
         if (useSFRetry) {
-          val cachedData = IOUtils.toByteArray(inputStream)
+          val startDownload = System.currentTimeMillis()
+          var cachedData = IOUtils.toByteArray(inputStream)
+          val compressedSize = if (cachedData != Nil) cachedData.size else 0
+          inputStream.close
           inputStream = new ByteArrayInputStream(cachedData)
-          StageReader.logger.info(s"NIKEPOC: finish gzip download: fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+
+          val startDecompress = System.currentTimeMillis()
+          var unCompressedSize = 0
+          if (compress) {
+            val oldInputStream = inputStream
+            inputStream = new GZIPInputStream(inputStream)
+
+            val decompress = true
+            if (decompress) {
+              cachedData = IOUtils.toByteArray(inputStream)
+              unCompressedSize = if (cachedData != Nil) cachedData.size else 0
+              oldInputStream.close
+              inputStream.close
+              inputStream = new ByteArrayInputStream(cachedData)
+            }
+          }
+
+          val end = System.currentTimeMillis()
+
+          val downloadTime = (startDecompress - startDownload).toDouble / 1000.0
+          val decompressTime = (end - startDecompress).toDouble / 1000.0
+          StageReader.logger.info(s"NIKEPOC: finish download and decompress: fileName=$fileName, downloadTime=$downloadTime, decompressTime=$decompressTime (Comp,UncompSize)=($compressedSize, $unCompressedSize)")
         } else {
           StageReader.logger.info(s"NIKEPOC: start gzip download(not done): fileName=$fileName, maxRetryCount=$maxRetryCount, useSFRetry=$useSFRetry")
+          if (compress) {
+            inputStream = new GZIPInputStream(inputStream)
+          }
         }
-
-        if (compress) {
-          inputStream = new GZIPInputStream(inputStream)
-        }
-        //Thread.sleep(1000L * 1)
 
         // succeed, break loop
         retryCount = maxRetryCount
