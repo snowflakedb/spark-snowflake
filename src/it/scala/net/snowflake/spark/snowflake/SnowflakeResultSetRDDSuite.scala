@@ -313,9 +313,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     connectorOptionsNoTable.foreach(tup => { thisConnectorOptionsNoTable += tup })
 
     // Setup special options for this test
-    thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
-    thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "50")
-    thisConnectorOptionsNoTable += ("query_result_format" -> "arrow")
+    if (System.getenv("SPARK_CONN_ENV_USE_COPY_UNLOAD") == null) {
+      thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
+      thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "50")
+      thisConnectorOptionsNoTable += ("jdbc_query_result_format" -> "arrow")
+    }
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
 
     setupNumberTable()

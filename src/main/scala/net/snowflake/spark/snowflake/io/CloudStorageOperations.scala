@@ -29,6 +29,7 @@ import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeConnectionV1, Sno
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.retry.{PredefinedRetryPolicies, RetryPolicy}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
@@ -41,6 +42,7 @@ import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, ProxyInfo}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import org.apache.commons.io.IOUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.slf4j.LoggerFactory
@@ -52,7 +54,8 @@ import scala.collection.JavaConversions._
 
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
-  private[io] final val S3_MAX_RETRIES = 3
+  private[io] final val S3_MAX_RETRIES = 6
+  private[io] final val S3_MAX_TIMEOUT_MS = 30 * 1000
   private final val AES = "AES"
   private final val AMZ_KEY: String = "x-amz-key"
   private final val AMZ_IV: String = "x-amz-iv"
@@ -263,6 +266,8 @@ object CloudStorageOperations {
           azureEndpoint = endpoint,
           azureSAS = azureSAS,
           param.proxyInfo,
+          param.maxRetryCount,
+          param.expectedPartitionCount,
           pref = path,
           connection = conn
         ), stageName)
@@ -286,6 +291,8 @@ object CloudStorageOperations {
           awsId = param.awsAccessKey.get,
           awsKey = param.awsSecretKey.get,
           param.proxyInfo,
+          param.maxRetryCount,
+          param.expectedPartitionCount,
           pref = prefix,
           connection = conn
         ), stageName)
@@ -330,6 +337,15 @@ object CloudStorageOperations {
       .setMaxConnections(parallelism)
     clientConfig
       .setMaxErrorRetry(CloudStorageOperations.S3_MAX_RETRIES)
+
+    clientConfig.setRetryPolicy(
+      new RetryPolicy(PredefinedRetryPolicies.DEFAULT_RETRY_CONDITION,
+        PredefinedRetryPolicies.DEFAULT_BACKOFF_STRATEGY,
+        CloudStorageOperations.S3_MAX_RETRIES,
+        true))
+
+    clientConfig.setConnectionTimeout(
+      CloudStorageOperations.S3_MAX_TIMEOUT_MS)
 
     proxyInfo match {
       case Some(proxyInfoValue) => {
@@ -396,6 +412,7 @@ private[io] object StorageInfo {
 
 sealed trait CloudStorage {
 
+  private var processedFileCount = 0
   protected val connection: Connection
 
   protected def getStageInfo(
@@ -456,6 +473,87 @@ sealed trait CloudStorage {
     files.collect().toList
   }
 
+  // Implement retry logic when download fails and finish the file download.
+  def createDownloadStreamWithRetry(
+                                     fileName: String,
+                                     compress: Boolean,
+                                     storageInfo: Map[String, String],
+                                     maxRetryCount: Int
+                                   ): InputStream = {
+    // download the file with retry and backoff and then consume.
+    // val maxRetryCount = 10
+    var retryCount = 0
+    var error: Option[Throwable] = None
+
+    do {
+      try {
+        val startTime = System.currentTimeMillis()
+        // Create original download stream
+        var inputStream = createDownloadStream(fileName, compress, storageInfo)
+
+        // If max retry count is greater than 1, enable the file download.
+        // This provides a way to disable the file download if necessary.
+        val download = maxRetryCount > 1
+        if (download) {
+          // Download, decrypt and decompress the data
+          val cachedData = IOUtils.toByteArray(inputStream)
+          val dataSizeInMB = cachedData.length.toDouble / 1024.0 / 1024.0
+
+          // Generate inputStream for the cached data buffer.
+          inputStream = new ByteArrayInputStream(cachedData)
+          val endTime = System.currentTimeMillis()
+          val downloadTime = (endTime - startTime).toDouble / 1000.0
+
+          CloudStorageOperations.log.info(
+            s"""createDownloadStreamWithRetry() download successful:
+               | fileID=$processedFileCount downloadTime=$downloadTime
+               | dataSizeInMB=$dataSizeInMB
+               |""".stripMargin.filter(_ >= ' '))
+        } else {
+          CloudStorageOperations.log.info(
+            s"""createDownloadStreamWithRetry() DO NOT download the file
+               | completely: fileID=$processedFileCount
+               |""".stripMargin.filter(_ >= ' '))
+        }
+
+        // succeed download return
+        processedFileCount += 1
+        return inputStream
+      } catch {
+        // Find problem to download the file, sleep some time and retry.
+        case e: Throwable => {
+          error = Some(e)
+          val errmsg = e.getMessage
+          CloudStorageOperations.log.info(
+            s"""createDownloadStreamWithRetry() hit download error:
+               | retryCount=$retryCount: fileName=$fileName,
+               | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
+               |""".stripMargin.filter(_ >= ' '))
+        }
+          retryCount = retryCount + 1
+          // sleep some time and retry
+          Thread.sleep(1000L * retryCount)
+      }
+    } while (retryCount < maxRetryCount)
+
+    // Fail to download data after retry
+    if (error.isDefined) {
+      val errorMessage = error.get.getMessage
+      CloudStorageOperations.log.info(
+        s"""createDownloadStreamWithRetry() last error message
+           | after retry $retryCount times is [ $errorMessage ]
+           |""".stripMargin.filter(_ >= ' '))
+      throw error.get
+    } else {
+      // Suppose this never happens
+      val errorMessage = "Unknown error occurs, Contact Snowflake Support"
+      CloudStorageOperations.log.info(
+        s"""createDownloadStreamWithRetry() hit un-expected condition
+           | after retry $retryCount times is [ $retryCount/$maxRetryCount ]
+           |""".stripMargin.filter(_ >= ' '))
+      throw new Exception(errorMessage)
+    }
+  }
 
   protected def createUploadStream(
                                     fileName: String,
@@ -473,11 +571,7 @@ sealed trait CloudStorage {
                 format: SupportedFormat = SupportedFormat.CSV,
                 compress: Boolean = true,
                 subDir: String = ""
-              ): RDD[String] = {
-    val (stageInfo, fileList) = getStageInfo(false)
-    new SnowflakeRDD(sc, fileList, format, createDownloadStream(_, compress, stageInfo))
-  }
-
+              ): RDD[String]
 
   protected def createDownloadStream(
                                       fileName: String,
@@ -537,6 +631,17 @@ case class InternalAzureStorage(
     (storageInfo, fileList)
   }
 
+  def download(
+                sc: SparkContext,
+                format: SupportedFormat = SupportedFormat.CSV,
+                compress: Boolean = true,
+                subDir: String = ""
+              ): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(false)
+    new SnowflakeRDD(sc, fileList, format,
+      createDownloadStreamWithRetry(_, compress, stageInfo, param.maxRetryCount),
+      param.expectedPartitionCount)
+  }
 
   override protected def createUploadStream(
                                              fileName: String,
@@ -654,6 +759,8 @@ case class ExternalAzureStorage(
                                  azureEndpoint: String,
                                  azureSAS: String,
                                  proxyInfo: Option[ProxyInfo],
+                                 maxRetryCount: Int,
+                                 fileCountPerPartition: Int,
                                  pref: String = "",
                                  @transient override val connection: Connection
                                ) extends CloudStorage {
@@ -728,7 +835,10 @@ case class ExternalAzureStorage(
                          format: SupportedFormat,
                          compress: Boolean,
                          subDir: String): RDD[String] = {
-    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+    new SnowflakeRDD(sc, getFileNames(subDir), format,
+      createDownloadStreamWithRetry(_, compress,
+        Map.empty[String, String], maxRetryCount),
+      fileCountPerPartition)
   }
 
   private def getFileNames(subDir: String): List[String] = {
@@ -782,6 +892,18 @@ case class InternalS3Storage(
     val fileList: List[String] =
       if (isWrite) List() else stageManager.getKeyIds.map(_._1).toList
     (storageInfo, fileList)
+  }
+
+  override def download(
+                sc: SparkContext,
+                format: SupportedFormat = SupportedFormat.CSV,
+                compress: Boolean = true,
+                subDir: String = ""
+              ): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(false)
+    new SnowflakeRDD(sc, fileList, format,
+      createDownloadStreamWithRetry(_, compress, stageInfo, param.maxRetryCount),
+      param.expectedPartitionCount)
   }
 
   override protected def createUploadStream(
@@ -918,6 +1040,8 @@ case class ExternalS3Storage(
                               awsId: String,
                               awsKey: String,
                               proxyInfo: Option[ProxyInfo],
+                              maxRetryCount: Int,
+                              fileCountPerPartition: Int,
                               awsToken: Option[String] = None,
                               pref: String = "",
                               @transient override val connection: Connection,
@@ -998,7 +1122,9 @@ case class ExternalS3Storage(
                          compress: Boolean,
                          subDir: String
                        ): RDD[String] =
-    new SnowflakeRDD(sc, getFileNames(subDir), format, createDownloadStream(_, compress, Map.empty[String, String]))
+    new SnowflakeRDD(sc, getFileNames(subDir), format,
+      createDownloadStreamWithRetry(_, compress, Map.empty[String, String], maxRetryCount),
+      fileCountPerPartition)
 
 
   private def getFileNames(subDir: String): List[String] =
