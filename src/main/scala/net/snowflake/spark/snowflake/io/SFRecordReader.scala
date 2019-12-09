@@ -41,6 +41,11 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   @inline private final val codecBufferSize = 64 * 1024
   @inline private final val inputBufferSize = 1024 * 1024
 
+  // The user of SFRecordReader can register InputStream or file name.
+  // In the case that both are registered, InputStreams are read firstly.
+  // If file name is registered, downloadFunction is used to download the file.
+  private var inputFileNames: List[String] = Nil
+  private var downloadFunction: (String) => InputStream = _
   private var inputStreams: List[InputStream] = Nil
   private var currentStream: Option[InputStream] = None
   private var currentChar: Option[Byte] = None
@@ -53,7 +58,12 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   private var key: Long = 0
   private var value: String = _
 
-
+  def setDownloadFunction(func : (String) => InputStream): Unit = {
+    downloadFunction = func
+  }
+  def addFileName(fileName: String): Unit = {
+    inputFileNames = fileName :: inputFileNames
+  }
 
   def addStream(stream: InputStream): Unit =
     inputStreams = stream :: inputStreams
@@ -102,10 +112,16 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   /**
     * In case of exceptions, using this method to manually close input streams.
     */
-  override def close(): Unit = inputStreams.foreach(_.close())
+  override def close(): Unit = {
+    inputStreams.foreach(_.close())
+    if (currentStream.isDefined) {
+      currentStream.get.close()
+      currentStream = None
+    }
+  }
 
   override def hasNext: Boolean =
-    inputStreams.nonEmpty || currentStream.isDefined
+    inputStreams.nonEmpty || currentStream.isDefined || inputFileNames.nonEmpty
 
   override def next(): String = {
     if (!hasNext) null
@@ -179,7 +195,11 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     if(inputStreams.nonEmpty){
       currentStream = Some(inputStreams.head)
       inputStreams = inputStreams.tail
-    } else{
+    } else if (inputFileNames.nonEmpty) {
+      val localInputStream = downloadFunction(inputFileNames.head)
+      currentStream = Some(localInputStream)
+      inputFileNames = inputFileNames.tail
+    } else {
       currentStream = None
     }
     currentChar = None
