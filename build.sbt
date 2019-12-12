@@ -16,7 +16,7 @@
 
 import scala.util.Properties
 
-val sparkVersion = "2.3.0"
+val sparkVersion = "2.2.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
 lazy val ItTest = config("it") extend(Test)
@@ -29,7 +29,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := "2.5.6-spark_2.3",
+    version := "2.5.6-spark_2.2",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
     crossScalaVersions := Seq("2.11.12"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
