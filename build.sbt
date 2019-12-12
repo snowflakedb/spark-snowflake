@@ -85,6 +85,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
             <name>Bing Li</name>
             <url>https://github.com/binglihub</url>
           </developer>
+          <developer>
+            <id>Mingli-Rui</id>
+            <name>Mingli Rui</name>
+            <url>https://github.com/Mingli-Rui</url>
+          </developer>
         </developers>,
 
     ThisBuild / bintrayReleaseOnPublish := true,
