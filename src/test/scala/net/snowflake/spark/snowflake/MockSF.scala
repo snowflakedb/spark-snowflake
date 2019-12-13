@@ -32,35 +32,34 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Assertions._
 
-
 /**
- * Helper class for mocking Snowflake / JDBC in unit tests.
- */
-class MockSF(
-    params: Map[String, String],
-    existingTablesAndSchemas: Map[String, StructType],
-    jdbcQueriesThatShouldFail: Seq[Regex] = Seq.empty) {
+  * Helper class for mocking Snowflake / JDBC in unit tests.
+  */
+class MockSF(params: Map[String, String],
+             existingTablesAndSchemas: Map[String, StructType],
+             jdbcQueriesThatShouldFail: Seq[Regex] = Seq.empty) {
 
   val mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS ++ params)
 
   private[this] val queriesIssued: mutable.Buffer[String] = mutable.Buffer.empty
-  def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued.toSeq
+  def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued
 
-  private[this] val jdbcConnections: mutable.Buffer[Connection] = mutable.Buffer.empty
+  private[this] val jdbcConnections: mutable.Buffer[Connection] =
+    mutable.Buffer.empty
 
   val jdbcWrapper: JDBCWrapper = spy(new JDBCWrapper)
 
-  private def createMockStatement(query: String) : PreparedStatement = {
-    val mockStatement= mock(classOf[PreparedStatement], RETURNS_SMART_NULLS)
+  private def createMockStatement(query: String): PreparedStatement = {
+    val mockStatement = mock(classOf[PreparedStatement], RETURNS_SMART_NULLS)
     if (jdbcQueriesThatShouldFail.forall(_.findFirstMatchIn(query).isEmpty)) {
       when(mockStatement.execute()).thenReturn(true)
 
       // Prepare mockResult depending on the query
-      var mockResult = mock(classOf[ResultSet], RETURNS_SMART_NULLS)
+      val mockResult = mock(classOf[ResultSet], RETURNS_SMART_NULLS)
       if (query.startsWith("COPY INTO ")) {
         // It's a SF->S3 query, SnowflakeRelation checks the schema
-        when(mockResult.getMetaData()).thenReturn({
-          var md = new RowSetMetaDataImpl
+        when(mockResult.getMetaData).thenReturn({
+          val md = new RowSetMetaDataImpl
           md.setColumnCount(3)
           md.setColumnName(1, "rows_unloaded")
           md.setColumnTypeName(1, "NUMBER")
@@ -70,20 +69,23 @@ class MockSF(
         when(mockResult.getLong(anyInt())).thenReturn(4L)
         // Return exactly 1 record
         when(mockResult.next()).thenAnswer(new Answer[Boolean] {
-          private var count : Int = 0
-          override def answer(invocation: InvocationOnMock): Boolean= {
+          private var count: Int = 0
+          override def answer(invocation: InvocationOnMock): Boolean = {
             count += 1
-            if (count == 1)
+            if (count == 1) {
               true
-            else
+            } else {
               false
+            }
           }
         })
       }
       when(mockStatement.executeQuery()).thenReturn(mockResult)
     } else {
-      when(mockStatement.execute()).thenThrow(new SQLException(s"Error executing $query"))
-      when(mockStatement.executeQuery()).thenThrow(new SQLException(s"Error executing $query"))
+      when(mockStatement.execute())
+        .thenThrow(new SQLException(s"Error executing $query"))
+      when(mockStatement.executeQuery())
+        .thenThrow(new SQLException(s"Error executing $query"))
     }
     mockStatement
   }
@@ -91,32 +93,29 @@ class MockSF(
   private def createMockConnection(): Connection = {
     val conn = mock(classOf[Connection], RETURNS_SMART_NULLS)
     jdbcConnections.append(conn)
-    when(conn.prepareStatement(anyString())).thenAnswer(new Answer[PreparedStatement] {
-      override def answer(invocation: InvocationOnMock): PreparedStatement = {
+    when(conn.prepareStatement(anyString()))
+      .thenAnswer((invocation: InvocationOnMock) => {
         val query = invocation.getArguments()(0).asInstanceOf[String]
         queriesIssued.append(query)
         createMockStatement(query)
-      }
-    })
+      })
     conn
   }
 
-  doAnswer(new Answer[Connection] {
-    override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
-  }).when(jdbcWrapper).getConnector(any[MergedParameters])
+  doAnswer((_: InvocationOnMock) =>
+    createMockConnection()).when(jdbcWrapper).getConnector(any[MergedParameters])
 
-  doAnswer(new Answer[Boolean] {
-    override def answer(invocation: InvocationOnMock): Boolean = {
-      existingTablesAndSchemas.contains(invocation.getArguments()(1).asInstanceOf[String])
-    }
+  doAnswer((invocation: InvocationOnMock) => {
+    existingTablesAndSchemas.contains(
+      invocation.getArguments()(1).asInstanceOf[String]
+    )
   }).when(jdbcWrapper).tableExists(any[Connection], anyString())
 
-  doAnswer(new Answer[StructType] {
-    override def answer(invocation: InvocationOnMock): StructType = {
-      existingTablesAndSchemas(invocation.getArguments()(1).asInstanceOf[String])
-    }
+  doAnswer((invocation: InvocationOnMock) => {
+    existingTablesAndSchemas(
+      invocation.getArguments()(1).asInstanceOf[String]
+    )
   }).when(jdbcWrapper).resolveTable(any[Connection], anyString(), mergedParams)
-
 
   def verifyThatConnectionsWereClosed(): Unit = {
     jdbcConnections.foreach { conn =>
@@ -125,10 +124,10 @@ class MockSF(
   }
 
   def verifyThatExpectedQueriesWereIssued(expectedQueries: Seq[Regex]): Unit = {
-    expectedQueries.zip(queriesIssued).foreach { case (expected, actual) =>
-      if (expected.findFirstMatchIn(actual).isEmpty) {
-        fail(
-          s"""
+    expectedQueries.zip(queriesIssued).foreach {
+      case (expected, actual) =>
+        if (expected.findFirstMatchIn(actual).isEmpty) {
+          fail(s"""
              |Actual and expected JDBC queries did not match:
              |=== Expected:
              |$expected
@@ -136,20 +135,28 @@ class MockSF(
              |$actual
              |=== END
            """.stripMargin)
-      }
+        }
     }
     if (expectedQueries.length > queriesIssued.length) {
       val missingQueries = expectedQueries.drop(queriesIssued.length)
-      fail(s"Missing ${missingQueries.length} (out of ${expectedQueries.length}) expected JDBC queries:" +
-        s"\n${missingQueries.mkString("\n")}")
+      fail(
+        s"Missing ${missingQueries.length} (out of ${expectedQueries.length})" +
+          s" expected JDBC queries:\n${missingQueries.mkString("\n")}"
+      )
     } else if (queriesIssued.length > expectedQueries.length) {
       val extraQueries = queriesIssued.drop(expectedQueries.length)
-      fail(s"Got ${extraQueries.length} unexpected JDBC queries:\n${extraQueries.mkString("\n")}")
+      fail(
+        s"Got ${extraQueries.length} unexpected JDBC queries:\n${extraQueries.mkString("\n")}"
+      )
     }
   }
 
-  def verifyThatExpectedQueriesWereIssuedForUnload(expectedQueries: Seq[Regex]): Unit = {
-    val queriesWithPrologueAndEpilogue= Seq(Utils.genPrologueSql(mergedParams).toString.r) ++
+  def verifyThatExpectedQueriesWereIssuedForUnload(
+    expectedQueries: Seq[Regex]
+  ): Unit = {
+    val queriesWithPrologueAndEpilogue = Seq(
+      Utils.genPrologueSql(mergedParams).toString.r
+    ) ++
       expectedQueries
     verifyThatExpectedQueriesWereIssued(queriesWithPrologueAndEpilogue)
   }

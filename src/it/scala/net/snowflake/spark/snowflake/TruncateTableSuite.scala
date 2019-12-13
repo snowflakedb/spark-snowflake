@@ -2,8 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SaveMode}
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 import scala.util.Random
 
@@ -17,13 +16,12 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     )
   )
 
-  lazy val df1 = sqlContext.createDataFrame(
-    sc.parallelize(1 to 100).map[Row](
-      _ => {
+  lazy val df1: DataFrame = sqlContext.createDataFrame(
+    sc.parallelize(1 to 100)
+      .map[Row](_ => {
         val rand = new Random(System.nanoTime())
         Row(rand.nextLong(), rand.nextFloat())
-      }
-    ),
+      }),
     st1
   )
 
@@ -34,13 +32,12 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     )
   )
 
-  lazy val df2 = sqlContext.createDataFrame(
-    sc.parallelize(1 to 100).map[Row](
-      _ => {
+  lazy val df2: DataFrame = sqlContext.createDataFrame(
+    sc.parallelize(1 to 100)
+      .map[Row](_ => {
         val rand = new Random(System.nanoTime())
         Row(rand.nextInt(), rand.nextInt())
-      }
-    ),
+      }),
     st2
   )
 
@@ -52,8 +49,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"drop table if exists $table")
 
-    //create one table
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // create one table
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -61,8 +59,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //replace previous table and overwrite schema
-    df1.write.format(SNOWFLAKE_SOURCE_NAME)
+    // replace previous table and overwrite schema
+    df1.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -70,8 +69,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //truncate previous table and keep schema
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // truncate previous table and keep schema
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "on")
@@ -79,7 +79,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //check schema
+    // check schema
     assert(checkSchema1())
 
   }
@@ -88,8 +88,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"drop table if exists $table")
 
-    //create table
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // create table
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -97,8 +98,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //replace previous table and overwrite schema
-    df1.write.format(SNOWFLAKE_SOURCE_NAME)
+    // replace previous table and overwrite schema
+    df1.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -106,8 +108,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //truncate table and keep schema
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // truncate table and keep schema
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "on")
@@ -115,7 +118,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //checker schema
+    // checker schema
     assert(checkSchema1())
 
   }
@@ -124,8 +127,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"drop table if exists $table")
 
-    //create one table
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // create one table
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -133,8 +137,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //replace previous table and overwrite schema
-    df1.write.format(SNOWFLAKE_SOURCE_NAME)
+    // replace previous table and overwrite schema
+    df1.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -142,8 +147,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //truncate previous table and overwrite schema
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // truncate previous table and overwrite schema
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -151,7 +157,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //check schema
+    // check schema
     assert(checkSchema2())
 
   }
@@ -159,8 +165,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"drop table if exists $table")
 
-    //create one table
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // create one table
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -168,8 +175,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //replace previous table and overwrite schema
-    df1.write.format(SNOWFLAKE_SOURCE_NAME)
+    // replace previous table and overwrite schema
+    df1.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -177,8 +185,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //truncate previous table and overwrite schema
-    df2.write.format(SNOWFLAKE_SOURCE_NAME)
+    // truncate previous table and overwrite schema
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
       .option("truncate_table", "off")
@@ -186,7 +195,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    //check schema
+    // check schema
     assert(checkSchema2())
   }
 

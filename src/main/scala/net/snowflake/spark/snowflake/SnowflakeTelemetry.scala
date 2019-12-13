@@ -6,29 +6,30 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{
+  ArrayNode,
+  ObjectNode
+}
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 
 object SnowflakeTelemetry {
 
   private val TELEMETRY_SOURCE = "spark_connector"
 
-  private var logs: List[(ObjectNode, Long)] = Nil //data and timestamp
+  private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 
   private[snowflake] var output: ObjectNode = _
 
   def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
-    logger.debug(
-      s"""
+    logger.debug(s"""
         |Telemetry Output
         |Type: ${log._1._1}
         |Data: ${log._1._2.toString}
-      """.stripMargin
-    )
+      """.stripMargin)
 
-    this.synchronized{
+    this.synchronized {
       output = mapper.createObjectNode()
       output.put("type", log._1._1.toString)
       output.put("source", TELEMETRY_SOURCE)
@@ -38,27 +39,23 @@ object SnowflakeTelemetry {
 
   }
 
-  def send(telemetry: Telemetry):Unit = {
+  def send(telemetry: Telemetry): Unit = {
     var tmp: List[(ObjectNode, Long)] = Nil
-    this.synchronized{
+    this.synchronized {
       tmp = logs
       logs = Nil
     }
-    tmp.foreach{
-      case(log, timestamp) => {
-        logger.debug(
-          s"""
+    tmp.foreach {
+      case (log, timestamp) =>
+        logger.debug(s"""
              |Send Telemetry
              |timestamp:$timestamp
              |log:${log.toString}"
-           """.stripMargin
-        )
-        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log,timestamp)
-      }
+           """.stripMargin)
+        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
     }
     telemetry.sendBatchAsync()
   }
-
 
   /**
     * Generate json node for giving spark plan tree,
@@ -66,10 +63,9 @@ object SnowflakeTelemetry {
     */
   def planToJson(plan: LogicalPlan): Option[(TelemetryTypes, ObjectNode)] =
     plan.nodeName match {
-      case "ReturnAnswer" => {
+      case "ReturnAnswer" =>
         val (isSFPlan, json) = planTree(plan)
-        if (isSFPlan) Some(TelemetryTypes.SPARK_PLAN ,json) else None
-      }
+        if (isSFPlan) Some(TelemetryTypes.SPARK_PLAN, json) else None
       case _ => None
     }
 
@@ -96,24 +92,24 @@ object SnowflakeTelemetry {
         argsNode.set("conditions", expToJson(condition))
 
       case Project(fields, _) =>
-        argsNode.set("fields",expressionsToJson(fields))
+        argsNode.set("fields", expressionsToJson(fields))
 
       case Join(_, _, joinType, Some(condition)) =>
-        argsNode.put("type",joinType.toString)
-        argsNode.set("conditions",expToJson(condition))
+        argsNode.put("type", joinType.toString)
+        argsNode.set("conditions", expToJson(condition))
 
       case Aggregate(groups, fields, _) =>
-        argsNode.set("field",expressionsToJson(fields))
-        argsNode.set("group",expressionsToJson(groups))
+        argsNode.set("field", expressionsToJson(fields))
+        argsNode.set("group", expressionsToJson(groups))
 
       case Limit(condition, _) =>
-        argsNode.set("condition",expToJson(condition))
+        argsNode.set("condition", expToJson(condition))
 
       case LocalLimit(condition, _) =>
         argsNode.set("condition", expToJson(condition))
 
       case Sort(orders, isGlobal, _) =>
-        argsNode.put("global",isGlobal)
+        argsNode.put("global", isGlobal)
         argsNode.set("order", expressionsToJson(orders))
 
       case Window(namedExpressions, _, _, _) =>
@@ -124,16 +120,16 @@ object SnowflakeTelemetry {
       case _ =>
     }
 
-    plan.children.foreach(x=>{
+    plan.children.foreach(x => {
       val (isSF, js) = planTree(x)
-      if(isSF) isSFPlan = true
+      if (isSF) isSFPlan = true
       children.add(js)
     })
 
-    result.put("action",action)
-    if(argsNode.toString=="{}"){
+    result.put("action", action)
+    if (argsNode.toString == "{}") {
       result.put("args", argsString)
-    } else{
+    } else {
       result.set("args", argsNode)
     }
     result.set("children", children)
@@ -150,39 +146,39 @@ object SnowflakeTelemetry {
     result
   }
 
-
   /**
     * Expression to Json object
     */
   private def expToJson(exp: Expression): ObjectNode = {
     val result = mapper.createObjectNode()
-    if(exp.children.isEmpty){
+    if (exp.children.isEmpty) {
       result.put("source", exp.nodeName)
       result.put("type", exp.dataType.typeName)
-    }
-    else{
+    } else {
       result.put("operator", exp.nodeName)
       val parameters = mapper.createArrayNode()
-      sortArgs(exp.nodeName,exp.children.map(expToJson)).foreach(parameters.add)
-      result.set("parameters",parameters)
+      sortArgs(exp.nodeName, exp.children.map(expToJson))
+        .foreach(parameters.add)
+      result.set("parameters", parameters)
     }
     result
   }
 
-  //Since order of arguments in some spark expression is random,
-  //sort them to provide fixed result for testing.
-  private def sortArgs(operator: String, args: Seq[ObjectNode]): Seq[ObjectNode] =
+  // Since order of arguments in some spark expression is random,
+  // sort them to provide fixed result for testing.
+  private def sortArgs(operator: String,
+                       args: Seq[ObjectNode]): Seq[ObjectNode] =
     operator match {
-      case "And"|"Or" => args.sortBy(_.toString)
+      case "And" | "Or" => args.sortBy(_.toString)
       case _ => args
     }
 }
 
 object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
-  val SPARK_PLAN = Value("spark_plan")
-  val SPARK_STREAMING = Value("spark_streaming")
-  val SPARK_STREAMING_START = Value("spark_streaming_start")
-  val SPARK_STREAMING_END = Value("spark_streaming_end")
-  val SPARK_EGRESS = Value("spark_egress")
+  val SPARK_PLAN: Value = Value("spark_plan")
+  val SPARK_STREAMING: Value = Value("spark_streaming")
+  val SPARK_STREAMING_START: Value = Value("spark_streaming_start")
+  val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
+  val SPARK_EGRESS: Value = Value("spark_egress")
 }

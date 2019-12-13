@@ -14,7 +14,8 @@ case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
   protected override def doExecute(): RDD[InternalRow] = {
 
     val schema = StructType(
-      output.map(attr => StructField(attr.name, attr.dataType, attr.nullable)))
+      output.map(attr => StructField(attr.name, attr.dataType, attr.nullable))
+    )
 
     rdd.mapPartitions { iter =>
       val project = UnsafeProjection.create(schema)

@@ -3,7 +3,7 @@ package net.snowflake.spark.snowflake.streaming
 import net.snowflake.spark.snowflake.{ConstantString, IntegrationSuiteBase}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
-class SinkUtilsSuite extends IntegrationSuiteBase{
+class SinkUtilsSuite extends IntegrationSuiteBase {
 
   val pipeName = s"test_pipe_$randomSuffix"
   val stageName = s"test_stage_$randomSuffix"
@@ -22,10 +22,11 @@ class SinkUtilsSuite extends IntegrationSuiteBase{
     super.afterAll()
   }
 
-  test("verifyPipe"){
+  test("verifyPipe") {
 
     val copy = s"copy into $tableName from @$stageName"
-    conn.createPipe(pipeName, ConstantString(copy) !, true )
+    val overwrite = true
+    conn.createPipe(pipeName, ConstantString(copy) !, overwrite)
 
     assert(verifyPipe(conn, pipeName, copy))
 

@@ -23,18 +23,20 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
   val dbtable9 = s"column_mapping_test_9_$randomSuffix"
   val dbtable10 = s"column_mapping_test_10_$randomSuffix"
 
-
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val data: RDD[Row] = sc.makeRDD(List(Row(1, 2, 3, 4, 5), Row(2, 3, 4, 5, 6), Row(3, 4, 5, 6, 7)))
-    val schema = StructType(List(
-      StructField("one", IntegerType),
-      StructField("two", IntegerType),
-      StructField("three", IntegerType),
-      StructField("four", IntegerType),
-      StructField("five", IntegerType)
-    ))
+    val data: RDD[Row] = sc.makeRDD(
+      List(Row(1, 2, 3, 4, 5), Row(2, 3, 4, 5, 6), Row(3, 4, 5, 6, 7))
+    )
+    val schema = StructType(
+      List(
+        StructField("one", IntegerType),
+        StructField("two", IntegerType),
+        StructField("three", IntegerType),
+        StructField("four", IntegerType),
+        StructField("five", IntegerType)
+      )
+    )
     df = sqlContext.createDataFrame(data, schema)
   }
 
@@ -67,72 +69,91 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   test("Test columnMap") {
 
-    jdbcUpdate(s"create or replace table $dbtable (ONE int, TWO int, THREE int, FOUR int, FIVE int)")
+    jdbcUpdate(
+      s"create or replace table $dbtable (ONE int, TWO int, THREE int, FOUR int, FIVE int)"
+    )
 
-
-    df.write.format("snowflake").options(connectorOptionsNoTable)
+    df.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
       .option("dbtable", dbtable)
       .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
-      .mode(SaveMode.Append).save()
+      .mode(SaveMode.Append)
+      .save()
 
     checkTestTable(
-      Seq(Row(1, null, null, 5, null),
+      Seq(
+        Row(1, null, null, 5, null),
         Row(2, null, null, 6, null),
-        Row(3, null, null, 7, null))
+        Row(3, null, null, 7, null)
+      )
     )
 
     // throw exception because only suppert SavaMode.Append
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
-        .mode(SaveMode.Overwrite).save()
+        .mode(SaveMode.Overwrite)
+        .save()
     }
 
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
-        .mode(SaveMode.Append).save()
+        .mode(SaveMode.Append)
+        .save()
     }
 
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "AAA", "five" -> "FOUR").toString())
-        .mode(SaveMode.Append).save()
+        .mode(SaveMode.Append)
+        .save()
     }
 
   }
 
   test("Automatic Column Mapping") {
     jdbcUpdate(s"create or replace table $dbtable1 (num int, str string)")
-    //auto map
-    val schema1 = StructType(List(
-      StructField("str", StringType),
-      StructField("NUM", IntegerType)
-    ))
+    // auto map
+    val schema1 = StructType(
+      List(StructField("str", StringType), StructField("NUM", IntegerType))
+    )
     val data1: RDD[Row] = sc.makeRDD(List(Row("a", 1), Row("b", 2)))
     val df1 = sqlContext.createDataFrame(data1, schema1)
 
-    //error by default
+    // error by default
     assertThrows[SnowflakeSQLException] {
-      df1.write.format("snowflake").options(connectorOptionsNoTable)
+      df1.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable1)
         .mode(SaveMode.Append)
         .save()
     }
 
-    //no error when mapping by name
-    df1.write.format("snowflake").options(connectorOptionsNoTable)
+    // no error when mapping by name
+    df1.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .option("column_mapping", "name")
       .mode(SaveMode.Append)
       .save()
 
-    val result1 = sparkSession.read.format("snowflake")
+    val result1 = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .load()
@@ -145,31 +166,38 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   test("remove column from DataFrame") {
     jdbcUpdate(s"create or replace table $dbtable2 (num int, str string)")
-    val schema = StructType(List(
-      StructField("str", StringType),
-      StructField("useless", BooleanType),
-      StructField("NUM", IntegerType)
-    ))
+    val schema = StructType(
+      List(
+        StructField("str", StringType),
+        StructField("useless", BooleanType),
+        StructField("NUM", IntegerType)
+      )
+    )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", true, 1), Row("b", false, 2)))
     val df = sqlContext.createDataFrame(data, schema)
 
-    //error by default
+    // error by default
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable2)
         .option("column_mapping", "name")
         .mode(SaveMode.Append)
         .save()
     }
 
-    df.write.format("snowflake").options(connectorOptionsNoTable)
+    df.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .option("column_mapping", "name")
       .option("column_mismatch_behavior", "ignore")
       .mode(SaveMode.Append)
       .save()
 
-    val result = sparkSession.read.format("snowflake")
+    val result = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .load()
@@ -182,28 +210,31 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   test("add null column into DataFrame") {
     jdbcUpdate(s"create or replace table $dbtable3 (num int, str string)")
-    val schema = StructType(List(
-      StructField("str", StringType)
-    ))
+    val schema = StructType(List(StructField("str", StringType)))
     val data: RDD[Row] = sc.makeRDD(List(Row("a"), Row("b")))
     val df = sqlContext.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
-        .option("dbtable",dbtable3)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
+        .option("dbtable", dbtable3)
         .option("column_mapping", "name")
         .mode(SaveMode.Append)
         .save()
     }
 
-    df.write.format("snowflake").options(connectorOptionsNoTable)
-      .option("dbtable",dbtable3)
+    df.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", dbtable3)
       .option("column_mapping", "name")
       .option("column_mismatch_behavior", "ignore")
       .mode(SaveMode.Append)
       .save()
 
-    val result = sparkSession.read.format("snowflake")
+    val result = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable3)
       .load()
@@ -214,29 +245,33 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
   }
   test("mix behaviors") {
     jdbcUpdate(s"create or replace table $dbtable4 (num int, str string)")
-    val schema = StructType(List(
-      StructField("str", StringType),
-      StructField("useless", BooleanType)
-    ))
+    val schema = StructType(
+      List(StructField("str", StringType), StructField("useless", BooleanType))
+    )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", true), Row("b", false)))
     val df = sqlContext.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake").options(connectorOptionsNoTable)
+      df.write
+        .format("snowflake")
+        .options(connectorOptionsNoTable)
         .option("dbtable", dbtable4)
         .option("column_mapping", "name")
         .mode(SaveMode.Append)
         .save()
     }
 
-    df.write.format("snowflake").options(connectorOptionsNoTable)
+    df.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .option("column_mapping", "name")
       .option("column_mismatch_behavior", "ignore")
       .mode(SaveMode.Append)
       .save()
 
-    val result = sparkSession.read.format("snowflake")
+    val result = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .load()
@@ -249,16 +284,21 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   test("column type matching") {
     jdbcUpdate(s"create or replace table $dbtable5 (num int, str string)")
-    //todo: it works now (csv and json), but may be not work on binary format
-    val schema = StructType(List(
-      StructField("STR", DateType),
-      StructField("NUM", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row(new Date(System.currentTimeMillis()),1),
-      Row(new Date(System.currentTimeMillis()),2)))
+    // todo: it works now (csv and json), but may be not work on binary format
+    val schema = StructType(
+      List(StructField("STR", DateType), StructField("NUM", IntegerType))
+    )
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(new Date(System.currentTimeMillis()), 1),
+        Row(new Date(System.currentTimeMillis()), 2)
+      )
+    )
     val df = sqlContext.createDataFrame(data, schema)
 
-    df.write.format("snowflake").options(connectorOptionsNoTable)
+    df.write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
       .option("dbtable", dbtable5)
       .option("column_mapping", "name")
       .mode(SaveMode.Append)
@@ -270,16 +310,20 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     |create or replace table $dbtable6 ("FOO" int, "foo" string)
     """.stripMargin)
 
-    val schema = StructType(List(
-      StructField("DATE", DateType),
-      StructField("foo", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row(new Date(System.currentTimeMillis()),1),
-      Row(new Date(System.currentTimeMillis()),2)))
+    val schema = StructType(
+      List(StructField("DATE", DateType), StructField("foo", IntegerType))
+    )
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(new Date(System.currentTimeMillis()), 1),
+        Row(new Date(System.currentTimeMillis()), 2)
+      )
+    )
     val df = sqlContext.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake")
+      df.write
+        .format("snowflake")
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable6)
         .option("column_mapping", "name")
@@ -294,15 +338,15 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
                   |create or replace table $dbtable7 (foo int, bar string)
     """.stripMargin)
 
-    val schema = StructType(List(
-      StructField("Foo", IntegerType),
-      StructField("foo", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row(1,2), Row(2,3)))
+    val schema = StructType(
+      List(StructField("Foo", IntegerType), StructField("foo", IntegerType))
+    )
+    val data: RDD[Row] = sc.makeRDD(List(Row(1, 2), Row(2, 3)))
     val df = sqlContext.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake")
+      df.write
+        .format("snowflake")
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable7)
         .option("column_mapping", "name")
@@ -317,16 +361,19 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
                   |create or replace table $dbtable8 (num int, str string)
     """.stripMargin)
 
-    val schema = StructType(List(
-      StructField("Foo", IntegerType),
-      StructField("foo", IntegerType),
-      StructField("num", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row(1,2,4), Row(2,3,5)))
+    val schema = StructType(
+      List(
+        StructField("Foo", IntegerType),
+        StructField("foo", IntegerType),
+        StructField("num", IntegerType)
+      )
+    )
+    val data: RDD[Row] = sc.makeRDD(List(Row(1, 2, 4), Row(2, 3, 5)))
     val df = sqlContext.createDataFrame(data, schema)
 
-    //no error
-    df.write.format("snowflake")
+    // no error
+    df.write
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .option("column_mapping", "name")
@@ -334,8 +381,8 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Append)
       .save()
 
-
-    val result = sparkSession.read.format("snowflake")
+    val result = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .load()
@@ -352,15 +399,15 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
                   |create or replace table $dbtable9 (num int, "FOO" int, "foo" int)
     """.stripMargin)
 
-    val schema = StructType(List(
-      StructField("str", StringType),
-      StructField("num", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row("a",4), Row("b",5)))
+    val schema = StructType(
+      List(StructField("str", StringType), StructField("num", IntegerType))
+    )
+    val data: RDD[Row] = sc.makeRDD(List(Row("a", 4), Row("b", 5)))
     val df = sqlContext.createDataFrame(data, schema)
 
-    //no error
-    df.write.format("snowflake")
+    // no error
+    df.write
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .option("column_mapping", "name")
@@ -368,7 +415,8 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Append)
       .save()
 
-    val result = sparkSession.read.format("snowflake")
+    val result = sparkSession.read
+      .format("snowflake")
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .load()
@@ -386,15 +434,15 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
                   |create or replace table $dbtable10 (num int, str string)
     """.stripMargin)
 
-    val schema = StructType(List(
-      StructField("foo", StringType),
-      StructField("bar", IntegerType)
-    ))
-    val data: RDD[Row] = sc.makeRDD(List(Row("a",4), Row("b",5)))
+    val schema = StructType(
+      List(StructField("foo", StringType), StructField("bar", IntegerType))
+    )
+    val data: RDD[Row] = sc.makeRDD(List(Row("a", 4), Row("b", 5)))
     val df = sqlContext.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
-      df.write.format("snowflake")
+      df.write
+        .format("snowflake")
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable10)
         .option("column_mapping", "name")

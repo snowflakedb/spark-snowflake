@@ -1,24 +1,23 @@
 package net.snowflake.spark.snowflake
 
 import DefaultJDBCWrapper.DataBaseOperations
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  IntegerType,
+  StringType,
+  StructField,
+  StructType
+}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.Row
 
 class JDBCSuite extends IntegrationSuiteBase {
-
 
   test("create and drop table") {
 
     val name = s"spark_test_table_$randomSuffix"
     val schema =
-      new StructType(
-        Array(
-          StructField("num", IntegerType, false)
-        )
-      )
+      new StructType(Array(StructField("num", IntegerType, nullable = false)))
 
-    conn.createTable(name, schema, params, true, false)
+    conn.createTable(name, schema, params, overwrite = true, temporary = false)
 
     assert(conn.tableExists(name))
 
@@ -26,15 +25,15 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     assert(!conn.tableExists(name))
 
-    conn.createTable(name, schema, params, false, false)
+    conn.createTable(name, schema, params, overwrite = false, temporary = false)
 
     assert(conn.dropTable(name))
 
-    conn.createTable(name, schema, params, true, true)
+    conn.createTable(name, schema, params, overwrite = true, temporary = true)
 
     assert(conn.dropTable(name))
 
-    conn.createTable(name, schema, params, false, true)
+    conn.createTable(name, schema, params, overwrite = false, temporary = true)
 
     assert(conn.dropTable(name))
 
@@ -46,7 +45,7 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     val name = s"spark_test_stage_$randomSuffix"
 
-    conn.createStage(name, overwrite = false, temporary = false)
+    conn.createStage(name)
 
     assert(conn.stageExists(name))
 
@@ -68,8 +67,7 @@ class JDBCSuite extends IntegrationSuiteBase {
       params.awsAccessKey,
       params.awsSecretKey,
       params.azureSAS,
-      false,
-      true
+      temporary = true
     )
     assert(conn.dropStage(name))
 
@@ -77,22 +75,25 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   test("create and drop pipe") {
     val schema =
-      new StructType(
-        Array(
-          StructField("num", IntegerType, false)
-        )
-      )
+      new StructType(Array(StructField("num", IntegerType, nullable = false)))
 
     val pipe_name = s"spark_test_pipe_$randomSuffix"
     val stage_name = s"spark_test_stage_$randomSuffix"
     val table_name = s"spark_test_table_$randomSuffix"
-    conn.createTable(table_name, schema, params, true, false)
+    conn.createTable(table_name, schema, params, overwrite = true, temporary = false)
     conn.createStage(stage_name)
 
     assert(!conn.pipeExists(pipe_name))
-    conn.createPipe(pipe_name, ConstantString("copy into") + table_name + s"from @$stage_name", false)
+    conn.createPipe(
+      pipe_name,
+      ConstantString("copy into") + table_name + s"from @$stage_name"
+    )
     assert(conn.pipeExists(pipe_name))
-    conn.createPipe(pipe_name, ConstantString("copy into") + table_name + s"from @$stage_name", true)
+    conn.createPipe(
+      pipe_name,
+      ConstantString("copy into") + table_name + s"from @$stage_name",
+      overwrite = true
+    )
     assert(conn.pipeExists(pipe_name))
     conn.dropPipe(pipe_name)
     assert(!conn.pipeExists(pipe_name))
@@ -105,13 +106,9 @@ class JDBCSuite extends IntegrationSuiteBase {
   test("test schema") {
     val name = s"spark_test_table_$randomSuffix"
     val schema =
-      new StructType(
-        Array(
-          StructField("STR", StringType, false)
-        )
-      )
+      new StructType(Array(StructField("STR", StringType, nullable = false)))
 
-    conn.createTable(name, schema, params, true, false)
+    conn.createTable(name, schema, params, overwrite = true, temporary = false)
 
     conn.tableSchema(name, params).equals(schema)
 
@@ -123,18 +120,22 @@ class JDBCSuite extends IntegrationSuiteBase {
     val schema =
       new StructType(
         Array(
-          StructField("num", IntegerType, false),
-          StructField("str", StringType, false)
+          StructField("num", IntegerType, nullable = false),
+          StructField("str", StringType, nullable = false)
         )
       )
 
-    conn.createTable(name, schema, params,true, false)
+    conn.createTable(name, schema, params, overwrite = true, temporary = false)
 
     sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("query", s"""select num, str from $name where num = 0 and str = 'test'""")
-      .load().show()
+      .option(
+        "query",
+        s"""select num, str from $name where num = 0 and str = 'test'"""
+      )
+      .load()
+      .show()
 
     conn.dropTable(name)
 
@@ -142,26 +143,28 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   test("copy from query using udf") {
 
-    //create table and insert data
+    // create table and insert data
     val name = s"spark_test_table_$randomSuffix"
     val schema =
       new StructType(
         Array(
-          StructField("STR", StringType, false),
-          StructField("NUM", IntegerType, false)
+          StructField("STR", StringType, nullable = false),
+          StructField("NUM", IntegerType, nullable = false)
         )
       )
-    conn.createTable(name, schema, params,true, false)
+    conn.createTable(name, schema, params, overwrite = true, temporary = false)
     conn.execute(s"insert into $name values('a',1),('b',2)")
-    conn.execute(s"create or replace function test_function(n int) returns table (a int, b string) as $$$$ select num, str from $name where num = n$$$$")
-
+    conn.execute(
+      s"create or replace function test_function(n int) returns table" +
+        s"(a int, b string) as $$$$ select num, str from $name where num = n$$$$"
+    )
 
     val gapstats_query = s"""select * from table(test_function(1)) gs"""
     val test_df =
       sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
-        .option("query",gapstats_query)
+        .option("query", gapstats_query)
         .load()
 
     assert(test_df.collect().length == 1)
@@ -170,24 +173,23 @@ class JDBCSuite extends IntegrationSuiteBase {
     conn.dropTable(name)
   }
 
-  test("test union"){
+  test("test union") {
     val name = s"spark_test_table_$randomSuffix"
     val schema =
       new StructType(
         Array(
-          StructField("STR", StringType, false),
-          StructField("NUM", IntegerType, false)
+          StructField("STR", StringType, nullable = false),
+          StructField("NUM", IntegerType, nullable = false)
         )
       )
-    conn.createTable(name, schema, params,true, false)
+    conn.createTable(name, schema, params, overwrite = true, temporary = false)
     conn.execute(s"insert into $name values('a',1),('b',2)")
 
     val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable",name)
-        .load()
-
+      .option("dbtable", name)
+      .load()
 
     df.createOrReplaceTempView("table1")
 

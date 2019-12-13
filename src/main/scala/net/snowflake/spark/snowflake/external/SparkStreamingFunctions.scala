@@ -4,7 +4,8 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 object SparkStreamingFunctions {
 
-  def streamingToNonStreaming(sqlContext: SQLContext, dataFrame: DataFrame): DataFrame =
+  def streamingToNonStreaming(sqlContext: SQLContext,
+                              dataFrame: DataFrame): DataFrame =
     sqlContext.internalCreateDataFrame(
       dataFrame.queryExecution.toRdd,
       dataFrame.schema,

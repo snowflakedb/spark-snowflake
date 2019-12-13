@@ -18,12 +18,12 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   val table = s"test_table_${Random.alphanumeric take 10 mkString ""}"
 
-  private class NetworkService(
-                                val port: Int,
-                                val data: Seq[String],
-                                val sleepBeforeAll: Int = 10,
-                                val sleepAfterAll: Int = 1,
-                                val sleepAfterEach: Int = 5) extends Runnable {
+  private class NetworkService(val port: Int,
+                               val data: Seq[String],
+                               val sleepBeforeAll: Int = 10,
+                               val sleepAfterAll: Int = 1,
+                               val sleepAfterEach: Int = 5)
+      extends Runnable {
     val serverSocket = new ServerSocket(port)
 
     def run(): Unit = {
@@ -31,8 +31,10 @@ class StreamingSuite extends IntegrationSuiteBase {
       val output = new DataOutputStream(socket.getOutputStream)
       Thread.sleep(sleepBeforeAll * 1000)
       data.foreach(d => {
+        // scalastyle:off println
         println(s"send message: $d")
         s"$d\n".getBytes(Charset.forName("UTF-8")).foreach(x => output.write(x))
+        // scalastyle:on println
         Thread.sleep(sleepAfterEach * 1000)
       })
       Thread.sleep(sleepAfterAll * 1000)
@@ -41,11 +43,11 @@ class StreamingSuite extends IntegrationSuiteBase {
     }
   }
 
-  private class NetworkService2(
-                                 val port: Int,
-                                 val times: Int = 1000,
-                                 val sleepBeforeAll: Int = 10,
-                                 val sleepAfterEach: Int = 5) extends Runnable {
+  private class NetworkService2(val port: Int,
+                                val times: Int = 1000,
+                                val sleepBeforeAll: Int = 10,
+                                val sleepAfterEach: Int = 5)
+      extends Runnable {
     val serverSocket = new ServerSocket(port)
 
     def run(): Unit = {
@@ -55,8 +57,12 @@ class StreamingSuite extends IntegrationSuiteBase {
 
       (0 until times).foreach(index => {
         val word = Random.alphanumeric.take(10).mkString("")
+        // scalastyle:off println
         println(s"send message: $index $word")
-        s"$word\n".getBytes(Charset.forName("UTF-8")).foreach(x => output.write(x))
+        // scalastyle:on println
+        s"$word\n"
+          .getBytes(Charset.forName("UTF-8"))
+          .foreach(x => output.write(x))
         Thread.sleep(sleepAfterEach * 1000)
       })
 
@@ -87,13 +93,15 @@ class StreamingSuite extends IntegrationSuiteBase {
     super.afterAll()
   }
 
-  //manual test only
+  // manual test only
   ignore("test") {
     val spark = sqlContext.sparkSession
     import spark.implicits._
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      "create or replace table stream_test_table (value string)")
+    DefaultJDBCWrapper.executeQueryInterruptibly(
+      conn,
+      "create or replace table stream_test_table (value string)"
+    )
 
     val lines = spark.readStream
       .format("socket")
@@ -105,12 +113,9 @@ class StreamingSuite extends IntegrationSuiteBase {
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
-    new Thread(new NetworkService2(
-      5678,
-      sleepBeforeAll = 5,
-      sleepAfterEach = 5
-    )).start()
-
+    new Thread(
+      new NetworkService2(5678, sleepBeforeAll = 5, sleepAfterEach = 5)
+    ).start()
 
     val query = words.writeStream
       .outputMode("append")
@@ -121,9 +126,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
-
     query.awaitTermination()
-
 
   }
 
@@ -135,8 +138,10 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     conn.createStage(name = streamingStage, overwrite = true)
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"create or replace table $table (value string)")
+    DefaultJDBCWrapper.executeQueryInterruptibly(
+      conn,
+      s"create or replace table $table (value string)"
+    )
 
     val lines = spark.readStream
       .format("socket")
@@ -150,18 +155,21 @@ class StreamingSuite extends IntegrationSuiteBase {
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
-    new Thread(new NetworkService(
-      5678,
-      Seq("one two",
-        "three four five",
-        "six seven eight night ten",
-        "1 2 3 4 5",
-        "6 7 8 9 0"),
-      sleepBeforeAll = 5,
-      sleepAfterAll = 10,
-      sleepAfterEach = 5
-    )).start()
-
+    new Thread(
+      new NetworkService(
+        5678,
+        Seq(
+          "one two",
+          "three four five",
+          "six seven eight night ten",
+          "1 2 3 4 5",
+          "6 7 8 9 0"
+        ),
+        sleepBeforeAll = 5,
+        sleepAfterAll = 10,
+        sleepAfterEach = 5
+      )
+    ).start()
 
     val query = output.writeStream
       .outputMode("append")
@@ -174,28 +182,30 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     query.awaitTermination(150000)
 
-    checkTestTable(Seq(
-      Row("0"),
-      Row("1"),
-      Row("2"),
-      Row("3"),
-      Row("4"),
-      Row("5"),
-      Row("6"),
-      Row("7"),
-      Row("8"),
-      Row("9"),
-      Row("eight"),
-      Row("five"),
-      Row("four"),
-      Row("night"),
-      Row("one"),
-      Row("seven"),
-      Row("six"),
-      Row("ten"),
-      Row("three"),
-      Row("two")
-    ))
+    checkTestTable(
+      Seq(
+        Row("0"),
+        Row("1"),
+        Row("2"),
+        Row("3"),
+        Row("4"),
+        Row("5"),
+        Row("6"),
+        Row("7"),
+        Row("8"),
+        Row("9"),
+        Row("eight"),
+        Row("five"),
+        Row("four"),
+        Row("night"),
+        Row("one"),
+        Row("seven"),
+        Row("six"),
+        Row("ten"),
+        Row("three"),
+        Row("two")
+      )
+    )
 
   }
 
@@ -206,20 +216,22 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     conn.createStage(name = streamingStage, overwrite = true)
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"create or replace table $table (key string, value string)")
+    DefaultJDBCWrapper.executeQueryInterruptibly(
+      conn,
+      s"create or replace table $table (key string, value string)"
+    )
 
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
-    val df = spark
-      .readStream
+    val df = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "localhost:9092")
       .option("subscribe", "test")
       .load()
 
-    val query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+    val query = df
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .writeStream
       .outputMode("append")
       .option("checkpointLocation", "check")
@@ -229,7 +241,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
-      query.awaitTermination()
+    query.awaitTermination()
 
   }
 
@@ -241,22 +253,26 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     conn.createStage(name = streamingStage, overwrite = true)
 
-    DefaultJDBCWrapper.executeQueryInterruptibly(conn,
-      s"create or replace table $streamingTable (key string, value string)")
+    DefaultJDBCWrapper.executeQueryInterruptibly(
+      conn,
+      s"create or replace table $streamingTable (key string, value string)"
+    )
 
     val checkpoint = "check"
     removeDirectory(new File(checkpoint))
 
-    val df = spark
-      .readStream
+    val df = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "localhost:9092")
       .option("subscribe", "test")
       .load()
 
+    // scalastyle:off println
     println("-------------------------------------------------")
+    // scalastyle:on println
 
-    var query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+    var query = df
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .writeStream
       .outputMode("append")
       .option("checkpointLocation", "check")
@@ -269,10 +285,13 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     Thread.sleep(20000)
 
+    // scalastyle:off println
     println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+    // scalastyle:on println
     query.stop()
 
-    query = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+    query = df
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .writeStream
       .outputMode("append")
       .option("checkpointLocation", "check")
@@ -289,18 +308,28 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   ignore("test context") {
-    val storage: CloudStorage = CloudStorageOperations.createStorageClient(params, conn, false, Some("spark_streaming_test_stage"))._1
-    //val log = IngestLogManager.readIngestList(storage, conn)
+    val tempStage = false
+    val storage: CloudStorage = CloudStorageOperations
+      .createStorageClient(
+        params,
+        conn,
+        tempStage,
+        Some("spark_streaming_test_stage")
+      )
+      ._1
+    // val log = IngestLogManager.readIngestList(storage, conn)
 
     val failed = IngestContextManager.readFailedFileList(0, storage, conn)
     failed.addFiles(List("a", "b", "c"))
 
     val failed1 = IngestContextManager.readFailedFileList(0, storage, conn)
 
+    // scalastyle:off println
     println(failed1.toString)
+    // scalastyle:on println
 
   }
-  ignore("kafka2"){
+  ignore("kafka2") {
 
     import org.apache.spark.sql.functions._
     val KafkaLoggingTopic = sparkSession.readStream
@@ -312,7 +341,8 @@ class StreamingSuite extends IntegrationSuiteBase {
     val spark = sparkSession
     import spark.implicits._
 
-    val KafkaLoggingTopicDF = KafkaLoggingTopic.select($"value".cast("string")).as("event")
+    val KafkaLoggingTopicDF =
+      KafkaLoggingTopic.select($"value".cast("string")).as("event")
 
     val loggingSchema = new StructType()
       .add("url", StringType)
@@ -326,44 +356,56 @@ class StreamingSuite extends IntegrationSuiteBase {
       .add("sourceIp", StringType)
       .add("eventName", StringType)
       .add("operationName", StringType)
-      .add("header",new StructType()
-        .add("request", StringType)
-        .add("response", StringType)
+      .add(
+        "header",
+        new StructType()
+          .add("request", StringType)
+          .add("response", StringType)
       )
-      .add("body",  new StructType()
-        .add("request", StringType)
-        .add("response", StringType)
+      .add(
+        "body",
+        new StructType()
+          .add("request", StringType)
+          .add("response", StringType)
       )
-      .add("indexed", new StructType()
-        .add("openTimeout", StringType)
-        .add("readTimeout", StringType)
-        .add("threadId", StringType)
+      .add(
+        "indexed",
+        new StructType()
+          .add("openTimeout", StringType)
+          .add("readTimeout", StringType)
+          .add("threadId", StringType)
       )
-      .add("details", new StructType()
-        .add("soapAction", StringType)
-        .add("artifactType", StringType)
-        .add("reason", StringType)
-        .add("requestId", StringType)
-        .add("success", StringType)
-        .add("backendOwner", StringType)
+      .add(
+        "details",
+        new StructType()
+          .add("soapAction", StringType)
+          .add("artifactType", StringType)
+          .add("reason", StringType)
+          .add("requestId", StringType)
+          .add("success", StringType)
+          .add("backendOwner", StringType)
       )
-      .add("syslog", new StructType()
-        .add("appName", StringType)
-        .add("facility", StringType)
-        .add("host", StringType)
-        .add("priority", StringType)
-        .add("severity", StringType)
-        .add("timestamp", StringType)
+      .add(
+        "syslog",
+        new StructType()
+          .add("appName", StringType)
+          .add("facility", StringType)
+          .add("host", StringType)
+          .add("priority", StringType)
+          .add("severity", StringType)
+          .add("timestamp", StringType)
       )
 
-    val loggingSchemaDF = KafkaLoggingTopicDF.select(from_json('value, loggingSchema) as 'event).select("event.*")
+    val loggingSchemaDF = KafkaLoggingTopicDF
+      .select(from_json('value, loggingSchema) as 'event)
+      .select("event.*")
 
     loggingSchemaDF.writeStream
       .outputMode("append")
       .options(connectorOptionsNoTable)
       .option("checkpointLocation", "check")
-      //.trigger(ProcessingTime("1 seconds"))
-      .option("dbtable","streaming_test")
+      // .trigger(ProcessingTime("1 seconds"))
+      .option("dbtable", "streaming_test")
       .option("streaming_stage", "streaming_test")
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()

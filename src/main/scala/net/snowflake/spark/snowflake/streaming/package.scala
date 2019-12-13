@@ -24,19 +24,18 @@ package object streaming {
     new mutable.HashMap()
 
   private[streaming] def openIngestionService(
-                               param: MergedParameters,
-                               pipeName: String,
-                               format: SupportedFormat,
-                               schema: StructType,
-                               storage: CloudStorage,
-                               conn: Connection
-                             ): SnowflakeIngestService = {
+    param: MergedParameters,
+    pipeName: String,
+    format: SupportedFormat,
+    schema: StructType,
+    storage: CloudStorage,
+    conn: Connection
+  ): SnowflakeIngestService = {
     LOGGER.debug(s"create new ingestion service, pipe name: $pipeName")
 
-
     var pipeDropped = false
-    val checkPrevious: Future[Boolean] = Future{
-      while(pipeList.contains(pipeName)) {
+    val checkPrevious: Future[Boolean] = Future {
+      while (pipeList.contains(pipeName)) {
         LOGGER.debug(s"waiting previous pipe dropped")
         Thread.sleep(SLEEP_TIME)
       }
@@ -47,35 +46,33 @@ package object streaming {
 
     Await.result(checkPrevious, TIME_OUT minutes)
 
-    if(pipeDropped) {
-      conn.createTable(param.table.get.name, schema, param, overwrite = false)
+    if (pipeDropped) {
+      conn.createTable(param.table.get.name, schema, param, overwrite = false, temporary = false)
 
       val copy = ConstantString(copySql(param, conn, format)) !
 
-      if(verifyPipe(conn, pipeName, copy.toString)) {
+      if (verifyPipe(conn, pipeName, copy.toString)) {
         LOGGER.info(s"reuse pipe: $pipeName")
-      } else conn.createPipe(pipeName, copy, true)
+      } else conn.createPipe(pipeName, copy, overwrite = true)
 
       val ingestion = new SnowflakeIngestService(param, pipeName, storage, conn)
-      pipeList.put(
-        pipeName,
-        ingestion
-      )
+      pipeList.put(pipeName, ingestion)
       ingestion
     } else {
       LOGGER.error(s"waiting pipe dropped time out")
-      throw
-        new IllegalStateException(s"Waiting pipe dropped time out, pipe name: $pipeName")
+      throw new IllegalStateException(
+        s"Waiting pipe dropped time out, pipe name: $pipeName"
+      )
     }
   }
 
   private[streaming] def closeIngestionService(pipeName: String): Unit = {
     LOGGER.debug(s"closing ingestion service, pipe name: $pipeName")
-    if(pipeList.contains(pipeName)){
+    if (pipeList.contains(pipeName)) {
       pipeList(pipeName).close()
       pipeList.remove(pipeName)
       LOGGER.debug(s"ingestion service closed, pipe name: $pipeName")
-    } else{
+    } else {
       LOGGER.error(s"ingestion service not found, pipe name: $pipeName")
     }
   }
@@ -86,49 +83,61 @@ package object streaming {
     LOGGER.debug(s"all ingestion service closed")
   }
 
-
   /**
     * Generate the COPY SQL command for creating pipe only
     */
-  private def copySql(
-                       param: MergedParameters,
-                       conn: Connection,
-                       format: SupportedFormat
-                     ): String = {
+  private def copySql(param: MergedParameters,
+                      conn: Connection,
+                      format: SupportedFormat): String = {
 
     val tableName = param.table.get
     val stageName = param.streamingStage.get
-    val tableSchema = DefaultJDBCWrapper.resolveTable(conn, tableName.toString, param)
+    val tableSchema =
+      DefaultJDBCWrapper.resolveTable(conn, tableName.toString, param)
 
     def getMappingToString(list: Option[List[(Int, String)]]): String =
       format match {
         case SupportedFormat.JSON =>
-          val schema = DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
-          if (list.isEmpty || list.get.isEmpty)
+          val schema =
+            DefaultJDBCWrapper.resolveTable(conn, tableName.name, param)
+          if (list.isEmpty || list.get.isEmpty) {
             s"(${schema.fields.map(x => Utils.quotedNameIgnoreCase(x.name)).mkString(",")})"
-          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
+          } else {
+            s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
+          }
         case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) ""
-          else s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
+          if (list.isEmpty || list.get.isEmpty) {
+            ""
+          } else {
+            s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
+          }
       }
 
-    def getMappingFromString(list: Option[List[(Int, String)]], from: String): String =
+    def getMappingFromString(list: Option[List[(Int, String)]],
+                             from: String): String =
       format match {
         case SupportedFormat.JSON =>
           if (list.isEmpty || list.get.isEmpty) {
             val names =
-              tableSchema
-                .fields
-                .map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(x.name)))
+              tableSchema.fields
+                .map(
+                  x =>
+                    "parse_json($1):".concat(Utils.quotedNameIgnoreCase(x.name))
+                )
                 .mkString(",")
             s"from (select $names $from tmp)"
+          } else {
+            s"from (select ${list.get.map(x => "parse_json($1):".concat(
+              Utils.quotedNameIgnoreCase(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
           }
-          else
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(Utils.quotedNameIgnoreCase(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
         case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) from
-          else
-            s"from (select ${list.get.map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase(x._1.toString))).mkString(", ")} $from tmp)"
+          if (list.isEmpty || list.get.isEmpty) {
+            from
+          } else {
+            s"from (select ${list.get
+              .map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase(x._1.toString)))
+              .mkString(", ")} $from tmp)"
+          }
       }
 
     val fromString = s"FROM @$stageName"
@@ -140,10 +149,9 @@ package object streaming {
             try {
               (tableSchema.fieldIndex(key) + 1, value)
             } catch {
-              case e: Exception => {
+              case e: Exception =>
                 LOGGER.error("Error occurred while column mapping: " + e)
                 throw e
-              }
             }
         })
 
@@ -181,16 +189,12 @@ package object streaming {
     """.stripMargin.trim
   }
 
-  private[streaming] def verifyPipe(
-                                     conn: Connection,
-                                     pipeName: String,
-                                     copyStatement: String
-                                   ): Boolean =
+  private[streaming] def verifyPipe(conn: Connection,
+                                    pipeName: String,
+                                    copyStatement: String): Boolean =
     conn.pipeDefinition(pipeName) match {
       case Some(str) => str.trim.equals(copyStatement.trim)
       case _ => false
     }
-
-
 
 }

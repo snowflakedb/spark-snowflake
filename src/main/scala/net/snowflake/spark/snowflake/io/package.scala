@@ -17,7 +17,6 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.SupportedSource.SupportedSource
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SQLContext, SaveMode}
@@ -28,31 +27,26 @@ import org.slf4j.{Logger, LoggerFactory}
   */
 package object io {
 
-    private[io] val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  private[io] val logger: Logger = LoggerFactory.getLogger(this.getClass)
 
   /**
     * Read a String RDD from Snowflake through given source
     */
-  def readRDD(
-               sqlContext: SQLContext,
-               params: MergedParameters,
-               statement: SnowflakeSQLStatement,
-               format: SupportedFormat = SupportedFormat.CSV
-             ): RDD[String] =
-    StageReader.readFromStage(sqlContext,params,statement,format)
-
+  def readRDD(sqlContext: SQLContext,
+              params: MergedParameters,
+              statement: SnowflakeSQLStatement,
+              format: SupportedFormat = SupportedFormat.CSV): RDD[String] =
+    StageReader.readFromStage(sqlContext, params, statement, format)
 
   /**
     * Write a String RDD to Snowflake through given source
     */
-  def writeRDD(
-                params: MergedParameters,
-                rdd: RDD[String],
-                schema: StructType,
-                saveMode: SaveMode,
-                format: SupportedFormat = SupportedFormat.CSV,
-                mapper: Option[Map[String, String]] = None
-              ): Unit =
+  def writeRDD(params: MergedParameters,
+               rdd: RDD[String],
+               schema: StructType,
+               saveMode: SaveMode,
+               format: SupportedFormat = SupportedFormat.CSV,
+               mapper: Option[Map[String, String]] = None): Unit =
     StageWriter.writeToStage(rdd, schema, saveMode, params, format)
 
 }

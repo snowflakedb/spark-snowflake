@@ -25,30 +25,31 @@ class TPCHSuite extends PerformanceSuite {
 
   protected final var s3RootDir: String = ""
 
-  protected final val tables: Seq[String] = Seq("lineitem",
-                                                "orders",
-                                                "part",
-                                                "partsupp",
-                                                "customer",
-                                                "supplier",
-                                                "region",
-                                                "nation")
+  protected final val tables: Seq[String] = Seq(
+    "lineitem",
+    "orders",
+    "part",
+    "partsupp",
+    "customer",
+    "supplier",
+    "region",
+    "nation"
+  )
 
-  override var requiredParams = {
+  override var requiredParams: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]
     map.put("TPCHSuite", "")
     map
   }
 
-  override var acceptedArguments = {
+  override var acceptedArguments: mutable.LinkedHashMap[String, Set[String]] = {
     val map = new mutable.LinkedHashMap[String, Set[String]]
     map.put("TPCHSuite", Set("*"))
     map
   }
 
-  override protected var dataSources: mutable.LinkedHashMap[
-    String,
-    Map[String, DataFrame]] =
+  override protected var dataSources
+    : mutable.LinkedHashMap[String, Map[String, DataFrame]] =
     new mutable.LinkedHashMap[String, Map[String, DataFrame]]
 
   private def registerDF(tableName: String): Unit = {
@@ -60,40 +61,46 @@ class TPCHSuite extends PerformanceSuite {
       .load()
 
     val parquet =
-      if (s3Parquet)
+      if (s3Parquet) {
         sparkSession.read
           .schema(sf.schema)
           .parquet(s3RootDir + s"/$tableName/parquet")
-      else sf
+      } else {
+        sf
+      }
 
     val csv =
-      if (s3CSV)
+      if (s3CSV) {
         sparkSession.read
           .schema(sf.schema)
           .option("delimiter", "|")
           .csv(s3RootDir + s"/$tableName/csv")
-      else sf
+      } else {
+        sf
+      }
 
     val jdbc =
-      if (jdbcSource)
+      if (jdbcSource) {
         sparkSession.read
           .schema(sf.schema)
           .jdbc(jdbcURL, tableName, jdbcProperties)
-      else sf
+      } else {
+        sf
+      }
 
-    dataSources.put(tableName.toUpperCase,
-                    Map("parquet"   -> parquet,
-                        "csv"       -> csv,
-                        "snowflake" -> sf,
-                        "jdbc"      -> jdbc))
+    dataSources.put(
+      tableName.toUpperCase,
+      Map("parquet" -> parquet, "csv" -> csv, "snowflake" -> sf, "jdbc" -> jdbc)
+    )
   }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     if (runTests) {
-      if (s3Parquet || s3CSV)
+      if (s3Parquet || s3CSV) {
         s3RootDir = getConfigValue("s3SourceFilesRoot")
+      }
 
       tables.foreach(registerDF)
     }
@@ -120,8 +127,7 @@ group by
         l_linestatus
 order by
         l_returnflag,
-        l_linestatus""",
-              "TPCH-Q01")
+        l_linestatus""", "TPCH-Q01")
   }
 
   test("TPCH-Q02") {
@@ -168,8 +174,7 @@ order by
        n_name,
        s_name,
        p_partkey
-limit 100""",
-              "TPCH-Q02")
+limit 100""", "TPCH-Q02")
   }
 
   test("TPCH-Q03") {
@@ -195,8 +200,7 @@ where
  order by
        2 desc,
        o_orderdate
-limit 10""",
-              "TPCH-Q03")
+limit 10""", "TPCH-Q03")
   }
 
   test("TPCH-Q04") {
@@ -220,8 +224,7 @@ limit 10""",
  group by
        o_orderpriority
  order by
-      o_orderpriority""",
-              "TPCH-Q04")
+      o_orderpriority""", "TPCH-Q04")
   }
 
   test("TPCH-Q05") {
@@ -248,8 +251,7 @@ where
 group by
       n_name
 order by
-      2 desc""",
-              "TPCH-Q05")
+      2 desc""", "TPCH-Q05")
   }
 
   test("TPCH-Q06") {
@@ -261,8 +263,7 @@ where
   l_shipdate >= to_date('1994-01-01')
   and l_shipdate < to_date('1995-01-01')
   and l_discount >= 0.05 and l_discount <= 0.07
-  and l_quantity < 24""",
-              "TPCH-Q06")
+  and l_quantity < 24""", "TPCH-Q06")
   }
 
   test("TPCH-Q07") {
@@ -411,8 +412,7 @@ group by
       c_comment
 order by
       3 desc
-limit 20""",
-              "TPCH-Q10")
+limit 20""", "TPCH-Q10")
   }
 
   test("TPCH-Q11") {
@@ -443,8 +443,7 @@ limit 20""",
     )
     order by
      2 desc
-limit 20""",
-              "TPCH-Q11")
+limit 20""", "TPCH-Q11")
   }
 
   test("TPCH-Q12") {
@@ -475,8 +474,7 @@ limit 20""",
  group by
        l_shipmode
  order by
-       l_shipmode""",
-              "TPCH-Q12")
+       l_shipmode""", "TPCH-Q12")
   }
 
   test("TPCH-Q13") {
@@ -501,8 +499,7 @@ group by
       c_count
 order by
       2 desc,
-      c_count desc""",
-              "TPCH-Q13")
+      c_count desc""", "TPCH-Q13")
   }
 
   test("TPCH-Q14") {
@@ -517,11 +514,10 @@ order by
         part
   where l_partkey = p_partkey
     and l_shipdate >= to_date('1995-09-01')
-    and l_shipdate < to_date('1995-10-01')""",
-              "TPCH-Q14")
+    and l_shipdate < to_date('1995-10-01')""", "TPCH-Q14")
   }
 
-/*
+  /*
   test("TPCH-Q15") {
 
     val partsupp = sparkSession.read
@@ -563,7 +559,7 @@ order by
       s_suppkey""",
               "TPCH-Q15")
   }
-*/
+   */
 
   test("TPCH-Q16") {
     testQuery(s"""select
@@ -616,8 +612,7 @@ where
           lineitem
     where
           l_partkey = p_partkey
-     )""",
-              "TPCH-Q17")
+     )""", "TPCH-Q17")
   }
 
   test("TPCH-Q18") {
@@ -654,8 +649,7 @@ group by
 order by
       o_totalprice desc,
       o_orderdate
-limit 100""",
-              "TPCH-Q18")
+limit 100""", "TPCH-Q18")
 
   }
 
@@ -694,8 +688,7 @@ where
   and p_size between 1 and 15
   and l_shipmode in ('AIR', 'AIR REG')
   and l_shipinstruct = 'DELIVER IN PERSON'
-    )""",
-              "TPCH-Q19")
+    )""", "TPCH-Q19")
   }
 
   test("TPCH-Q20") {
@@ -736,8 +729,7 @@ where
   and n_name = 'CANADA'
 order by
       s_name
-limit 30""",
-              "TPCH-Q20")
+limit 30""", "TPCH-Q20")
   }
 
   test("TPCH-Q21") {
@@ -780,8 +772,7 @@ group by
 order by
       2 desc,
       s_name
-limit 100""",
-              "TPCH-Q21")
+limit 100""", "TPCH-Q21")
   }
 
   test("TPCH-Q22") {
@@ -818,8 +809,7 @@ limit 100""",
 group by
       cntrycode
 order by
-      cntrycode""",
-              "TPCH-Q22")
+      cntrycode""", "TPCH-Q22")
   }
 
   override def beforeEach(): Unit = {

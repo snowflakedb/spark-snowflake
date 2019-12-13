@@ -5,7 +5,7 @@ import java.io.ByteArrayInputStream
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
 
-class RecordReaderSuite extends FunSuite{
+class RecordReaderSuite extends FunSuite {
 
   val mapper: ObjectMapper = new ObjectMapper()
 
@@ -44,7 +44,6 @@ class RecordReaderSuite extends FunSuite{
          |}
        """.stripMargin
     val file = record1 + record2
-
 
     val recordReader: SFRecordReader = new SFRecordReader(SupportedFormat.JSON)
 

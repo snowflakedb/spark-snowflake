@@ -41,20 +41,21 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     "snowflake-all",
     "snowflake-stage",
     "snowflake-with-pushdown",
-    "snowflake-partial-pushdown")
+    "snowflake-partial-pushdown"
+  )
 
-  protected final var fullPushdown: Boolean    = false
+  protected final var fullPushdown: Boolean = false
   protected final var partialPushdown: Boolean = false
-  protected final var internalStage: Boolean   = false
-  protected final var s3CSV: Boolean           = false
-  protected final var s3Parquet: Boolean       = false
-  protected final var jdbcSource: Boolean      = false
+  protected final var internalStage: Boolean = false
+  protected final var s3CSV: Boolean = false
+  protected final var s3Parquet: Boolean = false
+  protected final var jdbcSource: Boolean = false
 
   protected final val outputFormatAccepted =
     Set[String]("csv", "print", "both")
-  protected var dataSources: mutable.LinkedHashMap[String,
-                                                   Map[String, DataFrame]]
-  protected final var headersWritten: Boolean    = false
+  protected var dataSources: mutable.LinkedHashMap[String, Map[String,
+                                                               DataFrame]]
+  protected final var headersWritten: Boolean = false
   protected final var fileWriter: Option[Writer] = None
 
   protected final var currentSource: String = ""
@@ -64,10 +65,10 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   protected var acceptedArguments: mutable.LinkedHashMap[String, Set[String]]
 
   /** Configuration string for run mode for benchmarks */
-  protected final var runOption: String = ""
+  protected var runOption: String = ""
 
   /** Configuration string for output: simple print or CSV */
-  protected final var outputFormat: String = ""
+  protected var outputFormat: String = ""
 
   protected final var runTests: Boolean = true
 
@@ -75,19 +76,19 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   protected final var sessionStatus: Boolean = false
 
   protected final var jdbcProperties: Properties = new Properties
-  protected final var jdbcURL: String            = ""
+  protected final var jdbcURL: String = ""
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sessionStatus = sparkSession.experimental.extraStrategies.exists(s =>
-      s.isInstanceOf[SnowflakeStrategy])
+    sessionStatus = sparkSession.experimental.extraStrategies
+      .exists(s => s.isInstanceOf[SnowflakeStrategy])
 
     try {
       runOption = getConfigValue("runOption")
       outputFormat = getConfigValue("outputFormat")
 
-      for ((k, v) <- requiredParams)
+      for ((k, _) <- requiredParams)
         requiredParams.put(k, getConfigValue(k).toLowerCase)
 
     } catch {
@@ -95,9 +96,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
         if (t.getMessage contains MISSING_PARAM_ERROR) {
           runTests = false
           val reqParams = requiredParams.keySet.mkString(", ")
+          // scalastyle:off println
           println(
             s"""One or more required parameters for running the benchmark suite was missing: " +
-              "runOption, outputFormat, $reqParams. Skipping ${getClass.getSimpleName}.""")
+              "runOption, outputFormat, $reqParams. Skipping ${getClass.getSimpleName}."""
+          )
+          // scalastyle:on println
         } else throw t
 
       case e: Exception => throw e
@@ -109,8 +113,18 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     }
 
     internalStage = Set("all", "snowflake-all-with-stage", "snowflake-stage") contains runOption
-    partialPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-partial-pushdown") contains runOption
-    fullPushdown = Set("all", "snowflake-all", "snowflake-all-with-stage", "snowflake-with-pushdown") contains runOption
+    partialPushdown = Set(
+      "all",
+      "snowflake-all",
+      "snowflake-all-with-stage",
+      "snowflake-partial-pushdown"
+    ) contains runOption
+    fullPushdown = Set(
+      "all",
+      "snowflake-all",
+      "snowflake-all-with-stage",
+      "snowflake-with-pushdown"
+    ) contains runOption
     jdbcSource = Set("all", "jdbc-source") contains runOption
     s3Parquet = Set("all", "s3-all", "s3-parquet") contains runOption
     s3CSV = Set("all", "s3-all", "s3-csv") contains runOption
@@ -121,7 +135,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     jdbcProperties.put("user", params.sfUser)
     params.privateKey match {
-      case Some(privateKey) =>
+      case Some(_) =>
         jdbcProperties.put("privateKey", params.privateKey)
       case None =>
         jdbcProperties.put("password", params.sfPassword)
@@ -153,10 +167,12 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     for ((param, acceptedSet) <- argCheckMap) {
       val argValue = fullParams
         .getOrElse(param, fail(s"Required parameter $param missing."))
-      if (!acceptedSet.contains(argValue) && !acceptedSet.contains("*"))
+      if (!acceptedSet.contains(argValue) && !acceptedSet.contains("*")) {
         fail(
           s"""Value $argValue not accepted for parameter $param. Accepted values are: ${acceptedSet
-            .mkString(", ")} """)
+            .mkString(", ")} """
+        )
+      }
     }
   }
 
@@ -174,8 +190,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   }
 
   /**
-    * Run the query using the given runtime configurations (S3-direct, with pushdown, without pushdown, etc.,
-    * outputting using also the provided config value.
+    * Run the query using the given runtime configurations (S3-direct, with pushdown,
+    * without pushdown, etc., outputting using also the provided config value.
     */
   protected final def testQuery(query: String,
                                 name: String = "unnamed"): Unit = {
@@ -186,7 +202,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     if (!runTests) return
 
     var columnWriters =
-      new mutable.ListBuffer[((String, String) => Option[String])]
+      new mutable.ListBuffer[(String, String) => Option[String]]
 
     var outputHeaders =
       new mutable.ListBuffer[String]
@@ -228,9 +244,11 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       columnWriters.map(f => f(query, name).getOrElse(failedMessage))
 
     if (outputFormat == "print" || outputFormat == "both") {
+      // scalastyle:off println
       outputHeaders
         .zip(results)
         .foreach(x => println(name + ", " + x._1 + ": " + x._2))
+      // scalastyle:on println
     }
 
     if (outputFormat == "csv" || outputFormat == "both") {
@@ -260,8 +278,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     if (fileWriter.isEmpty) {
       try {
         val outputFile = new File(getConfigValue("outputFile"))
-        fileWriter = Some(
-          new BufferedWriter(new FileWriter(outputFile, false)))
+        fileWriter = Some(new BufferedWriter(new FileWriter(outputFile, false)))
       } catch {
         case e: Exception =>
           if (fileWriter.isDefined) {
@@ -273,15 +290,16 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   }
 
   protected final def runWithSnowflake(
-      pushdown: Boolean)(sql: String, name: String): Option[String] = {
+    pushdown: Boolean
+  )(sql: String, name: String): Option[String] = {
 
     if (currentSource != "snowflake") {
       dataSources.foreach {
         case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             "snowflake",
-            fail(
-              "Snowflake datasource missing for snowflake performance test."))
+            fail("Snowflake datasource missing for snowflake performance test.")
+          )
           df.createOrReplaceTempView(tableName)
       }
       currentSource = "snowflake"
@@ -295,7 +313,8 @@ trait PerformanceSuite extends IntegrationSuiteBase {
   }
 
   protected final def runWithSnowflakeStage(
-      pushdown: Boolean)(sql: String, name: String): Option[String] = {
+    pushdown: Boolean
+  )(sql: String, name: String): Option[String] = {
 
     if (currentSource != "snowflake-stage") {
       dataSources.foreach {
@@ -303,7 +322,9 @@ trait PerformanceSuite extends IntegrationSuiteBase {
           val df: DataFrame = sources.getOrElse(
             "snowflake-stage",
             fail(
-              "Snowflake-Stage datasource missing for snowflake performance test."))
+              "Snowflake-Stage datasource missing for snowflake performance test."
+            )
+          )
           df.createOrReplaceTempView(tableName)
       }
       currentSource = "snowflake-stage"
@@ -324,22 +345,25 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       Some(((System.nanoTime() - t1) / 1e9d).toString)
     } catch {
       case _: Exception =>
+        // scalastyle:off println
         println(s"""Query $name failed.""")
+        // scalastyle:on println
         None
     }
   }
 
   /* Used for running direct from S3, or JDBC Source */
   protected final def runWithoutSnowflake(
-      format: String)(sql: String, name: String): Option[String] = {
+    format: String
+  )(sql: String, name: String): Option[String] = {
 
     if (currentSource != format) {
       dataSources.foreach {
         case (tableName: String, sources: Map[String, DataFrame]) =>
           val df: DataFrame = sources.getOrElse(
             format,
-            fail(
-              s"$format datasource missing for snowflake performance test."))
+            fail(s"$format datasource missing for snowflake performance test.")
+          )
           df.createOrReplaceTempView(tableName)
       }
       currentSource = format

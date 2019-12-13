@@ -35,29 +35,30 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 /**
   * Created by mzukowski on 8/9/16.
   */
+private class TestContext extends SparkContext("local", "SnowflakeBaseTest") {
 
-private class TestContext extends SparkContext("local", "SnowflakeBaseTest")
-{
   /**
     * A text file containing fake unloaded Snowflake data of all supported types
     */
-  val testData = new File("src/test/resources/snowflake_unload_data.txt").toURI.toString
+  val testData: String = new File(
+    "src/test/resources/snowflake_unload_data.txt").toURI.toString
 
   override def newAPIHadoopFile[K, V, F <: InputFormat[K, V]](
-                                                               path: String,
-                                                               fClass: Class[F],
-                                                               kClass: Class[K],
-                                                               vClass: Class[V],
-                                                               conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+    path: String,
+    fClass: Class[F],
+    kClass: Class[K],
+    vClass: Class[V],
+    conf: Configuration = hadoopConfiguration
+  ): RDD[(K, V)] = {
     super.newAPIHadoopFile[K, V, F](testData, fClass, kClass, vClass, conf)
   }
 }
 
-class BaseTest extends FunSuite
+class BaseTest
+    extends FunSuite
     with QueryTest
     with BeforeAndAfterAll
-    with BeforeAndAfterEach
-{
+    with BeforeAndAfterEach {
 
   /**
     * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
@@ -93,28 +94,38 @@ class BaseTest extends FunSuite
     sc = new TestContext
     // We need to use a DirectOutputCommitter to work around an issue which occurs with renames
     // while using the mocked S3 filesystem.
-    sc.hadoopConfiguration.set("spark.sql.sources.outputCommitterClass",
-      classOf[DirectOutputCommitter].getName)
-    sc.hadoopConfiguration.set("mapred.output.committer.class",
-      classOf[DirectOutputCommitter].getName)
+    sc.hadoopConfiguration.set(
+      "spark.sql.sources.outputCommitterClass",
+      classOf[DirectOutputCommitter].getName
+    )
+    sc.hadoopConfiguration.set(
+      "mapred.output.committer.class",
+      classOf[DirectOutputCommitter].getName
+    )
     sc.hadoopConfiguration.set("fs.s3.awsAccessKeyId", "test1")
     sc.hadoopConfiguration.set("fs.s3.awsSecretAccessKey", "test2")
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", "test1")
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", "test2")
     // Configure a mock S3 client so that we don't hit errors when trying to access AWS in tests.
-    mockS3Client = Mockito.mock(classOf[AmazonS3Client], Mockito.RETURNS_SMART_NULLS)
+    mockS3Client =
+      Mockito.mock(classOf[AmazonS3Client], Mockito.RETURNS_SMART_NULLS)
     when(mockS3Client.getBucketLifecycleConfiguration(anyString())).thenReturn(
       new BucketLifecycleConfiguration().withRules(
-        new Rule().withPrefix("").withStatus(BucketLifecycleConfiguration.ENABLED)
-      ))
+        new Rule()
+          .withPrefix("")
+          .withStatus(BucketLifecycleConfiguration.ENABLED)
+      )
+    )
   }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     s3FileSystem = FileSystem.get(new URI(s3TempDir), sc.hadoopConfiguration)
     testSqlContext = new SQLContext(sc)
-    expectedDataDF =
-      testSqlContext.createDataFrame(sc.parallelize(TestUtils.expectedData), TestUtils.testSchema)
+    expectedDataDF = testSqlContext.createDataFrame(
+      sc.parallelize(TestUtils.expectedData),
+      TestUtils.testSchema
+    )
   }
 
   override def afterEach(): Unit = {

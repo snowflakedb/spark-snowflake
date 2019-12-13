@@ -25,47 +25,48 @@ class TPCDSSuite extends PerformanceSuite {
 
   protected final var s3RootDir: String = ""
 
-  protected final val tables: Seq[String] = Seq("call_center",
-                                                "catalog_page",
-                                                "catalog_returns",
-                                                "catalog_sales",
-                                                "customer",
-                                                "customer_address",
-                                                "customer_demographics",
-                                                "date_dim",
-                                                "dbgen_version",
-                                                "household_demographics",
-                                                "income_band",
-                                                "inventory",
-                                                "item",
-                                                "promotion",
-                                                "reason",
-                                                "ship_mode",
-                                                "store",
-                                                "store_returns",
-                                                "store_sales",
-                                                "time_dim",
-                                                "warehouse",
-                                                "web_page",
-                                                "web_returns",
-                                                "web_sales",
-                                                "web_site")
+  protected final val tables: Seq[String] = Seq(
+    "call_center",
+    "catalog_page",
+    "catalog_returns",
+    "catalog_sales",
+    "customer",
+    "customer_address",
+    "customer_demographics",
+    "date_dim",
+    "dbgen_version",
+    "household_demographics",
+    "income_band",
+    "inventory",
+    "item",
+    "promotion",
+    "reason",
+    "ship_mode",
+    "store",
+    "store_returns",
+    "store_sales",
+    "time_dim",
+    "warehouse",
+    "web_page",
+    "web_returns",
+    "web_sales",
+    "web_site"
+  )
 
-  override var requiredParams = {
+  override var requiredParams: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]
     map.put("TPCDSSuite", "")
     map
   }
 
-  override var acceptedArguments = {
+  override var acceptedArguments: mutable.LinkedHashMap[String, Set[String]] = {
     val map = new mutable.LinkedHashMap[String, Set[String]]
     map.put("TPCDSSuite", Set("*"))
     map
   }
 
-  override protected var dataSources: mutable.LinkedHashMap[
-    String,
-    Map[String, DataFrame]] =
+  override protected var dataSources
+    : mutable.LinkedHashMap[String, Map[String, DataFrame]] =
     new mutable.LinkedHashMap[String, Map[String, DataFrame]]
 
   private def registerDF(tableName: String): Unit = {
@@ -77,40 +78,46 @@ class TPCDSSuite extends PerformanceSuite {
       .load()
 
     val parquet =
-      if (s3Parquet)
+      if (s3Parquet) {
         sparkSession.read
           .schema(sf.schema)
           .parquet(s3RootDir + s"/$tableName/parquet")
-      else sf
+      } else {
+        sf
+      }
 
     val csv =
-      if (s3CSV)
+      if (s3CSV) {
         sparkSession.read
           .schema(sf.schema)
           .option("delimiter", "|")
           .csv(s3RootDir + s"/$tableName/csv")
-      else sf
+      } else {
+        sf
+      }
 
     val jdbc =
-      if (jdbcSource)
+      if (jdbcSource) {
         sparkSession.read
           .schema(sf.schema)
           .jdbc(jdbcURL, tableName, jdbcProperties)
-      else sf
+      } else {
+        sf
+      }
 
-    dataSources.put(tableName.toUpperCase,
-                    Map("parquet"   -> parquet,
-                        "csv"       -> csv,
-                        "snowflake" -> sf,
-                        "jdbc"      -> jdbc))
+    dataSources.put(
+      tableName.toUpperCase,
+      Map("parquet" -> parquet, "csv" -> csv, "snowflake" -> sf, "jdbc" -> jdbc)
+    )
   }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     if (runTests) {
-      if (s3Parquet || s3CSV)
+      if (s3Parquet || s3CSV) {
         s3RootDir = getConfigValue("s3SourceFilesRoot")
+      }
 
       tables.foreach(registerDF)
     }
@@ -159,8 +166,9 @@ class TPCDSSuite extends PerformanceSuite {
  limit 100""", "TPCDS-Q07")
   }
 
-test("TPCDS-Q19") {
-  testQuery(s"""select  i_brand_id brand_id, i_brand brand, i_manufact_id, i_manufact,
+  test("TPCDS-Q19") {
+    testQuery(
+      s"""select  i_brand_id brand_id, i_brand brand, i_manufact_id, i_manufact,
         sum(ss_ext_sales_price) ext_price
  from date_dim, store_sales, item,customer,customer_address,store
  where d_date_sk = ss_sold_date_sk
@@ -182,8 +190,10 @@ test("TPCDS-Q19") {
          ,i_manufact_id
          ,i_manufact
 limit 100
-""", "TPCDS-Q19")
-}
+""",
+      "TPCDS-Q19"
+    )
+  }
 
   test("TPCDS-Q27") {
     testQuery(s"""select  i_item_id,

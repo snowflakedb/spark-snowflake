@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory
   *   - Add support for VARIANT
   */
 class DefaultSource(jdbcWrapper: JDBCWrapper)
-  extends RelationProvider
+    extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider
     with StreamSinkProvider
@@ -50,17 +50,19 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   def this() = this(DefaultJDBCWrapper)
 
   /**
-    * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL. Resolves the schema
-    * using JDBC connection over provided URL, which must contain credentials.
+    * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL.
+    * Resolves the schema using JDBC connection over provided URL, which must contain credentials.
     */
-  override def createRelation(
-                               sqlContext: SQLContext,
-                               parameters: Map[String, String]): BaseRelation = {
+  override def createRelation(sqlContext: SQLContext,
+                              parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    //check spark version for push down
-    if (params.autoPushdown)
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
-    //pass parameters to pushdown functions
+    // check spark version for push down
+    if (params.autoPushdown) {
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
+        sqlContext.sparkSession
+      )
+    }
+    // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
@@ -68,15 +70,17 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   /**
     * Load a `SnowflakeRelation` using user-provided schema, so no inference over JDBC will be used.
     */
-  override def createRelation(
-                               sqlContext: SQLContext,
-                               parameters: Map[String, String],
-                               schema: StructType): BaseRelation = {
+  override def createRelation(sqlContext: SQLContext,
+                              parameters: Map[String, String],
+                              schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    //check spark version for push down
-    if (params.autoPushdown)
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
-    //pass parameters to pushdown functions
+    // check spark version for push down
+    if (params.autoPushdown) {
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
+        sqlContext.sparkSession
+      )
+    }
+    // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
@@ -84,21 +88,24 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   /**
     * Creates a Relation instance by first writing the contents of the given DataFrame to Snowflake
     */
-  override def createRelation(
-                               sqlContext: SQLContext,
-                               saveMode: SaveMode,
-                               parameters: Map[String, String],
-                               data: DataFrame): BaseRelation = {
+  override def createRelation(sqlContext: SQLContext,
+                              saveMode: SaveMode,
+                              parameters: Map[String, String],
+                              data: DataFrame): BaseRelation = {
 
     val params = Parameters.mergeParameters(parameters)
-    //check spark version for push down
-    if (params.autoPushdown)
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(sqlContext.sparkSession)
-    //pass parameters to pushdown functions
+    // check spark version for push down
+    if (params.autoPushdown) {
+      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
+        sqlContext.sparkSession
+      )
+    }
+    // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
-        "For save operations you must specify a Snowfake table name with the 'dbtable' parameter")
+        "For save operations you must specify a Snowfake table name with the 'dbtable' parameter"
+      )
     }
 
     def tableExists: Boolean = {
@@ -115,7 +122,9 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
       case SaveMode.Overwrite => (true, true)
       case SaveMode.ErrorIfExists =>
         if (tableExists) {
-          sys.error(s"Table $table already exists! (SaveMode is set to ErrorIfExists)")
+          sys.error(
+            s"Table $table already exists! (SaveMode is set to ErrorIfExists)"
+          )
         } else {
           (true, false)
         }
@@ -131,18 +140,21 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
       new SnowflakeWriter(jdbcWrapper)
-        .save(sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
+        .save(
+          sqlContext,
+          data,
+          saveMode,
+          Parameters.mergeParameters(updatedParams)
+        )
 
     }
 
     createRelation(sqlContext, parameters)
   }
 
-  override def createSink(
-                           sqlContext: SQLContext,
-                           parameters: Map[String, String],
-                           partitionColumns: Seq[String],
-                           outputMode: OutputMode
-                         ): Sink =
+  override def createSink(sqlContext: SQLContext,
+                          parameters: Map[String, String],
+                          partitionColumns: Seq[String],
+                          outputMode: OutputMode): Sink =
     new SnowflakeSink(sqlContext, parameters, partitionColumns, outputMode)
 }

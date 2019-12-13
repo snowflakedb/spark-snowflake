@@ -36,7 +36,6 @@ import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.file.CloudFileDirectory
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, ProxyInfo}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
@@ -45,12 +44,11 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.commons.io.IOUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
 import scala.collection.immutable.HashMap
 import scala.collection.JavaConversions._
-
 
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
@@ -69,14 +67,14 @@ object CloudStorageOperations {
   private final val AZ_KEY = "EncryptedKey"
   private final val AZ_MATDESC = "matdesc"
 
-  val log = LoggerFactory.getLogger(getClass)
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
   private[io] final def getDecryptedStream(
-                                            stream: InputStream,
-                                            masterKey: String,
-                                            metaData: util.Map[String, String],
-                                            stageType: StageType
-                                          ): InputStream = {
+    stream: InputStream,
+    masterKey: String,
+    metaData: util.Map[String, String],
+    stageType: StageType
+  ): InputStream = {
 
     val decodedKey = Base64.decode(masterKey)
     val (key, iv) =
@@ -86,16 +84,18 @@ object CloudStorageOperations {
         case StageType.AZURE =>
           parseEncryptionData(metaData.get(AZ_ENCRYPTIONDATA))
         case _ =>
-          throw new
-              UnsupportedOperationException(
-                s"Only support s3 or azure stage. Stage Type: $stageType")
+          throw new UnsupportedOperationException(
+            s"Only support s3 or azure stage. Stage Type: $stageType"
+          )
       }
 
-
-    if (key == null || iv == null)
-      throw new SnowflakeSQLException(SqlState.INTERNAL_ERROR,
+    if (key == null || iv == null) {
+      throw new SnowflakeSQLException(
+        SqlState.INTERNAL_ERROR,
         ErrorCode.INTERNAL_ERROR.getMessageCode,
-        "File " + "metadata incomplete")
+        "File " + "metadata incomplete"
+      )
+    }
 
     val keyBytes: Array[Byte] = Base64.decode(key)
     val ivBytes: Array[Byte] = Base64.decode(iv)
@@ -105,7 +105,6 @@ object CloudStorageOperations {
 
     val keyCipher: Cipher = Cipher.getInstance(KEY_CIPHER)
     keyCipher.init(Cipher.DECRYPT_MODE, queryStageMasterKey)
-
 
     val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes)
     val fileKey =
@@ -117,22 +116,26 @@ object CloudStorageOperations {
     new CipherInputStream(stream, dataCipher)
   }
 
-  private[io] final def parseEncryptionData(jsonEncryptionData: String):
-  (String, String) = {
+  private[io] final def parseEncryptionData(
+    jsonEncryptionData: String
+  ): (String, String) = {
     val mapper: ObjectMapper = new ObjectMapper()
     val encryptionDataNode: JsonNode = mapper.readTree(jsonEncryptionData)
     val iv: String = encryptionDataNode.findValue(AZ_IV).asText()
     val key: String = encryptionDataNode
-      .findValue(AZ_KEY_WRAP).findValue(AZ_KEY).asText()
+      .findValue(AZ_KEY_WRAP)
+      .findValue(AZ_KEY)
+      .asText()
     (key, iv)
   }
 
   private[io] final def getCipherAndS3Metadata(
-                                                masterKey: String,
-                                                queryId: String,
-                                                smkId: String
-                                              ): (Cipher, ObjectMetadata) = {
-    val (cipher, matDesc, encKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
+    masterKey: String,
+    queryId: String,
+    smkId: String
+  ): (Cipher, ObjectMetadata) = {
+    val (cipher, matDesc, encKeK, ivData) =
+      getCipherAndMetadata(masterKey, queryId, smkId)
     val meta = new ObjectMetadata()
     meta.addUserMetadata(AMZ_MATDESC, matDesc)
     meta.addUserMetadata(AMZ_KEY, encKeK)
@@ -141,11 +144,10 @@ object CloudStorageOperations {
   }
 
   private[io] final def getCipherAndAZMetaData(
-                                                masterKey: String,
-                                                queryId: String,
-                                                smkId: String
-                                              ): (Cipher, util.HashMap[String, String]) = {
-
+    masterKey: String,
+    queryId: String,
+    smkId: String
+  ): (Cipher, util.HashMap[String, String]) = {
 
     def buildEncryptionMetadataJSON(iv64: String, key64: String): String =
       s"""
@@ -157,7 +159,8 @@ object CloudStorageOperations {
          | "KeyWrappingMetadata":{"EncryptionLibrary":"Java 5.3.0"}}
        """.stripMargin
 
-    val (cipher, matDesc, enKeK, ivData) = getCipherAndMetadata(masterKey, queryId, smkId)
+    val (cipher, matDesc, enKeK, ivData) =
+      getCipherAndMetadata(masterKey, queryId, smkId)
 
     val meta = new util.HashMap[String, String]()
 
@@ -168,9 +171,10 @@ object CloudStorageOperations {
   }
 
   private[io] final def getCipherAndMetadata(
-                                              masterKey: String,
-                                              queryId: String,
-                                              smkId: String): (Cipher, String, String, String) = {
+    masterKey: String,
+    queryId: String,
+    smkId: String
+  ): (Cipher, String, String, String) = {
 
     val decodedKey = Base64.decode(masterKey)
     val keySize = decodedKey.length
@@ -200,19 +204,27 @@ object CloudStorageOperations {
     val matDesc =
       new MatDesc(smkId.toLong, queryId, keySize * 8)
 
-    (fileCipher, matDesc.toString, Base64.encodeAsString(encKeK: _*), Base64.encodeAsString(ivData: _*))
+    (
+      fileCipher,
+      matDesc.toString,
+      Base64.encodeAsString(encKeK: _*),
+      Base64.encodeAsString(ivData: _*)
+    )
   }
 
-  def createStorageClientFromStage(
-                                    param: MergedParameters,
-                                    conn: Connection,
-                                    stageName: String,
-                                    dir: Option[String] = None,
-                                    temporary: Boolean = false
-                                  ): CloudStorage = {
+  def createStorageClientFromStage(param: MergedParameters,
+                                   conn: Connection,
+                                   stageName: String,
+                                   dir: Option[String] = None,
+                                   temporary: Boolean = false): CloudStorage = {
     conn.createStage(stageName, temporary = temporary)
     @transient val stageManager =
-      new SFInternalStage(false, param, stageName, conn.asInstanceOf[SnowflakeConnectionV1])
+      new SFInternalStage(
+        false,
+        param,
+        stageName,
+        conn.asInstanceOf[SnowflakeConnectionV1]
+      )
 
     stageManager.stageType match {
       case StageType.S3 =>
@@ -228,23 +240,24 @@ object CloudStorageOperations {
     }
   }
 
-
   /**
     * @return Storage client and stage name
     */
   def createStorageClient(
-                           param: MergedParameters,
-                           conn: Connection,
-                           tempStage: Boolean = true,
-                           stage: Option[String] = None
-                         ): (CloudStorage, String) = {
-    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
+    param: MergedParameters,
+    conn: Connection,
+    tempStage: Boolean = true,
+    stage: Option[String] = None
+  ): (CloudStorage, String) = {
+    val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
     val stageName = stage
-      .getOrElse(s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}")
+      .getOrElse(
+        s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}"
+      )
 
     param.rootTempDir match {
-      //External Stage
+      // External Stage
       case azure_url(container, account, endpoint, path) =>
         require(param.azureSAS.isDefined, "missing Azure SAS")
 
@@ -255,22 +268,25 @@ object CloudStorageOperations {
              |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
              |url = 'azure://$account.$endpoint/$container/$path'
              |credentials =
-             |(azure_sas_token='${azureSAS}')
+             |(azure_sas_token='$azureSAS')
          """.stripMargin
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
-        (ExternalAzureStorage(
-          containerName = container,
-          azureAccount = account,
-          azureEndpoint = endpoint,
-          azureSAS = azureSAS,
-          param.proxyInfo,
-          param.maxRetryCount,
-          param.expectedPartitionCount,
-          pref = path,
-          connection = conn
-        ), stageName)
+        (
+          ExternalAzureStorage(
+            containerName = container,
+            azureAccount = account,
+            azureEndpoint = endpoint,
+            azureSAS = azureSAS,
+            param.proxyInfo,
+            param.maxRetryCount,
+            param.expectedPartitionCount,
+            pref = path,
+            connection = conn
+          ),
+          stageName
+        )
 
       case s3_url(bucket, prefix) =>
         require(param.awsAccessKey.isDefined, "missing aws access key")
@@ -286,18 +302,24 @@ object CloudStorageOperations {
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
-        (ExternalS3Storage(
-          bucketName = bucket,
-          awsId = param.awsAccessKey.get,
-          awsKey = param.awsSecretKey.get,
-          param.proxyInfo,
-          param.maxRetryCount,
-          param.expectedPartitionCount,
-          pref = prefix,
-          connection = conn
-        ), stageName)
+        (
+          ExternalS3Storage(
+            bucketName = bucket,
+            awsId = param.awsAccessKey.get,
+            awsKey = param.awsSecretKey.get,
+            param.proxyInfo,
+            param.maxRetryCount,
+            param.expectedPartitionCount,
+            pref = prefix,
+            connection = conn
+          ),
+          stageName
+        )
       case _ => // Internal Stage
-        (createStorageClientFromStage(param, conn, stageName, None, tempStage), stageName)
+        (
+          createStorageClientFromStage(param, conn, stageName, None, tempStage),
+          stageName
+        )
     }
   }
 
@@ -309,24 +331,24 @@ object CloudStorageOperations {
     * @return a list of file name
     */
   def saveToStorage(
-                     data: RDD[String],
-                     format: SupportedFormat = SupportedFormat.CSV,
-                     dir: Option[String] = None,
-                     compress: Boolean = true
-                   )(implicit storage: CloudStorage): List[String] =
+    data: RDD[String],
+    format: SupportedFormat = SupportedFormat.CSV,
+    dir: Option[String] = None,
+    compress: Boolean = true
+  )(implicit storage: CloudStorage): List[String] =
     storage.upload(data, format, dir, compress)
 
-  def deleteFiles(files: List[String])(implicit storage: CloudStorage, connection: Connection): Unit =
+  def deleteFiles(files: List[String])(implicit storage: CloudStorage,
+                                       connection: Connection): Unit =
     storage.deleteFiles(files)
 
-
   private[io] def createS3Client(
-                                  awsId: String,
-                                  awsKey: String,
-                                  awsToken: Option[String],
-                                  parallelism: Int,
-                                  proxyInfo: Option[ProxyInfo]
-                                ): AmazonS3Client = {
+    awsId: String,
+    awsKey: String,
+    awsToken: Option[String],
+    parallelism: Int,
+    proxyInfo: Option[ProxyInfo]
+  ): AmazonS3Client = {
     val awsCredentials = awsToken match {
       case Some(token) => new BasicSessionCredentials(awsId, awsKey, token)
       case None => new BasicAWSCredentials(awsId, awsKey)
@@ -339,18 +361,19 @@ object CloudStorageOperations {
       .setMaxErrorRetry(CloudStorageOperations.S3_MAX_RETRIES)
 
     clientConfig.setRetryPolicy(
-      new RetryPolicy(PredefinedRetryPolicies.DEFAULT_RETRY_CONDITION,
+      new RetryPolicy(
+        PredefinedRetryPolicies.DEFAULT_RETRY_CONDITION,
         PredefinedRetryPolicies.DEFAULT_BACKOFF_STRATEGY,
         CloudStorageOperations.S3_MAX_RETRIES,
-        true))
+        true
+      )
+    )
 
-    clientConfig.setConnectionTimeout(
-      CloudStorageOperations.S3_MAX_TIMEOUT_MS)
+    clientConfig.setConnectionTimeout(CloudStorageOperations.S3_MAX_TIMEOUT_MS)
 
     proxyInfo match {
-      case Some(proxyInfoValue) => {
+      case Some(proxyInfoValue) =>
         proxyInfoValue.setProxyForS3(clientConfig)
-      }
       case None =>
     }
 
@@ -358,21 +381,19 @@ object CloudStorageOperations {
   }
 
   private[io] final def createAzureClient(
-                                           storageAccount: String,
-                                           endpoint: String,
-                                           sas: Option[String] = None,
-                                           proxyInfo: Option[ProxyInfo]
-                                         ): CloudBlobClient = {
+    storageAccount: String,
+    endpoint: String,
+    sas: Option[String] = None,
+    proxyInfo: Option[ProxyInfo]
+  ): CloudBlobClient = {
     val storageEndpoint: URI =
-      new URI("https",
-        s"$storageAccount.$endpoint/", null, null)
+      new URI("https", s"$storageAccount.$endpoint/", null, null)
     val azCreds =
       if (sas.isDefined) new StorageCredentialsSharedAccessSignature(sas.get)
       else StorageCredentialsAnonymous.ANONYMOUS
     proxyInfo match {
-      case Some(proxyInfoValue) => {
+      case Some(proxyInfoValue) =>
         proxyInfoValue.setProxyForAzure()
-      }
       case None =>
     }
 
@@ -409,41 +430,33 @@ private[io] object StorageInfo {
   @inline val AZURE_SAS = "azureSAS"
 }
 
-
 sealed trait CloudStorage {
 
   private var processedFileCount = 0
   protected val connection: Connection
 
   protected def getStageInfo(
-                              isWrite: Boolean,
-                              fileName: String = ""
-                            ): (Map[String, String], List[String]) =
+    isWrite: Boolean,
+    fileName: String = ""
+  ): (Map[String, String], List[String]) =
     (new HashMap[String, String], List())
 
-  def upload(
-              fileName: String,
-              dir: Option[String],
-              compress: Boolean
-            ): OutputStream =
-    createUploadStream(fileName, dir, compress, getStageInfo(true)._1)
+  def upload(fileName: String,
+             dir: Option[String],
+             compress: Boolean): OutputStream =
+    createUploadStream(fileName, dir, compress, getStageInfo(isWrite = true)._1)
 
+  def upload(data: RDD[String],
+             format: SupportedFormat = SupportedFormat.CSV,
+             dir: Option[String],
+             compress: Boolean = true): List[String] =
+    uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
 
-  def upload(
-              data: RDD[String],
-              format: SupportedFormat = SupportedFormat.CSV,
-              dir: Option[String],
-              compress: Boolean = true
-            ): List[String] =
-    uploadRDD(data, format, dir, compress, getStageInfo(true)._1)
-
-  protected def uploadRDD(
-                           data: RDD[String],
-                           format: SupportedFormat = SupportedFormat.CSV,
-                           dir: Option[String],
-                           compress: Boolean = true,
-                           storageInfo: Map[String, String]
-                         ): List[String] = {
+  protected def uploadRDD(data: RDD[String],
+                          format: SupportedFormat = SupportedFormat.CSV,
+                          dir: Option[String],
+                          compress: Boolean = true,
+                          storageInfo: Map[String, String]): List[String] = {
 
     val directory: String =
       dir match {
@@ -451,11 +464,12 @@ sealed trait CloudStorage {
         case None => Random.alphanumeric take 10 mkString ""
       }
     val files = data.mapPartitionsWithIndex {
-      case (index, rows) => {
+      case (index, rows) =>
         val fileName =
           s"$index.${format.toString}${if (compress) ".gz" else ""}"
 
-        val outputStream = createUploadStream(fileName, Some(directory), compress, storageInfo)
+        val outputStream =
+          createUploadStream(fileName, Some(directory), compress, storageInfo)
         while (rows.hasNext) {
           outputStream.write(rows.next.getBytes("UTF-8"))
           outputStream.write('\n')
@@ -467,19 +481,16 @@ sealed trait CloudStorage {
         )
 
         new SingleElementIterator(s"$directory/$fileName")
-      }
     }
 
     files.collect().toList
   }
 
   // Implement retry logic when download fails and finish the file download.
-  def createDownloadStreamWithRetry(
-                                     fileName: String,
-                                     compress: Boolean,
-                                     storageInfo: Map[String, String],
-                                     maxRetryCount: Int
-                                   ): InputStream = {
+  def createDownloadStreamWithRetry(fileName: String,
+                                    compress: Boolean,
+                                    storageInfo: Map[String, String],
+                                    maxRetryCount: Int): InputStream = {
     // download the file with retry and backoff and then consume.
     // val maxRetryCount = 10
     var retryCount = 0
@@ -508,12 +519,14 @@ sealed trait CloudStorage {
             s"""createDownloadStreamWithRetry() download successful:
                | fileID=$processedFileCount downloadTime=$downloadTime
                | dataSizeInMB=$dataSizeInMB
-               |""".stripMargin.filter(_ >= ' '))
+               |""".stripMargin.filter(_ >= ' ')
+          )
         } else {
           CloudStorageOperations.log.info(
             s"""createDownloadStreamWithRetry() DO NOT download the file
                | completely: fileID=$processedFileCount
-               |""".stripMargin.filter(_ >= ' '))
+               |""".stripMargin.filter(_ >= ' ')
+          )
         }
 
         // succeed download return
@@ -528,11 +541,12 @@ sealed trait CloudStorage {
             s"""createDownloadStreamWithRetry() hit download error:
                | retryCount=$retryCount: fileName=$fileName,
                | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
-               |""".stripMargin.filter(_ >= ' '))
+               |""".stripMargin.filter(_ >= ' ')
+          )
         }
-          retryCount = retryCount + 1
-          // sleep some time and retry
-          Thread.sleep(1000L * retryCount)
+        retryCount = retryCount + 1
+        // sleep some time and retry
+        Thread.sleep(1000L * retryCount)
       }
     } while (retryCount < maxRetryCount)
 
@@ -542,7 +556,8 @@ sealed trait CloudStorage {
       CloudStorageOperations.log.info(
         s"""createDownloadStreamWithRetry() last error message
            | after retry $retryCount times is [ $errorMessage ]
-           |""".stripMargin.filter(_ >= ' '))
+           |""".stripMargin.filter(_ >= ' ')
+      )
       throw error.get
     } else {
       // Suppose this never happens
@@ -550,34 +565,33 @@ sealed trait CloudStorage {
       CloudStorageOperations.log.info(
         s"""createDownloadStreamWithRetry() hit un-expected condition
            | after retry $retryCount times is [ $retryCount/$maxRetryCount ]
-           |""".stripMargin.filter(_ >= ' '))
+           |""".stripMargin.filter(_ >= ' ')
+      )
       throw new Exception(errorMessage)
     }
   }
 
   protected def createUploadStream(
-                                    fileName: String,
-                                    dir: Option[String],
-                                    compress: Boolean,
-                                    storageInfo: Map[String, String]
-                                  ): OutputStream
+
+    fileName: String,
+    dir: Option[String],
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): OutputStream
 
   def download(fileName: String, compress: Boolean): InputStream =
-    createDownloadStream(fileName, compress, getStageInfo(false, fileName)._1)
+    createDownloadStream(fileName, compress, getStageInfo(isWrite = false, fileName)._1)
 
-
-  def download(
-                sc: SparkContext,
-                format: SupportedFormat = SupportedFormat.CSV,
-                compress: Boolean = true,
-                subDir: String = ""
-              ): RDD[String]
+  def download(sc: SparkContext,
+               format: SupportedFormat = SupportedFormat.CSV,
+               compress: Boolean = true,
+               subDir: String = ""): RDD[String]
 
   protected def createDownloadStream(
-                                      fileName: String,
-                                      compress: Boolean,
-                                      storageInfo: Map[String, String]
-                                    ): InputStream
+    fileName: String,
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): InputStream
 
   def deleteFile(fileName: String): Unit
 
@@ -587,25 +601,25 @@ sealed trait CloudStorage {
   def fileExists(fileName: String): Boolean
 }
 
-case class InternalAzureStorage(
-                                 param: MergedParameters,
-                                 stageName: String,
-                                 @transient override val connection: Connection
-                               ) extends CloudStorage {
+case class InternalAzureStorage(param: MergedParameters,
+                                stageName: String,
+                                @transient override val connection: Connection)
+    extends CloudStorage {
 
   val proxyInfo: Option[ProxyInfo] = param.proxyInfo
 
   override protected def getStageInfo(
-                                       isWrite: Boolean,
-                                       fileName: String = ""
-                                     ): (Map[String, String], List[String]) = {
+    isWrite: Boolean,
+    fileName: String = ""
+  ): (Map[String, String], List[String]) = {
     @transient val stageManager =
       new SFInternalStage(
         isWrite,
         param,
         stageName,
         connection.asInstanceOf[SnowflakeConnectionV1],
-        fileName)
+        fileName
+      )
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]()
@@ -631,24 +645,31 @@ case class InternalAzureStorage(
     (storageInfo, fileList)
   }
 
-  def download(
-                sc: SparkContext,
-                format: SupportedFormat = SupportedFormat.CSV,
-                compress: Boolean = true,
-                subDir: String = ""
-              ): RDD[String] = {
-    val (stageInfo, fileList) = getStageInfo(false)
-    new SnowflakeRDD(sc, fileList, format,
-      createDownloadStreamWithRetry(_, compress, stageInfo, param.maxRetryCount),
-      param.expectedPartitionCount)
+  def download(sc: SparkContext,
+               format: SupportedFormat = SupportedFormat.CSV,
+               compress: Boolean = true,
+               subDir: String = ""): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(isWrite = false)
+    new SnowflakeRDD(
+      sc,
+      fileList,
+      format,
+      createDownloadStreamWithRetry(
+        _,
+        compress,
+        stageInfo,
+        param.maxRetryCount
+      ),
+      param.expectedPartitionCount
+    )
   }
 
   override protected def createUploadStream(
-                                             fileName: String,
-                                             dir: Option[String],
-                                             compress: Boolean,
-                                             storageInfo: Map[String, String]
-                                           ): OutputStream = {
+    fileName: String,
+    dir: Option[String],
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): OutputStream = {
 
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
@@ -679,10 +700,9 @@ case class InternalAzureStorage(
     if (compress) new GZIPOutputStream(encryptedStream) else encryptedStream
   }
 
-
   override def deleteFile(fileName: String): Unit = {
 
-    val (storageInfo, _) = getStageInfo(true)
+    val (storageInfo, _) = getStageInfo(isWrite = true)
 
     CloudStorageOperations
       .createAzureClient(
@@ -690,13 +710,14 @@ case class InternalAzureStorage(
         storageInfo(StorageInfo.AZURE_END_POINT),
         storageInfo.get(StorageInfo.AZURE_SAS),
         proxyInfo
-      ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      )
+      .getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
       .deleteIfExists()
   }
 
   override def deleteFiles(fileNames: List[String]): Unit = {
-    val (storageInfo, _) = getStageInfo(true)
+    val (storageInfo, _) = getStageInfo(isWrite = true)
 
     val container = CloudStorageOperations
       .createAzureClient(
@@ -704,37 +725,41 @@ case class InternalAzureStorage(
         storageInfo(StorageInfo.AZURE_END_POINT),
         storageInfo.get(StorageInfo.AZURE_SAS),
         proxyInfo
-      ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      )
+      .getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
 
-    fileNames.map(storageInfo(StorageInfo.PREFIX).concat)
+    fileNames
+      .map(storageInfo(StorageInfo.PREFIX).concat)
       .foreach(container.getBlockBlobReference(_).deleteIfExists())
   }
 
-
   override def fileExists(fileName: String): Boolean = {
-    val (storageInfo, _) = getStageInfo(false)
-    CloudStorageOperations.createAzureClient(
-      storageInfo(StorageInfo.AZURE_ACCOUNT),
-      storageInfo(StorageInfo.AZURE_END_POINT),
-      storageInfo.get(StorageInfo.AZURE_SAS),
-      proxyInfo
-    ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
-      .getBlockBlobReference(
-        storageInfo(StorageInfo.PREFIX).concat(fileName)
-      ).exists()
+    val (storageInfo, _) = getStageInfo(isWrite = false)
+    CloudStorageOperations
+      .createAzureClient(
+        storageInfo(StorageInfo.AZURE_ACCOUNT),
+        storageInfo(StorageInfo.AZURE_END_POINT),
+        storageInfo.get(StorageInfo.AZURE_SAS),
+        proxyInfo
+      )
+      .getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+      .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
+      .exists()
   }
 
   override protected def createDownloadStream(
-                                               fileName: String,
-                                               compress: Boolean,
-                                               storageInfo: Map[String, String]
-                                             ): InputStream = {
-    val blob = CloudStorageOperations.createAzureClient(
-      storageInfo(StorageInfo.AZURE_ACCOUNT),
-      storageInfo(StorageInfo.AZURE_END_POINT),
-      storageInfo.get(StorageInfo.AZURE_SAS),
-      proxyInfo
-    ).getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
+    fileName: String,
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): InputStream = {
+    val blob = CloudStorageOperations
+      .createAzureClient(
+        storageInfo(StorageInfo.AZURE_ACCOUNT),
+        storageInfo(StorageInfo.AZURE_END_POINT),
+        storageInfo.get(StorageInfo.AZURE_SAS),
+        proxyInfo
+      )
+      .getContainerReference(storageInfo(StorageInfo.CONTAINER_NAME))
       .getBlockBlobReference(storageInfo(StorageInfo.PREFIX).concat(fileName))
 
     val azureStorage: ByteArrayOutputStream = new ByteArrayOutputStream()
@@ -753,50 +778,61 @@ case class InternalAzureStorage(
   }
 }
 
-case class ExternalAzureStorage(
-                                 containerName: String,
-                                 azureAccount: String,
-                                 azureEndpoint: String,
-                                 azureSAS: String,
-                                 proxyInfo: Option[ProxyInfo],
-                                 maxRetryCount: Int,
-                                 fileCountPerPartition: Int,
-                                 pref: String = "",
-                                 @transient override val connection: Connection
-                               ) extends CloudStorage {
+case class ExternalAzureStorage(containerName: String,
+                                azureAccount: String,
+                                azureEndpoint: String,
+                                azureSAS: String,
+                                proxyInfo: Option[ProxyInfo],
+                                maxRetryCount: Int,
+                                fileCountPerPartition: Int,
+                                pref: String = "",
+                                @transient override val connection: Connection)
+    extends CloudStorage {
 
   lazy val prefix: String =
     if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
   override protected def createUploadStream(
-                                             fileName: String,
-                                             dir: Option[String],
-                                             compress: Boolean,
-                                             storageInfo: Map[String, String]
-                                           ): OutputStream = {
+    fileName: String,
+    dir: Option[String],
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): OutputStream = {
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
     val blob =
       CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
+        .createAzureClient(
+          azureAccount,
+          azureEndpoint,
+          Some(azureSAS),
+          proxyInfo
+        )
         .getContainerReference(containerName)
         .getBlockBlobReference(prefix.concat(file))
 
-    if (compress) new GZIPOutputStream(blob.openOutputStream()) else blob.openOutputStream()
+    if (compress) new GZIPOutputStream(blob.openOutputStream())
+    else blob.openOutputStream()
   }
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
-      .getBlockBlobReference(prefix.concat(fileName)).deleteIfExists()
+      .getBlockBlobReference(prefix.concat(fileName))
+      .deleteIfExists()
 
   override def deleteFiles(fileNames: List[String]): Unit = {
     val container =
       CloudStorageOperations
-        .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
+        .createAzureClient(
+          azureAccount,
+          azureEndpoint,
+          Some(azureSAS),
+          proxyInfo
+        )
         .getContainerReference(containerName)
 
     fileNames
@@ -808,13 +844,14 @@ case class ExternalAzureStorage(
     CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
-      .getBlockBlobReference(prefix.concat(fileName)).exists()
+      .getBlockBlobReference(prefix.concat(fileName))
+      .exists()
 
   override protected def createDownloadStream(
-                                               fileName: String,
-                                               compress: Boolean,
-                                               storageInfo: Map[String, String]
-                                             ): InputStream = {
+    fileName: String,
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): InputStream = {
     val blob = CloudStorageOperations
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
@@ -830,15 +867,22 @@ case class ExternalAzureStorage(
 
   }
 
-  override def download(
-                         sc: SparkContext,
-                         format: SupportedFormat,
-                         compress: Boolean,
-                         subDir: String): RDD[String] = {
-    new SnowflakeRDD(sc, getFileNames(subDir), format,
-      createDownloadStreamWithRetry(_, compress,
-        Map.empty[String, String], maxRetryCount),
-      fileCountPerPartition)
+  override def download(sc: SparkContext,
+                        format: SupportedFormat,
+                        compress: Boolean,
+                        subDir: String): RDD[String] = {
+    new SnowflakeRDD(
+      sc,
+      getFileNames(subDir),
+      format,
+      createDownloadStreamWithRetry(
+        _,
+        compress,
+        Map.empty[String, String],
+        maxRetryCount
+      ),
+      fileCountPerPartition
+    )
   }
 
   private def getFileNames(subDir: String): List[String] = {
@@ -847,28 +891,34 @@ case class ExternalAzureStorage(
       .getContainerReference(containerName)
       .listBlobs(prefix + subDir + "/")
       .toList
-      .map(x=>{
+      .map(x => {
         val key = x.getUri.toString
         val index = key.lastIndexOf('/')
-        subDir + "/" + key.substring(index+1)
+        subDir + "/" + key.substring(index + 1)
       })
   }
 }
 
-case class InternalS3Storage(
-                              param: MergedParameters,
-                              stageName: String,
-                              @transient override val connection: Connection,
-                              parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
-                            ) extends CloudStorage {
+case class InternalS3Storage(param: MergedParameters,
+                             stageName: String,
+                             @transient override val connection: Connection,
+                             parallelism: Int =
+                               CloudStorageOperations.DEFAULT_PARALLELISM)
+    extends CloudStorage {
   val proxyInfo: Option[ProxyInfo] = param.proxyInfo
 
   override protected def getStageInfo(
-                                       isWrite: Boolean,
-                                       fileName: String = ""
-                                     ): (Map[String, String], List[String]) = {
+    isWrite: Boolean,
+    fileName: String = ""
+  ): (Map[String, String], List[String]) = {
     @transient val stageManager =
-      new SFInternalStage(isWrite, param, stageName, connection.asInstanceOf[SnowflakeConnectionV1], fileName)
+      new SFInternalStage(
+        isWrite,
+        param,
+        stageName,
+        connection.asInstanceOf[SnowflakeConnectionV1],
+        fileName
+      )
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]
@@ -894,24 +944,31 @@ case class InternalS3Storage(
     (storageInfo, fileList)
   }
 
-  override def download(
-                sc: SparkContext,
-                format: SupportedFormat = SupportedFormat.CSV,
-                compress: Boolean = true,
-                subDir: String = ""
-              ): RDD[String] = {
-    val (stageInfo, fileList) = getStageInfo(false)
-    new SnowflakeRDD(sc, fileList, format,
-      createDownloadStreamWithRetry(_, compress, stageInfo, param.maxRetryCount),
-      param.expectedPartitionCount)
+  override def download(sc: SparkContext,
+                        format: SupportedFormat = SupportedFormat.CSV,
+                        compress: Boolean = true,
+                        subDir: String = ""): RDD[String] = {
+    val (stageInfo, fileList) = getStageInfo(isWrite = false)
+    new SnowflakeRDD(
+      sc,
+      fileList,
+      format,
+      createDownloadStreamWithRetry(
+        _,
+        compress,
+        stageInfo,
+        param.maxRetryCount
+      ),
+      param.expectedPartitionCount
+    )
   }
 
   override protected def createUploadStream(
-                                             fileName: String,
-                                             dir: Option[String],
-                                             compress: Boolean,
-                                             storageInfo: Map[String, String]
-                                           ): OutputStream = {
+    fileName: String,
+    dir: Option[String],
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): OutputStream = {
 
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
@@ -953,60 +1010,65 @@ case class InternalS3Storage(
       }
     }
 
-    outputStream =
-      new CipherOutputStream(outputStream, fileCipher)
+    outputStream = new CipherOutputStream(outputStream, fileCipher)
 
     if (compress) new GZIPOutputStream(outputStream)
     else outputStream
   }
 
   override def deleteFile(fileName: String): Unit = {
-    val (storageInfo, _) = getStageInfo(true)
-    CloudStorageOperations.createS3Client(
-      storageInfo(StorageInfo.AWS_ID),
-      storageInfo(StorageInfo.AWS_KEY),
-      storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism,
-      proxyInfo
-    ).deleteObject(
-      storageInfo(StorageInfo.BUCKET_NAME),
-      storageInfo(StorageInfo.PREFIX).concat(fileName)
-    )
+    val (storageInfo, _) = getStageInfo(isWrite = true)
+    CloudStorageOperations
+      .createS3Client(
+        storageInfo(StorageInfo.AWS_ID),
+        storageInfo(StorageInfo.AWS_KEY),
+        storageInfo.get(StorageInfo.AWS_TOKEN),
+        parallelism,
+        proxyInfo
+      )
+      .deleteObject(
+        storageInfo(StorageInfo.BUCKET_NAME),
+        storageInfo(StorageInfo.PREFIX).concat(fileName)
+      )
   }
 
   override def deleteFiles(fileNames: List[String]): Unit = {
-    val (storageInfo, _) = getStageInfo(true)
-    CloudStorageOperations.createS3Client(
-      storageInfo(StorageInfo.AWS_ID),
-      storageInfo(StorageInfo.AWS_KEY),
-      storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism,
-      proxyInfo
-    ).deleteObjects(
-      new DeleteObjectsRequest(storageInfo(StorageInfo.BUCKET_NAME))
-        .withKeys(fileNames.map(storageInfo(StorageInfo.PREFIX).concat): _*)
-    )
+    val (storageInfo, _) = getStageInfo(isWrite = true)
+    CloudStorageOperations
+      .createS3Client(
+        storageInfo(StorageInfo.AWS_ID),
+        storageInfo(StorageInfo.AWS_KEY),
+        storageInfo.get(StorageInfo.AWS_TOKEN),
+        parallelism,
+        proxyInfo
+      )
+      .deleteObjects(
+        new DeleteObjectsRequest(storageInfo(StorageInfo.BUCKET_NAME))
+          .withKeys(fileNames.map(storageInfo(StorageInfo.PREFIX).concat): _*)
+      )
   }
 
   override def fileExists(fileName: String): Boolean = {
-    val (storageInfo, _) = getStageInfo(false)
-    CloudStorageOperations.createS3Client(
-      storageInfo(StorageInfo.AWS_ID),
-      storageInfo(StorageInfo.AWS_KEY),
-      storageInfo.get(StorageInfo.AWS_TOKEN),
-      parallelism,
-      proxyInfo
-    ).doesObjectExist(
-      storageInfo(StorageInfo.BUCKET_NAME),
-      storageInfo(StorageInfo.PREFIX).concat(fileName)
-    )
+    val (storageInfo, _) = getStageInfo(isWrite = false)
+    CloudStorageOperations
+      .createS3Client(
+        storageInfo(StorageInfo.AWS_ID),
+        storageInfo(StorageInfo.AWS_KEY),
+        storageInfo.get(StorageInfo.AWS_TOKEN),
+        parallelism,
+        proxyInfo
+      )
+      .doesObjectExist(
+        storageInfo(StorageInfo.BUCKET_NAME),
+        storageInfo(StorageInfo.PREFIX).concat(fileName)
+      )
   }
 
   override protected def createDownloadStream(
-                                               fileName: String,
-                                               compress: Boolean,
-                                               storageInfo: Map[String, String]
-                                             ): InputStream = {
+    fileName: String,
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): InputStream = {
     val s3Client: AmazonS3Client =
       CloudStorageOperations
         .createS3Client(
@@ -1035,34 +1097,39 @@ case class InternalS3Storage(
   }
 }
 
-case class ExternalS3Storage(
-                              bucketName: String,
-                              awsId: String,
-                              awsKey: String,
-                              proxyInfo: Option[ProxyInfo],
-                              maxRetryCount: Int,
-                              fileCountPerPartition: Int,
-                              awsToken: Option[String] = None,
-                              pref: String = "",
-                              @transient override val connection: Connection,
-                              parallelism: Int = CloudStorageOperations.DEFAULT_PARALLELISM
-                            ) extends CloudStorage {
+case class ExternalS3Storage(bucketName: String,
+                             awsId: String,
+                             awsKey: String,
+                             proxyInfo: Option[ProxyInfo],
+                             maxRetryCount: Int,
+                             fileCountPerPartition: Int,
+                             awsToken: Option[String] = None,
+                             pref: String = "",
+                             @transient override val connection: Connection,
+                             parallelism: Int =
+                               CloudStorageOperations.DEFAULT_PARALLELISM)
+    extends CloudStorage {
 
   lazy val prefix: String =
     if (pref.isEmpty) pref else if (pref.endsWith("/")) pref else pref + "/"
 
   override protected def createUploadStream(
-                                             fileName: String,
-                                             dir: Option[String],
-                                             compress: Boolean,
-                                             storageInfo: Map[String, String]
-                                           ): OutputStream = {
+    fileName: String,
+    dir: Option[String],
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): OutputStream = {
     val file: String =
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
-      awsId, awsKey, awsToken, parallelism, proxyInfo)
+      awsId,
+      awsKey,
+      awsToken,
+      parallelism,
+      proxyInfo
+    )
 
     val meta = new ObjectMetadata()
 
@@ -1100,32 +1167,49 @@ case class ExternalS3Storage(
 
   override def fileExists(fileName: String): Boolean = {
     val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
-      awsId, awsKey, awsToken, parallelism,  proxyInfo)
+      awsId,
+      awsKey,
+      awsToken,
+      parallelism,
+      proxyInfo
+    )
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
 
   override protected def createDownloadStream(
-                                               fileName: String,
-                                               compress: Boolean,
-                                               storageInfo: Map[String, String]
-                                             ): InputStream = {
+    fileName: String,
+    compress: Boolean,
+    storageInfo: Map[String, String]
+  ): InputStream = {
     val s3Client: AmazonS3Client =
-      CloudStorageOperations.createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      CloudStorageOperations.createS3Client(
+        awsId,
+        awsKey,
+        awsToken,
+        parallelism,
+        proxyInfo
+      )
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
     val inputStream: InputStream = dataObject.getObjectContent
     if (compress) new GZIPInputStream(inputStream) else inputStream
   }
 
-  override def download(
-                         sc: SparkContext,
-                         format: SupportedFormat,
-                         compress: Boolean,
-                         subDir: String
-                       ): RDD[String] =
-    new SnowflakeRDD(sc, getFileNames(subDir), format,
-      createDownloadStreamWithRetry(_, compress, Map.empty[String, String], maxRetryCount),
-      fileCountPerPartition)
-
+  override def download(sc: SparkContext,
+                        format: SupportedFormat,
+                        compress: Boolean,
+                        subDir: String): RDD[String] =
+    new SnowflakeRDD(
+      sc,
+      getFileNames(subDir),
+      format,
+      createDownloadStreamWithRetry(
+        _,
+        compress,
+        Map.empty[String, String],
+        maxRetryCount
+      ),
+      fileCountPerPartition
+    )
 
   private def getFileNames(subDir: String): List[String] =
     CloudStorageOperations
@@ -1133,7 +1217,7 @@ case class ExternalS3Storage(
       .listObjects(bucketName, prefix + subDir)
       .getObjectSummaries
       .toList
-      .map(x=>{
+      .map(x => {
         val key = x.getKey
         val fullName = s"$prefix(.*)".r
         key match {
@@ -1144,4 +1228,4 @@ case class ExternalS3Storage(
 
 }
 
-//todo: google cloud, local file for testing?
+// todo: google cloud, local file for testing?

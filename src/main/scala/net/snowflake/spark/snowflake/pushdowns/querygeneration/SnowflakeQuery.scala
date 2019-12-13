@@ -1,7 +1,13 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  Cast,
+  Expression,
+  NamedExpression
+}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -12,16 +18,20 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
   lazy val output: Seq[Attribute] =
     if (helper == null) Seq.empty
     else {
-      helper.output.map { col =>
-        val orig_name =
-          if (col.metadata.contains(ORIG_NAME)) {
-            col.metadata.getString(ORIG_NAME)
-          } else col.name
+      helper.output
+        .map { col =>
+          val orig_name =
+            if (col.metadata.contains(ORIG_NAME)) {
+              col.metadata.getString(ORIG_NAME)
+            } else col.name
 
-        Alias(Cast(col, col.dataType), orig_name)(col.exprId,
-          Seq.empty[String],
-          Some(col.metadata))
-      }.map(_.toAttribute)
+          Alias(Cast(col, col.dataType), orig_name)(
+            col.exprId,
+            Seq.empty[String],
+            Some(col.metadata)
+          )
+        }
+        .map(_.toAttribute)
     }
 
   val helper: QueryHelper
@@ -37,7 +47,6 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
     * @param useAlias Whether or not to alias this translated block of SQL.
     * @return SQL statement for this query.
     */
-
   def getStatement(useAlias: Boolean = false): SnowflakeSQLStatement = {
     log.debug(s"""Generating a query of type: ${getClass.getSimpleName}""")
 
@@ -45,9 +54,11 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
       ConstantString("SELECT") + helper.columns.getOrElse(ConstantString("*") !) + "FROM" +
         helper.sourceStatement + suffixStatement
 
-    if (useAlias)
+    if (useAlias) {
       blockStatement(stmt, helper.alias)
-    else stmt
+    } else {
+      stmt
+    }
   }
 
   /** Finds a particular query type in the overall tree.
@@ -86,16 +97,16 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
 /** The query for a base type (representing a table or view).
   *
   * @constructor
-  * @param relation   The base SnowflakeRelation representing the basic table, view, or subquery defined by
-  *                   the user.
-  * @param refColumns Columns used to override the output generation for the QueryHelper. These are the columns
-  *                   resolved by SnowflakeRelation.
+  * @param relation   The base SnowflakeRelation representing the basic table, view,
+  *                   or subquery defined by the user.
+  * @param refColumns Columns used to override the output generation for the QueryHelper.
+  *                   These are the columns resolved by SnowflakeRelation.
   * @param alias      Query alias.
   */
 case class SourceQuery(relation: SnowflakeRelation,
                        refColumns: Seq[Attribute],
                        alias: String)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper = QueryHelper(
     children = Seq.empty,
@@ -103,7 +114,8 @@ case class SourceQuery(relation: SnowflakeRelation,
     outputAttributes = Some(refColumns),
     alias = alias,
     conjunctionStatement = blockStatement(
-      relation.params.query.map(ConstantString("(") + _ + ")") // user input query, don't parse
+      relation.params.query
+        .map(ConstantString("(") + _ + ")") // user input query, don't parse
         .getOrElse(relation.params.table.get.toStatement !),
       "sf_connector_query_alias"
     )
@@ -113,9 +125,11 @@ case class SourceQuery(relation: SnowflakeRelation,
     * Currently an exact match on cluster is needed for a join, but we may not need
     * to be this strict.
     */
-  val cluster = (relation.params.sfURL,
+  val cluster: (String, Option[String], String) = (
+    relation.params.sfURL,
     relation.params.sfWarehouse,
-    relation.params.sfDatabase)
+    relation.params.sfDatabase
+  )
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
     query.lift(this)
@@ -132,17 +146,22 @@ case class FilterQuery(conditions: Seq[Expression],
                        child: SnowflakeQuery,
                        alias: String,
                        fields: Option[Seq[Attribute]] = None)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(child),
+    QueryHelper(
+      children = Seq(child),
       projections = None,
       outputAttributes = None,
       alias = alias,
-      fields = fields)
+      fields = fields
+    )
 
   override val suffixStatement: SnowflakeSQLStatement =
-    ConstantString("WHERE") + mkStatement(conditions.map(expressionToStatement), "AND")
+    ConstantString("WHERE") + mkStatement(
+      conditions.map(expressionToStatement),
+      "AND"
+    )
 }
 
 /** The query for a projection operation.
@@ -155,13 +174,15 @@ case class FilterQuery(conditions: Seq[Expression],
 case class ProjectQuery(columns: Seq[NamedExpression],
                         child: SnowflakeQuery,
                         alias: String)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(child),
+    QueryHelper(
+      children = Seq(child),
       projections = Some(columns),
       outputAttributes = None,
-      alias = alias)
+      alias = alias
+    )
 }
 
 /** The query for a aggregation operation.
@@ -176,19 +197,23 @@ case class AggregateQuery(columns: Seq[NamedExpression],
                           groups: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(child),
+    QueryHelper(
+      children = Seq(child),
       projections = if (columns.isEmpty) None else Some(columns),
       outputAttributes = None,
-      alias = alias)
+      alias = alias
+    )
 
   override val suffixStatement: SnowflakeSQLStatement =
-    if (groups.nonEmpty)
+    if (groups.nonEmpty) {
       ConstantString("GROUP BY") +
         mkStatement(groups.map(expressionToStatement), ",")
-    else EmptySnowflakeSQLStatement()
+    } else {
+      EmptySnowflakeSQLStatement()
+    }
 }
 
 /** The query for Sort and Limit operations.
@@ -203,20 +228,31 @@ case class SortLimitQuery(limit: Option[Expression],
                           orderBy: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(child),
+    QueryHelper(
+      children = Seq(child),
       projections = None,
       outputAttributes = None,
-      alias = alias)
+      alias = alias
+    )
 
-  override val suffixStatement: SnowflakeSQLStatement =
-    (if (orderBy.nonEmpty)
-      ConstantString("ORDER BY") + mkStatement(orderBy.map(expressionToStatement), ",")
-    else EmptySnowflakeSQLStatement()) +
-      limit.map(ConstantString("LIMIT") + expressionToStatement(_))
-        .getOrElse(EmptySnowflakeSQLStatement())
+  override val suffixStatement: SnowflakeSQLStatement = {
+    val statementFirstPart =
+      if (orderBy.nonEmpty) {
+        ConstantString("ORDER BY") + mkStatement(
+          orderBy.map(expressionToStatement),
+          ","
+        )
+      } else {
+        EmptySnowflakeSQLStatement()
+      }
+
+    statementFirstPart + limit
+      .map(ConstantString("LIMIT") + expressionToStatement(_))
+      .getOrElse(EmptySnowflakeSQLStatement())
+  }
 }
 
 /** The query for join operations.
@@ -233,9 +269,9 @@ case class JoinQuery(left: SnowflakeQuery,
                      conditions: Option[Expression],
                      joinType: JoinType,
                      alias: String)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
-  val conj = joinType match {
+  val conj: String = joinType match {
     case Inner => "INNER JOIN"
     case LeftOuter => "LEFT OUTER JOIN"
     case RightOuter => "RIGHT OUTER JOIN"
@@ -247,14 +283,16 @@ case class JoinQuery(left: SnowflakeQuery,
     QueryHelper(
       children = Seq(left, right),
       projections = Some(
-        left.helper.outputWithQualifier ++ right.helper.outputWithQualifier),
+        left.helper.outputWithQualifier ++ right.helper.outputWithQualifier
+      ),
       outputAttributes = None,
       alias = alias,
       conjunctionStatement = ConstantString(conj) !
     )
 
   override val suffixStatement: SnowflakeSQLStatement =
-    conditions.map(ConstantString("ON") + expressionToStatement(_))
+    conditions
+      .map(ConstantString("ON") + expressionToStatement(_))
       .getOrElse(EmptySnowflakeSQLStatement())
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
@@ -266,17 +304,20 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
                              conditions: Option[Expression],
                              isAntiJoin: Boolean = false,
                              alias: Iterator[String])
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(left),
+    QueryHelper(
+      children = Seq(left),
       projections = Some(left.helper.outputWithQualifier),
       outputAttributes = None,
-      alias = alias.next)
+      alias = alias.next
+    )
 
-  val cond = if (conditions.isEmpty) Seq.empty else Seq(conditions.get)
+  val cond: Seq[Expression] =
+    if (conditions.isEmpty) Seq.empty else Seq(conditions.get)
 
-  val anti = if (isAntiJoin) " NOT " else " "
+  val anti: String = if (isAntiJoin) " NOT " else " "
 
   override val suffixStatement: SnowflakeSQLStatement =
     ConstantString("WHERE") + anti + "EXISTS" + blockStatement(
@@ -284,7 +325,9 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
         conditions = cond,
         child = right,
         alias = alias.next,
-        fields = Some(left.helper.outputWithQualifier ++ right.helper.outputWithQualifier)
+        fields = Some(
+          left.helper.outputWithQualifier ++ right.helper.outputWithQualifier
+        )
       ).getStatement()
     )
 
@@ -300,24 +343,35 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
 case class UnionQuery(children: Seq[LogicalPlan],
                       alias: String,
                       outputCols: Option[Seq[Attribute]] = None)
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
   val queries: Seq[SnowflakeQuery] = children.map { child =>
     new QueryBuilder(child).treeRoot
   }
 
   override val helper: QueryHelper =
-    QueryHelper(children = queries,
+    QueryHelper(
+      children = queries,
       outputAttributes = Some(queries.head.helper.output),
-      alias = alias)
+      alias = alias
+    )
 
   override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {
     val query =
-      if (queries.nonEmpty)
-        mkStatement(queries.map(c => blockStatement(c.getStatement())), "UNION ALL")
-      else EmptySnowflakeSQLStatement()
-    if (useAlias) blockStatement(query, alias)
-    else query
+      if (queries.nonEmpty) {
+        mkStatement(
+          queries.map(c => blockStatement(c.getStatement())),
+          "UNION ALL"
+        )
+      } else {
+        EmptySnowflakeSQLStatement()
+      }
+
+    if (useAlias) {
+      blockStatement(query, alias)
+    } else {
+      query
+    }
   }
 
   override def find[T](query: PartialFunction[SnowflakeQuery, T]): Option[T] =
@@ -327,7 +381,8 @@ case class UnionQuery(children: Seq[LogicalPlan],
         queries
           .map(q => q.find(query))
           .view
-          .foldLeft[Option[T]](None)(_ orElse _))
+          .foldLeft[Option[T]](None)(_ orElse _)
+      )
 }
 
 /** Query including a windowing clause.
@@ -342,21 +397,23 @@ case class WindowQuery(windowExpressions: Seq[NamedExpression],
                        child: SnowflakeQuery,
                        alias: String,
                        fields: Option[Seq[Attribute]])
-  extends SnowflakeQuery {
+    extends SnowflakeQuery {
 
-  val projectionVector = windowExpressions ++ child.helper.outputWithQualifier;
+  val projectionVector: Seq[NamedExpression] =
+    windowExpressions ++ child.helper.outputWithQualifier
 
   // We need to reorder the projections based on the output vector
-  val orderedProjections = fields.map(_.map(
-    reference => {
+  val orderedProjections: Option[Seq[NamedExpression]] =
+    fields.map(_.map(reference => {
       val origPos = projectionVector.map(_.exprId).indexOf(reference.exprId)
       projectionVector(origPos)
     }))
 
   override val helper: QueryHelper =
-    QueryHelper(children = Seq(child),
-      projections =
-        orderedProjections,
+    QueryHelper(
+      children = Seq(child),
+      projections = orderedProjections,
       outputAttributes = None,
-      alias = alias)
+      alias = alias
+    )
 }

@@ -20,24 +20,24 @@ package net.snowflake.spark.snowflake
 import org.scalatest.{FunSuite, Matchers}
 
 /**
- * Check validation of parameter config
- */
+  * Check validation of parameter config
+  */
 class ParametersSuite extends FunSuite with Matchers {
 
-  val minParams = Map(
+  val minParams: Map[String, String] = Map(
     "tempdir" -> "s3://foo/bar",
     "dbtable" -> "test_table",
     "sfurl" -> "account.snowflakecomputing.com:443",
     "sfuser" -> "username",
     "sfpassword" -> "password"
   )
-  
+
   test("Minimal valid parameter map is accepted") {
 
     val mergedParams = Parameters.mergeParameters(minParams)
 
-    mergedParams.rootTempDir should startWith (minParams("tempdir"))
-    mergedParams.createPerQueryTempDir() should startWith (minParams("tempdir"))
+    mergedParams.rootTempDir should startWith(minParams("tempdir"))
+    mergedParams.createPerQueryTempDir() should startWith(minParams("tempdir"))
     mergedParams.sfURL shouldBe minParams("sfurl")
     mergedParams.sfUser shouldBe minParams("sfuser")
     mergedParams.sfPassword shouldBe minParams("sfpassword")
@@ -52,7 +52,8 @@ class ParametersSuite extends FunSuite with Matchers {
   test("createPerQueryTempDir() returns distinct temp paths") {
     val mergedParams = Parameters.mergeParameters(minParams)
 
-    mergedParams.createPerQueryTempDir() should not equal mergedParams.createPerQueryTempDir()
+    mergedParams.createPerQueryTempDir() should not equal mergedParams
+      .createPerQueryTempDir()
   }
 
   test("Errors are thrown when mandatory parameters are not provided") {
@@ -65,7 +66,7 @@ class ParametersSuite extends FunSuite with Matchers {
     val minParamsStage = minParams.filterNot(x => x._1 == "tempdir")
 
     // Check that removing any of the parameters causes a failure
-    for ((k, v) <- minParamsStage) {
+    for ((k, _) <- minParamsStage) {
       val params = collection.mutable.Map() ++= minParamsStage
       params.remove(k)
       checkMerge(params.toMap)
@@ -77,13 +78,15 @@ class ParametersSuite extends FunSuite with Matchers {
       val params = collection.mutable.Map() ++= minParams
       params.remove("dbtable")
       Parameters.mergeParameters(params.toMap)
-    }.getMessage should (include ("dbtable") and include ("query"))
+    }.getMessage should (include("dbtable") and include("query"))
 
     intercept[IllegalArgumentException] {
       val params = collection.mutable.Map() ++= minParams
       params += "query" -> "select * from test_table"
       Parameters.mergeParameters(params.toMap)
-    }.getMessage should (include ("dbtable") and include ("query") and include("both"))
+    }.getMessage should (include("dbtable") and include("query") and include(
+      "both"
+    ))
 
     val params = collection.mutable.Map() ++= minParams
     params.remove("dbtable")
