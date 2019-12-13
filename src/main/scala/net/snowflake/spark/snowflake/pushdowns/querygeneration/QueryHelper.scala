@@ -1,7 +1,15 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{EmptySnowflakeSQLStatement, SnowflakePushdownException, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
+import net.snowflake.spark.snowflake.{
+  EmptySnowflakeSQLStatement,
+  SnowflakePushdownException,
+  SnowflakeSQLStatement
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeReference,
+  NamedExpression
+}
 
 /**
   * Helper class to maintain the fields, output, and projection expressions of
@@ -14,59 +22,78 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
   * @param projections Contains optional projection columns for this query.
   * @param outputAttributes Optional manual override for output.
   * @param alias The alias for this subquery.
-  * @param conjunctionStatement Conjunction phrase to be used in between subquery children, or simple phrase
-  *                    when there are no subqueries.
+  * @param conjunctionStatement Conjunction phrase to be used in between subquery children,
+  *                             or simple phrase when there are no subqueries.
   */
 private[querygeneration] case class QueryHelper(
-    children: Seq[SnowflakeQuery],
-    projections: Option[Seq[NamedExpression]] = None,
-    outputAttributes: Option[Seq[Attribute]],
-    alias: String,
-    conjunctionStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement(),
-    fields: Option[Seq[Attribute]] = None
-    ) {
+  children: Seq[SnowflakeQuery],
+  projections: Option[Seq[NamedExpression]] = None,
+  outputAttributes: Option[Seq[Attribute]],
+  alias: String,
+  conjunctionStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement(),
+  fields: Option[Seq[Attribute]] = None
+) {
 
-  val colSet =
-    if (fields.isEmpty)
-      children.foldLeft(Seq.empty[Attribute])((x, y) =>
-        x ++ y.helper.outputWithQualifier)
-    else fields.get
+  val colSet: Seq[Attribute] =
+    if (fields.isEmpty) {
+      children.foldLeft(Seq.empty[Attribute])(
+        (x, y) => x ++ y.helper.outputWithQualifier
+      )
+    } else {
+      fields.get
+    }
 
-  val pureColSet =
+  val pureColSet: Seq[Attribute] =
     children.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)
 
-  val processedProjections = projections
-    .map(p =>
-      p.map(e =>
-        colSet.find(c => c.exprId == e.exprId) match {
-          case Some(a) =>
-            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId)
-          case None => e
-      }))
+  val processedProjections: Option[Seq[NamedExpression]] = projections
+    .map(
+      p =>
+        p.map(
+          e =>
+            colSet.find(c => c.exprId == e.exprId) match {
+              case Some(a) =>
+                AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+                  a.exprId
+                )
+              case None => e
+          }
+      )
+    )
     .map(p => renameColumns(p, alias))
 
   val columns: Option[SnowflakeSQLStatement] =
-    processedProjections.map(p => mkStatement(p.map(convertStatement(_, colSet)), ","))
+    processedProjections.map(
+      p => mkStatement(p.map(convertStatement(_, colSet)), ",")
+    )
 
-  val output: Seq[Attribute] = {
+  lazy val output: Seq[Attribute] = {
     outputAttributes.getOrElse(
       processedProjections.map(p => p.map(_.toAttribute)).getOrElse {
         if (children.isEmpty) {
           throw new SnowflakePushdownException(
-            "Query output attributes must not be empty when it has no children.")
-        } else
-          children.foldLeft(Seq.empty[Attribute])((x, y) =>
-            x ++ y.helper.output)
+            "Query output attributes must not be empty when it has no children."
+          )
+        } else {
+          children
+            .foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output)
+        }
       }
     )
   }
 
-  val outputWithQualifier = output.map(
+  lazy val outputWithQualifier: Seq[AttributeReference] = output.map(
     a =>
-      AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(a.exprId, Seq[String](alias)))
+      AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+        a.exprId,
+        Seq[String](alias)
+    )
+  )
 
   val sourceStatement: SnowflakeSQLStatement =
-    if(children.nonEmpty)
+    if (children.nonEmpty) {
       mkStatement(children.map(_.getStatement(true)), conjunctionStatement)
-    else conjunctionStatement
+    } else {
+      conjunctionStatement
+    }
 }

@@ -27,41 +27,88 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
 
   private val test_table_number: String = s"test_table_number_$randomSuffix"
-  private val test_table_string_binary: String = s"test_table_string_binary_$randomSuffix"
-  private val test_table_date_time: String = s"test_table_date_time_$randomSuffix"
-  private val test_table_timestamp: String = s"test_table_timestamp_$randomSuffix"
-  private val test_table_large_result: String = s"test_table_large_result_$randomSuffix"
+  private val test_table_string_binary: String =
+    s"test_table_string_binary_$randomSuffix"
+  private val test_table_date_time: String =
+    s"test_table_date_time_$randomSuffix"
+  private val test_table_timestamp: String =
+    s"test_table_timestamp_$randomSuffix"
+  private val test_table_large_result: String =
+    s"test_table_large_result_$randomSuffix"
 
   private lazy val test_table_number_rows = Seq(
     Row(
-      BigDecimal(1), true
-    , BigDecimal(100), BigDecimal(1.2), BigDecimal(10.2)
-    , BigDecimal(300), BigDecimal(30.2), BigDecimal(1.002)
-    , BigDecimal(1234567890), BigDecimal(1.01234), BigDecimal(1.01234567)
-    , BigDecimal("123456789012345"), BigDecimal("123456789.01234"), BigDecimal("0.012345678901234")
-    , BigDecimal("1234567890123456789012345"), BigDecimal("12345678901234567890.01234"), BigDecimal("1234567890.012345678901234")
-    , 1.1, 1234567890.0123, 2.2,  0.123456789
-  ),
+      BigDecimal(1),
+      true,
+      BigDecimal(100),
+      BigDecimal(1.2),
+      BigDecimal(10.2),
+      BigDecimal(300),
+      BigDecimal(30.2),
+      BigDecimal(1.002),
+      BigDecimal(1234567890),
+      BigDecimal(1.01234),
+      BigDecimal(1.01234567),
+      BigDecimal("123456789012345"),
+      BigDecimal("123456789.01234"),
+      BigDecimal("0.012345678901234"),
+      BigDecimal("1234567890123456789012345"),
+      BigDecimal("12345678901234567890.01234"),
+      BigDecimal("1234567890.012345678901234"),
+      1.1,
+      1234567890.0123,
+      2.2,
+      0.123456789
+    ),
     Row(
-    2, null
-    , null , null, null
-    , null , null, null
-    , null , null, null
-    , null , null, null
-    , null , null, null
-    , null , null, null, null
-  ),
-    Row (
-      BigDecimal(3), false
-    , BigDecimal(-100), BigDecimal(-1.2), BigDecimal(-10.2)
-    , BigDecimal(-300), BigDecimal(-30.2), BigDecimal(-1.002)
-    , BigDecimal(-1234567890), BigDecimal(-1.01234), BigDecimal(-1.01234567)
-    , BigDecimal("-123456789012345"), BigDecimal("-123456789.01234"), BigDecimal("-0.012345678901234")
-    , BigDecimal("-1234567890123456789012345"), BigDecimal("-12345678901234567890.01234"), BigDecimal("-1234567890.012345678901234")
-    , -1.1, -1234567890.0123, -2.2,  -0.123456789
-  ))
+      2,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ),
+    Row(
+      BigDecimal(3),
+      false,
+      BigDecimal(-100),
+      BigDecimal(-1.2),
+      BigDecimal(-10.2),
+      BigDecimal(-300),
+      BigDecimal(-30.2),
+      BigDecimal(-1.002),
+      BigDecimal(-1234567890),
+      BigDecimal(-1.01234),
+      BigDecimal(-1.01234567),
+      BigDecimal("-123456789012345"),
+      BigDecimal("-123456789.01234"),
+      BigDecimal("-0.012345678901234"),
+      BigDecimal("-1234567890123456789012345"),
+      BigDecimal("-12345678901234567890.01234"),
+      BigDecimal("-1234567890.012345678901234"),
+      -1.1,
+      -1234567890.0123,
+      -2.2,
+      -0.123456789
+    )
+  )
 
-  private def setupNumberTable() : Unit = {
+  private def setupNumberTable(): Unit = {
     jdbcUpdate(s"""create or replace table $test_table_number (
                      | int_c int, boolean_c boolean
                      | , num_1b1 number(3), num_1b2 number(2,1), num_1b3 number(3,1)
@@ -109,14 +156,51 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   private lazy val test_table_string_binary_rows = Seq(
-    Row(BigDecimal(1), "varchar", "v50", "c", "c10", "s", "s20", "t", "t30",
-      "binary".getBytes(), "binary100".getBytes(), "varbinary".getBytes()),
-    Row(BigDecimal(2), null , null, null , null, null , null, null , null, null , null, null),
-    Row(BigDecimal(3), "varchar", "v50", "c", "c10", "s", "s20", "t", "t30",
-      "binary".getBytes(), "binary100".getBytes(), "varbinary".getBytes())
+    Row(
+      BigDecimal(1),
+      "varchar",
+      "v50",
+      "c",
+      "c10",
+      "s",
+      "s20",
+      "t",
+      "t30",
+      "binary".getBytes(),
+      "binary100".getBytes(),
+      "varbinary".getBytes()
+    ),
+    Row(
+      BigDecimal(2),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ),
+    Row(
+      BigDecimal(3),
+      "varchar",
+      "v50",
+      "c",
+      "c10",
+      "s",
+      "s20",
+      "t",
+      "t30",
+      "binary".getBytes(),
+      "binary100".getBytes(),
+      "varbinary".getBytes()
+    )
   )
 
-  private def setupStringBinaryTable() : Unit = {
+  private def setupStringBinaryTable(): Unit = {
     jdbcUpdate(s"""create or replace table $test_table_string_binary (
                   | int_c int,
                   | v varchar, v50 varchar(50), c char, c10 char(10),
@@ -148,26 +232,54 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     tmpdf.createOrReplaceTempView("test_table_string_binary")
   }
 
-
   // Snowflake may output "23:59:59" as "23:59:59.",
   // If that is changed in the future, the expected result needs to be updated.
   private lazy val test_table_date_time_rows = Seq(
     Row(
-      BigDecimal(0), Date.valueOf("9999-12-31")
-      , "23:59:59.", "23:59:59.9", "23:59:59.99"
-      , "23:59:59.999", "23:59:59.9999", "23:59:59.99999", "23:59:59.999999"
-      , "23:59:59.9999999", "23:59:59.99999999", "23:59:59.999999999"),
-    Row (BigDecimal(1), Date.valueOf("1970-01-01")
-      , "00:00:00.", "00:00:00.0", "00:00:00.00",
-      "00:00:00.000", "00:00:00.0000", "00:00:00.00000", "00:00:00.000000"
-      , "00:00:00.0000000", "00:00:00.00000000", "00:00:00.000000000"),
-    Row(BigDecimal(2), Date.valueOf("0000-01-01")
-      , "00:00:01.", "00:00:00.1", "00:00:00.01"
-      , "00:00:00.001", "00:00:00.0001", "00:00:00.00001", "00:00:00.000001"
-      , "00:00:00.0000001", "00:00:00.00000001", "00:00:00.000000001")
+      BigDecimal(0),
+      Date.valueOf("9999-12-31"),
+      "23:59:59.",
+      "23:59:59.9",
+      "23:59:59.99",
+      "23:59:59.999",
+      "23:59:59.9999",
+      "23:59:59.99999",
+      "23:59:59.999999",
+      "23:59:59.9999999",
+      "23:59:59.99999999",
+      "23:59:59.999999999"
+    ),
+    Row(
+      BigDecimal(1),
+      Date.valueOf("1970-01-01"),
+      "00:00:00.",
+      "00:00:00.0",
+      "00:00:00.00",
+      "00:00:00.000",
+      "00:00:00.0000",
+      "00:00:00.00000",
+      "00:00:00.000000",
+      "00:00:00.0000000",
+      "00:00:00.00000000",
+      "00:00:00.000000000"
+    ),
+    Row(
+      BigDecimal(2),
+      Date.valueOf("0000-01-01"),
+      "00:00:01.",
+      "00:00:00.1",
+      "00:00:00.01",
+      "00:00:00.001",
+      "00:00:00.0001",
+      "00:00:00.00001",
+      "00:00:00.000001",
+      "00:00:00.0000001",
+      "00:00:00.00000001",
+      "00:00:00.000000001"
+    )
   )
 
-  private def setupDateTimeTable() : Unit = {
+  private def setupDateTimeTable(): Unit = {
     jdbcUpdate(s"""create or replace table $test_table_date_time (
           | int_c int, date_c date, time_c0 time(0), time_c1 time(1), time_c2 time(2),
           | time_c3 time(3), time_c4 time(4), time_c5 time(5), time_c6 time(6),
@@ -198,39 +310,39 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   private lazy val test_table_timestamp_rows = Seq(
-    Row(BigDecimal(1),
+    Row(
+      BigDecimal(1),
       Timestamp.valueOf("2014-01-11 06:12:13.123456"),
       Timestamp.valueOf("2014-01-11 06:12:13"),
       Timestamp.valueOf("2014-01-11 06:12:13.123"),
       Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-
       Timestamp.valueOf("2014-01-11 06:12:13.123456"),
       Timestamp.valueOf("2014-01-11 06:12:13"),
       Timestamp.valueOf("2014-01-11 06:12:13.123"),
       Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-
-      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-      Timestamp.valueOf("2014-01-11 06:12:13"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123456")
-  ), Row(BigDecimal(2),
-      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-      Timestamp.valueOf("2014-01-11 06:12:13"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-
-      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-      Timestamp.valueOf("2014-01-11 06:12:13"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123"),
-      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
-
       Timestamp.valueOf("2014-01-11 06:12:13.123456"),
       Timestamp.valueOf("2014-01-11 06:12:13"),
       Timestamp.valueOf("2014-01-11 06:12:13.123"),
       Timestamp.valueOf("2014-01-11 06:12:13.123456")
-    ))
+    ),
+    Row(
+      BigDecimal(2),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
+      Timestamp.valueOf("2014-01-11 06:12:13"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
+      Timestamp.valueOf("2014-01-11 06:12:13"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456"),
+      Timestamp.valueOf("2014-01-11 06:12:13"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123"),
+      Timestamp.valueOf("2014-01-11 06:12:13.123456")
+    )
+  )
 
-  private def setupTimestampTable() : Unit = {
+  private def setupTimestampTable(): Unit = {
     jdbcUpdate(s"""create or replace table $test_table_timestamp (
                   | int_c int,
                   | ts_ltz_c timestamp_ltz(9), ts_ltz_c0 timestamp_ltz(0),
@@ -285,7 +397,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
        |spark_connector_test_large_result_1234567890
        |""".stripMargin.filter(_ >= ' ')
 
-  private def setupLargeResultTable() : Unit = {
+  private def setupLargeResultTable(): Unit = {
     jdbcUpdate(s"""create or replace table $test_table_large_result (
                   | int_c int, c_string string(1024) )""".stripMargin)
 
@@ -310,7 +422,9 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val gmtTimezone = TimeZone.getTimeZone("GMT")
     TimeZone.setDefault(gmtTimezone)
 
-    connectorOptionsNoTable.foreach(tup => { thisConnectorOptionsNoTable += tup })
+    connectorOptionsNoTable.foreach(tup => {
+      thisConnectorOptionsNoTable += tup
+    })
 
     // Setup special options for this test
     if (System.getenv("SPARK_CONN_ENV_USE_COPY_UNLOAD") == null) {
@@ -333,7 +447,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     testPushdown(
       s""" SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
       result,
-      test_table_number_rows)
+      test_table_number_rows
+    )
   }
 
   test("testStringBinary") {
@@ -342,10 +457,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       val result = sparkSession.sql("select * from test_table_string_binary")
 
       testPushdown(
-        s""" SELECT * FROM ( $test_table_string_binary ) AS "SF_CONNECTOR_QUERY_ALIAS""""
-          .stripMargin,
+        s""" SELECT * FROM ( $test_table_string_binary ) AS
+           | "SF_CONNECTOR_QUERY_ALIAS"""".stripMargin,
         result,
-        test_table_string_binary_rows)
+        test_table_string_binary_rows
+      )
     }
   }
 
@@ -355,7 +471,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     testPushdown(
       s""" SELECT * FROM ( $test_table_date_time ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
       result,
-      test_table_date_time_rows)
+      test_table_date_time_rows
+    )
   }
 
   test("testTimestamp") {
@@ -366,20 +483,26 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       testPushdown(
         s""" SELECT * FROM ( $test_table_timestamp ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
         result,
-        test_table_timestamp_rows)
+        test_table_timestamp_rows
+      )
     }
   }
 
   test("testLargeResult") {
-    val resultSet: Array[Row] = sparkSession.sql(
-      "select * from test_table_large_result order by int_c").collect()
+    val resultSet: Array[Row] = sparkSession
+      .sql("select * from test_table_large_result order by int_c")
+      .collect()
 
-    var i : Int = 0
-    while ( i < resultSet.length ) {
+    var i: Int = 0
+    while (i < resultSet.length) {
       val row = resultSet(i)
-      assert(largeStringValue.equals(row(1)) &&
-        (Math.abs(BigDecimal(i).doubleValue() -
-           row(0).asInstanceOf[java.math.BigDecimal].doubleValue()) < 0.00000000001))
+      assert(
+        largeStringValue.equals(row(1)) &&
+          (Math.abs(
+            BigDecimal(i).doubleValue() -
+              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+          ) < 0.00000000001)
+      )
       i += 1
     }
   }

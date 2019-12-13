@@ -20,12 +20,10 @@ private[io] object StageReader {
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
   private val OUTPUT_BYTES: String = "output_bytes"
 
-  def readFromStage(
-                     sqlContext: SQLContext,
-                     params: MergedParameters,
-                     statement: SnowflakeSQLStatement,
-                     format: SupportedFormat
-                   ): RDD[String] = {
+  def readFromStage(sqlContext: SQLContext,
+                    params: MergedParameters,
+                    statement: SnowflakeSQLStatement,
+                    format: SupportedFormat): RDD[String] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
     val (storage, stage) =
       CloudStorageOperations.createStorageClient(params, conn)
@@ -43,8 +41,8 @@ private[io] object StageReader {
       statement,
       s"@$stage/$prefix/",
       compressFormat,
-      format).execute(params.bindVariableEnabled)(conn)
-
+      format
+    ).execute(params.bindVariableEnabled)(conn)
 
     // Verify it's the expected format
     val sch = res.getMetaData
@@ -55,7 +53,7 @@ private[io] object StageReader {
     val first = res.next()
     assert(first)
 
-    //report egress usage
+    // report egress usage
     sendEgressUsage(res.getLong(3), conn)
 
     val second = res.next()
@@ -65,23 +63,16 @@ private[io] object StageReader {
 
     SnowflakeTelemetry.send(conn.getTelemetry)
 
-    storage.download(
-      sqlContext.sparkContext,
-      format,
-      compress,
-      prefix
-    )
+    storage.download(sqlContext.sparkContext, format, compress, prefix)
   }
 
-
   private def buildUnloadStatement(
-                                    params: MergedParameters,
-                                    statement: SnowflakeSQLStatement,
-                                    location: String,
-                                    compression: String,
-                                    format: SupportedFormat = SupportedFormat.CSV
-                                  ): SnowflakeSQLStatement = {
-
+    params: MergedParameters,
+    statement: SnowflakeSQLStatement,
+    location: String,
+    compression: String,
+    format: SupportedFormat = SupportedFormat.CSV
+  ): SnowflakeSQLStatement = {
 
     // Save the last SELECT so it can be inspected
     Utils.setLastSelect(statement.toString)
@@ -90,8 +81,7 @@ private[io] object StageReader {
       format match {
         case SupportedFormat.CSV =>
           (
-            ConstantString(
-              s"""
+            ConstantString(s"""
                  |FILE_FORMAT = (
                  |    TYPE=CSV
                  |    COMPRESSION='$compression'
@@ -100,20 +90,17 @@ private[io] object StageReader {
                  |    ESCAPE_UNENCLOSED_FIELD = none
                  |    NULL_IF= ()
                  |  )
-                 |  """.stripMargin
-            ) !,
+                 |  """.stripMargin) !,
             ConstantString("FROM (") + statement + ")"
           )
         case SupportedFormat.JSON =>
           (
-            ConstantString(
-              s"""
+            ConstantString(s"""
                  |FILE_FORMAT = (
                  |    TYPE=JSON
                  |    COMPRESSION='$compression'
                  |)
-                 |""".stripMargin
-            ) !,
+                 |""".stripMargin) !,
             ConstantString("FROM (SELECT object_construct(*) FROM (") + statement + "))"
           )
       }
@@ -130,11 +117,13 @@ private[io] object StageReader {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(OUTPUT_BYTES, bytes)
 
-    SnowflakeTelemetry.addLog((TelemetryTypes.SPARK_EGRESS, metric), System.currentTimeMillis())
+    SnowflakeTelemetry.addLog(
+      (TelemetryTypes.SPARK_EGRESS, metric),
+      System.currentTimeMillis()
+    )
     SnowflakeTelemetry.send(conn.getTelemetry)
 
-    logger.debug(s"Data Egress Usage: $bytes bytes".stripMargin
-    )
+    logger.debug(s"Data Egress Usage: $bytes bytes".stripMargin)
 
   }
 

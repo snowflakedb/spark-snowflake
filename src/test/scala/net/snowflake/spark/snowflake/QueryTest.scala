@@ -24,16 +24,19 @@ import org.apache.spark.sql.{Row, DataFrame}
 import org.scalatest.FunSuite
 
 /**
- * Copy of Spark SQL's `QueryTest` trait.
- */
+  * Copy of Spark SQL's `QueryTest` trait.
+  */
 trait QueryTest extends FunSuite {
+
   /**
-   * Runs the plan and makes sure the answer matches the expected result.
-   * @param df the [[DataFrame]] to be executed
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   */
+    * Runs the plan and makes sure the answer matches the expected result.
+    * @param df the [[DataFrame]] to be executed
+    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+    */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    val isSorted = df.queryExecution.logical.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.queryExecution.logical.collect {
+      case s: logical.Sort => s
+    }.nonEmpty
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
@@ -49,7 +52,8 @@ trait QueryTest extends FunSuite {
       }
       if (!isSorted) converted.sortBy(_.toString()) else converted
     }
-    val sparkAnswer = try df.collect().toSeq catch {
+    val sparkAnswer = try df.collect().toSeq
+    catch {
       case e: Exception =>
         val errorMessage =
           s"""
@@ -69,10 +73,11 @@ trait QueryTest extends FunSuite {
         |${df.queryExecution}
         |== Results ==
         |${sideBySide(
-          s"== Correct Answer - ${expectedAnswer.size} ==" +:
-            prepareAnswer(expectedAnswer).map(_.toString()),
-          s"== Spark Answer - ${sparkAnswer.size} ==" +:
-            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
+             s"== Correct Answer - ${expectedAnswer.size} ==" +:
+               prepareAnswer(expectedAnswer).map(_.toString()),
+             s"== Spark Answer - ${sparkAnswer.size} ==" +:
+               prepareAnswer(sparkAnswer).map(_.toString())
+           ).mkString("\n")}
       """.stripMargin
       fail(errorMessage)
     }
@@ -84,7 +89,8 @@ trait QueryTest extends FunSuite {
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
+      case (l, r) =>
+        (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
     }
   }
 }

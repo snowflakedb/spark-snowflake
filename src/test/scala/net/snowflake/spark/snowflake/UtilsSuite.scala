@@ -22,8 +22,8 @@ import java.net.URI
 import org.scalatest.{FunSuite, Matchers}
 
 /**
- * Unit tests for helper functions
- */
+  * Unit tests for helper functions
+  */
 class UtilsSuite extends FunSuite with Matchers {
 
   test("joinUrls preserves protocol information") {
@@ -42,15 +42,17 @@ class UtilsSuite extends FunSuite with Matchers {
   test("fixUrlForCopyCommand produces Snowflake-compatible equivalents") {
     Utils.fixUrlForCopyCommand("s3a://foo/bar/12345") shouldBe "s3://foo/bar/12345"
     Utils.fixUrlForCopyCommand("s3n://foo/bar/baz") shouldBe "s3://foo/bar/baz"
-    Utils.fixUrlForCopyCommand("wasb://container@test.azure.com/path") shouldBe "azure://test.azure.com/container/path"
-    Utils.fixUrlForCopyCommand("wasbs://container@test.azure.com/path") shouldBe "azure://test.azure.com/container/path"
+    Utils.fixUrlForCopyCommand("wasb://container@test.azure.com/path") shouldBe
+      "azure://test.azure.com/container/path"
+    Utils.fixUrlForCopyCommand("wasbs://container@test.azure.com/path") shouldBe
+      "azure://test.azure.com/container/path"
   }
 
   test("temp paths are random subdirectories of root") {
     val root = "s3n://temp/"
     val firstTempPath = Utils.makeTempPath(root)
 
-    Utils.makeTempPath(root) should (startWith (root) and endWith ("/")
+    Utils.makeTempPath(root) should (startWith(root) and endWith("/")
       and not equal root and not equal firstTempPath)
   }
 
@@ -58,9 +60,12 @@ class UtilsSuite extends FunSuite with Matchers {
     def removeCreds(uri: String): String = {
       Utils.removeCredentialsFromURI(URI.create(uri)).toString
     }
-    assert(removeCreds("s3n://bucket/path/to/temp/dir") === "s3n://bucket/path/to/temp/dir")
+    assert(
+      removeCreds("s3n://bucket/path/to/temp/dir") === "s3n://bucket/path/to/temp/dir"
+    )
     assert(
       removeCreds("s3n://ACCESSKEY:SECRETKEY@bucket/path/to/temp/dir") ===
-      "s3n://bucket/path/to/temp/dir")
+        "s3n://bucket/path/to/temp/dir"
+    )
   }
 }

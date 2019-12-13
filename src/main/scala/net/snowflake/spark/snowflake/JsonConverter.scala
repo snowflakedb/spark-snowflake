@@ -11,20 +11,15 @@ object JsonConverter {
   private val mapper: ObjectMapper = new ObjectMapper()
 
   private[snowflake] def convert[T: ClassTag](
-                                              partition: Iterator[String],
-                                              resultSchema: StructType
-                                             ): Iterator[T] =
-    partition.map(convertRow[T](resultSchema,_))
+    partition: Iterator[String],
+    resultSchema: StructType
+  ): Iterator[T] =
+    partition.map(convertRow[T](resultSchema, _))
 
-
-
-  private[snowflake] def convertRow[T:ClassTag](
-                                                 schema: StructType,
+  private[snowflake] def convertRow[T: ClassTag](schema: StructType,
                                                  fields: String): T = {
     val json = mapper.readTree(fields)
     jsonStringToRow[T](json, schema).asInstanceOf[T]
   }
-
-
 
 }

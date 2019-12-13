@@ -26,14 +26,11 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-
-
 private[io] class SFInternalStage(isWrite: Boolean,
                                   params: MergedParameters,
                                   tempStage: String,
                                   connection: SnowflakeConnectionV1,
-                                  fileName: String = ""
-                                 ) {
+                                  fileName: String = "") {
 
   private[io] final val DUMMY_LOCATION =
     "file:///tmp/dummy_location_spark_connector_tmp/"
@@ -43,14 +40,15 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private[io] final def TEMP_STAGE_LOCATION: String =
     "spark_connector_unload_stage_" + (Random.alphanumeric take 10 mkString "")
 
-
   private lazy val sfAgent = {
     Utils.setLastPutCommand(command)
     Utils.setLastGetCommand(command)
 
-    new SnowflakeFileTransferAgent(command,
+    new SnowflakeFileTransferAgent(
+      command,
       connection.getSfSession,
-      new SFStatement(connection.getSfSession))
+      new SFStatement(connection.getSfSession)
+    )
   }
 
   private lazy val encryptionMaterials = sfAgent.getEncryptionMaterial
@@ -68,38 +66,49 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private[io] lazy val stageType: StageInfo.StageType =
     stageInfo.getStageType
 
-  //try get aws credentials
+  // try get aws credentials
   private[io] lazy val awsId: Option[String] =
-    if (stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3) {
       Option(stageCredentials.get("AWS_ID").toString)
-    else None
+    } else {
+      None
+    }
 
   private[io] lazy val awsKey: Option[String] =
-    if (stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3) {
       Option(stageCredentials.get("AWS_KEY").toString)
-    else None
+    } else {
+      None
+    }
 
   private[io] lazy val awsToken: Option[String] =
-    if (stageType == StageInfo.StageType.S3)
+    if (stageType == StageInfo.StageType.S3) {
       Option(stageCredentials.get("AWS_TOKEN").toString)
-    else None
+    } else {
+      None
+    }
 
-  //try get azure credentials
-
+  // try get azure credentials
   private[io] lazy val azureSAS: Option[String] =
-    if (stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE) {
       Option(stageCredentials.get("AZURE_SAS_TOKEN").toString)
-    else None
+    } else {
+      None
+    }
 
   private[io] lazy val azureEndpoint: Option[String] =
-    if (stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE) {
       Option(stageInfo.getEndPoint)
-    else None
+    } else {
+      None
+    }
 
   private[io] lazy val azureAccountName: Option[String] =
-    if (stageType == StageInfo.StageType.AZURE)
+    if (stageType == StageInfo.StageType.AZURE) {
       Option(stageInfo.getStorageAccount)
-    else None
+    } else {
+      None
+    }
 
   private[io] lazy val stageLocation: String =
     sfAgent.getStageLocation
@@ -108,9 +117,11 @@ private[io] class SFInternalStage(isWrite: Boolean,
     if (srcMaterialsMap != null) {
       srcMaterialsMap.asScala.toList.map {
         case (k, v) =>
-          (k,
+          (
+            k,
             if (v != null) v.getQueryId else null,
-            if (v != null) v.getSmkId.toString else null)
+            if (v != null) v.getSmkId.toString else null
+          )
       }
     } else {
       encryptionMaterials.asScala map { encMat =>
@@ -126,29 +137,30 @@ private[io] class SFInternalStage(isWrite: Boolean,
 
   private[io] lazy val is256Encryption: Boolean = {
     val length = if (decodedKey != null) decodedKey.length * 8 else 128
-    if (length == 256)
+    if (length == 256) {
       true
-    else if (length == 128)
+    } else if (length == 128) {
       false
-    else
+    } else {
       throw new SnowflakeConnectorException(s"Unsupported Key Size: $length")
+    }
   }
-
 
   private val dummyLocation = DUMMY_LOCATION
 
   private val command = {
     val comm =
-      if (isWrite)
+      if (isWrite) {
         s"PUT $dummyLocation @$tempStage"
-      else
+      } else {
         s"GET @$tempStage/$fileName $dummyLocation"
+      }
 
     if (params.parallelism.isDefined) {
       comm + s" PARALLEL=${params.parallelism.get}"
-    }
-    else
+    } else {
       comm
+    }
   }
 
   private[io] def getEncryptionMaterials = encryptionMaterials

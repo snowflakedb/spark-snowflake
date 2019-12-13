@@ -31,16 +31,15 @@ private[io] object StageWriter {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  def writeToStage(
-                    rdd: RDD[String],
-                    schema: StructType,
-                    saveMode: SaveMode,
-                    params: MergedParameters,
-                    format: SupportedFormat
-                  ): Unit = {
+  def writeToStage(rdd: RDD[String],
+                   schema: StructType,
+                   saveMode: SaveMode,
+                   params: MergedParameters,
+                   format: SupportedFormat): Unit = {
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
-        "For save operations you must specify a Snowflake table name with the 'dbtable' parameter")
+        "For save operations you must specify a Snowflake table name with the 'dbtable' parameter"
+      )
     }
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(prologueSql.toString)
@@ -51,13 +50,20 @@ private[io] object StageWriter {
       prologueSql.execute(params.bindVariableEnabled)(conn)
 
       val (storage, stage) =
-        CloudStorageOperations.createStorageClient(params, conn, true, None)
+        CloudStorageOperations.createStorageClient(params, conn, tempStage = true, None)
 
-      val filesToCopy = storage.upload(rdd, format, None, true)
+      val filesToCopy = storage.upload(rdd, format, None)
 
-      if (filesToCopy.size > 0) {
-        writeToTable(conn, schema, saveMode, params,
-          filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")), stage, format)
+      if (filesToCopy.nonEmpty) {
+        writeToTable(
+          conn,
+          schema,
+          saveMode,
+          params,
+          filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")),
+          stage,
+          format
+        )
       }
     } finally {
       conn.close()
@@ -65,55 +71,72 @@ private[io] object StageWriter {
 
   }
 
-
   /**
     * load data from stage to table
     */
-  private def writeToTable(
-                            conn: Connection,
-                            schema: StructType,
-                            saveMode: SaveMode,
-                            params: MergedParameters,
-                            file: String,
-                            tempStage: String,
-                            format: SupportedFormat
-                          ): Unit = {
+  private def writeToTable(conn: Connection,
+                           schema: StructType,
+                           saveMode: SaveMode,
+                           params: MergedParameters,
+                           file: String,
+                           tempStage: String,
+                           format: SupportedFormat): Unit = {
     val table = params.table.get
     val tempTable =
-      TableName(s"${table.name.replace('"','_')}_staging_${Math.abs(Random.nextInt()).toString}")
-    val targetTable = if (saveMode == SaveMode.Overwrite
-      && params.useStagingTable) tempTable else table
+      TableName(
+        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
+      )
+    val targetTable =
+      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+        tempTable
+      } else {
+        table
+      }
 
     try {
-      //purge tables when overwriting
+      // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite &&
-        DefaultJDBCWrapper.tableExists(conn, table.toString)) {
+          DefaultJDBCWrapper.tableExists(conn, table.toString)) {
         if (params.useStagingTable) {
           if (params.truncateTable) {
             conn.createTableLike(tempTable.name, table.name)
           }
-        }
-        else if (params.truncateTable) conn.truncateTable(table.name)
+        } else if (params.truncateTable) conn.truncateTable(table.name)
         else conn.dropTable(table.name)
       }
 
-      //create table
-      conn.createTable(targetTable.name, schema, params)
+      // create table
+      conn.createTable(targetTable.name, schema, params, overwrite = false, temporary = false)
 
-      //pre actions
-      Utils.executePreActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
+      // pre actions
+      Utils.executePreActions(
+        DefaultJDBCWrapper,
+        conn,
+        params,
+        Option(targetTable)
+      )
 
       // Load the temporary data into the new file
       val copyStatement =
-        copySql(schema, saveMode, params, targetTable, file, tempStage, format, conn)
-      //copy
+        copySql(
+          schema,
+          saveMode,
+          params,
+          targetTable,
+          file,
+          tempStage,
+          format,
+          conn
+        )
+      // copy
       log.debug(Utils.sanitizeQueryText(copyStatement.toString))
-      //todo: handle on_error parameter on spark side
+      // todo: handle on_error parameter on spark side
 
-      //report the number of skipped files.
-      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn) //todo: replace table name to Identifier(?) after bug fixed
+      // report the number of skipped files.
+      // todo: replace table name to Identifier(?) after bug fixed
+      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
       if (params.continueOnError) {
-        var rowSkipped: Long = 0l
+        var rowSkipped: Long = 0L
         while (resultSet.next()) {
           rowSkipped +=
             resultSet.getLong("rows_parsed") -
@@ -122,18 +145,23 @@ private[io] object StageWriter {
         log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
       }
       Utils.setLastCopyLoad(copyStatement.toString)
-      //post actions
-      Utils.executePostActions(DefaultJDBCWrapper, conn, params, Option(targetTable))
+      // post actions
+      Utils.executePostActions(
+        DefaultJDBCWrapper,
+        conn,
+        params,
+        Option(targetTable)
+      )
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (conn.tableExists(table.toString)){
+        if (conn.tableExists(table.toString)) {
           conn.swapTable(table.name, tempTable.name)
           conn.dropTable(tempTable.name)
-        }
-        else
+        } else {
           conn.renameTable(table.name, tempTable.name)
+        }
       } else {
-        conn.commit() 
+        conn.commit()
       }
     } catch {
       case e: Exception =>
@@ -150,59 +178,89 @@ private[io] object StageWriter {
   /**
     * Generate the COPY SQL command
     */
-  private def copySql(
-                       schema: StructType,
-                       saveMode: SaveMode,
-                       params: MergedParameters,
-                       table: TableName,
-                       file: String,
-                       tempStage: String,
-                       format: SupportedFormat,
-                       conn: Connection
-                     ): SnowflakeSQLStatement = {
+  private def copySql(schema: StructType,
+                      saveMode: SaveMode,
+                      params: MergedParameters,
+                      table: TableName,
+                      file: String,
+                      tempStage: String,
+                      format: SupportedFormat,
+                      conn: Connection): SnowflakeSQLStatement = {
 
-    if (saveMode != SaveMode.Append && params.columnMap.isDefined)
-      throw new UnsupportedOperationException("The column mapping only works in append mode.")
+    if (saveMode != SaveMode.Append && params.columnMap.isDefined) {
+      throw new UnsupportedOperationException(
+        "The column mapping only works in append mode."
+      )
+    }
 
-    def getMappingToString(list: Option[List[(Int, String)]]): SnowflakeSQLStatement =
+    def getMappingToString(
+      list: Option[List[(Int, String)]]
+    ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.JSON =>
-          val tableSchema = DefaultJDBCWrapper.resolveTable(conn, table.name, params)
-          if (list.isEmpty || list.get.isEmpty)
-            ConstantString("(") + tableSchema.fields.map(_.name).mkString(",") + ")"
-          else ConstantString("(") +
-            list.get.map(
-              x =>
-                if(params.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(x._2)
-                else Utils.ensureQuoted(x._2)
-            ).mkString(", ") + ")"
+          val tableSchema =
+            DefaultJDBCWrapper.resolveTable(conn, table.name, params)
+          if (list.isEmpty || list.get.isEmpty) {
+            ConstantString("(") + tableSchema.fields
+              .map(_.name)
+              .mkString(",") + ")"
+          } else {
+            ConstantString("(") +
+              list.get
+                .map(
+                  x =>
+                    if (params.keepOriginalColumnNameCase) {
+                      Utils.quotedNameIgnoreCase(x._2)
+                    } else {
+                      Utils.ensureQuoted(x._2)
+                    }
+                )
+                .mkString(", ") + ")"
+          }
         case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) EmptySnowflakeSQLStatement()
-          else ConstantString("(") +
-            list.get.map(
-              x =>
-                if(params.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(x._2)
-                else Utils.ensureQuoted(x._2)
-            ).mkString(", ") + ")"
+          if (list.isEmpty || list.get.isEmpty) {
+            EmptySnowflakeSQLStatement()
+          } else {
+            ConstantString("(") +
+              list.get
+                .map(
+                  x =>
+                    if (params.keepOriginalColumnNameCase) {
+                      Utils.quotedNameIgnoreCase(x._2)
+                    } else {
+                      Utils.ensureQuoted(x._2)
+                    }
+                )
+                .mkString(", ") + ")"
+          }
       }
 
-
-    def getMappingFromString(list: Option[List[(Int, String)]], from: SnowflakeSQLStatement): SnowflakeSQLStatement =
+    def getMappingFromString(
+      list: Option[List[(Int, String)]],
+      from: SnowflakeSQLStatement
+    ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.JSON =>
           if (list.isEmpty || list.get.isEmpty) {
-            val names = schema.fields.map(x => "parse_json($1):".concat(x.name)).mkString(",")
+            val names = schema.fields
+              .map(x => "parse_json($1):".concat(x.name))
+              .mkString(",")
             ConstantString("from (select") + names + from + "tmp)"
-          }
-          else
+          } else {
             ConstantString("from (select") +
-              list.get.map(x => "parse_json($1):".concat(schema(x._1 - 1).name)).mkString(", ") +
+              list.get
+                .map(x => "parse_json($1):".concat(schema(x._1 - 1).name))
+                .mkString(", ") +
               from + "tmp)"
+          }
         case SupportedFormat.CSV =>
-          if (list.isEmpty || list.get.isEmpty) from
-          else ConstantString("from (select") +
-            list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ") +
-            from + "tmp)"
+          if (list.isEmpty || list.get.isEmpty) {
+            from
+          } else {
+            ConstantString("from (select") +
+              list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ") +
+              from + "tmp)"
+          }
       }
 
     val fromString = ConstantString(s"FROM @$tempStage/$file") !
@@ -214,10 +272,9 @@ private[io] object StageWriter {
             try {
               (schema.fieldIndex(key) + 1, value)
             } catch {
-              case e: Exception => {
+              case e: Exception =>
                 log.error("Error occurred while column mapping: " + e)
                 throw e
-              }
             }
         })
 
@@ -231,8 +288,7 @@ private[io] object StageWriter {
     val formatString =
       format match {
         case SupportedFormat.CSV =>
-          ConstantString(
-            s"""
+          ConstantString(s"""
                |FILE_FORMAT = (
                |    TYPE=CSV
                |    FIELD_DELIMITER='|'
@@ -243,8 +299,7 @@ private[io] object StageWriter {
                |  )
            """.stripMargin) !
         case SupportedFormat.JSON =>
-          ConstantString(
-            s"""
+          ConstantString(s"""
                |FILE_FORMAT = (
                |    TYPE = JSON
                |)
@@ -252,21 +307,29 @@ private[io] object StageWriter {
       }
 
     val truncateCol =
-      if (params.truncateColumns())
+      if (params.truncateColumns()) {
         ConstantString("TRUNCATECOLUMNS = TRUE") !
-      else
+      } else {
         EmptySnowflakeSQLStatement()
+      }
 
-    val purge = if (params.purge())
-      ConstantString("PURGE = TRUE") ! else EmptySnowflakeSQLStatement()
+    val purge =
+      if (params.purge()) {
+        ConstantString("PURGE = TRUE") !
+      } else {
+        EmptySnowflakeSQLStatement()
+      }
 
-    val onError = if (params.continueOnError)
-      ConstantString("ON_ERROR = CONTINUE") ! else EmptySnowflakeSQLStatement()
+    val onError =
+      if (params.continueOnError) {
+        ConstantString("ON_ERROR = CONTINUE") !
+      } else {
+        EmptySnowflakeSQLStatement()
+      }
 
-    //todo: replace table name to Identifier(?) after bug fixed
+    // todo: replace table name to Identifier(?) after bug fixed
     ConstantString("copy into") + table.name + mappingToString +
       mappingFromString + formatString + truncateCol + purge + onError
   }
-
 
 }

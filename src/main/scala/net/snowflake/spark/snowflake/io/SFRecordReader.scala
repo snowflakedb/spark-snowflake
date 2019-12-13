@@ -7,31 +7,34 @@ import java.nio.charset.Charset
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{
+  InputSplit,
+  RecordReader,
+  TaskAttemptContext
+}
 
 import scala.collection.mutable.ArrayBuffer
 
-
 class SFCSVInputFormat extends FileInputFormat[java.lang.Long, String] {
   override def createRecordReader(
-                                   split: InputSplit,
-                                   context: TaskAttemptContext
-                                 ): RecordReader[lang.Long, String] =
+    split: InputSplit,
+    context: TaskAttemptContext
+  ): RecordReader[lang.Long, String] =
     new SFRecordReader(SupportedFormat.CSV)
 }
 
 class SFJsonInputFormat extends FileInputFormat[java.lang.Long, String] {
   override def createRecordReader(
-                                   split: InputSplit,
-                                   context: TaskAttemptContext
-                                 ): RecordReader[lang.Long, String] =
+    split: InputSplit,
+    context: TaskAttemptContext
+  ): RecordReader[lang.Long, String] =
     new SFRecordReader(SupportedFormat.JSON)
 }
 
-
-private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.CSV)
-  extends RecordReader[java.lang.Long, String]
-  with Iterator[String]{
+private[io] class SFRecordReader(
+  val format: SupportedFormat = SupportedFormat.CSV
+) extends RecordReader[java.lang.Long, String]
+    with Iterator[String] {
 
   @inline private final val lineFeed: Byte = '\n'
   @inline private final val quoteChar: Byte = '"'
@@ -39,18 +42,18 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   @inline private final val rightBrace: Byte = '}'
 
   @inline private final val codecBufferSize = 64 * 1024
-  @inline private final val inputBufferSize = 1024 * 1024
+  @inline private final val inputBufferSize: Int = 1024 * 1024
 
   // The user of SFRecordReader can register InputStream or file name.
   // In the case that both are registered, InputStreams are read firstly.
   // If file name is registered, downloadFunction is used to download the file.
   private var inputFileNames: List[String] = Nil
-  private var downloadFunction: (String) => InputStream = _
+  private var downloadFunction: String => InputStream = _
   private var inputStreams: List[InputStream] = Nil
   private var currentStream: Option[InputStream] = None
   private var currentChar: Option[Byte] = None
 
-  //for recordReader only
+  // For recordReader only
   private var codec: Option[CompressionCodec] = None
   private var fileSize: Long = 0
   private var cur: Long = 0
@@ -58,7 +61,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   private var key: Long = 0
   private var value: String = _
 
-  def setDownloadFunction(func : (String) => InputStream): Unit = {
+  def setDownloadFunction(func: String => InputStream): Unit = {
     downloadFunction = func
   }
   def addFileName(fileName: String): Unit = {
@@ -68,8 +71,8 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   def addStream(stream: InputStream): Unit =
     inputStreams = stream :: inputStreams
 
-
-  override def initialize(split: InputSplit, context: TaskAttemptContext): Unit = {
+  override def initialize(split: InputSplit,
+                          context: TaskAttemptContext): Unit = {
     val inputSplit = split.asInstanceOf[FileSplit]
     val file = inputSplit.getPath
     val conf = context.getConfiguration
@@ -80,12 +83,16 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     cur = 0
     val reader = new BufferedInputStream(fs.open(file), inputBufferSize)
 
-    inputStreams =
-      {
-        if(codec.isDefined)
-          new BufferedInputStream(codec.get.createInputStream(reader), codecBufferSize)
-        else reader
-      } :: inputStreams
+    inputStreams = {
+      if (codec.isDefined) {
+        new BufferedInputStream(
+          codec.get.createInputStream(reader),
+          codecBufferSize
+        )
+      } else {
+        reader
+      }
+    } :: inputStreams
 
   }
 
@@ -95,7 +102,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     * @return False if no more record, True otherwise
     */
   override def nextKeyValue(): Boolean = {
-    if(hasNext) {
+    if (hasNext) {
       key = cur
       value = next()
       true
@@ -107,7 +114,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
   override def getCurrentValue: String = value
 
   override def getProgress: Float =
-    if(hasNext) math.min(cur.toFloat / fileSize, 1.0f) else 1.0f
+    if (hasNext) math.min(cur.toFloat / fileSize, 1.0f) else 1.0f
 
   /**
     * In case of exceptions, using this method to manually close input streams.
@@ -135,23 +142,23 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
           if (currentChar.get == quoteChar) numOfQuote += 1
 
           while (currentChar.isDefined &&
-            !(currentChar.get == lineFeed && numOfQuote % 2 == 0)) {
+                 !(currentChar.get == lineFeed && numOfQuote % 2 == 0)) {
             buff.append(currentChar.get)
             currentChar = readChar()
-            if(currentChar.get == quoteChar) numOfQuote += 1
+            if (currentChar.get == quoteChar) numOfQuote += 1
           }
           currentChar = readChar()
 
-          if(currentChar.isEmpty) nextStream()
+          if (currentChar.isEmpty) nextStream()
 
         case SupportedFormat.JSON =>
-          //no empty file accepted, at least one record
-          //remove white spaces
-          while(currentChar.isEmpty || currentChar.get != leftBrace)
-            currentChar = readChar()
+          // no empty file accepted, at least one record
+          // remove white spaces
+          while (currentChar.isEmpty || currentChar.get != leftBrace) currentChar =
+            readChar()
           var numOfBrace = 1
 
-          while(numOfBrace != 0){
+          while (numOfBrace != 0) {
             buff.append(currentChar.get)
             currentChar = readChar()
             currentChar match {
@@ -163,10 +170,10 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
             }
           }
           buff.append(currentChar.get)
-          //remove white spaces
-          while(currentChar.isDefined && currentChar.get != leftBrace)
-            currentChar = readChar()
-          if(currentChar.isEmpty) nextStream()
+          // remove white spaces
+          while (currentChar.isDefined && currentChar.get != leftBrace) currentChar =
+            readChar()
+          if (currentChar.isEmpty) nextStream()
 
       }
       new String(buff.toArray, Charset.forName("UTF-8"))
@@ -178,7 +185,7 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     * @return an optional char value, None for empty
     */
   private def readChar(): Option[Byte] = {
-    if(currentStream.isEmpty) None
+    if (currentStream.isEmpty) None
     else {
       val c = currentStream.get.read()
       cur += 1
@@ -191,8 +198,8 @@ private[io] class SFRecordReader(val format: SupportedFormat = SupportedFormat.C
     * stream list.
     */
   private def nextStream(): Unit = {
-    if(currentStream.isDefined) currentStream.get.close()
-    if(inputStreams.nonEmpty){
+    if (currentStream.isDefined) currentStream.get.close()
+    if (inputStreams.nonEmpty) {
       currentStream = Some(inputStreams.head)
       inputStreams = inputStreams.tail
     } else if (inputFileNames.nonEmpty) {

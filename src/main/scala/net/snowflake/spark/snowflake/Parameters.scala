@@ -19,11 +19,12 @@ package net.snowflake.spark.snowflake
 
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
+
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
@@ -31,93 +32,93 @@ import org.slf4j.LoggerFactory
   */
 object Parameters {
 
-  val log = LoggerFactory.getLogger(getClass)
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
-  private[snowflake] val KNOWN_PARAMETERS = new scala.collection.mutable.HashSet[String]()
+  private[snowflake] val KNOWN_PARAMETERS =
+    new scala.collection.mutable.HashSet[String]()
 
-  private def knownParam(param: String): String = {
+  private def knownParam(param: String) = {
     KNOWN_PARAMETERS += param
     param
   }
 
   // List of known parameters
-  val PARAM_S3_MAX_FILE_SIZE   = knownParam("s3maxfilesize")
-  val PARAM_SF_ACCOUNT         = knownParam("sfaccount")
-  val PARAM_SF_URL             = knownParam("sfurl")
-  val PARAM_SF_USER            = knownParam("sfuser")
-  val PARAM_SF_PASSWORD        = knownParam("sfpassword")
-  val PARAM_SF_DATABASE        = knownParam("sfdatabase")
-  val PARAM_SF_SCHEMA          = knownParam("sfschema")
-  val PARAM_SF_ROLE            = knownParam("sfrole")
-  val PARAM_SF_COMPRESS        = knownParam("sfcompress")
-  val PARAM_SF_SSL             = knownParam("sfssl")
-  val PARAM_TEMPDIR            = knownParam("tempdir")
-  val PARAM_SF_DBTABLE         = knownParam("dbtable")
-  val PARAM_SF_QUERY           = knownParam("query")
-  val PARAM_SF_TIMEZONE        = knownParam("sftimezone")
-  val PARAM_SF_WAREHOUSE       = knownParam("sfwarehouse")
-  val PARAM_TEMP_KEY_ID        = knownParam("temporary_aws_access_key_id")
-  val PARAM_TEMP_KEY_SECRET    = knownParam("temporary_aws_secret_access_key")
-  val PARAM_TEMP_SESSION_TOKEN = knownParam("temporary_aws_session_token")
-  val PARAM_CHECK_BUCKET_CONFIGURATION = knownParam(
-    "check_bucket_configuration")
-  val PARAM_TEMP_SAS_TOKEN     = knownParam("temporary_azure_sas_token")
-  val PARAM_PARALLELISM        = knownParam("parallelism")
-  val PARAM_PREACTIONS         = knownParam("preactions")
-  val PARAM_POSTACTIONS        = knownParam("postactions")
-  val PARAM_AWS_SECRET_KEY     = knownParam("awssecretkey")
-  val PARAM_AWS_ACCESS_KEY     = knownParam("awsaccesskey")
-  val PARAM_USE_STAGING_TABLE  = knownParam("usestagingtable")
-  val PARAM_EXTRA_COPY_OPTIONS = knownParam("extracopyoptions")
-  val PARAM_AUTO_PUSHDOWN      = knownParam("autopushdown")
-  val PARAM_COLUMN_MAP         = knownParam("columnmap")
-  val PARAM_TRUNCATE_COLUMNS   = knownParam("truncate_columns")
-  val PARAM_PURGE              = knownParam("purge")
+  val PARAM_S3_MAX_FILE_SIZE: String = knownParam("s3maxfilesize")
+  val PARAM_SF_ACCOUNT: String = knownParam("sfaccount")
+  val PARAM_SF_URL: String = knownParam("sfurl")
+  val PARAM_SF_USER: String = knownParam("sfuser")
+  val PARAM_SF_PASSWORD: String = knownParam("sfpassword")
+  val PARAM_SF_DATABASE: String = knownParam("sfdatabase")
+  val PARAM_SF_SCHEMA: String = knownParam("sfschema")
+  val PARAM_SF_ROLE: String = knownParam("sfrole")
+  val PARAM_SF_COMPRESS: String = knownParam("sfcompress")
+  val PARAM_SF_SSL: String = knownParam("sfssl")
+  val PARAM_TEMPDIR: String = knownParam("tempdir")
+  val PARAM_SF_DBTABLE: String = knownParam("dbtable")
+  val PARAM_SF_QUERY: String = knownParam("query")
+  val PARAM_SF_TIMEZONE: String = knownParam("sftimezone")
+  val PARAM_SF_WAREHOUSE: String = knownParam("sfwarehouse")
+  val PARAM_TEMP_KEY_ID: String = knownParam("temporary_aws_access_key_id")
+  val PARAM_TEMP_KEY_SECRET: String = knownParam("temporary_aws_secret_access_key")
+  val PARAM_TEMP_SESSION_TOKEN: String = knownParam("temporary_aws_session_token")
+  val PARAM_CHECK_BUCKET_CONFIGURATION: String = knownParam(
+    "check_bucket_configuration"
+  )
+  val PARAM_TEMP_SAS_TOKEN: String = knownParam("temporary_azure_sas_token")
+  val PARAM_PARALLELISM: String = knownParam("parallelism")
+  val PARAM_PREACTIONS: String = knownParam("preactions")
+  val PARAM_POSTACTIONS: String = knownParam("postactions")
+  val PARAM_AWS_SECRET_KEY: String = knownParam("awssecretkey")
+  val PARAM_AWS_ACCESS_KEY: String = knownParam("awsaccesskey")
+  val PARAM_USE_STAGING_TABLE: String = knownParam("usestagingtable")
+  val PARAM_EXTRA_COPY_OPTIONS: String = knownParam("extracopyoptions")
+  val PARAM_AUTO_PUSHDOWN: String = knownParam("autopushdown")
+  val PARAM_COLUMN_MAP: String = knownParam("columnmap")
+  val PARAM_TRUNCATE_COLUMNS: String = knownParam("truncate_columns")
+  val PARAM_PURGE: String = knownParam("purge")
 
-  val PARAM_TRUNCATE_TABLE     = knownParam("truncate_table")
-  val PARAM_CONTINUE_ON_ERROR  = knownParam("continue_on_error")
-  val PARAM_STREAMING_STAGE    = knownParam("streaming_stage")
-  val PARAM_PEM_PRIVATE_KEY    = knownParam("pem_private_key")
-  val PARAM_KEEP_COLUMN_CASE   = knownParam("keep_column_case")
+  val PARAM_TRUNCATE_TABLE: String = knownParam("truncate_table")
+  val PARAM_CONTINUE_ON_ERROR: String = knownParam("continue_on_error")
+  val PARAM_STREAMING_STAGE: String = knownParam("streaming_stage")
+  val PARAM_PEM_PRIVATE_KEY: String = knownParam("pem_private_key")
+  val PARAM_KEEP_COLUMN_CASE: String = knownParam("keep_column_case")
 
-  val PARAM_COLUMN_MAPPING     = knownParam("column_mapping")
-  val PARAM_COLUMN_MISMATCH_BEHAVIOR = knownParam("column_mismatch_behavior")
+  val PARAM_COLUMN_MAPPING: String = knownParam("column_mapping")
+  val PARAM_COLUMN_MISMATCH_BEHAVIOR: String = knownParam("column_mismatch_behavior")
 
-  //Internal use only?
-  val PARAM_BIND_VARIABLE      = knownParam("bind_variable")
+  // Internal use only?
+  val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
 
   // Force to use COPY UNLOAD when reading data from Snowflake
-  val PARAM_USE_COPY_UNLOAD    = knownParam("use_copy_unload")
+  val PARAM_USE_COPY_UNLOAD: String = knownParam("use_copy_unload")
   // Expected partition size in MB when SELECT is used when reading data from Snowflake
-  val PARAM_EXPECTED_PARTITION_SIZE_IN_MB = knownParam("partition_size_in_mb")
-  val PARAM_TIME_OUTPUT_FORMAT = knownParam("time_output_format")
-  val PARAM_JDBC_QUERY_RESULT_FORMAT = knownParam("jdbc_query_result_format")
+  val PARAM_EXPECTED_PARTITION_SIZE_IN_MB: String = knownParam("partition_size_in_mb")
+  val PARAM_TIME_OUTPUT_FORMAT: String = knownParam("time_output_format")
+  val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam("jdbc_query_result_format")
 
   // Proxy related info
-  val PARAM_USE_PROXY          = knownParam("use_proxy")
-  val PARAM_PROXY_HOST         = knownParam("proxy_host")
-  val PARAM_PROXY_PORT         = knownParam("proxy_port")
-  val PARAM_PROXY_USER         = knownParam("proxy_user")
-  val PARAM_PROXY_PASSWORD     = knownParam("proxy_password")
-  val PARAM_NON_PROXY_HOSTS    = knownParam("non_proxy_hosts")
+  val PARAM_USE_PROXY: String = knownParam("use_proxy")
+  val PARAM_PROXY_HOST: String = knownParam("proxy_host")
+  val PARAM_PROXY_PORT: String = knownParam("proxy_port")
+  val PARAM_PROXY_USER: String = knownParam("proxy_user")
+  val PARAM_PROXY_PASSWORD: String = knownParam("proxy_password")
+  val PARAM_NON_PROXY_HOSTS: String = knownParam("non_proxy_hosts")
 
-  val PARAM_EXPECTED_PARTITION_COUNT = knownParam("expected_partition_count")
-  val PARAM_MAX_RETRY_COUNT = knownParam("max_retry_count")
+  val PARAM_EXPECTED_PARTITION_COUNT: String = knownParam("expected_partition_count")
+  val PARAM_MAX_RETRY_COUNT: String = knownParam("max_retry_count")
 
-  val DEFAULT_S3_MAX_FILE_SIZE = (10 * 1000 * 1000).toString
-  val MIN_S3_MAX_FILE_SIZE     = 1000000
+  val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
+  val MIN_S3_MAX_FILE_SIZE = 1000000
 
-  val TZ_SPARK1     = ""
-  val TZ_SPARK2     = "spark"
-  val TZ_SF1        = "snowflake"
-  val TZ_SF2        = "sf_current"
+  val TZ_SPARK1 = ""
+  val TZ_SPARK2 = "spark"
+  val TZ_SF1 = "snowflake"
+  val TZ_SF2 = "sf_current"
   val TZ_SF_DEFAULT = "sf_default"
 
   // List of values that mean "yes" when considered to be Boolean
-  // scalastyle:off
-  val BOOLEAN_VALUES_TRUE  = Set("on", "yes", "true", "1", "enabled")
-  val BOOLEAN_VALUES_FALSE = Set("off", "no", "false", "0", "disabled")
-  // scalastyle: on
+  val BOOLEAN_VALUES_TRUE: Set[String] = Set("on", "yes", "true", "1", "enabled")
+  val BOOLEAN_VALUES_FALSE: Set[String] = Set("off", "no", "false", "0", "disabled")
 
   /**
     * Helper method to check if a given string represents some form
@@ -130,11 +131,11 @@ object Parameters {
   val DEFAULT_PARAMETERS: Map[String, String] = Map(
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
-    "diststyle"       -> "EVEN",
+    "diststyle" -> "EVEN",
     PARAM_USE_STAGING_TABLE -> "true",
     PARAM_CONTINUE_ON_ERROR -> "off",
     PARAM_TRUNCATE_TABLE -> "off",
-    PARAM_PREACTIONS  -> "",
+    PARAM_PREACTIONS -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
     PARAM_SF_SSL -> "on",
@@ -160,33 +161,45 @@ object Parameters {
 
     if (userParameters.contains(PARAM_TEMPDIR)) {
       log.warn(
-        "Use of an external S3/Azure storage for staging is deprecated and will be removed in a future version. " +
-          "Unset your 'tempDir' parameter to use the Snowflake internal stage instead.")
+        "Use of an external S3/Azure storage for staging is deprecated" +
+          " and will be removed in a future version. " +
+          "Unset your 'tempDir' parameter to use the Snowflake internal stage instead."
+      )
     }
     // Snowflake-todo Add more parameter checking
     if (!userParameters.contains(PARAM_SF_URL)) {
       throw new IllegalArgumentException(
-        "A snowflake URL must be provided with '" + PARAM_SF_URL + "' parameter, e.g. 'accountname.snowflakecomputing.com:443'")
+        "A snowflake URL must be provided with '" + PARAM_SF_URL +
+          "' parameter, e.g. 'accountname.snowflakecomputing.com:443'"
+      )
     }
     if (!userParameters.contains(PARAM_SF_USER)) {
       throw new IllegalArgumentException(
-        "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'")
+        "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
+      )
     }
     if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-      (!userParameters.contains(PARAM_PEM_PRIVATE_KEY))) {
+        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY))) {
       throw new IllegalArgumentException(
-        "A snowflake passsword or private key path must be provided with '" + PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' parameter, e.g. 'password'")
+        "A snowflake password or private key path must be provided with '" + PARAM_SF_PASSWORD +
+          " or " + PARAM_PEM_PRIVATE_KEY + "' parameter, e.g. 'password'"
+      )
     }
     if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
-          PARAM_SF_QUERY)) {
+          PARAM_SF_QUERY
+        )) {
       throw new IllegalArgumentException(
-        "You must specify a Snowflake table name with the '" + PARAM_SF_DBTABLE + "' parameter or a query" + " with the " +
-          "'" + PARAM_SF_QUERY + "' parameter.")
+        "You must specify a Snowflake table name with the '" + PARAM_SF_DBTABLE +
+          "' parameter or a query with the '" + PARAM_SF_QUERY + "' parameter."
+      )
     }
     if (userParameters.contains(PARAM_SF_DBTABLE) && userParameters.contains(
-          PARAM_SF_QUERY)) {
+          PARAM_SF_QUERY
+        )) {
       throw new IllegalArgumentException(
-        "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY + "' parameters at the same time.")
+        "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY +
+          "' parameters at the same time."
+      )
     }
 
     // Check temp keys
@@ -207,17 +220,19 @@ object Parameters {
         try {
           Some(s.toInt)
         } catch {
-          case e: Exception => None
+          case _: Exception => None
         }
       }
       val s3maxfilesize = toInt(s3maxfilesizeStr.get)
       if (s3maxfilesize.isEmpty) {
         throw new IllegalArgumentException(
-          s"Cannot parse $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} as a number")
+          s"Cannot parse $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} as a number"
+        )
       }
       if (s3maxfilesize.get < MIN_S3_MAX_FILE_SIZE) {
         throw new IllegalArgumentException(
-          s"Specified $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} too small")
+          s"Specified $PARAM_S3_MAX_FILE_SIZE=${s3maxfilesizeStr.get} too small"
+        )
       }
     }
 
@@ -241,7 +256,7 @@ object Parameters {
       try {
         return new Integer(s)
       } catch {
-        case t: Throwable =>
+        case _: Throwable =>
       }
       if (s.equalsIgnoreCase("true")) {
         return new java.lang.Boolean(true)
@@ -255,9 +270,10 @@ object Parameters {
     private lazy val extraParams: Map[String, Object] = {
       // Find all entries that are in parameters and are not known
       val unknownParamNames = parameters.keySet -- KNOWN_PARAMETERS
-      var res               = Map[String, Object]()
-      unknownParamNames.foreach(v =>
-        res += (v -> stringToObject(parameters(v))))
+      var res = Map[String, Object]()
+      unknownParamNames.foreach(
+        v => res += (v -> stringToObject(parameters(v)))
+      )
       res
     }
 
@@ -279,8 +295,10 @@ object Parameters {
         } else if (lsTempDir.startsWith("s3")) {
           FSType.S3
         } else {
-          throw new SnowflakeConnectorException("Parameter 'tempDir' must have a " +
-            "file, wasb, wasbs, s3a, or s3n schema.")
+          throw new SnowflakeConnectorException(
+            "Parameter 'tempDir' must have a " +
+              "file, wasb, wasbs, s3a, or s3n schema."
+          )
         }
       }
     }
@@ -288,7 +306,8 @@ object Parameters {
     /**
       * Number of threads used for PUT/GET.
       */
-    lazy val parallelism: Option[Int] = parameters.get(PARAM_PARALLELISM).map(p => p.toInt)
+    lazy val parallelism: Option[Int] =
+      parameters.get(PARAM_PARALLELISM).map(p => p.toInt)
 
     /**
       * A root directory to be used for intermediate data exchange,
@@ -303,7 +322,15 @@ object Parameters {
 
     lazy val proxyInfo: Option[ProxyInfo] = {
       if (this.useProxy) {
-        Some(new ProxyInfo(proxyHost, proxyPort,proxyUser, proxyPassword, nonProxyHosts))
+        Some(
+          new ProxyInfo(
+            proxyHost,
+            proxyPort,
+            proxyUser,
+            proxyPassword,
+            nonProxyHosts
+          )
+        )
       } else {
         None
       }
@@ -355,8 +382,9 @@ object Parameters {
       if (res.isDefined) {
         // Remove trailing semicolon if present
         var str: String = res.get.trim
-        if (str.charAt(str.length - 1) == ';')
+        if (str.charAt(str.length - 1) == ';') {
           str = str.substring(0, str.length - 1)
+        }
         Some(str)
       } else {
         parameters
@@ -424,7 +452,8 @@ object Parameters {
     /**
       * Snowflake automatically enable/disable pushdown function
       */
-    def autoPushdown: Boolean = isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
+    def autoPushdown: Boolean =
+      isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
 
     /**
       * Snowflake role - optional
@@ -470,7 +499,10 @@ object Parameters {
       * set column map
       */
     def setColumnMap(map: Map[String, String]): Unit = {
-      assert(parameters.get(PARAM_COLUMN_MAP).isEmpty, "Column map is already declared")
+      assert(
+        parameters.get(PARAM_COLUMN_MAP).isEmpty,
+        "Column map is already declared"
+      )
       generatedColumnMap = Some(map)
     }
 
@@ -478,7 +510,7 @@ object Parameters {
       * Retrieve Column mapping data.
       * None if empty
       */
-    def columnMap: Option[Map[String,String]] = {
+    def columnMap: Option[Map[String, String]] = {
       parameters.get(PARAM_COLUMN_MAP) match {
         case None => generatedColumnMap
         case Some(source: String) => Some(Utils.parseMap(source))
@@ -522,8 +554,8 @@ object Parameters {
     /**
       * When true, data is always loaded into a new temporary table when performing an overwrite.
       * This is to ensure that the whole load process succeeds before dropping any data from
-      * Snowflake, which can be useful if, in the event of failures, stale data is better than no data
-      * for your systems.
+      * Snowflake, which can be useful if, in the event of failures, stale data is better than
+      * no data for your systems.
       *
       * Defaults to true.
       */
@@ -565,9 +597,9 @@ object Parameters {
       * instances.
       */
     def temporaryAWSCredentials: Option[AWSCredentials] = {
-      for (accessKey       <- parameters.get(PARAM_TEMP_KEY_ID);
+      for (accessKey <- parameters.get(PARAM_TEMP_KEY_ID);
            secretAccessKey <- parameters.get(PARAM_TEMP_KEY_SECRET);
-           sessionToken    <- parameters.get(PARAM_TEMP_SESSION_TOKEN))
+           sessionToken <- parameters.get(PARAM_TEMP_SESSION_TOKEN))
         yield
           new BasicSessionCredentials(accessKey, secretAccessKey, sessionToken)
     }
@@ -578,11 +610,12 @@ object Parameters {
       * provided if customer would like to load data through their storage
       * account directly.
       */
-    def temporaryAzureStorageCredentials: Option[StorageCredentialsSharedAccessSignature] = {
+    def temporaryAzureStorageCredentials
+      : Option[StorageCredentialsSharedAccessSignature] = {
       for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
-        yield
-          new StorageCredentialsSharedAccessSignature(sas)
+        yield new StorageCredentialsSharedAccessSignature(sas)
     }
+
     /**
       * Truncate table when overwriting.
       * Keep the table schema
@@ -614,8 +647,10 @@ object Parameters {
       try {
         (parameters(PARAM_EXPECTED_PARTITION_SIZE_IN_MB).toDouble * 1024 * 1024).toLong
       } catch {
-        case _: Exception => throw new IllegalArgumentException(
-                                    "Input expected partition size is invalid")
+        case _: Exception =>
+          throw new IllegalArgumentException(
+            "Input expected partition size is invalid"
+          )
       }
     }
 
@@ -638,35 +673,39 @@ object Parameters {
       * @return private key object
       */
     def privateKey: Option[PrivateKey] =
-      parameters.get(PARAM_PEM_PRIVATE_KEY).map(key => {
-        java.security.Security.addProvider(
-          new net.snowflake.client.jdbc.internal.org.bouncycastle.jce.provider.BouncyCastleProvider
-        )
-        try{
-          val encoded = Base64.decodeBase64(key)
-          val kf = KeyFactory.getInstance("RSA")
-          val keySpec = new PKCS8EncodedKeySpec(encoded)
-          kf.generatePrivate(keySpec)
-        }
-        catch{
-          case _: Exception => throw new IllegalArgumentException("Input PEM private key is invalid")
-        }
+      parameters
+        .get(PARAM_PEM_PRIVATE_KEY)
+        .map(key => {
+          // scalastyle:off
+          java.security.Security.addProvider(
+            new net.snowflake.client.jdbc.internal.org.bouncycastle.jce.provider.BouncyCastleProvider
+          )
+          // scalastyle:on
+          try {
+            val encoded = Base64.decodeBase64(key)
+            val kf = KeyFactory.getInstance("RSA")
+            val keySpec = new PKCS8EncodedKeySpec(encoded)
+            kf.generatePrivate(keySpec)
+          } catch {
+            case _: Exception =>
+              throw new IllegalArgumentException(
+                "Input PEM private key is invalid"
+              )
+          }
 
-      })
+        })
 
     def columnMapping: String = {
       parameters(PARAM_COLUMN_MAPPING).toLowerCase match {
         case "name" => "name"
         case "order" => "order"
-        case value => {
-          log.error(
-            s"""
+        case value =>
+          log.error(s"""
               |wrong input value of column_mapping parameter: $value,
               |it only supports "name" and "order",
               |using default setting "order"
               |""".stripMargin)
           "order"
-        }
       }
     }
 
@@ -674,24 +713,20 @@ object Parameters {
       parameters(PARAM_COLUMN_MISMATCH_BEHAVIOR).toLowerCase() match {
         case "error" => "error"
         case "ignore" => "ignore"
-        case value => {
-          log.error(
-            s"""
+        case value =>
+          log.error(s"""
                |wrong input values of column_mismatch_behavior parameter: $value
                |it only supports "error" and "ignore",
                |using default setting "error"
-               """.stripMargin
-          )
+               """.stripMargin)
           "ignore"
-        }
       }
     }
 
     def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
 
-
     def storagePath: Option[String] = {
-      val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.*)".r
+      val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.*)".r
       val s3_url = "s3[an]://([^/]+)/(.*)".r
       parameters.get(PARAM_TEMPDIR) match {
         case Some(azure_url(container, account, endpoint, path)) =>
@@ -701,7 +736,7 @@ object Parameters {
         case None => None
         case Some(str) =>
           throw new UnsupportedOperationException(
-           s"Only Support azure or s3 storage: $str"
+            s"Only Support azure or s3 storage: $str"
           )
       }
     }

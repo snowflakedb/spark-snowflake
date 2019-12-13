@@ -2,25 +2,19 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class OnErrorSuite extends IntegrationSuiteBase{
+class OnErrorSuite extends IntegrationSuiteBase {
   lazy val table = s"spark_test_table_$randomSuffix"
 
   lazy val schema = new StructType(
-    Array(
-      StructField("var", StringType, nullable = false)
-    )
+    Array(StructField("var", StringType, nullable = false))
   )
 
-
-  lazy val df = sqlContext.createDataFrame(
+  lazy val df: DataFrame = sqlContext.createDataFrame(
     sc.parallelize(
-      Seq(
-        Row("{\"dsadas\nadsa\":12311}"),
-        Row("{\"abc\":334}")
-      ) //invalid json key
+      Seq(Row("{\"dsadas\nadsa\":12311}"), Row("{\"abc\":334}")) // invalid json key
     ),
     schema
   )
@@ -37,7 +31,7 @@ class OnErrorSuite extends IntegrationSuiteBase{
 
   test("continue_on_error off") {
 
-    assertThrows[SnowflakeSQLException]{
+    assertThrows[SnowflakeSQLException] {
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
@@ -64,6 +58,5 @@ class OnErrorSuite extends IntegrationSuiteBase{
 
     assert(result.collect().length == 1)
   }
-
 
 }

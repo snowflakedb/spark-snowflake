@@ -18,13 +18,13 @@
 package net.snowflake.spark.snowflake
 
 /**
- * Wrapper class for representing the name of a Snowflake table.
- *
- * Note, we don't do any escaping/unescaping for Snowflake tables,
- * we expect the user to do it.
- */
+  * Wrapper class for representing the name of a Snowflake table.
+  *
+  * Note, we don't do any escaping/unescaping for Snowflake tables,
+  * we expect the user to do it.
+  */
 private[snowflake] case class TableName(name: String) {
   override def toString: String = name
 
-  def toStatement: Identifier =Identifier(name)
+  def toStatement: Identifier = Identifier(name)
 }

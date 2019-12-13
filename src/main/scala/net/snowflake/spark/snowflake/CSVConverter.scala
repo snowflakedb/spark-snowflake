@@ -21,17 +21,17 @@ import org.apache.spark.sql.types.StructType
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-object CSVConverter{
+object CSVConverter {
 
   private final val delimiter = '|'
   private final val quoteChar = '"'
-  
+
   private[snowflake] def convert[T: ClassTag](
-                                               partition: Iterator[String],
-                                               resultSchema: StructType
-                                             ): Iterator[T] = {
+    partition: Iterator[String],
+    resultSchema: StructType
+  ): Iterator[T] = {
     val converter = Conversions.createRowConverter[T](resultSchema)
-    partition.map(s=>{
+    partition.map(s => {
       val fields = ArrayBuffer.empty[String]
       var buff = new StringBuilder
 
@@ -55,14 +55,12 @@ object CSVConverter{
             if (escaped) {
               escaped = false
               buff.append(s(index))
-            }
-            else if (s(index) == quoteChar) escaped = true
+            } else if (s(index) == quoteChar) escaped = true
             else buff.append(s(index))
             index += 1
           }
           addField()
-        }
-        else {
+        } else {
           while (index < s.length && s(index) != delimiter) {
             buff.append(s(index))
             index += 1

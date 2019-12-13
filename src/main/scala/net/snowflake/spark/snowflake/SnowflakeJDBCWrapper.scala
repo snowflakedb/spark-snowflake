@@ -19,7 +19,15 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
+import java.sql.{
+  Connection,
+  DriverManager,
+  PreparedStatement,
+  ResultSet,
+  ResultSetMetaData,
+  SQLException,
+  Statement
+}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
@@ -47,17 +55,19 @@ private[snowflake] class JDBCWrapper {
 
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
-    val threadFactory = new ThreadFactory {
+    val threadFactory: ThreadFactory = new ThreadFactory {
       private[this] val count = new AtomicInteger()
 
-      override def newThread(r: Runnable) = {
+      override def newThread(r: Runnable): Thread = {
         val thread = new Thread(r)
         thread.setName(s"spark-snowflake-JDBCWrapper-${count.incrementAndGet}")
         thread.setDaemon(true)
         thread
       }
     }
-    ExecutionContext.fromExecutorService(Executors.newCachedThreadPool(threadFactory))
+    ExecutionContext.fromExecutorService(
+      Executors.newCachedThreadPool(threadFactory)
+    )
   }
 
   /**
@@ -71,29 +81,34 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table specification is garbage.
     * @throws SQLException if the table contains an unsupported type.
     */
-  def resolveTable(conn: Connection, table: String, params: MergedParameters): StructType =
+  def resolveTable(conn: Connection,
+                   table: String,
+                   params: MergedParameters): StructType =
     resolveTableFromMeta(conn, conn.tableMetaData(table), params)
 
-  def resolveTableFromMeta(conn: Connection, rsmd: ResultSetMetaData, params: MergedParameters): StructType = {
+  def resolveTableFromMeta(conn: Connection,
+                           rsmd: ResultSetMetaData,
+                           params: MergedParameters): StructType = {
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
     var i = 0
     while (i < ncols) {
       val columnName = rsmd.getColumnLabel(i + 1)
       val dataType = rsmd.getColumnType(i + 1)
-      val typeName = rsmd.getColumnTypeName(i + 1)
       val fieldSize = rsmd.getPrecision(i + 1)
       val fieldScale = rsmd.getScale(i + 1)
       val isSigned = rsmd.isSigned(i + 1)
       val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-      val columnType = getCatalystType(dataType, fieldSize, fieldScale, isSigned)
+      val columnType =
+        getCatalystType(dataType, fieldSize, fieldScale, isSigned)
       fields(i) = StructField(
-        if(params.keepOriginalColumnNameCase) columnName
+        if (params.keepOriginalColumnNameCase) columnName
         // Add quotes around column names if Snowflake would usually require them.
         else if (columnName.matches("[_A-Z]([_0-9A-Z])*")) columnName
         else s""""$columnName"""",
         columnType,
-        nullable)
+        nullable
+      )
       i = i + 1
     }
     new StructType(fields)
@@ -110,7 +125,10 @@ private[snowflake] class JDBCWrapper {
       DriverRegistry.register(driverClass.getCanonicalName)
     } catch {
       case e: ClassNotFoundException =>
-        throw new ClassNotFoundException(s"Could not load a Snowflake JDBC driver class < $driverClassName > ", e)
+        throw new ClassNotFoundException(
+          s"Could not load a Snowflake JDBC driver class < $driverClassName > ",
+          e
+        )
     }
 
     val sfURL = params.sfURL
@@ -141,25 +159,25 @@ private[snowflake] class JDBCWrapper {
       jdbcProperties.put("role", params.sfRole.get)
     }
     params.getTimeOutputFormat match {
-      case Some(value) => jdbcProperties.put(Parameters.PARAM_TIME_OUTPUT_FORMAT, value)
+      case Some(value) =>
+        jdbcProperties.put(Parameters.PARAM_TIME_OUTPUT_FORMAT, value)
       case _ => // No default value for it.
     }
     params.getQueryResultFormat match {
-      case Some(value) => jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, value)
-      case _ => {
+      case Some(value) =>
+        jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, value)
+      case _ =>
         // If the user doesn't want to use COPY UNLOAD and doesn't set query result result
         // explicitly, set the query result format automatically as ARROW for better performance.
         if (!params.useCopyUnload) {
           jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, "arrow")
         }
-      }
     }
 
     // Set up proxy info if it is configured.
     params.proxyInfo match {
-      case Some(proxyInfoValue) => {
+      case Some(proxyInfoValue) =>
         proxyInfoValue.setProxyForJDBC(jdbcProperties)
-      }
       case None =>
     }
 
@@ -173,7 +191,7 @@ private[snowflake] class JDBCWrapper {
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
     for ((k: String, v: Object) <- extraOptions) {
-      jdbcProperties.put(k.toLowerCase, v.toString())
+      jdbcProperties.put(k.toLowerCase, v.toString)
     }
 
     // Set info on the system level
@@ -182,7 +200,8 @@ private[snowflake] class JDBCWrapper {
       s.replace("\"", "").replace("\\", "")
     }
 
-    val sparkAppName = SparkContext.getOrCreate().getConf.get("spark.app.name", "")
+    val sparkAppName =
+      SparkContext.getOrCreate().getConf.get("spark.app.name", "")
     val scalaVersion = util.Properties.versionString
     val javaVersion = System.getProperty("java.version", "UNKNOWN")
     val snowflakeClientInfo =
@@ -196,7 +215,7 @@ private[snowflake] class JDBCWrapper {
     log.debug(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
-    val conn : Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
+    val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
 
     // Setup query result format explicitly because this option is not supported
     // to be set with JDBC properties
@@ -205,19 +224,22 @@ private[snowflake] class JDBCWrapper {
       // to "jdbc_query_result_format", so we try to setup both. and it will
       // can be clean in the future.
       try {
-        val resultFormat = jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT)
-        conn.createStatement().execute(
-          s"alter session set QUERY_RESULT_FORMAT = '$resultFormat'");
-        conn.createStatement().execute(
-          s"alter session set JDBC_QUERY_RESULT_FORMAT = '$resultFormat'");
+        val resultFormat =
+          jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT)
+        conn
+          .createStatement()
+          .execute(s"alter session set QUERY_RESULT_FORMAT = '$resultFormat'")
+        conn
+          .createStatement()
+          .execute(
+            s"alter session set JDBC_QUERY_RESULT_FORMAT = '$resultFormat'"
+          )
       } catch {
-        case e : SQLException => {
+        case e: SQLException =>
           log.info(e.getMessage)
-        }
-        case other : Any => {
+        case other: Any =>
           // Rethrow other errors.
           throw other
-        }
       }
     }
 
@@ -228,14 +250,19 @@ private[snowflake] class JDBCWrapper {
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
   def schemaString(schema: StructType, param: MergedParameters): String = {
-    schema.fields.map(field => {
-      val name: String =
-        if(param.keepOriginalColumnNameCase) Utils.quotedNameIgnoreCase(field.name)
-        else Utils.ensureQuoted(field.name)
-      val `type`: String = schemaConversion(field)
-      val nullable: String = if (field.nullable) "" else "NOT NULL"
-      s"""$name ${`type`} $nullable"""
-    }).mkString(",")
+    schema.fields
+      .map(field => {
+        val name: String =
+          if (param.keepOriginalColumnNameCase) {
+            Utils.quotedNameIgnoreCase(field.name)
+          } else {
+            Utils.ensureQuoted(field.name)
+          }
+        val `type`: String = schemaConversion(field)
+        val nullable: String = if (field.nullable) "" else "NOT NULL"
+        s"""$name ${`type`} $nullable"""
+      })
+      .mkString(",")
   }
 
   /**
@@ -267,45 +294,47 @@ private[snowflake] class JDBCWrapper {
       case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
       case _: StructType | _: ArrayType | _: MapType => "VARIANT"
       case _ =>
-        throw new IllegalArgumentException(s"Don't know how to save $field of type ${field.name} to Snowflake")
+        throw new IllegalArgumentException(
+          s"Don't know how to save $field of type ${field.name} to Snowflake"
+        )
     }
-
 
   /**
     * Returns true if the table already exists in the JDBC database.
     */
-  def tableExists(conn: Connection, table: String): Boolean = conn.tableExists(table)
+  def tableExists(conn: Connection, table: String): Boolean =
+    conn.tableExists(table)
 
   // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
   // SQL database systems, considering "table" could also include the database name.
 
   def executePreparedInterruptibly(statement: PreparedStatement): Boolean = {
-    executeInterruptibly(statement,
-      {
-        stmt: Statement =>
-          val prepStmt = stmt.asInstanceOf[PreparedStatement]
-          prepStmt.execute()
-      })
+    executeInterruptibly(statement, { stmt: Statement =>
+      val prepStmt = stmt.asInstanceOf[PreparedStatement]
+      prepStmt.execute()
+    })
   }
 
   def executePreparedInterruptibly(conn: Connection, sql: String): Boolean = {
     executePreparedInterruptibly(conn.prepareStatement(sql))
   }
 
-  def executePreparedQueryInterruptibly(statement: PreparedStatement): ResultSet = {
-    executeInterruptibly(statement,
-      {
-        stmt: Statement =>
-          val prepStmt = stmt.asInstanceOf[PreparedStatement]
-          prepStmt.executeQuery()
-      })
+  def executePreparedQueryInterruptibly(
+    statement: PreparedStatement
+  ): ResultSet = {
+    executeInterruptibly(statement, { stmt: Statement =>
+      val prepStmt = stmt.asInstanceOf[PreparedStatement]
+      prepStmt.executeQuery()
+    })
   }
 
-  def executePreparedQueryInterruptibly(conn: Connection, sql: String): ResultSet = {
+  def executePreparedQueryInterruptibly(conn: Connection,
+                                        sql: String): ResultSet = {
     executePreparedQueryInterruptibly(conn.prepareStatement(sql))
   }
 
-  def executeQueryInterruptibly(statement: Statement, str: String): ResultSet = {
+  def executeQueryInterruptibly(statement: Statement,
+                                str: String): ResultSet = {
     executeInterruptibly(statement, _.executeQuery(str))
   }
 
@@ -329,7 +358,8 @@ private[snowflake] class JDBCWrapper {
     executeInterruptibly(stmt, sql)
   }
 
-  private def executeInterruptibly[T](statement: Statement, op: Statement => T): T = {
+  private def executeInterruptibly[T](statement: Statement,
+                                      op: Statement => T): T = {
     try {
       log.debug(s"Running statement $statement")
       val future = Future[T](op(statement))(ec)
@@ -355,66 +385,74 @@ private[snowflake] class JDBCWrapper {
     * @param sqlType - A field of java.sql.Types
     * @return The Catalyst type corresponding to sqlType.
     */
-  private def getCatalystType(sqlType: Int, precision: Int, scale: Int, signed: Boolean): DataType = {
+  private def getCatalystType(sqlType: Int,
+                              precision: Int,
+                              scale: Int,
+                              signed: Boolean): DataType = {
     // TODO: cleanup types which are irrelevant for Snowflake.
     // Snowflake-todo: Add support for some types like ARRAY.
     // Snowflake-todo: Verify all types.
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY => null
-      case java.sql.Types.BIGINT => if (signed) {
-        LongType
-      } else {
-        DecimalType(20, 0)
-      }
+      case java.sql.Types.BIGINT =>
+        if (signed) {
+          LongType
+        } else {
+          DecimalType(20, 0)
+        }
       //      case java.sql.Types.BINARY        => BinaryType
       //      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       //      case java.sql.Types.BLOB          => BinaryType
-      case java.sql.Types.BOOLEAN => BooleanType
-      case java.sql.Types.CHAR => StringType
-      case java.sql.Types.CLOB => StringType
+      case java.sql.Types.BOOLEAN  => BooleanType
+      case java.sql.Types.CHAR     => StringType
+      case java.sql.Types.CLOB     => StringType
       case java.sql.Types.DATALINK => null
-      case java.sql.Types.DATE => DateType
-      case java.sql.Types.DECIMAL if precision != 0 || scale != 0 => {
+      case java.sql.Types.DATE     => DateType
+      case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
         if (precision > DecimalType.MAX_PRECISION) {
-          DecimalType(DecimalType.MAX_PRECISION, scale + (precision - DecimalType.MAX_SCALE))
+          DecimalType(
+            DecimalType.MAX_PRECISION,
+            scale + (precision - DecimalType.MAX_SCALE)
+          )
         } else {
           DecimalType(precision, scale)
         }
-      }
-      case java.sql.Types.DECIMAL => DecimalType(38, 18) // Spark 1.5.0 default
+      case java.sql.Types.DECIMAL  => DecimalType(38, 18) // Spark 1.5.0 default
       case java.sql.Types.DISTINCT => null
-      case java.sql.Types.DOUBLE => DoubleType
-      case java.sql.Types.FLOAT => FloatType
-      case java.sql.Types.INTEGER => if (signed) {
-        IntegerType
-      } else {
-        LongType
-      }
-      case java.sql.Types.JAVA_OBJECT => null
+      case java.sql.Types.DOUBLE   => DoubleType
+      case java.sql.Types.FLOAT    => FloatType
+      case java.sql.Types.INTEGER =>
+        if (signed) {
+          IntegerType
+        } else {
+          LongType
+        }
+      case java.sql.Types.JAVA_OBJECT  => null
       case java.sql.Types.LONGNVARCHAR => StringType
       //      case java.sql.Types.LONGVARBINARY => BinaryType
       case java.sql.Types.LONGVARCHAR => StringType
-      case java.sql.Types.NCHAR => StringType
-      case java.sql.Types.NCLOB => StringType
-      case java.sql.Types.NULL => null
-      case java.sql.Types.NUMERIC if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.NUMERIC => DecimalType(38, 18) // Spark 1.5.0 default
-      case java.sql.Types.NVARCHAR => StringType
-      case java.sql.Types.OTHER => null
-      case java.sql.Types.REAL => DoubleType
-      case java.sql.Types.REF => StringType
-      case java.sql.Types.ROWID => LongType
-      case java.sql.Types.SMALLINT => IntegerType
-      case java.sql.Types.SQLXML => StringType // Snowflake-todo: ?
-      case java.sql.Types.STRUCT => StringType // Snowflake-todo: ?
-      case java.sql.Types.TIME => StringType
+      case java.sql.Types.NCHAR       => StringType
+      case java.sql.Types.NCLOB       => StringType
+      case java.sql.Types.NULL        => null
+      case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
+        DecimalType(precision, scale)
+      case java.sql.Types.NUMERIC   => DecimalType(38, 18) // Spark 1.5.0 default
+      case java.sql.Types.NVARCHAR  => StringType
+      case java.sql.Types.OTHER     => null
+      case java.sql.Types.REAL      => DoubleType
+      case java.sql.Types.REF       => StringType
+      case java.sql.Types.ROWID     => LongType
+      case java.sql.Types.SMALLINT  => IntegerType
+      case java.sql.Types.SQLXML    => StringType // Snowflake-todo: ?
+      case java.sql.Types.STRUCT    => StringType // Snowflake-todo: ?
+      case java.sql.Types.TIME      => StringType
       case java.sql.Types.TIMESTAMP => TimestampType
-      case java.sql.Types.TINYINT => IntegerType
+      case java.sql.Types.TINYINT   => IntegerType
       //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType
-      case java.sql.Types.BINARY => BinaryType
-      case _ => null
+      case java.sql.Types.BINARY  => BinaryType
+      case _                      => null
       // scalastyle:on
     }
 
@@ -423,7 +461,8 @@ private[snowflake] class JDBCWrapper {
   }
 
   @deprecated
-  def getTelemetry(conn: Connection): Telemetry = TelemetryClient.createTelemetry(conn)
+  def getTelemetry(conn: Connection): Telemetry =
+    TelemetryClient.createTelemetry(conn)
 }
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
@@ -445,45 +484,41 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @param overwrite use "create or replace" if true,
       *                  otherwise, use "create if not exists"
       */
-    def createTable(
-                     name: String,
-                     schema: StructType,
-                     params: MergedParameters,
-                     overwrite: Boolean = false,
-                     temporary: Boolean = false,
-                     bindVariableEnabled: Boolean = true
-                   ): Unit =
+    def createTable(name: String,
+                    schema: StructType,
+                    params: MergedParameters,
+                    overwrite: Boolean,
+                    temporary: Boolean,
+                    bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
         (if (temporary) "temporary" else "") + "table" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
-        s"(${schemaString(schema, params)})").execute(bindVariableEnabled)(connection)
+        s"(${schemaString(schema, params)})")
+        .execute(bindVariableEnabled)(connection)
 
-    def createTableLike(
-                         newTable: String,
-                         originalTable: String,
-                         bindVariableEnabled: Boolean = true
-                       ): Unit = {
+    def createTableLike(newTable: String,
+                        originalTable: String,
+                        bindVariableEnabled: Boolean = true): Unit = {
       (ConstantString("create or replace table") + Identifier(newTable) +
-        "like" + Identifier(originalTable)).execute(bindVariableEnabled)(connection)
+        "like" + Identifier(originalTable))
+        .execute(bindVariableEnabled)(connection)
     }
 
-    def truncateTable(table: String, bindVariableEnabled: Boolean = true): Unit =
-      (ConstantString("truncate") + table).execute(bindVariableEnabled)(connection)
+    def truncateTable(table: String,
+                      bindVariableEnabled: Boolean = true): Unit =
+      (ConstantString("truncate") + table)
+        .execute(bindVariableEnabled)(connection)
 
-    def swapTable(
-                   newTable: String,
-                   originalTable: String,
-                   bindVariableEnabled: Boolean = true
-                 ): Unit =
+    def swapTable(newTable: String,
+                  originalTable: String,
+                  bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("alter table") + Identifier(newTable) + "swap with" +
         Identifier(originalTable)).execute(bindVariableEnabled)(connection)
 
-    def renameTable(
-                     newName: String,
-                     oldName: String,
-                     bindVariableEnabled: Boolean = true
-                   ): Unit =
+    def renameTable(newName: String,
+                    oldName: String,
+                    bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("alter table") + Identifier(oldName) + "rename to" +
         Identifier(newName)).execute(bindVariableEnabled)(connection)
 
@@ -491,7 +526,8 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       * @param name table name
       * @return true if table exists, otherwise false
       */
-    def tableExists(name: String, bindVariableEnabled: Boolean = true): Boolean =
+    def tableExists(name: String,
+                    bindVariableEnabled: Boolean = true): Boolean =
       Try {
         (EmptySnowflakeSQLStatement() + "desc table" + Identifier(name))
           .execute(bindVariableEnabled)(connection)
@@ -512,16 +548,24 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
     def tableMetaData(name: String): ResultSetMetaData =
       tableMetaDataFromStatement(ConstantString(name) !)
 
-    def tableMetaDataFromStatement(statement: SnowflakeSQLStatement,
-                                   bindVariableEnabled: Boolean = true): ResultSetMetaData =
+    def tableMetaDataFromStatement(
+      statement: SnowflakeSQLStatement,
+      bindVariableEnabled: Boolean = true
+    ): ResultSetMetaData =
       (ConstantString("select * from") + statement + "where 1 = 0")
-        .execute(bindVariableEnabled)(connection).getMetaData
+        .execute(bindVariableEnabled)(connection)
+        .getMetaData
 
     def tableSchema(name: String, params: MergedParameters): StructType =
       resolveTable(connection, name, params)
 
-    def tableSchema(statement: SnowflakeSQLStatement, params: MergedParameters): StructType =
-      resolveTableFromMeta(connection, tableMetaDataFromStatement(statement), params)
+    def tableSchema(statement: SnowflakeSQLStatement,
+                    params: MergedParameters): StructType =
+      resolveTableFromMeta(
+        connection,
+        tableMetaDataFromStatement(statement),
+        params
+      )
 
     /**
       * Create an internal stage if location is None,
@@ -536,16 +580,14 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       *                     otherwise use " create stage if not exists"
       * @param temporary    create temporary stage if it is true
       */
-    def createStage(
-                     name: String,
-                     location: Option[String] = None,
-                     awsAccessKey: Option[String] = None,
-                     awsSecretKey: Option[String] = None,
-                     azureSAS: Option[String] = None,
-                     overwrite: Boolean = false,
-                     temporary: Boolean = false,
-                     bindVariableEnabled: Boolean = true
-                   ): Unit = {
+    def createStage(name: String,
+                    location: Option[String] = None,
+                    awsAccessKey: Option[String] = None,
+                    awsSecretKey: Option[String] = None,
+                    azureSAS: Option[String] = None,
+                    overwrite: Boolean = false,
+                    temporary: Boolean = false,
+                    bindVariableEnabled: Boolean = true): Unit = {
 
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
@@ -558,11 +600,12 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                 case Some(sas) =>
                   ConstantString(s"azure_sas_token = '$sas')")
                 case None =>
-                  ConstantString(s"aws_key_id = '${awsAccessKey.get}' aws_secret_key = '${awsSecretKey.get}')")
+                  ConstantString(
+                    s"aws_key_id = '${awsAccessKey.get}' aws_secret_key = '${awsSecretKey.get}')"
+                  )
               })
           case None => EmptySnowflakeSQLStatement()
-        })
-        ).execute(bindVariableEnabled)(connection)
+        })).execute(bindVariableEnabled)(connection)
 
     }
 
@@ -574,90 +617,96 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       */
     def dropStage(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("drop stage") + Identifier(name)).execute(bindVariableEnabled)(connection)
+        (ConstantString("drop stage") + Identifier(name)).execute(
+          bindVariableEnabled
+        )(connection)
       }.isSuccess
-
 
     /**
       *
       * @param name stage name
       * @return true is stage exists, otherwise false
       */
-    def stageExists(name: String, bindVariableEnabled: Boolean = true): Boolean = {
+    def stageExists(name: String,
+                    bindVariableEnabled: Boolean = true): Boolean = {
       Try {
-        (EmptySnowflakeSQLStatement() + "desc stage" + Identifier(name)).execute(bindVariableEnabled)(connection)
+        (EmptySnowflakeSQLStatement() + "desc stage" + Identifier(name))
+          .execute(bindVariableEnabled)(connection)
       }.isSuccess
     }
 
-    def execute(statement: SnowflakeSQLStatement, bindVariableEnabled: Boolean = true): Unit =
+    def execute(statement: SnowflakeSQLStatement,
+                bindVariableEnabled: Boolean = true): Unit =
       statement.execute(bindVariableEnabled)(connection)
 
-    def execute(query: String): Unit = DefaultJDBCWrapper.executeInterruptibly(connection, query)
+    def execute(query: String): Unit =
+      DefaultJDBCWrapper.executeInterruptibly(connection, query)
 
     def copyFromSnowflake(): Unit = {}
 
     def copyToSnowflake(): Unit = {}
 
-    //pipe operations
-    def createPipe(
-                    name: String,
-                    copyQuery: SnowflakeSQLStatement,
-                    overwrite: Boolean = false,
-                    bindVariableEnabled: Boolean = true
-                  ): Unit = {
+    // pipe operations
+    def createPipe(name: String,
+                   copyQuery: SnowflakeSQLStatement,
+                   overwrite: Boolean = false,
+                   bindVariableEnabled: Boolean = true): Unit = {
       (
         ConstantString("create") +
           (if (overwrite) "or replace pipe" else "pipe if not exists") +
           Identifier(name) + "as" + copyQuery
-        ).execute(bindVariableEnabled)(connection)
+      ).execute(bindVariableEnabled)(connection)
     }
 
     def dropPipe(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("drop pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
+        (ConstantString("drop pipe") + Identifier(name)).execute(
+          bindVariableEnabled
+        )(connection)
       }.isSuccess
 
     def pipeExists(name: String, bindVariableEnabled: Boolean = true): Boolean =
       Try {
-        (ConstantString("desc pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
+        (ConstantString("desc pipe") + Identifier(name)).execute(
+          bindVariableEnabled
+        )(connection)
       }.isSuccess
 
-    def pipeDefinition(name: String, bindVariableEnabled: Boolean = true): Option[String] = {
-      var definition:String = null
+    def pipeDefinition(name: String,
+                       bindVariableEnabled: Boolean = true): Option[String] = {
+      var definition: String = null
 
       try {
-        val result:ResultSet =
-          (ConstantString("desc pipe") + Identifier(name)).execute(bindVariableEnabled)(connection)
+        val result: ResultSet =
+          (ConstantString("desc pipe") + Identifier(name))
+            .execute(bindVariableEnabled)(connection)
 //        definition = result.getString("definition")
 
         result.next()
         definition = result.getString("definition")
       } catch {
-        case e: Exception => LOGGER.debug(s"pipe $name doesn't exist")
+        case _: Exception => LOGGER.debug(s"pipe $name doesn't exist")
       }
 
       Option[String](definition)
     }
   }
 
-
 }
 
+// scalastyle:off
 /**
   * SQL string wrapper
   */
 private[snowflake] class SnowflakeSQLStatement(
-                                                val numOfVar: Int = 0,
-                                                val list: List[StatementElement] = Nil
-                                              ) {
+  val numOfVar: Int = 0,
+  val list: List[StatementElement] = Nil
+) {
 
   private val log = LoggerFactory.getLogger(getClass)
 
   def +(element: StatementElement): SnowflakeSQLStatement =
-    new SnowflakeSQLStatement(
-      numOfVar + element.isVariable,
-      element :: list
-    )
+    new SnowflakeSQLStatement(numOfVar + element.isVariable, element :: list)
 
   def +(statement: SnowflakeSQLStatement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(
@@ -669,22 +718,24 @@ private[snowflake] class SnowflakeSQLStatement(
 
   def isEmpty: Boolean = list.isEmpty
 
-  def execute(bindVariableEnabled: Boolean)
-             (implicit conn: Connection) : ResultSet =
-    if(bindVariableEnabled) executeWithBindVariable(conn)
+  def execute(
+    bindVariableEnabled: Boolean
+  )(implicit conn: Connection): ResultSet =
+    if (bindVariableEnabled) executeWithBindVariable(conn)
     else executeWithoutBindVaribale(conn)
 
   private def executeWithoutBindVaribale(conn: Connection): ResultSet = {
     val sql = list.reverse
-    val query = sql.foldLeft(new StringBuilder){
-      case(buffer, statement) => {
-        buffer.append(
-          if(statement.isInstanceOf[ConstantString]) statement
-          else statement.sql
-        )
-        buffer.append(" ")
+    val query = sql
+      .foldLeft(new StringBuilder) {
+        case (buffer, statement) =>
+          buffer.append(
+            if (statement.isInstanceOf[ConstantString]) statement
+            else statement.sql
+          )
+          buffer.append(" ")
       }
-    }.toString()
+      .toString()
 
     val statement = conn.prepareStatement(query)
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
@@ -692,7 +743,8 @@ private[snowflake] class SnowflakeSQLStatement(
 
   private def executeWithBindVariable(conn: Connection): ResultSet = {
     val sql = list.reverse
-    val varArray: Array[StatementElement] = new Array[StatementElement](numOfVar)
+    val varArray: Array[StatementElement] =
+      new Array[StatementElement](numOfVar)
     var indexOfVar: Int = 0
     val buffer = new StringBuilder
 
@@ -711,7 +763,7 @@ private[snowflake] class SnowflakeSQLStatement(
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {
-      case (element, index) => {
+      case (element, index) =>
         element match {
           case ele: StringVariable =>
             statement.setString(index + 1, ele.variable)
@@ -732,13 +784,13 @@ private[snowflake] class SnowflakeSQLStatement(
           case ele: ByteVariable =>
             statement.setByte(index + 1, ele.variable)
           case _ =>
-            throw new IllegalArgumentException("Unexpected Element Type: " + element.getClass.getName)
+            throw new IllegalArgumentException(
+              "Unexpected Element Type: " + element.getClass.getName
+            )
         }
-      }
     }
 
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
-
 
   }
 
@@ -749,20 +801,21 @@ private[snowflake] class SnowflakeSQLStatement(
       case _ => false
     }
 
-
   override def toString: String = {
     val buffer = new StringBuilder
     val sql = list.reverse
 
     sql.foreach {
-      case x: ConstantString => {
-        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+      case x: ConstantString =>
+        if (buffer.nonEmpty && buffer.last != ' ') {
+          buffer.append(" ")
+        }
         buffer.append(x)
-      }
-      case x: VariableElement[_] => {
-        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+      case x: VariableElement[_] =>
+        if (buffer.nonEmpty && buffer.last != ' ') {
+          buffer.append(" ")
+        }
         buffer.append(x.sql)
-      }
     }
 
     buffer.toString()
@@ -773,23 +826,26 @@ private[snowflake] class SnowflakeSQLStatement(
     val sql = list.reverse
 
     sql.foreach {
-      case x: ConstantString => {
-        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+      case x: ConstantString =>
+        if (buffer.nonEmpty && buffer.last != ' ') {
+          buffer.append(" ")
+        }
         buffer.append(x)
-      }
-      case x: VariableElement[_] => {
-        if (buffer.nonEmpty && buffer.last != ' ') buffer.append(" ")
+      case x: VariableElement[_] =>
+        if (buffer.nonEmpty && buffer.last != ' ') {
+          buffer.append(" ")
+        }
         buffer.append(x.value)
         buffer.append("(")
         buffer.append(x.variable)
         buffer.append(")")
-      }
     }
 
     buffer.toString()
   }
 
 }
+// scalastyle:on
 
 private[snowflake] object EmptySnowflakeSQLStatement {
   def apply(): SnowflakeSQLStatement = new SnowflakeSQLStatement()
@@ -825,7 +881,8 @@ private[snowflake] sealed trait StatementElement {
   def sql: String = value
 }
 
-private[snowflake] case class ConstantString(override val value: String) extends StatementElement
+private[snowflake] case class ConstantString(override val value: String)
+    extends StatementElement
 
 private[snowflake] sealed trait VariableElement[T] extends StatementElement {
   override val value = "?"
@@ -838,25 +895,33 @@ private[snowflake] sealed trait VariableElement[T] extends StatementElement {
 
 }
 
-private[snowflake] case class Identifier(override val variable: String) extends VariableElement[String] {
+private[snowflake] case class Identifier(override val variable: String)
+    extends VariableElement[String] {
   override val value: String = "identifier(?)"
 }
 
-private[snowflake] case class StringVariable(override val variable: String) extends VariableElement[String] {
+private[snowflake] case class StringVariable(override val variable: String)
+    extends VariableElement[String] {
   override def sql: String = s"""'$variable'"""
 }
 
-private[snowflake] case class IntVariable(override val variable: Int) extends VariableElement[Int]
+private[snowflake] case class IntVariable(override val variable: Int)
+    extends VariableElement[Int]
 
-private[snowflake] case class LongVariable(override val variable: Long) extends VariableElement[Long]
+private[snowflake] case class LongVariable(override val variable: Long)
+    extends VariableElement[Long]
 
-private[snowflake] case class ShortVariable(override val variable: Short) extends VariableElement[Short]
+private[snowflake] case class ShortVariable(override val variable: Short)
+    extends VariableElement[Short]
 
-private[snowflake] case class FloatVariable(override val variable: Float) extends VariableElement[Float]
+private[snowflake] case class FloatVariable(override val variable: Float)
+    extends VariableElement[Float]
 
-private[snowflake] case class DoubleVariable(override val variable: Double) extends VariableElement[Double]
+private[snowflake] case class DoubleVariable(override val variable: Double)
+    extends VariableElement[Double]
 
-private[snowflake] case class BooleanVariable(override val variable: Boolean) extends VariableElement[Boolean]
+private[snowflake] case class BooleanVariable(override val variable: Boolean)
+    extends VariableElement[Boolean]
 
-private[snowflake] case class ByteVariable(override val variable: Byte) extends VariableElement[Byte]
-
+private[snowflake] case class ByteVariable(override val variable: Byte)
+    extends VariableElement[Byte]

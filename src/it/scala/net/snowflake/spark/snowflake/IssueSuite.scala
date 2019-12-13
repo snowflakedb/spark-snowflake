@@ -20,7 +20,7 @@ class IssueSuite extends IntegrationSuiteBase {
     super.beforeEach()
   }
 
-  test("csv delimiter character should not break rows"){
+  test("csv delimiter character should not break rows") {
     val st1 = new StructType(
       Array(
         StructField("str", StringType, nullable = false),
@@ -29,16 +29,18 @@ class IssueSuite extends IntegrationSuiteBase {
     )
     val tt: String = s"tt_$randomSuffix"
     try {
-      sparkSession.createDataFrame(
-        sparkSession.sparkContext.parallelize(
-          Seq(Row("\"\n\"",123),
-            Row("\"|\"",223),
-            Row("\",\"",345),
-            Row("\n",423)
-          )
-        ),
-        st1
-      )
+      sparkSession
+        .createDataFrame(
+          sparkSession.sparkContext.parallelize(
+            Seq(
+              Row("\"\n\"", 123),
+              Row("\"|\"", 223),
+              Row("\",\"", 345),
+              Row("\n", 423)
+            )
+          ),
+          st1
+        )
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -67,26 +69,33 @@ class IssueSuite extends IntegrationSuiteBase {
     val numRows = 100
 
     val st1 = new StructType(
-      Array(StructField("id", IntegerType, nullable = true),
-            StructField("order", IntegerType, nullable = true),
-            StructField("sort", StringType, nullable = true),
-            StructField("select", BooleanType, nullable = true),
-            StructField("randLong", LongType, nullable = true)))
+      Array(
+        StructField("id", IntegerType, nullable = true),
+        StructField("order", IntegerType, nullable = true),
+        StructField("sort", StringType, nullable = true),
+        StructField("select", BooleanType, nullable = true),
+        StructField("randLong", LongType, nullable = true)
+      )
+    )
 
     val tt: String = s"tt_$randomSuffix"
 
     try {
       sqlContext
-        .createDataFrame(sc.parallelize(1 to numRows)
-                           .map[Row](value => {
-                             val rand = new Random(System.nanoTime())
-                             Row(value,
-                                 rand.nextInt(),
-                                 rand.nextString(10),
-                                 rand.nextBoolean(),
-                                 rand.nextLong())
-                           }),
-                         st1)
+        .createDataFrame(
+          sc.parallelize(1 to numRows)
+            .map[Row](value => {
+              val rand = new Random(System.nanoTime())
+              Row(
+                value,
+                rand.nextInt(),
+                rand.nextString(10),
+                rand.nextBoolean(),
+                rand.nextLong()
+              )
+            }),
+          st1
+        )
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -112,8 +121,11 @@ class IssueSuite extends IntegrationSuiteBase {
     val numRows = 100
 
     val st1 = new StructType(
-      Array(StructField("str", StringType, nullable = false),
-            StructField("randLong", LongType, nullable = true)))
+      Array(
+        StructField("str", StringType, nullable = false),
+        StructField("randLong", LongType, nullable = true)
+      )
+    )
 
     val tt: String = s"tt_$randomSuffix"
 
@@ -125,19 +137,20 @@ class IssueSuite extends IntegrationSuiteBase {
       }
 
       sqlContext
-        .createDataFrame(sc.parallelize(1 to numRows)
-                           .map[Row](value => {
-                             val rand = new Random(System.nanoTime())
-                             Row(getString(rand, value), rand.nextLong())
-                           }),
-                         st1)
+        .createDataFrame(
+          sc.parallelize(1 to numRows)
+            .map[Row](value => {
+              val rand = new Random(System.nanoTime())
+              Row(getString(rand, value), rand.nextLong())
+            }),
+          st1
+        )
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
         .mode(SaveMode.Overwrite)
         .save()
-
 
       val loadedDf = sqlContext.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -155,8 +168,11 @@ class IssueSuite extends IntegrationSuiteBase {
     val numRows = 100
 
     val st1 = new StructType(
-      Array(StructField("str", StringType, nullable = false),
-        StructField("randLong", LongType, nullable = true)))
+      Array(
+        StructField("str", StringType, nullable = false),
+        StructField("randLong", LongType, nullable = true)
+      )
+    )
 
     val tt: String = s"tt_$randomSuffix"
 
@@ -168,16 +184,20 @@ class IssueSuite extends IntegrationSuiteBase {
       }
 
       sqlContext
-        .createDataFrame(sc.parallelize(1 to numRows)
-          .map[Row](value => {
-          val rand = new Random(System.nanoTime())
-          Row(getString(rand, value), rand.nextLong())
-        }),
-          st1)
+        .createDataFrame(
+          sc.parallelize(1 to numRows)
+            .map[Row](value => {
+              val rand = new Random(System.nanoTime())
+              Row(getString(rand, value), rand.nextLong())
+            }),
+          st1
+        )
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptions
-          ++ Seq("truncate_columns" -> "on"))
+        .options(
+          connectorOptions
+            ++ Seq("truncate_columns" -> "on")
+        )
         .option("dbtable", tt)
         .mode(SaveMode.Overwrite)
         .save()
@@ -201,8 +221,11 @@ class IssueSuite extends IntegrationSuiteBase {
     val numRows = 100
 
     val st1 = new StructType(
-      Array(StructField("str", StringType, nullable = false),
-        StructField("randLong", LongType, nullable = true)))
+      Array(
+        StructField("str", StringType, nullable = false),
+        StructField("randLong", LongType, nullable = true)
+      )
+    )
 
     val tt: String = s"tt_$randomSuffix"
 
@@ -214,12 +237,14 @@ class IssueSuite extends IntegrationSuiteBase {
       }
 
       sqlContext
-        .createDataFrame(sc.parallelize(1 to numRows)
-          .map[Row](value => {
-          val rand = new Random(System.nanoTime())
-          Row(getString(rand, value), rand.nextLong())
-        }),
-          st1)
+        .createDataFrame(
+          sc.parallelize(1 to numRows)
+            .map[Row](value => {
+              val rand = new Random(System.nanoTime())
+              Row(getString(rand, value), rand.nextLong())
+            }),
+          st1
+        )
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)

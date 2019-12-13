@@ -3,7 +3,7 @@ package net.snowflake.spark.snowflake.streaming
 import java.nio.charset.Charset
 import java.sql.Connection
 
-import net.snowflake.client.jdbc.internal.apache.commons.logging.LogFactory
+import net.snowflake.client.jdbc.internal.apache.commons.logging.{Log, LogFactory}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ArrayNode
 import net.snowflake.ingest.SimpleIngestManager
@@ -18,18 +18,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
+class SnowflakeIngestService(param: MergedParameters,
+                             pipeName: String,
+                             storage: CloudStorage,
+                             conn: Connection) {
 
-class SnowflakeIngestService(
-                              param: MergedParameters,
-                              pipeName: String,
-                              storage: CloudStorage,
-                              conn: Connection
-                            ) {
-
-
-  val SLEEP_TIME: Long = 60 * 1000 //1m
-  val HISTORY_CHECK_TIME: Long = 60 * 60 * 1000 //1h
-  val WAITING_TIME_ON_TERMINATION: Int = 10 //10m
+  val SLEEP_TIME: Long = 60 * 1000 // 1m
+  val HISTORY_CHECK_TIME: Long = 60 * 60 * 1000 // 1h
+  val WAITING_TIME_ON_TERMINATION: Int = 10 // 10m
 
   lazy implicit val ingestManager: SimpleIngestManager =
     SnowflakeIngestConnector.createIngestManager(param, pipeName)
@@ -38,18 +34,19 @@ class SnowflakeIngestService(
 
   private val ingestedFileList: IngestedFileList = init()
 
-  private lazy val checker = SnowflakeIngestConnector.createHistoryChecker(ingestManager)
+  private lazy val checker =
+    SnowflakeIngestConnector.createHistoryChecker(ingestManager)
 
   private var pipeDropped = false
 
-  //run clean function periodically
+  // run clean function periodically
   private val process = Future {
     while (notClosed) {
       Thread.sleep(SLEEP_TIME)
       val time = System.currentTimeMillis()
       ingestedFileList.checkResponseList(checker())
       if (ingestedFileList.getFirstTimeStamp.isDefined &&
-        time - ingestedFileList.getFirstTimeStamp.get > HISTORY_CHECK_TIME) {
+          time - ingestedFileList.getFirstTimeStamp.get > HISTORY_CHECK_TIME) {
         ingestedFileList
           .checkResponseList(
             SnowflakeIngestConnector
@@ -57,7 +54,8 @@ class SnowflakeIngestService(
                 ingestManager,
                 ingestedFileList.getFirstTimeStamp.get,
                 time
-              ))
+              )
+          )
       }
     }
     cleanAll()
@@ -67,7 +65,6 @@ class SnowflakeIngestService(
     SnowflakeIngestConnector.ingestFiles(list)
     ingestedFileList.addFiles(list)
   }
-
 
   def cleanAll(): Unit = {
     while (ingestedFileList.nonEmpty) {
@@ -81,11 +78,12 @@ class SnowflakeIngestService(
                 ingestManager,
                 ingestedFileList.getFirstTimeStamp.get,
                 time
-              ))
+              )
+          )
       } else ingestedFileList.checkResponseList(checker())
     }
     conn.dropPipe(pipeName)
-    ingestedFileList.remove
+    ingestedFileList.remove()
     pipeDropped = true
 
   }
@@ -95,13 +93,15 @@ class SnowflakeIngestService(
     IngestContextManager.logger.debug("closing ingest service")
     notClosed = false
     Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
-    if(!pipeDropped){
+    if (!pipeDropped) {
       IngestContextManager.logger.error(
         s"closing ingest service time out, please drop pipe: $pipeName manually"
       )
     }
 
-    IngestContextManager.logger.debug(s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}")
+    IngestContextManager.logger.debug(
+      s"ingest service closed: ${(System.currentTimeMillis() - ct) / 1000.0}"
+    )
   }
 
   /**
@@ -109,7 +109,6 @@ class SnowflakeIngestService(
     */
   private def init(): IngestedFileList =
     IngestContextManager.readIngestList(storage, conn)
-
 
 }
 
@@ -121,12 +120,13 @@ object IngestContextManager {
   val NAME = "name"
   val TIME = "time"
   val mapper = new ObjectMapper()
-  val logger = LogFactory.getLog(getClass)
+  val logger: Log = LogFactory.getLog(getClass)
 
-  def readIngestList(storage: CloudStorage, conn: Connection): IngestedFileList = {
+  def readIngestList(storage: CloudStorage,
+                     conn: Connection): IngestedFileList = {
     val fileName = s"$CONTEXT_DIR/$INGEST_FILE_LIST_NAME"
     if (storage.fileExists(fileName)) {
-      val inputStream = storage.download(fileName, false)
+      val inputStream = storage.download(fileName, compress = false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {
@@ -134,25 +134,35 @@ object IngestContextManager {
         c = inputStream.read()
       }
       try {
-        val node = mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8")))
+        val node =
+          mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8")))
         val failedIndex: Int = node.get(FAILED_FILE_INDEX).asInt()
-        val failedList: FailedFileList = readFailedFileList(failedIndex, storage, conn)
+        val failedList: FailedFileList =
+          readFailedFileList(failedIndex, storage, conn)
         val arrNode = node.get(LIST).asInstanceOf[ArrayNode]
         var list: List[(String, Long)] = Nil
         (0 until arrNode.size()).foreach(i => {
-          list = arrNode.get(i).get(NAME).asText() -> arrNode.get(i).get(TIME).asLong() :: list
+          list = arrNode.get(i).get(NAME).asText() -> arrNode
+            .get(i)
+            .get(TIME)
+            .asLong() :: list
         })
         IngestedFileList(storage, conn, Some(failedList), Some(list))
       } catch {
-        case e: Exception => throw new IllegalArgumentException(s"context file: $fileName is broken: $e")
+        case e: Exception =>
+          throw new IllegalArgumentException(
+            s"context file: $fileName is broken: $e"
+          )
       }
     } else IngestedFileList(storage, conn)
   }
 
-  def readFailedFileList(index: Int, storage: CloudStorage, conn: Connection): FailedFileList = {
+  def readFailedFileList(index: Int,
+                         storage: CloudStorage,
+                         conn: Connection): FailedFileList = {
     val fileName = s"$CONTEXT_DIR/failed_file_list_$index.json"
     if (storage.fileExists(fileName)) {
-      val inputStream = storage.download(fileName, false)
+      val inputStream = storage.download(fileName, compress = false)
       val buffer = ArrayBuffer.empty[Byte]
       var c: Int = inputStream.read()
       while (c != -1) {
@@ -160,14 +170,19 @@ object IngestContextManager {
         c = inputStream.read()
       }
       try {
-        val list = mapper.readTree(new String(buffer.toArray, Charset.forName("UTF-8"))).asInstanceOf[ArrayNode]
+        val list = mapper
+          .readTree(new String(buffer.toArray, Charset.forName("UTF-8")))
+          .asInstanceOf[ArrayNode]
         var set = mutable.HashSet.empty[String]
         (0 until list.size()).foreach(i => {
           set += list.get(i).asText()
         })
         FailedFileList(storage, conn, index, Some(set))
       } catch {
-        case e: Exception => throw new IllegalArgumentException(s"context file: $fileName is broken: $e")
+        case e: Exception =>
+          throw new IllegalArgumentException(
+            s"context file: $fileName is broken: $e"
+          )
       }
     } else FailedFileList(storage, conn, index)
   }
@@ -182,9 +197,10 @@ sealed trait IngestContext {
 
   val conn: Connection
 
-  def save: Unit = {
+  def save(): Unit = {
     IngestContextManager.logger.debug(s"$fileName:$toString")
-    val output = storage.upload(fileName, Some(IngestContextManager.CONTEXT_DIR), false)
+    val output =
+      storage.upload(fileName, Some(IngestContextManager.CONTEXT_DIR), compress = false)
     output.write(toString.getBytes("UTF-8"))
     output.close()
 
@@ -192,13 +208,12 @@ sealed trait IngestContext {
 
 }
 
-case class FailedFileList(
-                           override val storage: CloudStorage,
-                           override val conn: Connection,
-                           fileIndex: Int = 0,
-                           files: Option[mutable.HashSet[String]] = None
-                         ) extends IngestContext {
-  val MAX_FILE_SIZE: Int = 1000 //how many file names
+case class FailedFileList(override val storage: CloudStorage,
+                          override val conn: Connection,
+                          fileIndex: Int = 0,
+                          files: Option[mutable.HashSet[String]] = None)
+    extends IngestContext {
+  val MAX_FILE_SIZE: Int = 1000 // how many file names
 
   private var fileSet: mutable.HashSet[String] =
     files.getOrElse(mutable.HashSet.empty[String])
@@ -210,7 +225,7 @@ case class FailedFileList(
     val part2 = names.slice(MAX_FILE_SIZE - fileSet.size, Int.MaxValue)
 
     fileSet ++= part1.toSet
-    save
+    save()
     if (part2.isEmpty) this
     else FailedFileList(storage, conn, fileIndex + 1).addFiles(part2)
   }
@@ -223,18 +238,19 @@ case class FailedFileList(
 
 }
 
-case class IngestedFileList(
-                             override val storage: CloudStorage,
-                             override val conn: Connection,
-                             failedFileList: Option[FailedFileList] = None,
-                             ingestList: Option[List[(String, Long)]] = None
-                           ) extends IngestContext {
+case class IngestedFileList(override val storage: CloudStorage,
+                            override val conn: Connection,
+                            failedFileList: Option[FailedFileList] = None,
+                            ingestList: Option[List[(String, Long)]] = None)
+    extends IngestContext {
   override val fileName: String = IngestContextManager.INGEST_FILE_LIST_NAME
 
-  private var failedFiles: FailedFileList = failedFileList.getOrElse(FailedFileList(storage, conn))
+  private var failedFiles: FailedFileList =
+    failedFileList.getOrElse(FailedFileList(storage, conn))
 
   private var fileList: mutable.PriorityQueue[(String, Long)] =
-    mutable.PriorityQueue.empty[(String, Long)](Ordering.by[(String, Long), Long](_._2).reverse)
+    mutable.PriorityQueue
+      .empty[(String, Long)](Ordering.by[(String, Long), Long](_._2).reverse)
 
   if (ingestList.isDefined) {
     ingestList.get.foreach(fileList += _)
@@ -243,7 +259,7 @@ case class IngestedFileList(
   def addFiles(names: List[String]): Unit = {
     val time = System.currentTimeMillis()
     names.foreach(fileList += _ -> time)
-    save
+    save()
   }
 
   override def toString: String = {
@@ -252,12 +268,11 @@ case class IngestedFileList(
 
     val arr = node.putArray(IngestContextManager.LIST)
     fileList.foreach {
-      case (name, time) => {
+      case (name, time) =>
         val n = IngestContextManager.mapper.createObjectNode()
         n.put(IngestContextManager.NAME, name)
         n.put(IngestContextManager.TIME, time)
         arr.add(n)
-      }
     }
 
     node.toString
@@ -268,8 +283,8 @@ case class IngestedFileList(
     var failed: List[String] = Nil
 
     list.foreach {
-      case (name, status) => {
-        if (fileList.exists(_._1 == name))
+      case (name, status) =>
+        if (fileList.exists(_._1 == name)) {
           status match {
             case IngestStatus.LOADED =>
               toClean = name :: toClean
@@ -277,23 +292,23 @@ case class IngestedFileList(
             case IngestStatus.LOAD_FAILED | IngestStatus.PARTIALLY_LOADED =>
               failed = name :: failed
               fileList = fileList.filterNot(_._1 == name)
-            case _ => //do nothing
+            case _ => // do nothing
           }
-      }
+        }
     }
     if (toClean.nonEmpty) storage.deleteFiles(toClean)
     if (failed.nonEmpty) failedFiles = failedFiles.addFiles(failed)
-    save
+    save()
   }
 
-  def getFirstTimeStamp: Option[Long] = if (fileList.isEmpty) None else Some(fileList.head._2)
+  def getFirstTimeStamp: Option[Long] =
+    if (fileList.isEmpty) None else Some(fileList.head._2)
 
   def isEmpty: Boolean = fileList.isEmpty
 
   def nonEmpty: Boolean = fileList.nonEmpty
 
-  def remove: Unit = storage.deleteFile(IngestContextManager.CONTEXT_DIR + "/" + fileName)
+  def remove(): Unit =
+    storage.deleteFile(IngestContextManager.CONTEXT_DIR + "/" + fileName)
 
 }
-
-

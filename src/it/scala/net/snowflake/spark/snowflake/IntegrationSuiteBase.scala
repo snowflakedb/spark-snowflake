@@ -21,7 +21,10 @@ import java.sql.Connection
 import java.time.ZonedDateTime
 import java.util.TimeZone
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
+  JsonNode,
+  ObjectMapper
+}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
@@ -42,7 +45,7 @@ import scala.util.matching.Regex
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
 trait IntegrationSuiteBase
-  extends QueryTest
+    extends QueryTest
     with Matchers
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
@@ -53,14 +56,16 @@ trait IntegrationSuiteBase
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
   private final val CONFIG_JSON_FILE = "snowflake.travis.json"
   private final val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
-  protected final val MISSING_PARAM_ERROR = "Missing required configuration value: "
+  protected final val MISSING_PARAM_ERROR =
+    "Missing required configuration value: "
 
   protected lazy val configsFromEnv: Map[String, String] = {
     var settingsMap = new mutable.HashMap[String, String]
     Parameters.KNOWN_PARAMETERS foreach { param =>
       val opt = readConfigValueFromEnv(param)
-      if (opt.isDefined)
+      if (opt.isDefined) {
         settingsMap += (param -> opt.get)
+      }
     }
     settingsMap.toMap
   }
@@ -76,7 +81,6 @@ trait IntegrationSuiteBase
   protected def loadConfig(): Map[String, String] =
     loadJsonConfig().getOrElse(configsFromFile) ++ configsFromEnv
 
-
   // Used for internal integration testing in SF env.
   protected def readConfigValueFromEnv(name: String): Option[String] = {
     scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
@@ -87,7 +91,6 @@ trait IntegrationSuiteBase
 
   protected var connectorOptionsNoExternalStageNoTable: Map[String, String] = _
 
-
   // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString: String = _
 
@@ -97,9 +100,11 @@ trait IntegrationSuiteBase
                                required: Boolean = true): String = {
 
     connectorOptions.getOrElse(name.toLowerCase, {
-      if (required)
+      if (required) {
         fail(s"$MISSING_PARAM_ERROR $name")
-      else null
+      } else {
+        null
+      }
     })
   }
 
@@ -145,13 +150,15 @@ trait IntegrationSuiteBase
     // Initialize variables
     connectorOptions = loadConfig()
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
-    connectorOptionsNoExternalStageNoTable = connectorOptionsNoTable.filterKeys(_ != "tempdir")
+    connectorOptionsNoExternalStageNoTable =
+      connectorOptionsNoTable.filterKeys(_ != "tempdir")
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
-    connectorOptionsString = connectorOptionsNoTable.map {
-      case (key, value) => s"""$key "$value""""
-    }.mkString(" , ")
-
+    connectorOptionsString = connectorOptionsNoTable
+      .map {
+        case (key, value) => s"""$key "$value""""
+      }
+      .mkString(" , ")
 
     conn = DefaultJDBCWrapper.getConnector(params)
 
@@ -183,9 +190,9 @@ trait IntegrationSuiteBase
   }
 
   def getAzureURL(input: String): String = {
-    val azure_url = "wasbs?://([^@]+)@([^\\.]+)\\.([^/]+)/(.+)?".r
+    val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.+)?".r
     input match {
-      case azure_url(container, account, endpoint, path) =>
+      case azure_url(container, account, endpoint, _) =>
         s"fs.azure.sas.$container.$account.$endpoint"
       case _ => throw new IllegalArgumentException(s"invalid wasb url: $input")
     }
@@ -206,7 +213,9 @@ trait IntegrationSuiteBase
     if (!bypass) {
       assert(
         Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase == reference.trim
-          .replaceAll("\\s+", "").toLowerCase)
+          .replaceAll("\\s+", "")
+          .toLowerCase
+      )
     }
   }
 
@@ -222,10 +231,11 @@ trait IntegrationSuiteBase
     * @param saveMode                the [[SaveMode]] to use when writing data back to Snowflake
     */
   def testRoundtripSaveAndLoad(
-                                tableName: String,
-                                df: DataFrame,
-                                expectedSchemaAfterLoad: Option[StructType] = None,
-                                saveMode: SaveMode = SaveMode.ErrorIfExists): Unit = {
+    tableName: String,
+    df: DataFrame,
+    expectedSchemaAfterLoad: Option[StructType] = None,
+    saveMode: SaveMode = SaveMode.ErrorIfExists
+  ): Unit = {
     try {
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -254,12 +264,15 @@ trait IntegrationSuiteBase
 
     var result: Map[String, String] = Map()
     def read(node: JsonNode): Unit =
-      node.fields().foreach(
-        entry => result = result + (entry.getKey -> entry.getValue.asText())
-      )
+      node
+        .fields()
+        .foreach(
+          entry => result = result + (entry.getKey -> entry.getValue.asText())
+        )
 
-    try{
-      val file = Source.fromFile(CONFIG_JSON_FILE).mkString
+    try {
+      val jsonConfigFile = Source.fromFile(CONFIG_JSON_FILE)
+      val file = jsonConfigFile.mkString
       val mapper: ObjectMapper = new ObjectMapper()
       val json = mapper.readTree(file)
       val commonConfig = json.get("common")
@@ -273,16 +286,16 @@ trait IntegrationSuiteBase
 
       read(
         (
-          for(i <- 0 until accountConfig.size()
-              if accountConfig.get(i).get("name").asText() == accountName)
+          for (i <- 0 until accountConfig.size()
+               if accountConfig.get(i).get("name").asText() == accountName)
             yield accountConfig.get(i).get("config")
-          ).get(0)
+        ).get(0)
       )
 
       log.info(s"load config from $CONFIG_JSON_FILE")
+      jsonConfigFile.close()
       Some(result)
-    }
-    catch {
+    } catch {
       case _: Throwable =>
         log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
         None
@@ -294,7 +307,7 @@ trait IntegrationSuiteBase
   // Suggest you to run with "printOnly = true" to make sure the tables are correct.
   // And then run with "printOnly = false"
   // For example, dropTestTables(".*TEST_TABLE_.*\\d+".r, true)
-  def dropTestTables(regex: Regex, printOnly : Boolean): Unit = {
+  def dropTestTables(regex: Regex, printOnly: Boolean): Unit = {
     val statement = conn.createStatement()
 
     statement.execute("show tables")
@@ -302,13 +315,14 @@ trait IntegrationSuiteBase
     while (resultset.next()) {
       val tableName = resultset.getString(2)
       tableName match {
-        case regex() => {
+        case regex() =>
           if (printOnly) {
+            // scalastyle:off println
             println(s"will drop table: $tableName")
+            // scalastyle:on println
           } else {
             jdbcUpdate(s"drop table $tableName")
           }
-        }
         case _ => None
       }
     }

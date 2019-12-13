@@ -1,6 +1,5 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-
 import net.snowflake.spark.snowflake.SnowflakeTelemetry.{addLog, planToJson}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
@@ -27,17 +26,15 @@ class SnowflakeStrategy extends Strategy {
 
     try {
       buildQueryRDD(plan.transform({
-        case Project(Nil, child)     => child
+        case Project(Nil, child) => child
         case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         log.warn(s"Pushdown failed :${e.getMessage}")
         Nil
-      }
     }
   }
-
 
   /** Attempts to get a SparkPlan from the provided LogicalPlan.
     *

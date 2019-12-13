@@ -25,8 +25,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 /**
- * Unit test for data type conversions
- */
+  * Unit test for data type conversions
+  */
 class ConversionsSuite extends FunSuite {
 
   val mapper = new ObjectMapper()
@@ -48,27 +48,63 @@ class ConversionsSuite extends FunSuite {
     val dateString = "2015-07-01"
     val expectedDateMillis = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
 
-    def quote(str: String) = "\"" + str + "\""
-
     var convertedRow = convertRow(
-      Array("1", dateString, "123.45", doubleMin, "1.0", "42",
-        longMax, "23", unicodeString,
-        timestampString))
+      Array(
+        "1",
+        dateString,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestampString
+      )
+    )
 
-    var expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
-      new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
-      new Timestamp(expectedTimestampMillis))
+    var expectedRow = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDateMillis),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      new Timestamp(expectedTimestampMillis)
+    )
 
     assert(convertedRow == expectedRow)
 
     convertedRow = convertRow(
-      Array("1", dateString, "123.45", doubleMin, "1.0", "42",
-        longMax, "23", unicodeString,
-        timestamp2String))
+      Array(
+        "1",
+        dateString,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestamp2String
+      )
+    )
 
-    expectedRow = Row(1.asInstanceOf[Byte], new Date(expectedDateMillis),
-      new java.math.BigDecimal("123.45"), Double.MinValue, 1.0f, 42, Long.MaxValue, 23.toShort, unicodeString,
-      new Timestamp(expectedTimestamp2Millis))
+    expectedRow = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDateMillis),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      new Timestamp(expectedTimestamp2Millis)
+    )
 
     assert(convertedRow == expectedRow)
   }
@@ -81,8 +117,12 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Dates are correctly converted") {
-    val convertRow = Conversions.createRowConverter[Row](StructType(Seq(StructField("a", DateType))))
-    assert(convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9)))
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", DateType)))
+    )
+    assert(
+      convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9))
+    )
     assert(convertRow(Array(null)) === Row(null))
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
@@ -112,35 +152,44 @@ class ConversionsSuite extends FunSuite {
 
     val schema: StructType = new StructType(
       Array(
-        StructField("byte",ByteType, false),
-        StructField("boolean", BooleanType, false),
-        StructField("date", DateType, false),
-        StructField("double", DoubleType, false),
-        StructField("float", FloatType, false),
-        StructField("decimal", DecimalType(38,0), false),
-        StructField("integer", IntegerType, false),
-        StructField("long", LongType, false),
-        StructField("short", ShortType, false),
-        StructField("string", StringType, false),
-        StructField("timestamp", TimestampType, false),
-        StructField("array", ArrayType(IntegerType), false),
-        StructField("map", MapType(StringType, IntegerType), false),
-        StructField("structure",StructType(
-          Array(
-            StructField("num", IntegerType, false),
-            StructField("str", StringType, false)
-          )
-        ),false)
+        StructField("byte", ByteType, nullable = false),
+        StructField("boolean", BooleanType, nullable = false),
+        StructField("date", DateType, nullable = false),
+        StructField("double", DoubleType, nullable = false),
+        StructField("float", FloatType, nullable = false),
+        StructField("decimal", DecimalType(38, 0), nullable = false),
+        StructField("integer", IntegerType, nullable = false),
+        StructField("long", LongType, nullable = false),
+        StructField("short", ShortType, nullable = false),
+        StructField("string", StringType, nullable = false),
+        StructField("timestamp", TimestampType, nullable = false),
+        StructField("array", ArrayType(IntegerType), nullable = false),
+        StructField("map", MapType(StringType, IntegerType), nullable = false),
+        StructField(
+          "structure",
+          StructType(
+            Array(
+              StructField("num", IntegerType, nullable = false),
+              StructField("str", StringType, nullable = false)
+            )
+          ),
+          nullable = false
+        )
       )
     )
 
     val result: Row =
       Conversions
-        .jsonStringToRow[Row](mapper.readTree(str), schema).asInstanceOf[Row]
+        .jsonStringToRow[Row](mapper.readTree(str), schema)
+        .asInstanceOf[Row]
 
+    // scalastyle:off println
     println(result)
+    // scalastyle:on println
 
-    val expect = "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string,2015-07-01 00:00:00.001,[1,2,3,4,5],keys: [a,b,c], values: [1,2,3],[123,str1]]"
+    val expect =
+      "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string," +
+        "2015-07-01 00:00:00.001,[1,2,3,4,5],keys: [a,b,c], values: [1,2,3],[123,str1]]"
 
     assert(expect == result.toString())
   }

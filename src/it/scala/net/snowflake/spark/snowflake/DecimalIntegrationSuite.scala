@@ -22,22 +22,37 @@ import org.apache.spark.sql.Row
 import Utils.SNOWFLAKE_SOURCE_NAME
 
 /**
- * Integration tests for decimal support.
- * For a reference on Snowflake's DECIMAL type, see
- * https://docs.snowflake.net/manuals/sql-reference/data-types.html
- */
+  * Integration tests for decimal support.
+  * For a reference on Snowflake's DECIMAL type, see
+  * https://docs.snowflake.net/manuals/sql-reference/data-types.html
+  */
 class DecimalIntegrationSuite extends IntegrationSuiteBase {
 
-  private def testReadingDecimals(precision: Int, scale: Int, decimalStrings: Seq[String]): Unit = {
+  private def testReadingDecimals(precision: Int,
+                                  scale: Int,
+                                  decimalStrings: Seq[String]): Unit = {
     test(s"reading DECIMAL($precision, $scale)") {
       val tableName = s"reading_decimal_${precision}_${scale}_$randomSuffix"
       val expectedRows =
-        decimalStrings.map(d => Row(if (d == null) null else Conversions.parseDecimal(d, false)))
+        decimalStrings.map(
+          d =>
+            Row(if (d == null) {
+              null
+            } else {
+              val isInternalRow = false
+              Conversions.parseDecimal(d, isInternalRow)
+            })
+        )
       try {
-        conn.createStatement().executeUpdate(
-          s"CREATE TABLE $tableName (x DECIMAL($precision, $scale))")
+        conn
+          .createStatement()
+          .executeUpdate(
+            s"CREATE TABLE $tableName (x DECIMAL($precision, $scale))"
+          )
         for (x <- decimalStrings) {
-          conn.createStatement().executeUpdate(s"INSERT INTO $tableName VALUES ($x)")
+          conn
+            .createStatement()
+            .executeUpdate(s"INSERT INTO $tableName VALUES ($x)")
         }
         conn.commit()
         assert(DefaultJDBCWrapper.tableExists(conn, tableName))
@@ -65,24 +80,32 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
     "12345678910",
     null
   ))
-  */
+   */
 
-  testReadingDecimals(19, 4, Seq(
-     "922337203685477.5807",
-    "-922337203685477.5807",
-     "999999999999999.9999",
-    "-999999999999999.9999",
-    "0",
-    "1234567.8910",
-    null
-  ))
+  testReadingDecimals(
+    19,
+    4,
+    Seq(
+      "922337203685477.5807",
+      "-922337203685477.5807",
+      "999999999999999.9999",
+      "-999999999999999.9999",
+      "0",
+      "1234567.8910",
+      null
+    )
+  )
 
-  testReadingDecimals(38, 4, Seq(
-     "922337203685477.5808",
-     "9999999999999999999999999999999999.9999",
-    "-9999999999999999999999999999999999.9999",
-    "0",
-    "1234567.8910",
-    null
-  ))
+  testReadingDecimals(
+    38,
+    4,
+    Seq(
+      "922337203685477.5808",
+      "9999999999999999999999999999999999.9999",
+      "-9999999999999999999999999999999999.9999",
+      "0",
+      "1234567.8910",
+      null
+    )
+  )
 }

@@ -16,33 +16,29 @@
 
 package net.snowflake.spark.snowflake.benchmarks
 
-import java.util.Properties
-
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper
 import net.snowflake.spark.snowflake.Utils._
 import org.apache.spark.sql._
 
 import scala.collection.mutable
 
-// This suite only runs with the Snowflake deployment defined in the conf file, so we fill the parquet and csv
-// options with the same DF for those.
+// This suite only runs with the Snowflake deployment defined in the conf file,
+// so we fill the parquet and csv options with the same DF for those.
 
 class RegDeploymentSuite extends PerformanceSuite {
 
-  override var requiredParams = {
+  override var requiredParams: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]
     map.put("RegSuite", "")
     map
   }
-  override var acceptedArguments = {
+  override var acceptedArguments: mutable.LinkedHashMap[String, Set[String]] = {
     val map = new mutable.LinkedHashMap[String, Set[String]]
     map.put("RegSuite", Set("*"))
     map
   }
 
-  override protected var dataSources: mutable.LinkedHashMap[
-    String,
-    Map[String, DataFrame]] =
+  override protected var dataSources
+    : mutable.LinkedHashMap[String, Map[String, DataFrame]] =
     new mutable.LinkedHashMap[String, Map[String, DataFrame]]
 
   override def beforeAll(): Unit = {
@@ -60,11 +56,15 @@ class RegDeploymentSuite extends PerformanceSuite {
         sparkSession.read.jdbc(jdbcURL, "LINEITEM", jdbcProperties)
       } else lineitem
 
-      dataSources.put("LINEITEM",
-                      Map("parquet"   -> lineitem,
-                          "csv"       -> lineitem,
-                          "snowflake" -> lineitem,
-                          "jdbc"      -> jdbc_lineitem))
+      dataSources.put(
+        "LINEITEM",
+        Map(
+          "parquet" -> lineitem,
+          "csv" -> lineitem,
+          "snowflake" -> lineitem,
+          "jdbc" -> jdbc_lineitem
+        )
+      )
 
       val ordersTiny = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -77,11 +77,15 @@ class RegDeploymentSuite extends PerformanceSuite {
         sparkSession.read.jdbc(jdbcURL, "ORDERSTINY", jdbcProperties)
       } else ordersTiny
 
-      dataSources.put("ORDERSTINY",
-                      Map("parquet"   -> ordersTiny,
-                          "csv"       -> ordersTiny,
-                          "snowflake" -> ordersTiny,
-                          "jdbc"      -> jdbc_ordersTiny))
+      dataSources.put(
+        "ORDERSTINY",
+        Map(
+          "parquet" -> ordersTiny,
+          "csv" -> ordersTiny,
+          "snowflake" -> ordersTiny,
+          "jdbc" -> jdbc_ordersTiny
+        )
+      )
 
       val orders = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -95,11 +99,15 @@ class RegDeploymentSuite extends PerformanceSuite {
         orders
       } else orders
 
-      dataSources.put("ORDERS",
-                      Map("parquet"   -> orders,
-                          "csv"       -> orders,
-                          "snowflake" -> orders,
-                          "jdbc"      -> jdbc_orders))
+      dataSources.put(
+        "ORDERS",
+        Map(
+          "parquet" -> orders,
+          "csv" -> orders,
+          "snowflake" -> orders,
+          "jdbc" -> jdbc_orders
+        )
+      )
     }
   }
 
@@ -110,23 +118,29 @@ class RegDeploymentSuite extends PerformanceSuite {
   test("AGGREGATE BY C15") {
     testQuery(
       "SELECT C15 AS TYPE, SUM(C2) as SUM_C2, AVG(C3) AS AVG_C3 FROM LINEITEM GROUP BY C15",
-      "Aggregate LINEITEM by transport type (C15)")
+      "Aggregate LINEITEM by transport type (C15)"
+    )
   }
 
   test("AGGREGATE BY C14 AND C15") {
     testQuery(
       "SELECT C15 AS TYPE, SUM(C2) as SUM_C2, AVG(C3) AS AVG_C3 FROM LINEITEM GROUP BY C14,C15",
-      "Aggregate LINEITEM by delivery status and transport type (C14,C15)")
+      "Aggregate LINEITEM by delivery status and transport type (C14,C15)"
+    )
   }
 
   test("JOIN ORDERS AND ORDERSTINY") {
-    testQuery("SELECT * FROM ORDERS O1 JOIN ORDERSTINY O2 ON O1.C2=O2.C2",
-              "Join orders and orderstiny on c2")
+    testQuery(
+      "SELECT * FROM ORDERS O1 JOIN ORDERSTINY O2 ON O1.C2=O2.C2",
+      "Join orders and orderstiny on c2"
+    )
   }
 
   test("JOIN ORDERS AND LINEITEM") {
-    testQuery("SELECT * FROM ORDERS O JOIN LINEITEM L ON O.C6=L.C14",
-              "Join orders and lineitem on c6 and c14")
+    testQuery(
+      "SELECT * FROM ORDERS O JOIN LINEITEM L ON O.C6=L.C14",
+      "Join orders and lineitem on c6 and c14"
+    )
   }
 
   override def beforeEach(): Unit = {

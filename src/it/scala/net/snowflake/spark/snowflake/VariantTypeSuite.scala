@@ -9,14 +9,14 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   lazy val schema = new StructType(
     Array(
-      StructField("ARR", ArrayType(IntegerType), false),
-      StructField("OB",StructType(
-        Array(
-          StructField("str", StringType, false)
-        )
-      ), false),
-      StructField("MAP", MapType(StringType,StringType), false),
-      StructField("NUM", IntegerType, false)
+      StructField("ARR", ArrayType(IntegerType), nullable = false),
+      StructField(
+        "OB",
+        StructType(Array(StructField("str", StringType, nullable = false))),
+        nullable = false
+      ),
+      StructField("MAP", MapType(StringType, StringType), nullable = false),
+      StructField("NUM", IntegerType, nullable = false)
     )
   )
 
@@ -26,11 +26,18 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    jdbcUpdate(s"create or replace table $tableName1 (arr array, ob object, map variant, num integer)")
-    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'), parse_json('{"a":"one","b":"two"}'), 123)""")
-    jdbcUpdate(s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'), parse_json('{"a":"one","b":"two"}'), 123)""")
+    jdbcUpdate(
+      s"create or replace table $tableName1 (arr array, ob object, map variant, num integer)"
+    )
+    jdbcUpdate(
+      s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'),
+         | parse_json('{"a":"one","b":"two"}'), 123)""".stripMargin
+    )
+    jdbcUpdate(
+      s"""insert into $tableName1 (select parse_json('[1,2,3,4]'), parse_json('{"str":"text"}'),
+         | parse_json('{"a":"one","b":"two"}'), 123)""".stripMargin
+    )
   }
-
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $tableName1")
@@ -44,7 +51,8 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)
-      .load().collect()
+      .load()
+      .collect()
 
     assert(df(0).get(0).isInstanceOf[String])
     assert(df(0).get(1).isInstanceOf[String])
@@ -58,14 +66,15 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)
       .schema(schema)
-      .load().collect()
+      .load()
+      .collect()
 
-    assert(df(0).getStruct(1).getString(0)=="text")
+    assert(df(0).getStruct(1).getString(0) == "text")
 
     assert(df(0).getSeq(0).length == 4)
 
-    assert(df(0).getMap[String,String](2).get("a").get == "one")
-    assert(df(0).getMap[String,String](2).get("b").get == "two")
+    assert(df(0).getMap[String, String](2)("a") == "one")
+    assert(df(0).getMap[String, String](2)("b") == "two")
 
     assert(df(0).getInt(3) == 123)
 
@@ -76,31 +85,37 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
     val data = sc.parallelize(
       Seq(
-        Row(123, Array(1,2,3), Map("a"->1), Row("abc")),
-        Row(456, Array(4,5,6), Map("b"->2), Row("def")),
-        Row(789, Array(7,8,9), Map("c"->3), Row("ghi"))
+        Row(123, Array(1, 2, 3), Map("a" -> 1), Row("abc")),
+        Row(456, Array(4, 5, 6), Map("b" -> 2), Row("def")),
+        Row(789, Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
       )
     )
+
     val schema1 = new StructType(
       Array(
-        StructField("NUM", IntegerType, false),
-        StructField("ARR", ArrayType(IntegerType), false),
-        StructField("MAP", MapType(StringType, IntegerType), false),
-        StructField("OBJ", StructType(Array(StructField("STR", StringType, false))))
+        StructField("NUM", IntegerType, nullable = false),
+        StructField("ARR", ArrayType(IntegerType), nullable = false),
+        StructField("MAP", MapType(StringType, IntegerType), nullable = false),
+        StructField(
+          "OBJ",
+          StructType(Array(StructField("STR", StringType, nullable = false)))
+        )
       )
     )
 
     val df = sparkSession.createDataFrame(data, schema1)
 
-    df.write.format(SNOWFLAKE_SOURCE_NAME)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName2)
       .mode(SaveMode.Overwrite)
       .save()
 
-    val out = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
+    val out = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable",tableName2)
+      .option("dbtable", tableName2)
       .schema(schema1)
       .load()
 
@@ -118,12 +133,15 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   test("unload object and array") {
     jdbcUpdate(s"create or replace table $tableName3(o object, a array)")
-    jdbcUpdate(s"insert into $tableName3 select object_construct('a', '1 | 2 | 3'), array_construct('a | b', 'c | d')")
+    jdbcUpdate(
+      s"insert into $tableName3 select object_construct('a', '1 | 2 | 3')," +
+        s"array_construct('a | b', 'c | d')"
+    )
 
     val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable",tableName3)
+      .option("dbtable", tableName3)
       .load()
 
     val result = df.collect()
@@ -132,7 +150,12 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     val tree0 = mapper.readTree(result(0).get(0).toString)
     assert(tree0.findValue("a").asText().equals("1 | 2 | 3"))
     val tree1 = mapper.readTree(result(0).get(1).toString)
-    assert(tree1.get(0).asText().equals("a | b") && tree1.get(1).asText().equals("c | d"))
+    assert(
+      tree1.get(0).asText().equals("a | b") && tree1
+        .get(1)
+        .asText()
+        .equals("c | d")
+    )
   }
 
 }

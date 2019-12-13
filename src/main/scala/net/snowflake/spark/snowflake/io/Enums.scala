@@ -26,4 +26,3 @@ object SupportedFormat extends Enumeration {
   type SupportedFormat = Value
   val CSV, JSON = Value
 }
-

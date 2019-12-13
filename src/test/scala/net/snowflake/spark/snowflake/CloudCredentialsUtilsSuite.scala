@@ -18,7 +18,10 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.internal.amazonaws.AmazonClientException
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  BasicAWSCredentials,
+  BasicSessionCredentials
+}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.FunSuite
@@ -26,24 +29,42 @@ import org.scalatest.FunSuite
 class CloudCredentialsUtilsSuite extends FunSuite {
 
   test("credentialsString with regular S3 keys") {
-    val creds = new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).toString.replaceAll("\\s+", " ")
-    assert( result ===
-      "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY/WITH/SLASHES' )")
+    val creds =
+      new BasicAWSCredentials("ACCESSKEYID", "SECRET/KEY/WITH/SLASHES")
+    val result = CloudCredentialsUtils
+      .getSnowflakeCredentialsStringForAWS(creds)
+      .toString
+      .replaceAll("\\s+", " ")
+    assert(
+      result ===
+        "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY/WITH/SLASHES' )"
+    )
   }
 
   test("credentialsString with STS temporary keys") {
-    val creds = new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAWS(creds).toString.replaceAll("\\s+", " ")
-    assert(result ===
-      "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY' AWS_TOKEN='SESSION/Token' )")
+    val creds =
+      new BasicSessionCredentials("ACCESSKEYID", "SECRET/KEY", "SESSION/Token")
+    val result = CloudCredentialsUtils
+      .getSnowflakeCredentialsStringForAWS(creds)
+      .toString
+      .replaceAll("\\s+", " ")
+    assert(
+      result ===
+        "CREDENTIALS = ( AWS_KEY_ID='ACCESSKEYID' AWS_SECRET_KEY='SECRET/KEY'" +
+          " AWS_TOKEN='SESSION/Token' )"
+    )
   }
 
   test("credentialsString with Azure storage SAS token") {
     val creds = new StorageCredentialsSharedAccessSignature("SAS_TOKEN")
-    val result = CloudCredentialsUtils.getSnowflakeCredentialsStringForAzure(creds).toString.replaceAll("\\s+", " ")
-    assert(result ===
-      "CREDENTIALS = ( AZURE_SAS_TOKEN='SAS_TOKEN' )")
+    val result = CloudCredentialsUtils
+      .getSnowflakeCredentialsStringForAzure(creds)
+      .toString
+      .replaceAll("\\s+", " ")
+    assert(
+      result ===
+        "CREDENTIALS = ( AZURE_SAS_TOKEN='SAS_TOKEN' )"
+    )
   }
 
   test("AWSCredentials.load() credentials precedence for s3:// URIs") {
@@ -52,7 +73,8 @@ class CloudCredentialsUtilsSuite extends FunSuite {
     conf.set("fs.s3.awsSecretAccessKey", "CONFKEY")
 
     {
-      val creds = CloudCredentialsUtils.load("s3://URIID:URIKEY@bucket/path", conf)
+      val creds =
+        CloudCredentialsUtils.load("s3://URIID:URIKEY@bucket/path", conf)
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
@@ -76,7 +98,8 @@ class CloudCredentialsUtilsSuite extends FunSuite {
     conf.set("fs.s3n.awsSecretAccessKey", "CONFKEY")
 
     {
-      val creds = CloudCredentialsUtils.load("s3n://URIID:URIKEY@bucket/path", conf)
+      val creds =
+        CloudCredentialsUtils.load("s3n://URIID:URIKEY@bucket/path", conf)
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
@@ -100,7 +123,8 @@ class CloudCredentialsUtilsSuite extends FunSuite {
     conf.set("fs.s3a.secret.key", "CONFKEY")
 
     {
-      val creds = CloudCredentialsUtils.load("s3a://URIID:URIKEY@bucket/path", conf)
+      val creds =
+        CloudCredentialsUtils.load("s3a://URIID:URIKEY@bucket/path", conf)
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
@@ -118,7 +142,9 @@ class CloudCredentialsUtilsSuite extends FunSuite {
     val e = intercept[AmazonClientException] {
       CloudCredentialsUtils.load("s3a://bucket/path", new Configuration(false))
     }
-    assert(e.getMessage === "Unable to load credentials from service endpoint" ||
-      e.getMessage.contains("The requested metadata is not found at"))
+    assert(
+      e.getMessage === "Unable to load credentials from service endpoint" ||
+        e.getMessage.contains("The requested metadata is not found at")
+    )
   }
 }
