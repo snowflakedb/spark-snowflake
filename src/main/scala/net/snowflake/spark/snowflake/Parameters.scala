@@ -20,10 +20,14 @@ package net.snowflake.spark.snowflake
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  AWSCredentials,
+  BasicSessionCredentials
+}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
+import org.apache.spark.sql.types.StructType
 import org.slf4j.{Logger, LoggerFactory}
 
 /**
@@ -59,8 +63,12 @@ object Parameters {
   val PARAM_SF_TIMEZONE: String = knownParam("sftimezone")
   val PARAM_SF_WAREHOUSE: String = knownParam("sfwarehouse")
   val PARAM_TEMP_KEY_ID: String = knownParam("temporary_aws_access_key_id")
-  val PARAM_TEMP_KEY_SECRET: String = knownParam("temporary_aws_secret_access_key")
-  val PARAM_TEMP_SESSION_TOKEN: String = knownParam("temporary_aws_session_token")
+  val PARAM_TEMP_KEY_SECRET: String = knownParam(
+    "temporary_aws_secret_access_key"
+  )
+  val PARAM_TEMP_SESSION_TOKEN: String = knownParam(
+    "temporary_aws_session_token"
+  )
   val PARAM_CHECK_BUCKET_CONFIGURATION: String = knownParam(
     "check_bucket_configuration"
   )
@@ -84,7 +92,9 @@ object Parameters {
   val PARAM_KEEP_COLUMN_CASE: String = knownParam("keep_column_case")
 
   val PARAM_COLUMN_MAPPING: String = knownParam("column_mapping")
-  val PARAM_COLUMN_MISMATCH_BEHAVIOR: String = knownParam("column_mismatch_behavior")
+  val PARAM_COLUMN_MISMATCH_BEHAVIOR: String = knownParam(
+    "column_mismatch_behavior"
+  )
 
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
@@ -92,9 +102,13 @@ object Parameters {
   // Force to use COPY UNLOAD when reading data from Snowflake
   val PARAM_USE_COPY_UNLOAD: String = knownParam("use_copy_unload")
   // Expected partition size in MB when SELECT is used when reading data from Snowflake
-  val PARAM_EXPECTED_PARTITION_SIZE_IN_MB: String = knownParam("partition_size_in_mb")
+  val PARAM_EXPECTED_PARTITION_SIZE_IN_MB: String = knownParam(
+    "partition_size_in_mb"
+  )
   val PARAM_TIME_OUTPUT_FORMAT: String = knownParam("time_output_format")
-  val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam("jdbc_query_result_format")
+  val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam(
+    "jdbc_query_result_format"
+  )
 
   // Proxy related info
   val PARAM_USE_PROXY: String = knownParam("use_proxy")
@@ -104,7 +118,9 @@ object Parameters {
   val PARAM_PROXY_PASSWORD: String = knownParam("proxy_password")
   val PARAM_NON_PROXY_HOSTS: String = knownParam("non_proxy_hosts")
 
-  val PARAM_EXPECTED_PARTITION_COUNT: String = knownParam("expected_partition_count")
+  val PARAM_EXPECTED_PARTITION_COUNT: String = knownParam(
+    "expected_partition_count"
+  )
   val PARAM_MAX_RETRY_COUNT: String = knownParam("max_retry_count")
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
@@ -117,8 +133,10 @@ object Parameters {
   val TZ_SF_DEFAULT = "sf_default"
 
   // List of values that mean "yes" when considered to be Boolean
-  val BOOLEAN_VALUES_TRUE: Set[String] = Set("on", "yes", "true", "1", "enabled")
-  val BOOLEAN_VALUES_FALSE: Set[String] = Set("off", "no", "false", "0", "disabled")
+  val BOOLEAN_VALUES_TRUE: Set[String] =
+    Set("on", "yes", "true", "1", "enabled")
+  val BOOLEAN_VALUES_FALSE: Set[String] =
+    Set("off", "no", "false", "0", "disabled")
 
   /**
     * Helper method to check if a given string represents some form
@@ -498,12 +516,25 @@ object Parameters {
     /**
       * set column map
       */
-    def setColumnMap(map: Map[String, String]): Unit = {
+    def setColumnMap(fromSchema: Option[StructType],
+                     toSchema: Option[StructType]): Unit = {
       assert(
         parameters.get(PARAM_COLUMN_MAP).isEmpty,
         "Column map is already declared"
       )
-      generatedColumnMap = Some(map)
+      generatedColumnMap =
+        if (columnMapping == "name" && fromSchema.isDefined && toSchema.isDefined) {
+          val map = Utils.generateColumnMap(
+            fromSchema.get,
+            toSchema.get,
+            columnMismatchBehavior.equals("error")
+          )
+          if (map.isEmpty) throw new UnsupportedOperationException(s"""
+             |No column name matched between Snowflake Table and Spark Dataframe.
+             |Please check the column names or manually assign the ColumnMap
+         """.stripMargin)
+          Some(map)
+        } else None
     }
 
     /**
@@ -697,7 +728,7 @@ object Parameters {
 
     def columnMapping: String = {
       parameters(PARAM_COLUMN_MAPPING).toLowerCase match {
-        case "name" => "name"
+        case "name"  => "name"
         case "order" => "order"
         case value =>
           log.error(s"""
@@ -711,7 +742,7 @@ object Parameters {
 
     def columnMismatchBehavior: String = {
       parameters(PARAM_COLUMN_MISMATCH_BEHAVIOR).toLowerCase() match {
-        case "error" => "error"
+        case "error"  => "error"
         case "ignore" => "ignore"
         case value =>
           log.error(s"""

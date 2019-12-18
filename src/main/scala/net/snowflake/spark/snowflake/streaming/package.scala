@@ -49,7 +49,7 @@ package object streaming {
     if (pipeDropped) {
       conn.createTable(param.table.get.name, schema, param, overwrite = false, temporary = false)
 
-      val copy = ConstantString(copySql(param, conn, format)) !
+      val copy = ConstantString(copySql(param, conn, format, schema)) !
 
       if (verifyPipe(conn, pipeName, copy.toString)) {
         LOGGER.info(s"reuse pipe: $pipeName")
@@ -88,7 +88,9 @@ package object streaming {
     */
   private def copySql(param: MergedParameters,
                       conn: Connection,
-                      format: SupportedFormat): String = {
+                      format: SupportedFormat,
+                      schema: StructType,
+                     ): String = {
 
     val tableName = param.table.get
     val stageName = param.streamingStage.get
@@ -103,7 +105,7 @@ package object streaming {
           if (list.isEmpty || list.get.isEmpty) {
             s"(${schema.fields.map(x => Utils.quotedNameIgnoreCase(x.name)).mkString(",")})"
           } else {
-            s"(${list.get.map(x => Utils.quotedNameIgnoreCase(x._2)).mkString(", ")})"
+            s"(${list.get.map(x => Utils.quotedNameIgnoreCase(tableSchema(x._1).name)).mkString(", ")})"
           }
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) {
@@ -128,26 +130,30 @@ package object streaming {
             s"from (select $names $from tmp)"
           } else {
             s"from (select ${list.get.map(x => "parse_json($1):".concat(
-              Utils.quotedNameIgnoreCase(tableSchema(x._1 - 1).name))).mkString(", ")} $from tmp)"
+              Utils.quotedNameIgnoreCase(x._2))).mkString(", ")} $from tmp)"
           }
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) {
             from
           } else {
             s"from (select ${list.get
-              .map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase(x._1.toString)))
+              .map(x => "tmp.$".concat(Utils.quotedNameIgnoreCase((x._1 + 1).toString)))
               .mkString(", ")} $from tmp)"
           }
       }
 
     val fromString = s"FROM @$stageName"
 
+    if (param.columnMap.isEmpty && param.columnMapping == "name") {
+        param.setColumnMap(Option(schema), Option(tableSchema))
+    }
+
     val mappingList: Option[List[(Int, String)]] = param.columnMap match {
       case Some(map) =>
         Some(map.toList.map {
           case (key, value) =>
             try {
-              (tableSchema.fieldIndex(key) + 1, value)
+              (tableSchema.fieldIndex(value), key)
             } catch {
               case e: Exception =>
                 LOGGER.error("Error occurred while column mapping: " + e)
