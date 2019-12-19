@@ -35,7 +35,11 @@ import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.reflect.ClassTag
-import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable, SnowflakeResultSetSerializableV1}
+import net.snowflake.client.jdbc.{
+  SnowflakeResultSet,
+  SnowflakeResultSetSerializable,
+  SnowflakeResultSetSerializableV1
+}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
 import scala.collection.JavaConversions
@@ -237,7 +241,7 @@ private[snowflake] case class SnowflakeRelation(
         totalCompressedSize += firstChunkSize
         totalUnCompressedSize += firstChunkSize
         if (firstRowCount > 0) {
-          log.info(s"""printStatForSnowflakeResultSetRDD First result chunk:
+          log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: First result chunk:
                | rowCount=$firstRowCount chunkSize=$firstChunkSize
                |""".stripMargin.filter(_ >= ' '))
         }
@@ -260,9 +264,9 @@ private[snowflake] case class SnowflakeRelation(
     val partitionCount = resultSetSerializables.length
     val totalCompressedSizeMB = totalCompressedSize.toDouble / 1024.0 / 1024.0
     val totalUnCompressedSizeMB = totalUnCompressedSize.toDouble / 1024.0 / 1024.0
-    log.info(s"""printStatForSnowflakeResultSetRDD Total statistics:
+    log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
          | partitionCount=$partitionCount rowCount=$totalRowCount
-         | URLCount=$totalURLCount compressSizeMB=$totalCompressedSizeMB
+         | presignedURLCount=$totalURLCount compressSizeMB=$totalCompressedSizeMB
          | unCompressSizeMB=$totalUnCompressedSizeMB
          |""".stripMargin.filter(_ >= ' '))
 
@@ -271,7 +275,7 @@ private[snowflake] case class SnowflakeRelation(
     val aveCompressSizeMB = totalCompressedSizeMB / partitionCount
     val aveUnCompressSizeMB = totalUnCompressedSizeMB / partitionCount
     log.info(
-      s"""printStatForSnowflakeResultSetRDD Average statistics per partition:
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
          | rowCount=$aveCount URLCount=$aveUrlCount
          | compressSizeMB=$aveCompressSizeMB unCompressSizeMB=$aveUnCompressSizeMB
          |""".stripMargin.filter(_ >= ' ')
