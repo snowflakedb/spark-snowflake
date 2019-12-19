@@ -4,6 +4,7 @@ import java.io.File
 import org.apache.log4j.PropertyConfigurator
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import org.slf4j.LoggerFactory
 
 import scala.io.Source
 
@@ -12,7 +13,8 @@ class SecuritySuite extends IntegrationSuiteBase {
   // The TEST_LOG_FILE_NAME needs to be configured in TEST_LOG4J_PROPERTY
   private val TEST_LOG_FILE_NAME = "spark_connector.log"
   private val TEST_LOG4J_PROPERTY = "src/it/resources/log4j_file.properties"
-  private val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j.properties"
+  private val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
+  private val log = LoggerFactory.getLogger(getClass)
 
   // Add some options for default for testing.
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
@@ -57,11 +59,13 @@ class SecuritySuite extends IntegrationSuiteBase {
 
     // Setup special options for this test
     thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
+    thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
 
     setupLargeResultTable()
   }
 
   test("verify pre-signed URL are not logged") {
+    log.info("Reconfigure to log into file")
     // Reconfigure log file to output all logging entries.
     reconfigureLogFile(TEST_LOG4J_PROPERTY)
 
@@ -70,9 +74,9 @@ class SecuritySuite extends IntegrationSuiteBase {
       .collect()
 
     // Check pre-signed is used for the test
-    assert(
-      searchInLogFile("printStatForSnowflakeResultSetRDD Total statistics")
-    )
+    assert(searchInLogFile("Spark Connector Worker"))
+    assert(searchInLogFile("Spark Connector Master"))
+    assert(searchInLogFile("presignedURL"))
 
     // Check pre-signed URL are NOT printed in the log
     // by searching the pre-signed URL domain name.
@@ -82,6 +86,8 @@ class SecuritySuite extends IntegrationSuiteBase {
 
     // Reconfigure back to the default log file.
     reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
+
+    log.info("Restore back to log into STDOUT")
   }
 
   override def beforeEach(): Unit = {

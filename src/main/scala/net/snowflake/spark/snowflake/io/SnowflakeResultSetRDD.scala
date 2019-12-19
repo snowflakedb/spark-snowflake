@@ -13,8 +13,15 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
+
+object SnowflakeResultSetRDD {
+  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
+  private[snowflake] val MASTER_LOG_PREFIX = "Spark Connector Master"
+  private[snowflake] val WORKER_LOG_PREFIX = "Spark Connector Worker"
+}
 
 class SnowflakeResultSetRDD[T: ClassTag](
   schema: StructType,
@@ -53,6 +60,9 @@ case class ResultIterator[T: ClassTag](
     jdbcProperties
   }
   val data: ResultSet = resultSet.getResultSet(jdbcProperties)
+  SnowflakeResultSetRDD.logger.debug(
+    s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start to process one partition.
+       |""".stripMargin.filter(_ >= ' '))
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
 
