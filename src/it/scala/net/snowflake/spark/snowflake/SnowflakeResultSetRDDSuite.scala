@@ -507,6 +507,30 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("testSparkScalaUDF") {
+    val squareUDF = (s: Int) => {
+      s * s
+    }
+    sparkSession.udf.register("UDFSquare", squareUDF)
+
+    val resultSet: Array[Row] = sparkSession
+      .sql("select int_c, UDFSquare(int_c), c_string from test_table_large_result order by int_c")
+      .collect()
+
+    var i: Int = 0
+    while (i < resultSet.length) {
+      val row = resultSet(i)
+      assert(
+        largeStringValue.equals(row(2)) &&
+          (Math.abs(
+            BigDecimal(i).doubleValue() -
+              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+          ) < 0.00000000001)
+      )
+      i += 1
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
