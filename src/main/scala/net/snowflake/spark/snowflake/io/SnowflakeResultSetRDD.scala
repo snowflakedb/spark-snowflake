@@ -3,7 +3,7 @@ package net.snowflake.spark.snowflake.io
 import java.sql.ResultSet
 import java.util.Properties
 
-import net.snowflake.client.jdbc.SnowflakeResultSetSerializable
+import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException}
 import org.apache.spark.rdd.RDD
@@ -34,6 +34,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
     ResultIterator[T](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
+      split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo
     )
 
@@ -47,6 +48,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 case class ResultIterator[T: ClassTag](
   schema: StructType,
   resultSet: SnowflakeResultSetSerializable,
+  partitionIndex: Int,
   proxyInfo: Option[ProxyInfo]
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
@@ -59,14 +61,37 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
+  var actualReadRowCount: Long = 0
+  val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = resultSet.getResultSet(jdbcProperties)
-  SnowflakeResultSetRDD.logger.debug(
-    s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start to process one partition.
+  SnowflakeResultSetRDD.logger.info(
+    s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+       | partition ID:$partitionIndex expectedRowCount=
+       | $expectedRowCount
        |""".stripMargin.filter(_ >= ' '))
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
 
-  override def hasNext: Boolean = data.next()
+  override def hasNext: Boolean = {
+    if (data.next()) {
+      true
+    } else {
+      SnowflakeResultSetRDD.logger.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
+           | partition ID:$partitionIndex expectedRowCount=$expectedRowCount
+           | actualReadRowCount=$actualReadRowCount
+           |""".stripMargin.filter(_ >= ' '))
+
+      if (actualReadRowCount != expectedRowCount) {
+        throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
+          s"""The actual read row count $actualReadRowCount is not equal to
+             | the expected row count $expectedRowCount for partition
+             | ID:$partitionIndex
+             |""".stripMargin.filter(_ >= ' '))
+      }
+      false
+    }
+  }
 
   override def next(): T = {
     val converted = schema.fields.indices.map(index => {
@@ -122,6 +147,9 @@ case class ResultIterator[T: ClassTag](
         }
       }
     })
+
+    // Increase actual read row count
+    actualReadRowCount += 1
 
     if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
     else Row.fromSeq(converted).asInstanceOf[T]

@@ -403,7 +403,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"""insert into $test_table_large_result select
                   | seq4(), '$largeStringValue'
-                  | from table(generator(rowcount => 100000))""".stripMargin)
+                  | from table(generator(rowcount => 900000))""".stripMargin)
 
     val tmpdf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -429,10 +429,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     // Setup special options for this test
     if (System.getenv("SPARK_CONN_ENV_USE_COPY_UNLOAD") == null) {
       thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
-      thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "50")
+      thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
       thisConnectorOptionsNoTable += ("jdbc_query_result_format" -> "arrow")
     }
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
+    thisConnectorOptionsNoTable += ("s3maxfilesize" -> "1000001")
 
     setupNumberTable()
     setupStringBinaryTable()
@@ -496,13 +497,15 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     var i: Int = 0
     while (i < resultSet.length) {
       val row = resultSet(i)
-      assert(
-        largeStringValue.equals(row(1)) &&
-          (Math.abs(
-            BigDecimal(i).doubleValue() -
-              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
-          ) < 0.00000000001)
-      )
+      assert(largeStringValue.equals(row(1)))
+      // For Arrow format, the result is ordered.
+      // For COPY UNLOAD, the order can't be guaranteed
+      if (!params.useCopyUnload) {
+        assert(Math.abs(
+          BigDecimal(i).doubleValue() -
+            row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+        ) < 0.00000000001)
+      }
       i += 1
     }
   }
@@ -520,13 +523,15 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     var i: Int = 0
     while (i < resultSet.length) {
       val row = resultSet(i)
-      assert(
-        largeStringValue.equals(row(2)) &&
-          (Math.abs(
-            BigDecimal(i).doubleValue() -
-              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
-          ) < 0.00000000001)
-      )
+      assert(largeStringValue.equals(row(2)))
+      // For Arrow format, the result is ordered.
+      // For COPY UNLOAD, the order can't be guaranteed
+      if (!params.useCopyUnload) {
+        assert(Math.abs(
+          BigDecimal(i).doubleValue() -
+            row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+        ) < 0.00000000001)
+      }
       i += 1
     }
   }

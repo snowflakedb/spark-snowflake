@@ -76,7 +76,6 @@ class SecuritySuite extends IntegrationSuiteBase {
     // Check pre-signed is used for the test
     assert(searchInLogFile("Spark Connector Worker"))
     assert(searchInLogFile("Spark Connector Master"))
-    assert(searchInLogFile("presignedURL"))
 
     // Check pre-signed URL are NOT printed in the log
     // by searching the pre-signed URL domain name.

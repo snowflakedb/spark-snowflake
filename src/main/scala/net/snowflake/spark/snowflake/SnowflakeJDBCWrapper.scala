@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -737,6 +738,11 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       .toString()
 
+    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                       | execute query without bind variable:
+                       |""".stripMargin.filter(_ >= ' ')
+    log.info(s"$logPrefix $query")
+
     val statement = conn.prepareStatement(query)
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
   }
@@ -759,7 +765,10 @@ private[snowflake] class SnowflakeSQLStatement(
 
     val query: String = buffer.toString
 
-    log.info(s"sql query generated: $query")
+    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                       | execute query with bind variable:
+                       |""".stripMargin.filter(_ >= ' ')
+    log.info(s"$logPrefix $query")
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {
