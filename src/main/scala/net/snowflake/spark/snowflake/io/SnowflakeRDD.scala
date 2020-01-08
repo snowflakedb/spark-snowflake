@@ -17,15 +17,21 @@ class SnowflakeRDD(sc: SparkContext,
 
   override def compute(split: Partition,
                        context: TaskContext): Iterator[String] = {
-    val stringIterator = new SFRecordReader(format)
+    val snowflakePartition = split.asInstanceOf[SnowflakePartition]
+
+    val stringIterator = new SFRecordReader(format, snowflakePartition.index)
     stringIterator.setDownloadFunction(downloadFile)
 
-    split
-      .asInstanceOf[SnowflakePartition]
-      .fileNames
-      .foreach(name => {
-        stringIterator.addFileName(name)
-      })
+    snowflakePartition.fileNames.foreach(name => {
+      stringIterator.addFileName(name)
+    })
+
+    logger.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+         | partition ID:${snowflakePartition.index}
+         | totalFileCount=${snowflakePartition.fileNames.size}
+         |""".stripMargin.filter(_ >= ' '))
+
     stringIterator
   }
 
@@ -37,7 +43,7 @@ class SnowflakeRDD(sc: SparkContext,
       )
     val fileCount = fileNames.length
     val partitionCount = (fileCount + fileCountPerPartition - 1) / fileCountPerPartition
-    logger.info(s"""SnowflakeRDD.getPartitions statistic:
+    logger.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
          | fileCount=$fileCount filePerPartition=$fileCountPerPartition
          | actualPartitionCount=$partitionCount
          | expectedPartitionCount=$expectedPartitionCount

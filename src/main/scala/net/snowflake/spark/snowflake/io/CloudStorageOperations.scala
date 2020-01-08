@@ -477,7 +477,8 @@ sealed trait CloudStorage {
         outputStream.close()
 
         CloudStorageOperations.log.info(
-          s"upload file $directory/$fileName to stage"
+          SnowflakeResultSetRDD.WORKER_LOG_PREFIX +
+          s": upload file $directory/$fileName to stage"
         )
 
         new SingleElementIterator(s"$directory/$fileName")
@@ -516,15 +517,15 @@ sealed trait CloudStorage {
           val downloadTime = (endTime - startTime).toDouble / 1000.0
 
           CloudStorageOperations.log.info(
-            s"""createDownloadStreamWithRetry() download successful:
-               | fileID=$processedFileCount downloadTime=$downloadTime
-               | dataSizeInMB=$dataSizeInMB
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: download
+               | successful: fileID=$processedFileCount
+               | downloadTime=$downloadTime dataSizeInMB=$dataSizeInMB
                |""".stripMargin.filter(_ >= ' ')
           )
         } else {
           CloudStorageOperations.log.info(
-            s"""createDownloadStreamWithRetry() DO NOT download the file
-               | completely: fileID=$processedFileCount
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: DO NOT download
+               | the file completely: fileID=$processedFileCount
                |""".stripMargin.filter(_ >= ' ')
           )
         }
@@ -538,7 +539,7 @@ sealed trait CloudStorage {
           error = Some(e)
           val errmsg = e.getMessage
           CloudStorageOperations.log.info(
-            s"""createDownloadStreamWithRetry() hit download error:
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit download error:
                | retryCount=$retryCount: fileName=$fileName,
                | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
                |""".stripMargin.filter(_ >= ' ')
@@ -554,7 +555,7 @@ sealed trait CloudStorage {
     if (error.isDefined) {
       val errorMessage = error.get.getMessage
       CloudStorageOperations.log.info(
-        s"""createDownloadStreamWithRetry() last error message
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
            | after retry $retryCount times is [ $errorMessage ]
            |""".stripMargin.filter(_ >= ' ')
       )
@@ -563,8 +564,9 @@ sealed trait CloudStorage {
       // Suppose this never happens
       val errorMessage = "Unknown error occurs, Contact Snowflake Support"
       CloudStorageOperations.log.info(
-        s"""createDownloadStreamWithRetry() hit un-expected condition
-           | after retry $retryCount times is [ $retryCount/$maxRetryCount ]
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit un-expected
+           | condition after retry $retryCount times is
+           | [ $retryCount/$maxRetryCount ]
            |""".stripMargin.filter(_ >= ' ')
       )
       throw new Exception(errorMessage)
@@ -999,8 +1001,11 @@ case class InternalS3Storage(param: MergedParameters,
 
       override def close(): Unit = {
         buffer.close()
+        val resultByteArray = buffer.toByteArray
+        // Set up length to avoid S3 client API to raise warning message.
+        meta.setContentLength(resultByteArray.length)
         val inputStream: InputStream =
-          new ByteArrayInputStream(buffer.toByteArray)
+          new ByteArrayInputStream(resultByteArray)
         s3Client.putObject(
           storageInfo(StorageInfo.BUCKET_NAME),
           storageInfo(StorageInfo.PREFIX).concat(file),
@@ -1142,8 +1147,11 @@ case class ExternalS3Storage(bucketName: String,
 
       override def close(): Unit = {
         buffer.close()
+        val resultByteArray = buffer.toByteArray
+        // Set up length to avoid S3 client API to raise warning message.
+        meta.setContentLength(resultByteArray.length)
         val inputStream: InputStream =
-          new ByteArrayInputStream(buffer.toByteArray)
+          new ByteArrayInputStream(resultByteArray)
         s3Client.putObject(bucketName, prefix.concat(file), inputStream, meta)
       }
     }

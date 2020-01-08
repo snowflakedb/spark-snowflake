@@ -32,7 +32,8 @@ class SFJsonInputFormat extends FileInputFormat[java.lang.Long, String] {
 }
 
 private[io] class SFRecordReader(
-  val format: SupportedFormat = SupportedFormat.CSV
+  val format: SupportedFormat = SupportedFormat.CSV,
+  val partitionIndex: Int = 0
 ) extends RecordReader[java.lang.Long, String]
     with Iterator[String] {
 
@@ -57,6 +58,8 @@ private[io] class SFRecordReader(
   private var codec: Option[CompressionCodec] = None
   private var fileSize: Long = 0
   private var cur: Long = 0
+  private var readFileCount: Long = 0
+  private var readRowCount: Long = 0
 
   private var key: Long = 0
   private var value: String = _
@@ -127,12 +130,27 @@ private[io] class SFRecordReader(
     }
   }
 
-  override def hasNext: Boolean =
-    inputStreams.nonEmpty || currentStream.isDefined || inputFileNames.nonEmpty
+  override def hasNext: Boolean = {
+    if (inputStreams.nonEmpty || currentStream.isDefined ||
+      inputFileNames.nonEmpty)
+    {
+      true
+    } else {
+      logger.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
+           | partition ID:$partitionIndex totalReadUnCompDataSizeMB=
+           |${cur/1024.0/1024.0} readRowCount=$readRowCount
+           | readFileCount=$readFileCount
+           |""".stripMargin.filter(_ >= ' '))
+      false
+    }
+  }
 
   override def next(): String = {
-    if (!hasNext) null
-    else {
+    if (!hasNext) {
+      readRowCount += 1
+      null
+    } else {
       if (currentStream.isEmpty) nextStream()
       val buff = ArrayBuffer.empty[Byte]
       format match {
@@ -176,6 +194,7 @@ private[io] class SFRecordReader(
           if (currentChar.isEmpty) nextStream()
 
       }
+      readRowCount += 1
       new String(buff.toArray, Charset.forName("UTF-8"))
     }
   }
@@ -203,9 +222,14 @@ private[io] class SFRecordReader(
       currentStream = Some(inputStreams.head)
       inputStreams = inputStreams.tail
     } else if (inputFileNames.nonEmpty) {
+      logger.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+           | partition ID:$partitionIndex fileID=$readFileCount
+           |""".stripMargin.filter(_ >= ' '))
       val localInputStream = downloadFunction(inputFileNames.head)
       currentStream = Some(localInputStream)
       inputFileNames = inputFileNames.tail
+      readFileCount += 1
     } else {
       currentStream = None
     }

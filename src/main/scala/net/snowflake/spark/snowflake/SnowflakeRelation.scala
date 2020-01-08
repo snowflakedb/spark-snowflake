@@ -17,13 +17,6 @@
 
 package net.snowflake.spark.snowflake
 
-import java.io.{ByteArrayInputStream, InputStream}
-import java.util.Base64
-
-import net.snowflake.client.core.QueryResultFormat
-import net.snowflake.client.jdbc.internal.apache.arrow.memory.RootAllocator
-import net.snowflake.client.jdbc.internal.apache.arrow.vector.VectorSchemaRoot
-import net.snowflake.client.jdbc.internal.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -37,8 +30,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{
   SnowflakeResultSet,
-  SnowflakeResultSetSerializable,
-  SnowflakeResultSetSerializableV1
+  SnowflakeResultSetSerializable
 }
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
@@ -227,115 +219,34 @@ private[snowflake] case class SnowflakeRelation(
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
     var totalUnCompressedSize: Long = 0
-    var totalURLCount: Long = 0
 
-    resultSetSerializables.foreach { resultSet =>
+    resultSetSerializables.foreach { resultSetSerializable =>
       {
-        val resultSetSerializable =
-          resultSet.asInstanceOf[SnowflakeResultSetSerializableV1]
-
-        // Get row count and data size for first data chunk
-        val (firstRowCount, firstChunkSize) =
-          getFirstChunkSize(resultSetSerializable)
-        totalRowCount += firstRowCount
-        totalCompressedSize += firstChunkSize
-        totalUnCompressedSize += firstChunkSize
-        if (firstRowCount > 0) {
-          log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: First result chunk:
-               | rowCount=$firstRowCount chunkSize=$firstChunkSize
-               |""".stripMargin.filter(_ >= ' '))
-        }
-
-        // Get row count for all pre-signed URLs from metadata
-        var index = 0
-        val fileChunks = resultSet
-          .asInstanceOf[SnowflakeResultSetSerializableV1]
-          .getChunkFileMetadatas
-        while (index < fileChunks.size) {
-          totalRowCount += fileChunks.get(index).getRowCount
-          totalCompressedSize += fileChunks.get(index).getCompressedByteSize
-          totalUnCompressedSize += fileChunks.get(index).getUncompressedByteSize
-          totalURLCount += 1
-          index += 1
-        }
+        totalRowCount += resultSetSerializable.getRowCount
+        totalCompressedSize += resultSetSerializable.getCompressedDataSizeInBytes
+        totalUnCompressedSize += resultSetSerializable.getUncompressedDataSizeInBytes
       }
     }
 
     val partitionCount = resultSetSerializables.length
-    val totalCompressedSizeMB = totalCompressedSize.toDouble / 1024.0 / 1024.0
-    val totalUnCompressedSizeMB = totalUnCompressedSize.toDouble / 1024.0 / 1024.0
+    val totalCompressedSizeMB = totalCompressedSize.toDouble/1024.0/1024.0
+    val totalUnCompressedSizeMB = totalUnCompressedSize.toDouble/1024.0/1024.0
     log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
          | partitionCount=$partitionCount rowCount=$totalRowCount
-         | presignedURLCount=$totalURLCount compressSizeMB=$totalCompressedSizeMB
+         | compressSizeMB=$totalCompressedSizeMB
          | unCompressSizeMB=$totalUnCompressedSizeMB
          |""".stripMargin.filter(_ >= ' '))
 
     val aveCount = totalRowCount / partitionCount
-    val aveUrlCount = totalURLCount / partitionCount
     val aveCompressSizeMB = totalCompressedSizeMB / partitionCount
     val aveUnCompressSizeMB = totalUnCompressedSizeMB / partitionCount
     log.info(
-      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
-         | rowCount=$aveCount URLCount=$aveUrlCount
-         | compressSizeMB=$aveCompressSizeMB unCompressSizeMB=$aveUnCompressSizeMB
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Average statistics per partition: rowCount=$aveCount
+         | compressSizeMB=$aveCompressSizeMB
+         | unCompressSizeMB=$aveUnCompressSizeMB
          |""".stripMargin.filter(_ >= ' ')
     )
-  }
-
-  // Get data size and row count for first data chunk
-  private def getFirstChunkSize(
-    resultSetSerializable: SnowflakeResultSetSerializableV1
-  ): (Long, Long) = {
-    val firstChunkData = resultSetSerializable.getFirstChunkStringData
-
-    if (firstChunkData == null || firstChunkData.length < 1) {
-      // There is no first chunk
-      (0, 0)
-    } else if (resultSetSerializable.getQueryResultFormat.equals(
-                 QueryResultFormat.ARROW
-               )) {
-      // The first chunk is ARROW format
-      var rowCount: Long = 0
-      var inputStream: InputStream = null
-      var reader: ArrowStreamReader = null
-      var root: VectorSchemaRoot = null
-      try {
-        val bytes = Base64.getDecoder.decode(firstChunkData)
-        inputStream = new ByteArrayInputStream(bytes)
-
-        val rootAllocator = new RootAllocator(Long.MaxValue)
-
-        reader = new ArrowStreamReader(inputStream, rootAllocator)
-        root = reader.getVectorSchemaRoot
-        root.getFieldVectors
-        while (reader.loadNextBatch()) {
-          rowCount += root.getRowCount
-          root.clear()
-        }
-      } catch {
-        case e: Throwable =>
-          val errorMessage = e.getMessage
-          log.error(s"""getFirstChunkSize Fail to parse first Arrow chunk:
-                       | error message is [ $errorMessage ]
-                       |""".stripMargin.filter(_ >= ' '))
-          throw e
-      } finally {
-        if (root != null) {
-          root.clear()
-        }
-        if (reader != null) {
-          reader.close()
-        }
-        if (inputStream != null) {
-          inputStream.close()
-        }
-      }
-
-      (rowCount, firstChunkData.length)
-    } else {
-      // The first chunk is JSON
-      (resultSetSerializable.getFirstChunkRowCount, firstChunkData.length)
-    }
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
@@ -345,8 +256,8 @@ private[snowflake] case class SnowflakeRelation(
   ): SnowflakeSQLStatement = {
 
     assert(!requiredColumns.isEmpty)
-    // Always quote column names, and uppercase-cast them to make them equivalent to being unquoted
-    // (unless already quoted):
+    // Always quote column names, and uppercase-cast them to make them
+    // equivalent to being unquoted (unless already quoted):
     val columnList = requiredColumns
       .map(
         col =>
