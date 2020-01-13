@@ -105,8 +105,15 @@ private[io] object StageWriter {
         else conn.dropTable(table.name)
       }
 
-      // create table
-      conn.createTable(targetTable.name, schema, params, overwrite = false, temporary = false)
+      // If the SaveMode is 'Append' and the target exists, skip
+      // CREATE TABLE IF NOT EXIST command. This command doesn't actually
+      // create a table but it needs CREATE TABLE privilege.
+      if (saveMode == SaveMode.Overwrite ||
+        !DefaultJDBCWrapper.tableExists(conn, table.toString))
+      {
+        conn.createTable(targetTable.name, schema, params,
+          overwrite = false, temporary = false)
+      }
 
       // pre actions
       Utils.executePreActions(
