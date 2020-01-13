@@ -28,6 +28,8 @@ import Utils.SNOWFLAKE_SOURCE_NAME
   */
 class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
+  // test_table_tmp should be used inside of one test function.
+  private val test_table_tmp: String = s"test_table_tmp_$randomSuffix"
   private val test_table: String = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
   private val test_table3: String = s"test_table3_$randomSuffix"
@@ -94,6 +96,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       conn.createStatement.executeUpdate(s"drop table if exists $test_table")
       conn.createStatement.executeUpdate(s"drop table if exists $test_table2")
       conn.createStatement.executeUpdate(s"drop table if exists $test_table3")
+      conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
       conn.commit()
     } finally {
       super.afterAll()
@@ -316,6 +319,58 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         "DROP FUNCTION IF EXISTS testudf(number, number)"
       )
     }
+  }
+
+  test("Append SaveMode: 1. create table if not exist, 2. keep existing data if exist") {
+    val schema = StructType(
+      List(
+        StructField("col1", IntegerType),
+        StructField("col2", IntegerType)
+      )
+    )
+    val data = Seq(Row(1, 11), Row(2, 22))
+
+    // make sure table: test_table_tmp doesn't exist.
+    conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
+
+    // Append data in first time, table doesn't exist yet
+    sqlContext
+      .createDataFrame(sc.makeRDD(data), schema)
+      .write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .mode(SaveMode.Append)
+      .save()
+
+    val result1 = sparkSession.read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .load()
+
+    checkAnswer(result1, data)
+
+    // Append data in second time, the table must exist
+    sqlContext
+      .createDataFrame(sc.makeRDD(data), schema)
+      .write
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .mode(SaveMode.Append)
+      .save()
+
+    val result2 = sparkSession.read
+      .format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .load()
+
+    // Both old data and new data are in the table
+    checkAnswer(result2, data ++ data)
+
+    conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
   }
 
   // TODO Enable more tests
