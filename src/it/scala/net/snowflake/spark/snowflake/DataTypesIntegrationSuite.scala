@@ -125,7 +125,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
 
   }
 
-  test("filter on date column") {
+  ignore("filter on date column") {
     jdbcUpdate(
       s"""create or replace table $test_table ("id" int, "time" date)"""
     )
@@ -192,7 +192,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table $test_table")
   }
 
-  test("filter on timestamp column") {
+  ignore("filter on timestamp column") {
     jdbcUpdate(
       s"""create or replace table $test_table ("id" int, "time" timestamp)"""
     )

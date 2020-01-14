@@ -7,13 +7,16 @@ matrix:
   include:
   - jdk: openjdk8
     scala: 2.11.12
-    env: SPARK_VERSION="2.4.0"
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws" "SPARK_CONN_ENV_USE_COPY_UNLOAD"="true"
   - jdk: openjdk8
-    scala: 2.12.8
-    env: SPARK_VERSION="2.4.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws"
+    scala: 2.11.12
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="aws" "SPARK_CONN_ENV_USE_COPY_UNLOAD"="false"
   - jdk: openjdk8
-    scala: 2.12.8
-    env: SPARK_VERSION="2.4.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure"
+    scala: 2.11.12
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure" "SPARK_CONN_ENV_USE_COPY_UNLOAD"="true"
+  - jdk: openjdk8
+    scala: 2.11.12
+    env: SPARK_VERSION="2.2.0" INTEGRATION_TESTS="true" "SNOWFLAKE_TEST_ACCOUNT"="azure" "SPARK_CONN_ENV_USE_COPY_UNLOAD"="false"
 script:
 - "./dev/run-tests-travis.sh"
 after_success:

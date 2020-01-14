@@ -111,7 +111,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     */
   private def generateQueries(plan: LogicalPlan): Option[SnowflakeQuery] = {
     plan match {
-      case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _, _) =>
+      case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _) =>
         Some(SourceQuery(sfRelation, l.output, alias.next))
 
       case UnaryOp(child) =>
