@@ -296,9 +296,10 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Ability to query a UDF") {
+    val funcName = s"testudf$randomSuffix"
     try {
       Utils.runQuery(connectorOptionsNoTable, s"""
-          |CREATE OR REPLACE FUNCTION testudf(a number, b number)
+          |CREATE OR REPLACE FUNCTION $funcName(a number, b number)
           |RETURNS number
           |AS 'a * b'
         """.stripMargin)
@@ -307,7 +308,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         // scalastyle:off
-        .option("query", s"select testudf(3,4) as twelve")
+        .option("query", s"select $funcName(3,4) as twelve")
         // scalastyle:on
         .load()
 
@@ -316,7 +317,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       // Clean up the UDF
       Utils.runQuery(
         connectorOptionsNoTable,
-        "DROP FUNCTION IF EXISTS testudf(number, number)"
+        s"DROP FUNCTION IF EXISTS $funcName(number, number)"
       )
     }
   }
