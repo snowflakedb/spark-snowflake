@@ -514,10 +514,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val squareUDF = (s: Int) => {
       s * s
     }
-    sparkSession.udf.register("UDFSquare", squareUDF)
+    val funcName = s"UDFSquare$randomSuffix"
+    sparkSession.udf.register(funcName, squareUDF)
 
     val resultSet: Array[Row] = sparkSession
-      .sql("select int_c, UDFSquare(int_c), c_string from test_table_large_result order by int_c")
+      .sql(s"select int_c, $funcName(int_c), c_string" +
+        s" from test_table_large_result order by int_c")
       .collect()
 
     var i: Int = 0
