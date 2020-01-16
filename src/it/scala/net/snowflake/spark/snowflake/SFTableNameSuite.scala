@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.{
   IntegerType,
@@ -27,14 +28,14 @@ class SFTableNameSuite extends IntegrationSuiteBase {
     val df = sparkSession.createDataFrame(data, schema)
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptions)
       .option("dbtable", tableName)
       .mode(SaveMode.Overwrite)
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptions)
       .option("dbtable", tableName)
       .load()

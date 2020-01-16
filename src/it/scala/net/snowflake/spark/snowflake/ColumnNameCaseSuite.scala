@@ -8,6 +8,7 @@ import org.apache.spark.sql.types.{
   StructField,
   StructType
 }
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.sql.expressions.Window
@@ -38,14 +39,14 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     val df = sqlContext.createDataFrame(data, schema)
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table1)
       .option("keep_column_case", "on")
       .save()
 
     var df1 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table1)
       .option("keep_column_case", "on")
@@ -65,14 +66,14 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     val df = sqlContext.createDataFrame(data, schema)
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table2)
       .option("keep_column_case", "on")
       .save()
 
     var df1 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table2)
       .option("keep_column_case", "off")
@@ -122,7 +123,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"""create table $table3 ("col" int)""")
 
     val df = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table3)
       .option("keep_column_case", "on")
@@ -150,7 +151,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"""insert into $table3 values(1, to_timestamp(123456))""")
 
     val df = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table3)
       .option("keep_column_case", "on")
