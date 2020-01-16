@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.Date
-
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
@@ -60,7 +60,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   def checkTestTable(expectedAnswer: Seq[Row]): Unit = {
     val loadedDf = sqlContext.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("query", s"select * from $dbtable order by ONE")
       .load()
@@ -74,7 +74,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     )
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable)
       .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
@@ -92,7 +92,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because only suppert SavaMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
@@ -103,7 +103,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
@@ -114,7 +114,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "AAA", "five" -> "FOUR").toString())
@@ -136,7 +136,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // error by default
     assertThrows[SnowflakeSQLException] {
       df1.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable1)
         .mode(SaveMode.Append)
@@ -145,7 +145,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error when mapping by name
     df1.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .option("column_mapping", "name")
@@ -153,7 +153,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result1 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .load()
@@ -179,7 +179,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // error by default
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable2)
         .option("column_mapping", "name")
@@ -188,7 +188,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .option("column_mapping", "name")
@@ -197,7 +197,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .load()
@@ -216,7 +216,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable3)
         .option("column_mapping", "name")
@@ -225,7 +225,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable3)
       .option("column_mapping", "name")
@@ -234,7 +234,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable3)
       .load()
@@ -253,7 +253,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable4)
         .option("column_mapping", "name")
@@ -262,7 +262,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .option("column_mapping", "name")
@@ -271,7 +271,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .load()
@@ -297,7 +297,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     val df = sqlContext.createDataFrame(data, schema)
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable5)
       .option("column_mapping", "name")
@@ -323,7 +323,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable6)
         .option("column_mapping", "name")
@@ -346,7 +346,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable7)
         .option("column_mapping", "name")
@@ -373,7 +373,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .option("column_mapping", "name")
@@ -382,7 +382,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .load()
@@ -407,7 +407,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .option("column_mapping", "name")
@@ -416,7 +416,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .load()
@@ -442,7 +442,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable10)
         .option("column_mapping", "name")

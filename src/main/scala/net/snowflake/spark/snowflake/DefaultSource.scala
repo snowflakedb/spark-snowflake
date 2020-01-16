@@ -18,6 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.streaming.SnowflakeSink
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -40,7 +41,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     with StreamSinkProvider
     with DataSourceRegister {
 
-  override def shortName(): String = "snowflake"
+  override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
 
   private val log = LoggerFactory.getLogger(getClass)
 

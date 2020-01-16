@@ -21,7 +21,8 @@ import java.sql.SQLException
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.types._
-import Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 
 /**
   * End-to-end tests which run against a real Snowflake cluster.
@@ -338,14 +339,14 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     sqlContext
       .createDataFrame(sc.makeRDD(data), schema)
       .write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table_tmp)
       .mode(SaveMode.Append)
       .save()
 
     val result1 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table_tmp)
       .load()
@@ -356,14 +357,14 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     sqlContext
       .createDataFrame(sc.makeRDD(data), schema)
       .write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table_tmp)
       .mode(SaveMode.Append)
       .save()
 
     val result2 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table_tmp)
       .load()
