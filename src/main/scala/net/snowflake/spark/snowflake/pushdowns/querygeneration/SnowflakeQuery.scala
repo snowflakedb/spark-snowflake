@@ -272,10 +272,26 @@ case class JoinQuery(left: SnowflakeQuery,
     extends SnowflakeQuery {
 
   val conj: String = joinType match {
-    case Inner => "INNER JOIN"
-    case LeftOuter => "LEFT OUTER JOIN"
-    case RightOuter => "RIGHT OUTER JOIN"
-    case FullOuter => "OUTER JOIN"
+    case Inner =>
+      // keep the nullability for both projections
+      "INNER JOIN"
+    case LeftOuter =>
+      // Update the column's nullability of right table as true
+      right.helper.outputWithQualifier =
+        right.helper.nullableOutputWithQualifier
+      "LEFT OUTER JOIN"
+    case RightOuter =>
+      // Update the column's nullability of left table as true
+      left.helper.outputWithQualifier =
+        left.helper.nullableOutputWithQualifier
+      "RIGHT OUTER JOIN"
+    case FullOuter =>
+      // Update the column's nullability of both tables as true
+      left.helper.outputWithQualifier =
+        left.helper.nullableOutputWithQualifier
+      right.helper.outputWithQualifier =
+        right.helper.nullableOutputWithQualifier
+      "FULL OUTER JOIN"
     case _ => throw new MatchError
   }
 
