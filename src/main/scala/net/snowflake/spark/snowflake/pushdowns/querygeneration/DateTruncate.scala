@@ -10,7 +10,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Year,
   Day,
   Minute,
-  Second,
+  Second
 }
 
 /** Extractor for boolean expressions (return true or false). */
