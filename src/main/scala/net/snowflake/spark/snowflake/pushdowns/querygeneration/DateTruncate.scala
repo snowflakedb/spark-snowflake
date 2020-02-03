@@ -14,7 +14,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 
 /** Extractor for boolean expressions (return true or false). */
-private[querygeneration] object dateTruncate {
+private[querygeneration] object DateTruncate {
   def unapply(
     expAttr: (Expression, Seq[Attribute])
   ): Option[SnowflakeSQLStatement] = {
