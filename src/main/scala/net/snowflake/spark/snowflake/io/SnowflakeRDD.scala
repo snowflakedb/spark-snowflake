@@ -14,6 +14,7 @@ class SnowflakeRDD(sc: SparkContext,
     extends RDD[String](sc, Nil) {
 
   @transient private val MIN_FILES_PER_PARTITION = 2
+  @transient private val MAX_FILES_PER_PARTITION = 10
 
   override def compute(split: Partition,
                        context: TaskContext): Iterator[String] = {
@@ -36,11 +37,12 @@ class SnowflakeRDD(sc: SparkContext,
   }
 
   override protected def getPartitions: Array[Partition] = {
-    val fileCountPerPartition =
+    var fileCountPerPartition =
       Math.max(
         MIN_FILES_PER_PARTITION,
         (fileNames.length + expectedPartitionCount / 2) / expectedPartitionCount
       )
+    fileCountPerPartition = Math.min(MAX_FILES_PER_PARTITION, fileCountPerPartition)
     val fileCount = fileNames.length
     val partitionCount = (fileCount + fileCountPerPartition - 1) / fileCountPerPartition
     logger.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
