@@ -1,10 +1,19 @@
 package net.snowflake.spark.snowflake
 
+import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.test.TestHook
+import net.snowflake.spark.snowflake.test.TestHookFlag.{
+  TH_WRITE_ERROR_AFTER_COPY_INTO,
+  TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE,
+  TH_WRITE_ERROR_AFTER_DROP_OLD_TABLE,
+  TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE
+}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 import scala.util.Random
+// scalastyle:off println
 
 class TruncateTableSuite extends IntegrationSuiteBase {
   val table = s"test_table_$randomSuffix"
@@ -199,6 +208,118 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     assert(checkSchema2())
   }
 
+  test("negative test 1: original table doesn't exist, error happen when writing") {
+    // Make sure table doesnt' exist
+    jdbcUpdate(s"drop table if exists $table")
+    assert(!DefaultJDBCWrapper.tableExists(conn, table.toString))
+
+    // Old table doesn't exist so DROP table and TRUNCATE table never happen
+    val testConditions = Array(
+      (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "on", "off", SaveMode.Append),
+      // (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Append),
+      // (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "on", "off", SaveMode.Overwrite),
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Overwrite)
+    )
+
+    testConditions.map(x => {
+      println(s"Test case 1 condition: $x")
+
+      val testFlag = x._1
+      val df = x._2
+      val tableName = x._3
+      val truncate_table = x._4
+      val usestagingtable = x._5
+      val saveMode = x._6
+      assertThrows[SnowflakeSQLException] {
+        TestHook.enableTestFlagOnly(testFlag)
+          df.write
+            .format(SNOWFLAKE_SOURCE_NAME)
+            .options(connectorOptionsNoTable)
+            .option("dbtable", tableName)
+            .option("truncate_table", truncate_table)
+            .option("usestagingtable", usestagingtable)
+            .mode(saveMode)
+            .save()
+      }
+
+      // The original table should not exist
+      assert( !DefaultJDBCWrapper.tableExists(conn, table.toString))
+    })
+
+    // Disable test hook in the end
+    TestHook.disableTestHook()
+  }
+
+  test("negative test 2: original table exists, error happen when writing") {
+    // Make sure table doesnt' exist
+    jdbcUpdate(s"drop table if exists $table")
+    // create one table
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", table)
+      .option("truncate_table", "off")
+      .option("usestagingtable", "off")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val oldRowCount = sqlContext.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$table")
+      .load()
+      .count()
+
+    // Old table doesn't exist so DROP table and TRUNCATE table never happen
+    val testConditions = Array(
+      // In Append mode, failure may happen after COPY_INTO
+      // (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Append),
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Append),
+      // In Overwrite mode, failure may happen after after DROP OLD table
+      (TH_WRITE_ERROR_AFTER_DROP_OLD_TABLE, df2, table, "off", "off", SaveMode.Overwrite),
+      // In Overwrite mode, failure may happen after after DROP OLD table
+      (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "off", "off", SaveMode.Overwrite),
+      // In Overwrite mode, failure may happen after after truncate table
+      (TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE, df2, table, "on", "off", SaveMode.Overwrite),
+      // In Overwrite mode, failure may happen after after copy into
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Overwrite),
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Overwrite)
+    )
+
+    testConditions.map(x => {
+      println(s"Test case 2 condition: $x")
+
+      val testFlag = x._1
+      val df = x._2
+      val tableName = x._3
+      val truncate_table = x._4
+      val usestagingtable = x._5
+      val saveMode = x._6
+      assertThrows[SnowflakeSQLException] {
+        TestHook.enableTestFlagOnly(testFlag)
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(connectorOptionsNoTable)
+          .option("dbtable", tableName)
+          .option("truncate_table", truncate_table)
+          .option("usestagingtable", usestagingtable)
+          .mode(saveMode)
+          .save()
+      }
+
+      val newRowCount = sqlContext.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", s"$table")
+        .load()
+        .count()
+      assert(newRowCount == oldRowCount)
+    })
+
+    // Disable test hook in the end
+    TestHook.disableTestHook()
+  }
+
   def checkSchema2(): Boolean = {
     val st = DefaultJDBCWrapper.resolveTable(conn, table, params)
     val st1 = new StructType(
@@ -222,7 +343,10 @@ class TruncateTableSuite extends IntegrationSuiteBase {
   }
 
   override def afterAll(): Unit = {
+    TestHook.disableTestHook()
     jdbcUpdate(s"drop table if exists $table")
     super.afterAll()
   }
 }
+
+// scalastyle:on println
