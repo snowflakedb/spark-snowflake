@@ -574,7 +574,6 @@ sealed trait CloudStorage {
   }
 
   protected def createUploadStream(
-
     fileName: String,
     dir: Option[String],
     compress: Boolean,
