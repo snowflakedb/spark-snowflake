@@ -21,13 +21,6 @@ private[querygeneration] object DateTruncate {
     val expr = expAttr._1
     val fields = expAttr._2
 
-    expr  = expr match {
-      case _: YYYY | _: YY => Year
-      case _: MON | _: MM => Month
-      case _: DAY | _: DD => Day
-      case _ => expr
-    }
-
     Option(expr match {
       case date_trunc(dateType, timeStamp) =>
         ConstantString("DATE_TRUNC(" + convertStatement(dateType, fields) + "," +
