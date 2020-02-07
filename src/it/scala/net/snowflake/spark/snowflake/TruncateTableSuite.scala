@@ -97,15 +97,31 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     jdbcUpdate(s"drop table if exists $table")
 
-    // create table
+    // create table with Append mode
     df2.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)
-      .option("truncate_table", "off")
+      .option("truncate_table", "on")
+      .option("usestagingtable", "off")
+      .mode(SaveMode.Append)
+      .save()
+
+    assert(checkSchema2())
+
+    jdbcUpdate(s"drop table if exists $table")
+
+    // create table with Overwrite mode
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", table)
+      .option("truncate_table", "on")
       .option("usestagingtable", "off")
       .mode(SaveMode.Overwrite)
       .save()
+
+    assert(checkSchema2())
 
     // replace previous table and overwrite schema
     df1.write
@@ -116,6 +132,8 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .option("usestagingtable", "off")
       .mode(SaveMode.Overwrite)
       .save()
+
+    assert(checkSchema1())
 
     // truncate table and keep schema
     df2.write
@@ -216,9 +234,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     // Old table doesn't exist so DROP table and TRUNCATE table never happen
     val testConditions = Array(
       (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "on", "off", SaveMode.Append),
-      // (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Append),
-      // (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "on", "off", SaveMode.Overwrite),
-      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Overwrite)
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Overwrite)
     )
 
     testConditions.map(x => {
@@ -270,20 +286,14 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .load()
       .count()
 
-    // Old table doesn't exist so DROP table and TRUNCATE table never happen
+    // Test only covers truncate_table=on and usestagingtable=off
     val testConditions = Array(
       // In Append mode, failure may happen after COPY_INTO
-      // (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Append),
       (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Append),
-      // In Overwrite mode, failure may happen after after DROP OLD table
-      (TH_WRITE_ERROR_AFTER_DROP_OLD_TABLE, df2, table, "off", "off", SaveMode.Overwrite),
-      // In Overwrite mode, failure may happen after after DROP OLD table
-      (TH_WRITE_ERROR_AFTER_CREATE_NEW_TABLE, df2, table, "off", "off", SaveMode.Overwrite),
       // In Overwrite mode, failure may happen after after truncate table
       (TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE, df2, table, "on", "off", SaveMode.Overwrite),
       // In Overwrite mode, failure may happen after after copy into
-      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Overwrite),
-      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "off", "off", SaveMode.Overwrite)
+      (TH_WRITE_ERROR_AFTER_COPY_INTO, df2, table, "on", "off", SaveMode.Overwrite)
     )
 
     testConditions.map(x => {

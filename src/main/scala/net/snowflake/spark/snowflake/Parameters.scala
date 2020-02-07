@@ -150,9 +150,9 @@ object Parameters {
     // Notes:
     // * tempdir, dbtable and url have no default and they *must* be provided
     "diststyle" -> "EVEN",
-    PARAM_USE_STAGING_TABLE -> "false",
+    PARAM_USE_STAGING_TABLE -> "true",
     PARAM_CONTINUE_ON_ERROR -> "off",
-    PARAM_TRUNCATE_TABLE -> "on",
+    PARAM_TRUNCATE_TABLE -> "off",
     PARAM_PREACTIONS -> "",
     PARAM_POSTACTIONS -> "",
     PARAM_AUTO_PUSHDOWN -> "on",
