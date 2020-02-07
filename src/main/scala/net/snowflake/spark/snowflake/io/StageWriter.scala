@@ -250,7 +250,7 @@ private[io] object StageWriter {
                            file: String,
                            tempStage: String,
                            format: SupportedFormat): Unit = {
-    if (params.useStagingTable) {
+    if (params.useStagingTable || !params.truncateTable) {
       writeToTableWithStagingTable(conn, schema, saveMode, params, file, tempStage, format)
     } else {
       writeToTableWithoutStagingTable(conn, schema, saveMode, params, file, tempStage, format)
