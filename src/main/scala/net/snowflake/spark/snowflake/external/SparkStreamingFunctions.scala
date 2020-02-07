@@ -8,7 +8,6 @@ object SparkStreamingFunctions {
                               dataFrame: DataFrame): DataFrame =
     sqlContext.internalCreateDataFrame(
       dataFrame.queryExecution.toRdd,
-      dataFrame.schema,
-      isStreaming = false
+      dataFrame.schema
     )
 }
