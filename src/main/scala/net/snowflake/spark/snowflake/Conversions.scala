@@ -153,8 +153,8 @@ private[snowflake] object Conversions {
             case ByteType => data.toByte
             case BooleanType => parseBoolean(data)
             case DateType => parseDate(data, isIR)
-            case DoubleType => data.toDouble
-            case FloatType => data.toFloat
+            case DoubleType => parseDouble(data)
+            case FloatType => parseFloat(data)
             case _: DecimalType => parseDecimal(data, isIR)
             case IntegerType => data.toInt
             case LongType => data.toLong
@@ -212,6 +212,35 @@ private[snowflake] object Conversions {
     else res
   }
 
+  /**
+    * Parse a DOUBLE string as Double type
+    */
+  private def parseDouble(s: String): Double = {
+    if (s.equalsIgnoreCase("inf")) {
+      Double.PositiveInfinity
+    } else if (s.equalsIgnoreCase("-inf")) {
+      Double.NegativeInfinity
+    } else if (s.equalsIgnoreCase("NaN")) {
+      Double.NaN
+    } else {
+      s.toDouble
+    }
+  }
+
+  /**
+    * Parse a Float string as Float type
+    */
+  private def parseFloat(s: String): Float = {
+    if (s.equalsIgnoreCase("inf")) {
+      Float.PositiveInfinity
+    } else if (s.equalsIgnoreCase("-inf")) {
+      Float.NegativeInfinity
+    } else if (s.equalsIgnoreCase("NaN")) {
+      Float.NaN
+    } else {
+      s.toFloat
+    }
+  }
   /**
     * Convert a json String to Row
     */

@@ -20,7 +20,8 @@ import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.types.DoubleType
 
 class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // Add some options for default for testing.
@@ -35,6 +36,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     s"test_table_timestamp_$randomSuffix"
   private val test_table_large_result: String =
     s"test_table_large_result_$randomSuffix"
+  private val test_table_inf: String = s"test_table_inf_$randomSuffix"
+  private val test_table_write: String = s"test_table_write_$randomSuffix"
 
   private lazy val test_table_number_rows = Seq(
     Row(
@@ -414,6 +417,33 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     tmpdf.createOrReplaceTempView("test_table_large_result")
   }
 
+  private lazy val test_table_inf_rows = Seq(
+    Row(
+      Double.PositiveInfinity,
+      Double.NegativeInfinity,
+      Double.PositiveInfinity,
+      Double.NegativeInfinity,
+      Double.NaN
+    )
+  )
+
+  private def setupINFTable(): Unit = {
+    jdbcUpdate(
+      s"""create or replace table $test_table_inf (
+         |c1 double, c2 double, c3 float, c4 float, c5 double)""".stripMargin)
+    jdbcUpdate(
+      s"""insert into $test_table_inf values (
+         |'inf', '-INF', 'inf', '-inf', 'NaN')""".stripMargin)
+
+    val tmpdf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", s"$test_table_inf")
+      .load()
+
+    tmpdf.createOrReplaceTempView("test_table_inf")
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -440,6 +470,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     setupDateTimeTable()
     setupTimestampTable()
     setupLargeResultTable()
+    setupINFTable()
   }
 
   test("testNumber") {
@@ -538,6 +569,41 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("testDoubleINF") {
+    val tmpDF = sparkSession
+      .sql(s"select * from test_table_inf")
+
+    assert(tmpDF.schema.fields(0).dataType.equals(DoubleType))
+
+    var resultSet: Array[Row] = tmpDF.collect()
+    assert(resultSet.length == 1)
+    assert(resultSet(0).equals(test_table_inf_rows(0)))
+
+    // Write the INF back to snowflake
+    jdbcUpdate(s"drop table if exists $test_table_write")
+    tmpDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .option("truncate_table", "off")
+      .option("usestagingtable", "on")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Read back the written data.
+    val readBackDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", s"$test_table_write")
+      .load()
+
+    assert(readBackDF.schema.fields(0).dataType.equals(DoubleType))
+
+    resultSet = readBackDF.collect()
+    assert(resultSet.length == 1)
+    assert(resultSet(0).equals(test_table_inf_rows(0)))
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -549,6 +615,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_date_time")
       jdbcUpdate(s"drop table if exists $test_table_timestamp")
       jdbcUpdate(s"drop table if exists $test_table_large_result")
+      jdbcUpdate(s"drop table if exists $test_table_inf")
+      jdbcUpdate(s"drop table if exists $test_table_write")
     } finally {
       super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)

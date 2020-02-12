@@ -54,7 +54,7 @@ object Utils {
     */
   val SNOWFLAKE_SOURCE_SHORT_NAME = "snowflake"
 
-  val VERSION = "2.5.9"
+  val VERSION = "2.6.0"
 
   private[snowflake] val JDBC_DRIVER =
     "net.snowflake.client.jdbc.SnowflakeDriver"
