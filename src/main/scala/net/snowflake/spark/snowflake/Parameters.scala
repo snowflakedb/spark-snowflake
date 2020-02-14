@@ -96,6 +96,10 @@ object Parameters {
     "column_mismatch_behavior"
   )
 
+  // 2020-02-13 - add Oauth params
+  val PARAM_AUTHENTICATOR: String = knownParam("sfauthenticator")
+  val PARAM_OAUTH_TOKEN: String = knownParam("sftoken")
+
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
 
@@ -165,7 +169,9 @@ object Parameters {
     PARAM_USE_COPY_UNLOAD -> "true",
     PARAM_USE_PROXY -> "false",
     PARAM_EXPECTED_PARTITION_COUNT -> "1000",
-    PARAM_MAX_RETRY_COUNT -> "10"
+    PARAM_MAX_RETRY_COUNT -> "10",
+    // 2020-02-13 Default authenticator
+    PARAM_AUTHENTICATOR -> "snowflake"
   )
 
   /**
@@ -196,11 +202,29 @@ object Parameters {
         "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
       )
     }
+    val authenticatorVal = userParameters.getOrElse(PARAM_AUTHENTICATOR, "")
     if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY))) {
+        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
+        // 2020-02-13 - if OAuth token not provided
+        (!authenticatorVal.equals("oauth"))) {
       throw new IllegalArgumentException(
         "A snowflake password or private key path must be provided with '" + PARAM_SF_PASSWORD +
-          " or " + PARAM_PEM_PRIVATE_KEY + "' parameter, e.g. 'password'"
+          " or " + PARAM_PEM_PRIVATE_KEY + " or " + PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
+      )
+    }
+    // 2020-02-13 - ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
+    val tokenVal = userParameters.getOrElse(PARAM_OAUTH_TOKEN, "")
+    if ((authenticatorVal.equals("oauth")) &&
+        (tokenVal.isEmpty())) {
+      throw new IllegalArgumentException(
+        "An OAuth token is required if the authenticator mode is '" + PARAM_AUTHENTICATOR + "'"
+      )
+    }
+    // 2020-02-13 -  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
+    if ((!authenticatorVal.equals("oauth")) &&
+        (!tokenVal.isEmpty())) {
+      throw new IllegalArgumentException(
+        "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR + ", the authentication mode must be 'oauth' when specifying an OAuth token"
       )
     }
     if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
@@ -504,6 +528,12 @@ object Parameters {
     def nonProxyHosts: Option[String] = {
       parameters.get(PARAM_NON_PROXY_HOSTS)
     }
+
+    /**
+      *  2020-02-13 - mapping OAuth and authenticator values
+     */
+    def sfAuthenticator: String = parameters.getOrElse(PARAM_AUTHENTICATOR, "snowflake")
+    def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)
 
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt

@@ -177,6 +177,10 @@ private[snowflake] class JDBCWrapper {
       case None =>
     }
 
+    // 2020-02-13 Adding Authenticator and Oauth tokens
+    jdbcProperties.put("authenticator", params.sfAuthenticator)
+    jdbcProperties.put("token", params.sfToken)
+
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options
     jdbcProperties.put("client_session_keep_alive", "true")
