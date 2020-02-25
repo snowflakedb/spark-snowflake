@@ -101,20 +101,15 @@ class ParametersSuite extends FunSuite with Matchers {
     mergedParams.sfRole shouldBe Some("admin")
   }
 
-  // 2020-02-13 - add Authenticator and OAuth parameter tests
-
-  test("See if Authenticator parameter defaults to 'snowflake'") {
-    val params = collection.mutable.Map() ++= minParams
-    val mergedParams = Parameters.mergeParameters(params.toMap)
-    mergedParams.sfAuthenticator shouldBe "snowflake"
-  }
+  //  add Authenticator and OAuth parameter tests
 
   test("See if we can specify Authenticator/token") {
     val params = collection.mutable.Map() ++= minParams
     params += "sfauthenticator" -> "oauth"
     params += "sftoken" -> "mytoken"
+    params.remove("sfpassword")
     val mergedParams = Parameters.mergeParameters(params.toMap)
-    mergedParams.sfAuthenticator shouldBe "oauth"
+    mergedParams.sfAuthenticator shouldBe Some("oauth")
     mergedParams.sfToken shouldBe Some("mytoken")
   }
 
@@ -124,7 +119,8 @@ class ParametersSuite extends FunSuite with Matchers {
       params += "sfauthenticator" -> "oauth"
       params.remove("sftoken")
       Parameters.mergeParameters(params.toMap)
-    }.getMessage should (include("token") and include("required") and include("authenticator")  )
+    }.getMessage should (include("token") and include("required") and
+      include("authenticator")  )
   }
 
   test("Authenticator mode must be 'oauth' when an OAuth token is specified") {
@@ -132,7 +128,8 @@ class ParametersSuite extends FunSuite with Matchers {
       val params = collection.mutable.Map() ++= minParams
       params += "sftoken" -> "mytoken"
       Parameters.mergeParameters(params.toMap)
-    }.getMessage should (include("token") and include("Invalid") and include("authenticator")  )
+    }.getMessage should (include("token") and include("Invalid") and
+      include("authenticator")  )
   }
 
 }
