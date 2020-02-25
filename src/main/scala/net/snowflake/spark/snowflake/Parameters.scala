@@ -200,19 +200,19 @@ object Parameters {
         "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
       )
     }
-    val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
+    val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
     if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
         (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
         //  if OAuth token not provided
-        (!authenticatorVal.contains("oauth"))) {
+        (tokenVal.isEmpty)) {
       throw new IllegalArgumentException(
         "A snowflake password or private key path or OAuth token must be provided with '" +
-         PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + " or " +
+         PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
          PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
       )
     }
-    val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
     //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
+    val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
     if ((authenticatorVal.contains("oauth")) &&
         (tokenVal.isEmpty)) {
       throw new IllegalArgumentException(

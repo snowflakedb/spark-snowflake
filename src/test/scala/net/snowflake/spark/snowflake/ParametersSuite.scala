@@ -127,6 +127,7 @@ class ParametersSuite extends FunSuite with Matchers {
     intercept[IllegalArgumentException] {
       val params = collection.mutable.Map() ++= minParams
       params += "sftoken" -> "mytoken"
+      params.remove("sfpassword")
       Parameters.mergeParameters(params.toMap)
     }.getMessage should (include("token") and include("Invalid") and
       include("authenticator")  )
