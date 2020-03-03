@@ -208,7 +208,7 @@ private[snowflake] class JDBCWrapper {
          | "scala.version" : "${esc(scalaVersion)}",
          | "java.version" : "${esc(javaVersion)}"
          |}""".stripMargin
-    log.debug(snowflakeClientInfo)
+    log.info(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
     val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)

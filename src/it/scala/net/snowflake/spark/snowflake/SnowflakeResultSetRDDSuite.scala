@@ -521,9 +521,13 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testLargeResult") {
-    val resultSet: Array[Row] = sparkSession
+    val tmpDF = sparkSession
       .sql("select * from test_table_large_result order by int_c")
-      .collect()
+      // The call of cache() is to confirm a data loss issue is fixed.
+      // SNOW-123999
+      .cache()
+
+    val resultSet: Array[Row] = tmpDF.collect()
 
     var i: Int = 0
     while (i < resultSet.length) {
