@@ -203,12 +203,16 @@ private[snowflake] case class SnowflakeRelation(
         )
         .toArray
     printStatForSnowflakeResultSetRDD(resultSetSerializables)
+    val queryID = resultSet.asInstanceOf[SnowflakeResultSet].getQueryID
+    // The result set can be closed on master side, since is it not necessary.
+    resultSet.close()
 
     new SnowflakeResultSetRDD[T](
       resultSchema,
       sqlContext.sparkContext,
       resultSetSerializables,
-      params.proxyInfo
+      params.proxyInfo,
+      queryID
     )
   }
 

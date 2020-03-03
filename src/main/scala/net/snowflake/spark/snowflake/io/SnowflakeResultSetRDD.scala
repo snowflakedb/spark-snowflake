@@ -27,7 +27,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
   schema: StructType,
   sc: SparkContext,
   resultSets: Array[SnowflakeResultSetSerializable],
-  proxyInfo: Option[ProxyInfo]
+  proxyInfo: Option[ProxyInfo],
+  queryID: String
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] =
@@ -35,7 +36,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
-      proxyInfo
+      proxyInfo,
+      queryID
     )
 
   override protected def getPartitions: Array[Partition] =
@@ -49,7 +51,8 @@ case class ResultIterator[T: ClassTag](
   schema: StructType,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
-  proxyInfo: Option[ProxyInfo]
+  proxyInfo: Option[ProxyInfo],
+  queryID: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -71,9 +74,20 @@ case class ResultIterator[T: ClassTag](
        |""".stripMargin.filter(_ >= ' '))
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
+  var currentRowNotConsumedYet: Boolean = false
 
   override def hasNext: Boolean = {
+    // In some cases, hasNext() may be called but next() isn't.
+    // This will cause the row to be 'skipped'.
+    // So currentRowNotConsumedYet is introduced to make hasNext()
+    // can be called repeatedly.
+    if (currentRowNotConsumedYet) {
+      return currentRowNotConsumedYet
+    }
+
     if (data.next()) {
+      // Move to the current row in the ResultSet, but it is not consumed yet.
+      currentRowNotConsumedYet = true
       true
     } else {
       SnowflakeResultSetRDD.logger.info(
@@ -86,7 +100,7 @@ case class ResultIterator[T: ClassTag](
         throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
           s"""The actual read row count $actualReadRowCount is not equal to
              | the expected row count $expectedRowCount for partition
-             | ID:$partitionIndex
+             | ID:$partitionIndex. Related query ID is $queryID
              |""".stripMargin.filter(_ >= ' '))
       }
       false
@@ -150,6 +164,9 @@ case class ResultIterator[T: ClassTag](
 
     // Increase actual read row count
     actualReadRowCount += 1
+
+    // The row is consumed, the iterator can move to next row.
+    currentRowNotConsumedYet = false
 
     if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
     else Row.fromSeq(converted).asInstanceOf[T]
