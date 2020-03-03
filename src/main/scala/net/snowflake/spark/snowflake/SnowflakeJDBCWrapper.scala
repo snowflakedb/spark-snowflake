@@ -146,7 +146,12 @@ private[snowflake] class JDBCWrapper {
       case Some(privateKey) =>
         jdbcProperties.put("privateKey", privateKey)
       case None =>
-        jdbcProperties.put("password", params.sfPassword)
+        // Adding OAuth Token parameter
+        params.sfToken match {
+          case Some(value) =>
+            jdbcProperties.put("token", value)
+          case None => jdbcProperties.put("password", params.sfPassword)
+        }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
@@ -177,9 +182,12 @@ private[snowflake] class JDBCWrapper {
       case None =>
     }
 
-    // 2020-02-13 Adding Authenticator and Oauth tokens
-    jdbcProperties.put("authenticator", params.sfAuthenticator)
-    jdbcProperties.put("token", params.sfToken)
+    // Adding Authenticator parameter
+    params.sfAuthenticator match {
+      case Some(value) =>
+        jdbcProperties.put("authenticator", value)
+      case _ => // No default value for it.
+    }
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
     // Note, can be overridden with options

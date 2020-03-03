@@ -96,7 +96,7 @@ object Parameters {
     "column_mismatch_behavior"
   )
 
-  // 2020-02-13 - add Oauth params
+  // Add Oauth params
   val PARAM_AUTHENTICATOR: String = knownParam("sfauthenticator")
   val PARAM_OAUTH_TOKEN: String = knownParam("sftoken")
 
@@ -531,7 +531,7 @@ object Parameters {
     }
 
     /**
-      *  2020-02-13 - mapping OAuth and authenticator values
+      *  Mapping OAuth and authenticator values
      */
     def sfAuthenticator: Option[String] = parameters.get(PARAM_AUTHENTICATOR)
     def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)

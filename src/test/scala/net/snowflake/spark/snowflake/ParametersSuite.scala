@@ -101,7 +101,7 @@ class ParametersSuite extends FunSuite with Matchers {
     mergedParams.sfRole shouldBe Some("admin")
   }
 
-  //  add Authenticator and OAuth parameter tests
+  //  Add Authenticator and OAuth parameter tests
 
   test("See if we can specify Authenticator/token") {
     val params = collection.mutable.Map() ++= minParams
