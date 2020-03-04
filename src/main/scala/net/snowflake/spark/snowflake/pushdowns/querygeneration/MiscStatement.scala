@@ -11,6 +11,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Ascending,
   Attribute,
   Cast,
+  CaseWhenCodegen,
   DenseRank,
   Descending,
   Expression,
@@ -43,6 +44,17 @@ private[querygeneration] object MiscStatement {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         blockStatement(convertStatement(child, fields), name)
+      case CaseWhenCodegen(branches, elseValue) =>
+        val cases = ConstantString("CASE") +
+          mkStatement(branches.map(b =>
+            ConstantString("WHEN") + convertStatement(b._1, fields) +
+              "THEN" +convertStatement(b._2, fields)
+          ), " ")
+        if (elseValue.isDefined)
+          blockStatement(
+            cases + " ELSE " + convertStatement(elseValue.get, fields)
+              + " END")
+        else blockStatement(cases + " END")
       case Cast(child, t, _) =>
         getCastType(t) match {
           case Some(cast) =>
@@ -147,7 +159,7 @@ private[querygeneration] object MiscStatement {
 
     val fromTo =
       if (!useWindowFrame || spec.orderSpec.isEmpty) ""
-      else " " + spec.frameSpecification.sql
+      else " " + spec.frameSpecification.toString
 
     blockStatement(partitionBy + orderBy + fromTo)
   }
