@@ -573,4 +573,19 @@ object Utils {
         )
         .toArray
     )
+
+  // Get pretty size String
+  def getSizeString(size: Long): String = {
+    if (size <  1024.toLong) {
+      s"$size Bytes"
+    } else if (size <  1024.toLong * 1024) {
+      "%.2f KB".format(size.toDouble / 1024)
+    } else if (size <  1024.toLong * 1024 * 1024) {
+      "%.2f MB".format(size.toDouble / 1024 / 1024)
+    } else if (size < 1024.toLong * 1024 * 1024 * 1024) {
+      "%.2f GB".format(size.toDouble / 1024 / 1024 / 1024)
+    } else {
+      "%.2f TB".format(size.toDouble / 1024 / 1024 / 1024 / 1024)
+    }
+  }
 }

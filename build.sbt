@@ -18,6 +18,7 @@ import scala.util.Properties
 
 val sparkVersion = "2.4.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
+val sparkConnectorVersion = "2.6.1"
 
 lazy val ItTest = config("it") extend Test
 
@@ -29,7 +30,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := "2.6.0-spark_2.4",
+    version := s"${sparkConnectorVersion}-spark_2.4",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
     crossScalaVersions := Seq("2.11.12", "2.12.8"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
@@ -39,11 +40,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.6",
-      "net.snowflake" % "snowflake-jdbc" % "3.12.1",
+      "net.snowflake" % "snowflake-jdbc" % "3.12.2",
       "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
-      "org.apache.commons" % "commons-lang3" % "3.5",
+      "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
       // Below is for Spark Streaming from Kafka test only
       // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
@@ -53,7 +54,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
 
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
-    Test / javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M"),
+    Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
 
     // Release settings
     usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),

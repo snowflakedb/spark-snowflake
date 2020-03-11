@@ -233,22 +233,20 @@ private[snowflake] case class SnowflakeRelation(
     }
 
     val partitionCount = resultSetSerializables.length
-    val totalCompressedSizeMB = totalCompressedSize.toDouble/1024.0/1024.0
-    val totalUnCompressedSizeMB = totalUnCompressedSize.toDouble/1024.0/1024.0
     log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
          | partitionCount=$partitionCount rowCount=$totalRowCount
-         | compressSizeMB=$totalCompressedSizeMB
-         | unCompressSizeMB=$totalUnCompressedSizeMB
+         | compressSize=${Utils.getSizeString(totalCompressedSize)}
+         | unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
          |""".stripMargin.filter(_ >= ' '))
 
     val aveCount = totalRowCount / partitionCount
-    val aveCompressSizeMB = totalCompressedSizeMB / partitionCount
-    val aveUnCompressSizeMB = totalUnCompressedSizeMB / partitionCount
+    val aveCompressSize = totalCompressedSize / partitionCount
+    val aveUnCompressSize = totalUnCompressedSize / partitionCount
     log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
          | Average statistics per partition: rowCount=$aveCount
-         | compressSizeMB=$aveCompressSizeMB
-         | unCompressSizeMB=$aveUnCompressSizeMB
+         | compressSize=${Utils.getSizeString(aveCompressSize)}
+         | unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
          |""".stripMargin.filter(_ >= ' ')
     )
   }

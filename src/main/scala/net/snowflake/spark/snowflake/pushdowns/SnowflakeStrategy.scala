@@ -1,5 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns
 
+import net.snowflake.spark.snowflake.SnowflakeConnectorFeatureNotSupportException
 import net.snowflake.spark.snowflake.SnowflakeTelemetry.{addLog, planToJson}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
@@ -30,6 +31,9 @@ class SnowflakeStrategy extends Strategy {
         case SubqueryAlias(_, child) => child
       })).getOrElse(Nil)
     } catch {
+      case ue: SnowflakeConnectorFeatureNotSupportException =>
+        log.warn(s"Snowflake does't support this feature :${ue.getMessage}")
+        throw ue
       case e: Exception =>
         log.warn(s"Pushdown failed :${e.getMessage}")
         Nil
