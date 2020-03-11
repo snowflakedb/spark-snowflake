@@ -218,8 +218,8 @@ private[io] object StageWriter {
     try {
       prologueSql.execute(params.bindVariableEnabled)(conn)
 
-      val (storage, stage) =
-        CloudStorageOperations.createStorageClient(params, conn, tempStage = true, None)
+      val (storage, stage) = CloudStorageOperations.createStorageClient(
+        params, conn, tempStage = true, None, "load")
 
       val filesToCopy = storage.upload(rdd, format, None)
 

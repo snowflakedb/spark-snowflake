@@ -276,7 +276,8 @@ object CloudStorageOperations {
     param: MergedParameters,
     conn: Connection,
     tempStage: Boolean = true,
-    stage: Option[String] = None
+    stage: Option[String] = None,
+    operation: String = "unload"
   ): (CloudStorage, String) = {
     val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
@@ -284,7 +285,7 @@ object CloudStorageOperations {
 
     val stageName = stage
       .getOrElse(
-        s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}"
+        s"spark_connector_${operation}_stage_${Random.alphanumeric take 10 mkString ""}"
       )
 
     param.rootTempDir match {
