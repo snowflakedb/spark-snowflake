@@ -51,13 +51,18 @@ class SnowflakeRDD(sc: SparkContext,
          | expectedPartitionCount=$expectedPartitionCount
          |""".stripMargin.filter(_ >= ' '))
 
-    fileNames
-      .grouped(fileCountPerPartition)
-      .zipWithIndex
-      .map {
-        case (names, index) => SnowflakePartition(names, id, index)
-      }
-      .toArray
+    if (fileNames.nonEmpty) {
+      fileNames
+        .grouped(fileCountPerPartition)
+        .zipWithIndex
+        .map {
+          case (names, index) => SnowflakePartition(names, id, index)
+        }
+        .toArray
+    } else {
+      // If the result set is empty, put one empty partition to the array.
+      Seq[SnowflakePartition]{SnowflakePartition(fileNames, 0, 0)}.toArray
+    }
   }
 
 }

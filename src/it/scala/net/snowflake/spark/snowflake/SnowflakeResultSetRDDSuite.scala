@@ -613,7 +613,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   // For USE_COPY_UNLOAD=TRUE, write an empty result doesn't really create the table
   // use separate Jira to fix it.
-  ignore("testReadWriteEmptyResult") {
+  test("testReadWriteEmptyResult") {
     val tmpDF = sparkSession
       .sql(s"select * from test_table_large_result where int_c < -1")
 
