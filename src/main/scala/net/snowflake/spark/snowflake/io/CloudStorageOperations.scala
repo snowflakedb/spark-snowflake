@@ -16,31 +16,54 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
+import java.io._
 import java.net.URI
 import java.security.SecureRandom
 import java.sql.Connection
 import java.util
+import java.util.Properties
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeConnectionV1, SnowflakeSQLException}
+import net.snowflake.client.core.{OCSPMode, SFStatement}
+import net.snowflake.client.jdbc.{
+  ErrorCode,
+  MatDesc,
+  SnowflakeConnectionV1,
+  SnowflakeFileTransferAgent,
+  SnowflakeFileTransferConfig,
+  SnowflakeFileTransferMetadata,
+  SnowflakeSQLException
+}
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{BasicAWSCredentials, BasicSessionCredentials}
-import net.snowflake.client.jdbc.internal.amazonaws.retry.{PredefinedRetryPolicies, RetryPolicy}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  BasicAWSCredentials,
+  BasicSessionCredentials
+}
+import net.snowflake.client.jdbc.internal.amazonaws.retry.{
+  PredefinedRetryPolicies,
+  RetryPolicy
+}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
+  JsonNode,
+  ObjectMapper
+}
+import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{
+  StorageCredentialsAnonymous,
+  StorageCredentialsSharedAccessSignature
+}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.CloudBlobClient
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
-import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, ProxyInfo}
+import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.commons.io.IOUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -49,6 +72,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import scala.util.Random
 import scala.collection.immutable.HashMap
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ListBuffer
 
 object CloudStorageOperations {
   private[io] final val DEFAULT_PARALLELISM = 10
@@ -233,9 +257,14 @@ object CloudStorageOperations {
       case StageType.AZURE =>
         InternalAzureStorage(param, stageName, conn)
 
+      case StageType.GCS =>
+        InternalGcsStorage(param, stageName, conn, stageManager)
+
       case _ =>
         throw new UnsupportedOperationException(
-          s"Only support s3 or Azure stage, stage types: ${stageManager.stageType}"
+          s"""Only support s3, Azure or Gcs stage,
+             | stage types: ${stageManager.stageType}
+             |""".stripMargin
         )
     }
   }
@@ -251,6 +280,8 @@ object CloudStorageOperations {
   ): (CloudStorage, String) = {
     val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.*)".r
     val s3_url = "s3[an]://([^/]+)/(.*)".r
+    val gcs_url = "gcs://([^/]+)/(.*)".r
+
     val stageName = stage
       .getOrElse(
         s"spark_connector_unload_stage_${Random.alphanumeric take 10 mkString ""}"
@@ -315,6 +346,12 @@ object CloudStorageOperations {
           ),
           stageName
         )
+
+      case gcs_url(_, _) =>
+        throw new SnowflakeConnectorFeatureNotSupportException(
+          s"Doesn't support GCS external stage. url: ${param.rootTempDir}"
+        )
+
       case _ => // Internal Stage
         (
           createStorageClientFromStage(param, conn, stageName, None, tempStage),
@@ -431,9 +468,15 @@ private[io] object StorageInfo {
 }
 
 sealed trait CloudStorage {
-
+  protected val RETRY_SLEEP_TIME_UNIT_IN_MS: Long = 200
   private var processedFileCount = 0
   protected val connection: Connection
+
+  protected def getFileName(fileIndex: Int,
+                            format: SupportedFormat,
+                            compress: Boolean): String = {
+    s"$fileIndex.${format.toString}${if (compress) ".gz" else ""}"
+  }
 
   protected def getStageInfo(
     isWrite: Boolean,
@@ -465,8 +508,7 @@ sealed trait CloudStorage {
       }
     val files = data.mapPartitionsWithIndex {
       case (index, rows) =>
-        val fileName =
-          s"$index.${format.toString}${if (compress) ".gz" else ""}"
+        val fileName = getFileName(index, format, compress)
 
         val outputStream =
           createUploadStream(fileName, Some(directory), compress, storageInfo)
@@ -509,7 +551,6 @@ sealed trait CloudStorage {
         if (download) {
           // Download, decrypt and decompress the data
           val cachedData = IOUtils.toByteArray(inputStream)
-          val dataSizeInMB = cachedData.length.toDouble / 1024.0 / 1024.0
 
           // Generate inputStream for the cached data buffer.
           inputStream = new ByteArrayInputStream(cachedData)
@@ -519,7 +560,8 @@ sealed trait CloudStorage {
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: download
                | successful: fileID=$processedFileCount
-               | downloadTime=$downloadTime dataSizeInMB=$dataSizeInMB
+               | downloadTime=$downloadTime
+               | dataSize=${Utils.getSizeString(cachedData.size)}
                |""".stripMargin.filter(_ >= ' ')
           )
         } else {
@@ -547,7 +589,7 @@ sealed trait CloudStorage {
         }
         retryCount = retryCount + 1
         // sleep some time and retry
-        Thread.sleep(1000L * retryCount)
+        Thread.sleep(RETRY_SLEEP_TIME_UNIT_IN_MS * retryCount)
       }
     } while (retryCount < maxRetryCount)
 
@@ -1235,4 +1277,293 @@ case class ExternalS3Storage(bucketName: String,
 
 }
 
-// todo: google cloud, local file for testing?
+// Internal CloudStorage for GCS (Google Cloud Storage).
+// NOTE: External storage for GCS is not supported.
+case class InternalGcsStorage(param: MergedParameters,
+                              stageName: String,
+                              @transient override val connection: Connection,
+                              @transient stageManager: SFInternalStage)
+  extends CloudStorage {
+  // proxy related properties
+  val proxyProperties: Properties = {
+    val proxyProperties = new Properties()
+    // Set up proxy info if it is configured.
+    param.proxyInfo match {
+      case Some(proxyInfoValue) =>
+        proxyInfoValue.setProxyForJDBC(proxyProperties)
+      case None =>
+    }
+    proxyProperties
+  }
+
+  // Max retry count to upload a file
+  val maxRetryCount: Int = param.maxRetryCount
+
+  // Generate file transfer metadata objects for file upload. On GCS,
+  // the file transfer metadata is pre-signed URL and related metadata.
+  // This function is called on Master node.
+  private def generateFileTransferMetadatas(data: RDD[String],
+                                            format: SupportedFormat,
+                                            compress: Boolean,
+                                            dir: String,
+                                            fileCount: Int)
+  : List[SnowflakeFileTransferMetadata] = {
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Begin to retrieve pre-signed URL for
+         | ${data.getNumPartitions} files by calling
+         | PUT command for each file.
+         |""".stripMargin.filter(_ >= ' '))
+
+    val connectionV1 = connection.asInstanceOf[SnowflakeConnectionV1]
+    var result = new ListBuffer[SnowflakeFileTransferMetadata]()
+
+    val startTime = System.currentTimeMillis()
+    val printStep = 1000
+    // Loop to execute one PUT command for one pre-signed URL.
+    // This is because GCS doesn't support to generate pre-signed for
+    // prefix(path). If GCS supports it, this part can be enhanced.
+    for (index <- 0 until fileCount) {
+      val fileName = getFileName(index, format, compress)
+      val dummyDir = s"/dummy_put_${index}_of_$fileCount"
+      val putCommand = s"put file://$dummyDir/$fileName @$stageName/$dir"
+
+      // Retrieve pre-signed URLs and put them in result
+      new SnowflakeFileTransferAgent(
+        putCommand,
+        connectionV1.getSfSession,
+        new SFStatement(connectionV1.getSfSession)
+      ).getFileTransferMetadatas
+        .map(oneMetadata => result += oneMetadata)
+
+      // Output time for retrieving every 1000 pre-signed URLs
+      // to indicate the progress for big data.
+      if ((index % printStep) == (printStep - 1)) {
+        val endTime = System.currentTimeMillis()
+        CloudStorageOperations.log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | Time to retrieve pre-signed URL for
+             | ${index + 1} files is
+             | ${(endTime - startTime) / 1000.0} seconds.
+             |""".stripMargin.filter(_ >= ' '))
+      }
+    }
+
+    // Output the total time for retrieving pre-signed URLs
+    val endTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Time to retrieve pre-signed URL for
+         | ${data.getNumPartitions} files is
+         | ${(endTime - startTime) / 1000.0} seconds.
+         |""".stripMargin.filter(_ >= ' '))
+
+    result.toList
+  }
+
+  // Retrieve data for one partition and upload the result data to stage.
+  // The upload is done by JDBC internal API without JDBC connection.
+  // This function is called on worker node.
+  private def uploadPartition(rows: Iterator[String],
+                              format: SupportedFormat,
+                              compress: Boolean,
+                              directory: String,
+                              partitionID: Int,
+                              metadata: SnowflakeFileTransferMetadata)
+  : SingleElementIterator = {
+    val fileName = getFileName(partitionID, format, compress)
+
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+         | Start writing partition ID:$partitionID as $fileName
+         |""".stripMargin.filter(_ >= ' '))
+
+    // Retrieve the data for uploading
+    val startTime = System.currentTimeMillis()
+    val outputStream = new ByteArrayOutputStream(1024 * 1024)
+    var rowCount: Long = 0
+    while (rows.hasNext) {
+      outputStream.write(rows.next.getBytes("UTF-8"))
+      outputStream.write('\n')
+      rowCount += 1
+    }
+    val data = outputStream.toByteArray
+
+    if (data.nonEmpty) {
+      // Upload the file with retry and backoff.
+      // default maxRetryCount is 10 which is configurable.
+      var retryCount = 0
+      var error: Option[Throwable] = None
+      var uploadDone = false
+      do {
+        try {
+          val startUploadTime = System.currentTimeMillis()
+          val inStream = new ByteArrayInputStream(data)
+          SnowflakeFileTransferAgent.uploadWithoutConnection(
+            SnowflakeFileTransferConfig.Builder.newInstance()
+              .setSnowflakeFileTransferMetadata(metadata)
+              .setUploadStream(inStream)
+              .setRequireCompress(compress)
+              .setOcspMode(OCSPMode.FAIL_OPEN)
+              .setProxyProperties(proxyProperties)
+              .build())
+          outputStream.close()
+
+          TestHook.raiseExceptionIfTestFlagEnabled(
+            TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
+            "Negative test to raise error when uploading data to GCS"
+          )
+
+          val endTime = System.currentTimeMillis()
+          CloudStorageOperations.log.info(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+               | Finish writing partition ID:$partitionID:
+               | write row count is $rowCount.
+               | Uncompressed data size is ${Utils.getSizeString(data.size)}.
+               | Total process time is
+               | ${(endTime - startTime) / 1000.0}s including
+               | conversion_time=${(startUploadTime - startTime) / 1000.0}s
+               | and upload_time=${(endTime - startUploadTime) / 1000.0}s.
+               |""".stripMargin.filter(_ >= ' '))
+
+          // succeed upload, set done to break the loop
+          uploadDone = true
+          error = None
+        } catch {
+          // Hit exception when uploading the file, sleep some time and retry.
+          case e: Throwable => {
+            error = Some(e)
+            val errmsg = e.getMessage
+            CloudStorageOperations.log.info(
+              s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
+                 | retryCount=$retryCount: fileName=$fileName,
+                 | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
+                 |""".stripMargin.filter(_ >= ' ')
+            )
+          }
+            retryCount = retryCount + 1
+            // sleep some time and retry
+            Thread.sleep(RETRY_SLEEP_TIME_UNIT_IN_MS * retryCount)
+        }
+      } while (retryCount < maxRetryCount && !uploadDone)
+
+      // Fail to upload data after retry
+      if (!uploadDone) {
+        val errorMessage = error.get.getMessage
+        CloudStorageOperations.log.info(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
+             | after retry $retryCount times is [ $errorMessage ]
+             |""".stripMargin.filter(_ >= ' ')
+        )
+        throw error.get
+      }
+    } else {
+      val endTime = System.currentTimeMillis()
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+           | Finish writing partition ID:$partitionID:
+           | upload is skipped because partition is empty.
+           | Total process time is
+           | ${(endTime - startTime) / 1000.0}s.
+           |""".stripMargin.filter(_ >= ' '))
+    }
+
+    new SingleElementIterator(s"$directory/$fileName")
+  }
+
+  // The RDD upload on GCS is different to AWS and Azure
+  // so override it separately.
+  override def upload(data: RDD[String],
+                      format: SupportedFormat = SupportedFormat.CSV,
+                      dir: Option[String],
+                      compress: Boolean = true): List[String] = {
+
+    val directory: String =
+      dir match {
+        case Some(str: String) => str
+        case None => Random.alphanumeric take 10 mkString ""
+      }
+
+    // Generate one pre-signed for each partition.
+    val metadatas = generateFileTransferMetadatas(
+      data, format, compress, directory, data.getNumPartitions)
+
+    val oneMetadataPerFile = metadatas.head.isForOneFile
+
+    // Some explain for newbies on spark connector:
+    // Bellow code is executed in distributed by spark FRAMEWORK
+    // 1. The master node executes "data.mapPartitionsWithIndex()"
+    // 2. Code snippet for CASE clause is executed by distributed worker nodes
+    val files = data.mapPartitionsWithIndex {
+      case (index, rows) =>
+        ///////////////////////////////////////////////////////////////////////
+        // Begin code snippet to executed on worker
+        ///////////////////////////////////////////////////////////////////////
+
+        // Get file transfer metadata object
+        val metadata = if (oneMetadataPerFile) {
+          metadatas(index)
+        } else {
+          metadatas.head
+        }
+        // Convert and upload the partition with the file transfer metadata
+        uploadPartition(rows, format, compress, directory, index, metadata)
+
+      ///////////////////////////////////////////////////////////////////////
+      // End code snippet to executed on worker
+      ///////////////////////////////////////////////////////////////////////
+    }
+
+    files.collect().toList
+  }
+
+  // GCS doesn't support streaming yet
+  def download(sc: SparkContext,
+               format: SupportedFormat = SupportedFormat.CSV,
+               compress: Boolean = true,
+               subDir: String = ""): RDD[String] = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: download() should not be called for GCS")
+  }
+
+  // On GCS, the JDBC driver uploads the data directly,
+  // So this function is not needed anymore.
+  override protected def createUploadStream(
+                                             fileName: String,
+                                             dir: Option[String],
+                                             compress: Boolean,
+                                             storageInfo: Map[String, String]
+                                           ): OutputStream = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: createUploadStream() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def deleteFile(fileName: String): Unit = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: deleteFile() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: deleteFiles() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def fileExists(fileName: String): Boolean = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: fileExists() should not be called for GCS")
+  }
+
+  // GCS doesn't support reading from snowflake with COPY UNLOAD
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: createDownloadStream() should not be called for GCS")
+  }
+}
+

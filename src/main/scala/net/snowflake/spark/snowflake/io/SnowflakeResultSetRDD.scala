@@ -96,6 +96,9 @@ case class ResultIterator[T: ClassTag](
            | actualReadRowCount=$actualReadRowCount
            |""".stripMargin.filter(_ >= ' '))
 
+      // Close the result set.
+      data.close()
+
       if (actualReadRowCount != expectedRowCount) {
         throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
           s"""The actual read row count $actualReadRowCount is not equal to

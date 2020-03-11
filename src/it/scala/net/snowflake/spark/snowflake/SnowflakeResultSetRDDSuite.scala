@@ -19,10 +19,13 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.DoubleType
 
+// scalastyle:off println
 class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // Add some options for default for testing.
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
@@ -457,11 +460,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     })
 
     // Setup special options for this test
-    if (System.getenv("SPARK_CONN_ENV_USE_COPY_UNLOAD") == null) {
-      thisConnectorOptionsNoTable += ("use_copy_unload" -> "false")
-      thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
-      thisConnectorOptionsNoTable += ("jdbc_query_result_format" -> "arrow")
-    }
+    thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
     thisConnectorOptionsNoTable += ("s3maxfilesize" -> "1000001")
 
@@ -521,55 +520,59 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testLargeResult") {
-    val tmpDF = sparkSession
-      .sql("select * from test_table_large_result order by int_c")
-      // The call of cache() is to confirm a data loss issue is fixed.
-      // SNOW-123999
-      .cache()
+    if (!skipBigDataTest) {
+      val tmpDF = sparkSession
+        .sql("select * from test_table_large_result order by int_c")
+        // The call of cache() is to confirm a data loss issue is fixed.
+        // SNOW-123999
+        .cache()
 
-    val resultSet: Array[Row] = tmpDF.collect()
+      val resultSet: Array[Row] = tmpDF.collect()
 
-    var i: Int = 0
-    while (i < resultSet.length) {
-      val row = resultSet(i)
-      assert(largeStringValue.equals(row(1)))
-      // For Arrow format, the result is ordered.
-      // For COPY UNLOAD, the order can't be guaranteed
-      if (!params.useCopyUnload) {
-        assert(Math.abs(
-          BigDecimal(i).doubleValue() -
-            row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
-        ) < 0.00000000001)
+      var i: Int = 0
+      while (i < resultSet.length) {
+        val row = resultSet(i)
+        assert(largeStringValue.equals(row(1)))
+        // For Arrow format, the result is ordered.
+        // For COPY UNLOAD, the order can't be guaranteed
+        if (!params.useCopyUnload) {
+          assert(Math.abs(
+            BigDecimal(i).doubleValue() -
+              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+          ) < 0.00000000001)
+        }
+        i += 1
       }
-      i += 1
     }
   }
 
   test("testSparkScalaUDF") {
-    val squareUDF = (s: Int) => {
-      s * s
-    }
-    val funcName = s"UDFSquare$randomSuffix"
-    sparkSession.udf.register(funcName, squareUDF)
-
-    val resultSet: Array[Row] = sparkSession
-      .sql(s"select int_c, $funcName(int_c), c_string" +
-        s" from test_table_large_result order by int_c")
-      .collect()
-
-    var i: Int = 0
-    while (i < resultSet.length) {
-      val row = resultSet(i)
-      assert(largeStringValue.equals(row(2)))
-      // For Arrow format, the result is ordered.
-      // For COPY UNLOAD, the order can't be guaranteed
-      if (!params.useCopyUnload) {
-        assert(Math.abs(
-          BigDecimal(i).doubleValue() -
-            row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
-        ) < 0.00000000001)
+    if (!skipBigDataTest) {
+      val squareUDF = (s: Int) => {
+        s * s
       }
-      i += 1
+      val funcName = s"UDFSquare$randomSuffix"
+      sparkSession.udf.register(funcName, squareUDF)
+
+      val resultSet: Array[Row] = sparkSession
+        .sql(s"select int_c, $funcName(int_c), c_string" +
+          s" from test_table_large_result where int_c < 100 order by int_c")
+        .collect()
+
+      var i: Int = 0
+      while (i < resultSet.length) {
+        val row = resultSet(i)
+        assert(largeStringValue.equals(row(2)))
+        // For Arrow format, the result is ordered.
+        // For COPY UNLOAD, the order can't be guaranteed
+        if (!params.useCopyUnload) {
+          assert(Math.abs(
+            BigDecimal(i).doubleValue() -
+              row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
+          ) < 0.00000000001)
+        }
+        i += 1
+      }
     }
   }
 
@@ -608,6 +611,250 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     assert(resultSet(0).equals(test_table_inf_rows(0)))
   }
 
+  // For USE_COPY_UNLOAD=TRUE, write an empty result doesn't really create the table
+  // use separate Jira to fix it.
+  ignore("testReadWriteEmptyResult") {
+    val tmpDF = sparkSession
+      .sql(s"select * from test_table_large_result where int_c < -1")
+
+    var resultSet: Array[Row] = tmpDF.collect()
+    val sourceLength = resultSet.length
+    assert(sourceLength == 0)
+
+    // Write the Data back to snowflake
+    jdbcUpdate(s"drop table if exists $test_table_write")
+    tmpDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .option("truncate_table", "off")
+      .option("usestagingtable", "on")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Read back the written data.
+    val readBackDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", s"$test_table_write")
+      .load()
+
+    resultSet = readBackDF.collect()
+    assert(resultSet.length == sourceLength)
+  }
+
+  // Some partitions are empty, but some are not
+  test("testReadWriteSomePartitionsEmpty") {
+    if (!skipBigDataTest) {
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+      val originalDF = sparkSession
+        .sql(s"select * from test_table_large_result")
+
+      // Use UDF to avoid FILTER to be push-down.
+      import org.apache.spark.sql.functions._
+      val betweenUdf = udf((x: Integer, min: Integer, max: Integer) => {
+        if (x >= min && x < max) true else false
+      })
+      val tmpDF = originalDF.filter(
+        betweenUdf(col("int_c"), lit(400000), lit(500000)))
+
+      var resultSet: Array[Row] = tmpDF.collect()
+      val sourceLength = resultSet.length
+      assert(sourceLength == 100000)
+
+      // Write the Data back to snowflake
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Read back the written data.
+      val readBackDF = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", s"$test_table_write")
+        .load()
+
+      resultSet = readBackDF.collect()
+      assert(resultSet.length == sourceLength)
+
+      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
+    }
+  }
+
+  // large table read and write.
+  test("testReadWriteLargeTable") {
+    if (!skipBigDataTest) {
+      val tmpDF = sparkSession
+        .sql(s"select * from test_table_large_result order by int_c")
+
+      var resultSet: Array[Row] = tmpDF.collect()
+      val sourceLength = resultSet.length
+      assert(sourceLength == 900000)
+
+      // Write the Data back to snowflake
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Read back the written data.
+      val readBackDF = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", s"$test_table_write")
+        .load()
+
+      resultSet = readBackDF.collect()
+      assert(resultSet.length == sourceLength)
+    }
+  }
+
+  // Negative test for GCP doesn't support use_copy_unload = true
+  test("GCP only supports use_copy_unload = true") {
+    if ("gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
+      var oldValue: Option[String] = None
+      if (thisConnectorOptionsNoTable.contains("use_copy_unload")) {
+        oldValue = Some(thisConnectorOptionsNoTable("use_copy_unload"))
+        thisConnectorOptionsNoTable -= "use_copy_unload"
+      }
+      thisConnectorOptionsNoTable += ("use_copy_unload" -> "true")
+
+      val tmpDF = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", s"$test_table_large_result")
+        .load()
+
+      assertThrows[SnowflakeConnectorFeatureNotSupportException] {
+        tmpDF.collect()
+      }
+      thisConnectorOptionsNoTable -= "use_copy_unload"
+      if (oldValue.isDefined) {
+        thisConnectorOptionsNoTable += ("use_copy_unload" -> oldValue.get)
+      }
+    } else {
+      println("Skip the test on non-GCP platform")
+    }
+  }
+
+  // Negative test for uploading data to GCP hit exception
+  test("Test GCP uploading retry works") {
+    if ("gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
+      // Enable test hook to simulate upload error
+      TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
+
+      // Set max_retry_count to small value to avoid bock testcase too long.
+      thisConnectorOptionsNoTable += ("max_retry_count" -> "3")
+
+      val tmpDF = sparkSession
+        .sql(s"select * from test_table_large_result where int_c < 1000")
+
+      // Write the Data back to snowflake
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      assertThrows[Exception] {
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", test_table_write)
+          .option("truncate_table", "off")
+          .option("usestagingtable", "on")
+          .mode(SaveMode.Overwrite)
+          .save()
+      }
+
+      // Reset env.
+      thisConnectorOptionsNoTable -= "max_retry_count"
+      TestHook.disableTestHook()
+    } else {
+      println("Skip the test on non-GCP platform")
+    }
+  }
+
+  // Copy one table from AWS account to GCP account
+  ignore("copy data from AWS to GCP") {
+    val moveTableName = "LINEITEM_FROM_PARQUET"
+    val awsSchema = "TPCH_SF100"
+
+    var awsOptionsNoTable: Map[String, String] = Map()
+    connectorOptionsNoTable.foreach(tup => {
+      awsOptionsNoTable += tup
+    })
+    awsOptionsNoTable -= "sfURL"
+    awsOptionsNoTable += ("sfURL" -> "sfctest0.snowflakecomputing.com")
+
+    var gcpOptionsNoTable: Map[String, String] = Map()
+    connectorOptionsNoTable.foreach(tup => {
+      gcpOptionsNoTable += tup
+    })
+    gcpOptionsNoTable -= "sfURL"
+    gcpOptionsNoTable += ("sfURL" -> "sfctest0.us-central1.gcp.snowflakecomputing.com")
+
+    // Read data from AWS.
+    val awsReadDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(awsOptionsNoTable)
+      .option("query", s"select * from $awsSchema.$moveTableName where 1 = 0")
+      .load()
+
+    // Write the Data to GCP
+    awsReadDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(gcpOptionsNoTable)
+      .option("dbtable", moveTableName)
+      .option("truncate_table", "off")
+      .option("usestagingtable", "on")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // clean up download dir
+    import sys.process._
+    "rm -fr /tmp/test_move_data" !
+
+    "mkdir /tmp/test_move_data" !
+
+    val awsConn = Utils.getJDBCConnection(awsOptionsNoTable)
+    awsConn.createStatement().execute("create or replace stage test_move_data")
+    awsConn.createStatement().execute(
+      s"""COPY INTO '@test_move_data/' FROM ( SELECT * FROM $awsSchema.$moveTableName )
+      FILE_FORMAT = (
+      TYPE=CSV
+      COMPRESSION='gzip'
+      FIELD_DELIMITER='|'
+      FIELD_OPTIONALLY_ENCLOSED_BY='"'
+      ESCAPE_UNENCLOSED_FIELD = none
+      NULL_IF= ()
+      )""".stripMargin
+    )
+    awsConn.createStatement.execute("GET @test_move_data/ file:///tmp/test_move_data")
+
+    val gcpConn = Utils.getJDBCConnection(gcpOptionsNoTable)
+    gcpConn.createStatement().execute("create or replace stage test_move_data")
+    gcpConn.createStatement.execute("PUT file:///tmp/test_move_data/*.gz @test_move_data/")
+
+    gcpConn.createStatement().execute(
+      s"""copy into $moveTableName FROM @test_move_data/
+         |FILE_FORMAT = (
+         |    TYPE=CSV
+         |    FIELD_DELIMITER='|'
+         |    NULL_IF=()
+         |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+         |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+         |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+         |  )""".stripMargin
+    )
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -622,8 +869,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_inf")
       jdbcUpdate(s"drop table if exists $test_table_write")
     } finally {
+      TestHook.disableTestHook()
       super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
     }
   }
 }
+// scalastyle:on println
+

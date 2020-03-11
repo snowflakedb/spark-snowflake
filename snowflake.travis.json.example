@@ -23,6 +23,12 @@
       "config": {
         "sfURL": "xxxx.east-us-2.azure.snowflakecomputing.com"
       }
+    },
+    {
+      "name": "gcp",
+      "config": {
+        "sfURL": "xxxx.us-central1.gcp.snowflakecomputing.com"
+      }
     }
   ]
 }
