@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -145,7 +146,12 @@ private[snowflake] class JDBCWrapper {
       case Some(privateKey) =>
         jdbcProperties.put("privateKey", privateKey)
       case None =>
-        jdbcProperties.put("password", params.sfPassword)
+        // Adding OAuth Token parameter
+        params.sfToken match {
+          case Some(value) =>
+            jdbcProperties.put("token", value)
+          case None => jdbcProperties.put("password", params.sfPassword)
+        }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
@@ -166,12 +172,7 @@ private[snowflake] class JDBCWrapper {
     params.getQueryResultFormat match {
       case Some(value) =>
         jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, value)
-      case _ =>
-        // If the user doesn't want to use COPY UNLOAD and doesn't set query result result
-        // explicitly, set the query result format automatically as ARROW for better performance.
-        if (!params.useCopyUnload) {
-          jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, "arrow")
-        }
+      case _ => // No default value for it.
     }
 
     // Set up proxy info if it is configured.
@@ -179,6 +180,13 @@ private[snowflake] class JDBCWrapper {
       case Some(proxyInfoValue) =>
         proxyInfoValue.setProxyForJDBC(jdbcProperties)
       case None =>
+    }
+
+    // Adding Authenticator parameter
+    params.sfAuthenticator match {
+      case Some(value) =>
+        jdbcProperties.put("authenticator", value)
+      case _ => // No default value for it.
     }
 
     // Always set CLIENT_SESSION_KEEP_ALIVE.
@@ -212,7 +220,7 @@ private[snowflake] class JDBCWrapper {
          | "scala.version" : "${esc(scalaVersion)}",
          | "java.version" : "${esc(javaVersion)}"
          |}""".stripMargin
-    log.debug(snowflakeClientInfo)
+    log.info(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
     val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
@@ -220,15 +228,9 @@ private[snowflake] class JDBCWrapper {
     // Setup query result format explicitly because this option is not supported
     // to be set with JDBC properties
     if (jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT) != null) {
-      // TODO: Current, Snowflake is in the process of changing "query_result_format"
-      // to "jdbc_query_result_format", so we try to setup both. and it will
-      // can be clean in the future.
       try {
         val resultFormat =
           jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT)
-        conn
-          .createStatement()
-          .execute(s"alter session set QUERY_RESULT_FORMAT = '$resultFormat'")
         conn
           .createStatement()
           .execute(
@@ -737,6 +739,11 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       .toString()
 
+    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                       | execute query without bind variable:
+                       |""".stripMargin.filter(_ >= ' ')
+    log.info(s"$logPrefix $query")
+
     val statement = conn.prepareStatement(query)
     DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
   }
@@ -759,7 +766,10 @@ private[snowflake] class SnowflakeSQLStatement(
 
     val query: String = buffer.toString
 
-    log.info(s"sql query generated: $query")
+    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                       | execute query with bind variable:
+                       |""".stripMargin.filter(_ >= ' ')
+    log.info(s"$logPrefix $query")
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {

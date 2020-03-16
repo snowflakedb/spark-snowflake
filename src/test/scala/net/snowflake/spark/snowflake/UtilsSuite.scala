@@ -68,4 +68,13 @@ class UtilsSuite extends FunSuite with Matchers {
         "s3n://bucket/path/to/temp/dir"
     )
   }
+
+  test("test Utils.getPrettySizeString") {
+    assert(Utils.getSizeString(100) === "100 Bytes")
+    assert(Utils.getSizeString(1024) === "1.00 KB")
+    assert(Utils.getSizeString((1.1 * 1024).toLong) === "1.10 KB")
+    assert(Utils.getSizeString((1.25 * 1024 * 1024).toLong) === "1.25 MB")
+    assert(Utils.getSizeString((1.88 * 1024 * 1024 * 1024 + 1).toLong) === "1.88 GB")
+    assert(Utils.getSizeString((3.51 * 1024 * 1024 * 1024 * 1024 + 100).toLong) === "3.51 TB")
+  }
 }

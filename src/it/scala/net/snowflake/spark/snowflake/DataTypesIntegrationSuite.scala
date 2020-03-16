@@ -21,6 +21,7 @@ import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.sql.{Row, SaveMode}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DateType, TimestampType}
 
@@ -135,7 +136,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
     )
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table)
       .option("keep_column_case", "on")
@@ -163,7 +164,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
     assert(result(0)(1) == 2)
 
     sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table)
       .option("keep_column_case", "off")
@@ -210,7 +211,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
     )
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table)
       .option("keep_column_case", "on")
@@ -238,7 +239,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
     assert(result(0)(1) == 2)
 
     sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table)
       .option("keep_column_case", "off")

@@ -90,32 +90,36 @@ class MockSF(params: Map[String, String],
     mockStatement
   }
 
+  // scalastyle: off
   private def createMockConnection(): Connection = {
     val conn = mock(classOf[Connection], RETURNS_SMART_NULLS)
     jdbcConnections.append(conn)
-    when(conn.prepareStatement(anyString()))
-      .thenAnswer((invocation: InvocationOnMock) => {
+    when(conn.prepareStatement(anyString())).thenAnswer(new Answer[PreparedStatement] {
+      override def answer(invocation: InvocationOnMock): PreparedStatement = {
         val query = invocation.getArguments()(0).asInstanceOf[String]
         queriesIssued.append(query)
         createMockStatement(query)
-      })
+      }
+    })
     conn
   }
 
-  doAnswer((_: InvocationOnMock) =>
-    createMockConnection()).when(jdbcWrapper).getConnector(any[MergedParameters])
+  doAnswer(new Answer[Connection] {
+    override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
+  }).when(jdbcWrapper).getConnector(any[MergedParameters])
 
-  doAnswer((invocation: InvocationOnMock) => {
-    existingTablesAndSchemas.contains(
-      invocation.getArguments()(1).asInstanceOf[String]
-    )
+  doAnswer(new Answer[Boolean] {
+    override def answer(invocation: InvocationOnMock): Boolean = {
+      existingTablesAndSchemas.contains(invocation.getArguments()(1).asInstanceOf[String])
+    }
   }).when(jdbcWrapper).tableExists(any[Connection], anyString())
 
-  doAnswer((invocation: InvocationOnMock) => {
-    existingTablesAndSchemas(
-      invocation.getArguments()(1).asInstanceOf[String]
-    )
+  doAnswer(new Answer[StructType] {
+    override def answer(invocation: InvocationOnMock): StructType = {
+      existingTablesAndSchemas(invocation.getArguments()(1).asInstanceOf[String])
+    }
   }).when(jdbcWrapper).resolveTable(any[Connection], anyString(), mergedParams)
+  // scalastyle: on
 
   def verifyThatConnectionsWereClosed(): Unit = {
     jdbcConnections.foreach { conn =>

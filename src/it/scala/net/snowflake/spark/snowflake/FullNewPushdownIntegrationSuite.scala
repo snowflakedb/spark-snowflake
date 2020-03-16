@@ -26,6 +26,8 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
   private val test_table: String = s"test_table_1_$randomSuffix"
   private val test_table2: String = s"test_table_2_$randomSuffix"
+  private val test_join_left: String = s"test_table_left_$randomSuffix"
+  private val test_join_right: String = s"test_table_right_$randomSuffix"
   private val table_placeholder = "table_placeholder"
 
   private val numRows1 = 50
@@ -125,6 +127,30 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         jdbcUpdate(s"drop table if exists $test_table2")
         throw e
     }
+
+    // Set up two tables for join push down test
+    jdbcUpdate(s"create or replace table $test_join_left(id decimal not null)")
+    jdbcUpdate(s"create or replace table $test_join_right" +
+               s"(id decimal not null, flag varchar not null)")
+    jdbcUpdate(s"insert into $test_join_left values (1), (2), (3), (4)")
+    jdbcUpdate(s"insert into $test_join_right " +
+              s"values (1, 'a'), (2, 'b'), (6, 'd'), (7, 'd')")
+
+    // Set up left join view
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$test_join_left")
+      .load()
+      .createOrReplaceTempView("LEFT_VIEW")
+
+    // Set up right view
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", s"$test_join_right")
+      .load()
+      .createOrReplaceTempView("RIGHT_VIEW")
   }
 
   test("Select all columns.") {
@@ -262,6 +288,30 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     )
   }
 
+  test( "test INNER JOIN with not-Null column") {
+    sparkSession.sql("select l.id, r.id, r.flag, length(r.flag) from" +
+      " LEFT_VIEW l join RIGHT_VIEW r on l.id = r.id")
+      .show()
+  }
+
+  test( "test LEFT OUTER JOIN with not-Null column") {
+      sparkSession.sql("select l.id, r.id, r.flag, length(r.flag) from" +
+      " LEFT_VIEW l left outer join RIGHT_VIEW r on l.id = r.id")
+        .show()
+  }
+
+  test( "test RIGHT OUTER JOIN with not-Null column") {
+    sparkSession.sql("select l.id, r.id, r.flag, length(r.flag) from" +
+      " LEFT_VIEW l right outer join RIGHT_VIEW r on l.id = r.id")
+      .show()
+  }
+
+  test( "test FULL OUTER JOIN with not-Null column") {
+    sparkSession.sql("select l.id, r.id, r.flag, length(r.flag) from" +
+      " LEFT_VIEW l full outer join RIGHT_VIEW r on l.id = r.id")
+      .show()
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -270,6 +320,8 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     try {
       jdbcUpdate(s"drop table if exists $test_table")
       jdbcUpdate(s"drop table if exists $test_table2")
+      jdbcUpdate(s"drop table if exists $test_join_left")
+      jdbcUpdate(s"drop table if exists $test_join_right")
     } finally {
       super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)

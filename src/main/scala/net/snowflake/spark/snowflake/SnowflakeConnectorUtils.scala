@@ -112,4 +112,7 @@ object SnowflakeConnectorUtils {
 
 class SnowflakeConnectorException(message: String) extends Exception(message)
 class SnowflakePushdownException(message: String)
-    extends SnowflakeConnectorException(message)
+  extends SnowflakeConnectorException(message)
+class SnowflakeConnectorFeatureNotSupportException(message: String)
+  extends Exception(message)
+

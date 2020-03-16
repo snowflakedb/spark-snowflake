@@ -59,6 +59,16 @@ trait IntegrationSuiteBase
   protected final val MISSING_PARAM_ERROR =
     "Missing required configuration value: "
 
+  // Some integration tests are for large Data, it needs long time to run.
+  // But when the test suite is run on travis, there are job time limitation.
+  // The suite can't be finished successfully for USE_COPY_UNLOAD.
+  // So this environment variable is introduced to skip the test for big data.
+  // It only should be used on travis for USE_COPY_UNLOAD.
+  // By default, it is false
+  final val SKIP_BIG_DATA_TEST = "SKIP_BIG_DATA_TEST"
+  protected lazy val skipBigDataTest : Boolean =
+    "true".equalsIgnoreCase(System.getenv(SKIP_BIG_DATA_TEST))
+
   protected lazy val configsFromEnv: Map[String, String] = {
     var settingsMap = new mutable.HashMap[String, String]
     Parameters.KNOWN_PARAMETERS foreach { param =>

@@ -89,7 +89,7 @@ package object streaming {
   private def copySql(param: MergedParameters,
                       conn: Connection,
                       format: SupportedFormat,
-                      schema: StructType,
+                      schema: StructType
                      ): String = {
 
     val tableName = param.table.get

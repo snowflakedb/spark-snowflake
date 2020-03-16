@@ -21,13 +21,16 @@ import java.sql.SQLException
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.types._
-import Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 
 /**
   * End-to-end tests which run against a real Snowflake cluster.
   */
 class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
+  // test_table_tmp should be used inside of one test function.
+  private val test_table_tmp: String = s"test_table_tmp_$randomSuffix"
   private val test_table: String = s"test_table_$randomSuffix"
   private val test_table2: String = s"test_table2_$randomSuffix"
   private val test_table3: String = s"test_table3_$randomSuffix"
@@ -94,6 +97,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       conn.createStatement.executeUpdate(s"drop table if exists $test_table")
       conn.createStatement.executeUpdate(s"drop table if exists $test_table2")
       conn.createStatement.executeUpdate(s"drop table if exists $test_table3")
+      conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
       conn.commit()
     } finally {
       super.afterAll()
@@ -293,9 +297,10 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Ability to query a UDF") {
+    val funcName = s"testudf$randomSuffix"
     try {
       Utils.runQuery(connectorOptionsNoTable, s"""
-          |CREATE OR REPLACE FUNCTION testudf(a number, b number)
+          |CREATE OR REPLACE FUNCTION $funcName(a number, b number)
           |RETURNS number
           |AS 'a * b'
         """.stripMargin)
@@ -304,7 +309,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         // scalastyle:off
-        .option("query", s"select testudf(3,4) as twelve")
+        .option("query", s"select $funcName(3,4) as twelve")
         // scalastyle:on
         .load()
 
@@ -313,9 +318,61 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       // Clean up the UDF
       Utils.runQuery(
         connectorOptionsNoTable,
-        "DROP FUNCTION IF EXISTS testudf(number, number)"
+        s"DROP FUNCTION IF EXISTS $funcName(number, number)"
       )
     }
+  }
+
+  test("Append SaveMode: 1. create table if not exist, 2. keep existing data if exist") {
+    val schema = StructType(
+      List(
+        StructField("col1", IntegerType),
+        StructField("col2", IntegerType)
+      )
+    )
+    val data = Seq(Row(1, 11), Row(2, 22))
+
+    // make sure table: test_table_tmp doesn't exist.
+    conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
+
+    // Append data in first time, table doesn't exist yet
+    sqlContext
+      .createDataFrame(sc.makeRDD(data), schema)
+      .write
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .mode(SaveMode.Append)
+      .save()
+
+    val result1 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .load()
+
+    checkAnswer(result1, data)
+
+    // Append data in second time, the table must exist
+    sqlContext
+      .createDataFrame(sc.makeRDD(data), schema)
+      .write
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .mode(SaveMode.Append)
+      .save()
+
+    val result2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_tmp)
+      .load()
+
+    // Both old data and new data are in the table
+    checkAnswer(result2, data ++ data)
+
+    conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
   }
 
   // TODO Enable more tests

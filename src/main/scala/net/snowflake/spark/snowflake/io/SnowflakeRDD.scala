@@ -14,42 +14,55 @@ class SnowflakeRDD(sc: SparkContext,
     extends RDD[String](sc, Nil) {
 
   @transient private val MIN_FILES_PER_PARTITION = 2
+  @transient private val MAX_FILES_PER_PARTITION = 10
 
   override def compute(split: Partition,
                        context: TaskContext): Iterator[String] = {
-    val stringIterator = new SFRecordReader(format)
+    val snowflakePartition = split.asInstanceOf[SnowflakePartition]
+
+    val stringIterator = new SFRecordReader(format, snowflakePartition.index)
     stringIterator.setDownloadFunction(downloadFile)
 
-    split
-      .asInstanceOf[SnowflakePartition]
-      .fileNames
-      .foreach(name => {
-        stringIterator.addFileName(name)
-      })
+    snowflakePartition.fileNames.foreach(name => {
+      stringIterator.addFileName(name)
+    })
+
+    logger.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+         | partition ID:${snowflakePartition.index}
+         | totalFileCount=${snowflakePartition.fileNames.size}
+         |""".stripMargin.filter(_ >= ' '))
+
     stringIterator
   }
 
   override protected def getPartitions: Array[Partition] = {
-    val fileCountPerPartition =
+    var fileCountPerPartition =
       Math.max(
         MIN_FILES_PER_PARTITION,
         (fileNames.length + expectedPartitionCount / 2) / expectedPartitionCount
       )
+    fileCountPerPartition = Math.min(MAX_FILES_PER_PARTITION, fileCountPerPartition)
     val fileCount = fileNames.length
     val partitionCount = (fileCount + fileCountPerPartition - 1) / fileCountPerPartition
-    logger.info(s"""SnowflakeRDD.getPartitions statistic:
+    logger.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
          | fileCount=$fileCount filePerPartition=$fileCountPerPartition
          | actualPartitionCount=$partitionCount
          | expectedPartitionCount=$expectedPartitionCount
          |""".stripMargin.filter(_ >= ' '))
 
-    fileNames
-      .grouped(fileCountPerPartition)
-      .zipWithIndex
-      .map {
-        case (names, index) => SnowflakePartition(names, id, index)
-      }
-      .toArray
+    if (fileNames.nonEmpty) {
+      fileNames
+        .grouped(fileCountPerPartition)
+        .zipWithIndex
+        .map {
+          case (names, index) => SnowflakePartition(names, id, index)
+        }
+        .toArray
+    } else {
+      // If the result set is empty, put one empty partition to the array.
+      Seq[SnowflakePartition]{SnowflakePartition(fileNames, 0, 0)}.toArray
+    }
   }
 
 }

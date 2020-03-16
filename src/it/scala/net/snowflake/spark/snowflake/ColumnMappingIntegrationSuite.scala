@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.Date
-
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
@@ -22,6 +22,8 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
   val dbtable8 = s"column_mapping_test_8_$randomSuffix"
   val dbtable9 = s"column_mapping_test_9_$randomSuffix"
   val dbtable10 = s"column_mapping_test_10_$randomSuffix"
+  val dbtable11 = s"column_mapping_test_11_$randomSuffix"
+  val dbtable12 = s"column_mapping_test_12_$randomSuffix"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -53,6 +55,8 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $dbtable8")
       jdbcUpdate(s"drop table if exists $dbtable9")
       jdbcUpdate(s"drop table if exists $dbtable10")
+      jdbcUpdate(s"drop table if exists $dbtable11")
+      jdbcUpdate(s"drop table if exists $dbtable12")
     } finally {
       super.afterAll()
     }
@@ -60,7 +64,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
   def checkTestTable(expectedAnswer: Seq[Row]): Unit = {
     val loadedDf = sqlContext.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("query", s"select * from $dbtable order by ONE")
       .load()
@@ -74,7 +78,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     )
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable)
       .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
@@ -92,7 +96,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because only suppert SavaMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "ONE", "five" -> "FOUR").toString())
@@ -103,7 +107,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("aaa" -> "ONE", "five" -> "FOUR").toString())
@@ -114,7 +118,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[SnowflakeSQLException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable)
         .option("columnmap", Map("one" -> "AAA", "five" -> "FOUR").toString())
@@ -136,7 +140,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // error by default
     assertThrows[SnowflakeSQLException] {
       df1.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable1)
         .mode(SaveMode.Append)
@@ -145,7 +149,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error when mapping by name
     df1.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .option("column_mapping", "name")
@@ -153,7 +157,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result1 = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable1)
       .load()
@@ -179,7 +183,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     // error by default
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable2)
         .option("column_mapping", "name")
@@ -188,7 +192,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .option("column_mapping", "name")
@@ -197,7 +201,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable2)
       .load()
@@ -216,7 +220,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable3)
         .option("column_mapping", "name")
@@ -225,7 +229,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable3)
       .option("column_mapping", "name")
@@ -234,7 +238,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable3)
       .load()
@@ -253,7 +257,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable4)
         .option("column_mapping", "name")
@@ -262,7 +266,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .option("column_mapping", "name")
@@ -271,7 +275,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable4)
       .load()
@@ -297,7 +301,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     val df = sqlContext.createDataFrame(data, schema)
 
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable5)
       .option("column_mapping", "name")
@@ -323,7 +327,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable6)
         .option("column_mapping", "name")
@@ -346,7 +350,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable7)
         .option("column_mapping", "name")
@@ -373,7 +377,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .option("column_mapping", "name")
@@ -382,7 +386,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable8)
       .load()
@@ -407,7 +411,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     // no error
     df.write
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .option("column_mapping", "name")
@@ -416,7 +420,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       .save()
 
     val result = sparkSession.read
-      .format("snowflake")
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", dbtable9)
       .load()
@@ -442,7 +446,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
 
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format("snowflake")
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", dbtable10)
         .option("column_mapping", "name")
@@ -451,4 +455,126 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         .save()
     }
   }
+
+  test("Test column names with .(dot) for column_mapping") {
+    jdbcUpdate(s"drop table if exists $dbtable11")
+    val schema = StructType(List(
+      StructField("a.1", StringType),
+      StructField("B..1", IntegerType),
+      StructField("a1", IntegerType)
+    ))
+    val data: RDD[Row] = sc.makeRDD(List(Row("val", 4, 5)))
+    val df = sqlContext.createDataFrame(data, schema)
+
+    // Create table and write data with column_mapping = "order"
+    df.write.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", dbtable11)
+      .option("column_mapping", "order")
+      .mode(SaveMode.Append)
+      .save()
+
+    // Append data with column_mapping = "name"
+    df.write.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", dbtable11)
+      .option("column_mapping", "name")
+      .mode(SaveMode.Append)
+      .save()
+
+    // Read and verify data.
+    // Note: there are dot in the column name, so "keep_column_case = true" is necessary.
+    val resultDF = sparkSession.read.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("keep_column_case", "true")
+      .option("dbtable", dbtable11)
+      .load().cache()
+
+    resultDF.show
+
+    // println(s"table name: $dbtable11")
+    // Note: the column name needs to be enclosed by `(backticks) if there is .(dot) in it.
+    var result = resultDF.select("`a.1`").collect().toSeq
+    assert(result(0)(0) == "val")
+    assert(result(1)(0) == "val")
+    result = resultDF.select("`A.1`").collect().toSeq
+    assert(result(0)(0) == "val")
+    assert(result(1)(0) == "val")
+
+    result = resultDF.select("`b..1`").collect().toSeq
+    assert(result(0)(0).toString == "4")
+    assert(result(1)(0).toString == "4")
+    result = resultDF.select("`B..1`").collect().toSeq
+    assert(result(0)(0).toString == "4")
+    assert(result(1)(0).toString == "4")
+
+    result = resultDF.select("a1").collect().toSeq
+    assert(result(0)(0).toString == "5")
+    assert(result(1)(0).toString == "5")
+    result = resultDF.select("A1").collect().toSeq
+    assert(result(0)(0).toString == "5")
+    assert(result(1)(0).toString == "5")
+  }
+
+  test("Test column names with .(dot) for columnmap") {
+    jdbcUpdate(s"drop table if exists $dbtable12")
+    val schema = StructType(List(
+      StructField("a.1", StringType),
+      StructField("B..1", StringType),
+      StructField("c1", StringType)
+    ))
+    val data: RDD[Row] = sc.makeRDD(List(Row("A", "B", "C")))
+    val df = sqlContext.createDataFrame(data, schema)
+
+    // Create table and write data with column_mapping = "order"
+    df.write.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", dbtable12)
+      .option("column_mapping", "order")
+      .mode(SaveMode.Append)
+      .save()
+
+    // Append data with columnnap = a -> b, b -> c, c-> a
+    val columnmap = Map("a.1" -> "B..1", "B..1" -> "c1", "c1" -> "a.1").toString()
+    df.write.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("dbtable", dbtable12)
+      .option("columnmap", columnmap)
+      .mode(SaveMode.Append)
+      .save()
+
+    // Read and verify data.
+    // Note: there are dot in the column name, so "keep_column_case = true" is necessary.
+    val resultDF = sparkSession.read.format("snowflake")
+      .options(connectorOptionsNoTable)
+      .option("keep_column_case", "true")
+      .option("dbtable", dbtable12)
+      .load().cache()
+
+    resultDF.show
+
+    // println(s"table name: $dbtable12")
+    // Note: the column name needs to be enclosed by `(backticks) if there is .(dot) in it.
+    var result = resultDF.select("`a.1`").collect().toSeq
+    assert(result(0)(0) == "A")
+    assert(result(1)(0) == "C")
+    result = resultDF.select("`A.1`").collect().toSeq
+    assert(result(0)(0) == "A")
+    assert(result(1)(0) == "C")
+
+    result = resultDF.select("`B..1`").collect().toSeq
+    assert(result(0)(0) == "B")
+    assert(result(1)(0) == "A")
+    result = resultDF.select("`b..1`").collect().toSeq
+    assert(result(0)(0) == "B")
+    assert(result(1)(0) == "A")
+
+    result = resultDF.select("C1").collect().toSeq
+    assert(result(0)(0) == "C")
+    assert(result(1)(0) == "B")
+    result = resultDF.select("c1").collect().toSeq
+    assert(result(0)(0) == "C")
+    assert(result(1)(0) == "B")
+  }
+
 }

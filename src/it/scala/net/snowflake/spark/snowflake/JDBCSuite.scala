@@ -154,12 +154,13 @@ class JDBCSuite extends IntegrationSuiteBase {
       )
     conn.createTable(name, schema, params, overwrite = true, temporary = false)
     conn.execute(s"insert into $name values('a',1),('b',2)")
+    val funcName = s"test_function$randomSuffix"
     conn.execute(
-      s"create or replace function test_function(n int) returns table" +
+      s"create or replace function $funcName(n int) returns table" +
         s"(a int, b string) as $$$$ select num, str from $name where num = n$$$$"
     )
 
-    val gapstats_query = s"""select * from table(test_function(1)) gs"""
+    val gapstats_query = s"""select * from table($funcName(1)) gs"""
     val test_df =
       sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -169,7 +170,7 @@ class JDBCSuite extends IntegrationSuiteBase {
 
     assert(test_df.collect().length == 1)
 
-    conn.execute("drop function test_function(int)")
+    conn.execute(s"drop function $funcName(int)")
     conn.dropTable(name)
   }
 

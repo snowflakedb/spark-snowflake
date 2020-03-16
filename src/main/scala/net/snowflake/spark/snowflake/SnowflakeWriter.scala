@@ -108,7 +108,13 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                                    params: MergedParameters): DataFrame =
     params.columnMap match {
       case Some(map) =>
-        val names = map.keys.toSeq
+        // Enclose column name with backtick(`) if dot(.) exists in column name
+        val names = map.keys.toSeq.map(name =>
+          if (name.contains(".")) {
+            s"`$name`"
+          } else {
+            name
+          })
         try {
           dataFrame.select(names.head, names.tail: _*)
         } catch {

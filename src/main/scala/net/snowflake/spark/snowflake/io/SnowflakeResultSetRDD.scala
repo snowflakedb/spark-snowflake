@@ -3,7 +3,7 @@ package net.snowflake.spark.snowflake.io
 import java.sql.ResultSet
 import java.util.Properties
 
-import net.snowflake.client.jdbc.SnowflakeResultSetSerializable
+import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException}
 import org.apache.spark.rdd.RDD
@@ -13,21 +13,31 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
+
+object SnowflakeResultSetRDD {
+  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
+  private[snowflake] val MASTER_LOG_PREFIX = "Spark Connector Master"
+  private[snowflake] val WORKER_LOG_PREFIX = "Spark Connector Worker"
+}
 
 class SnowflakeResultSetRDD[T: ClassTag](
   schema: StructType,
   sc: SparkContext,
   resultSets: Array[SnowflakeResultSetSerializable],
-  proxyInfo: Option[ProxyInfo]
+  proxyInfo: Option[ProxyInfo],
+  queryID: String
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] =
     ResultIterator[T](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
-      proxyInfo
+      split.asInstanceOf[SnowflakeResultSetPartition].index,
+      proxyInfo,
+      queryID
     )
 
   override protected def getPartitions: Array[Partition] =
@@ -40,7 +50,9 @@ class SnowflakeResultSetRDD[T: ClassTag](
 case class ResultIterator[T: ClassTag](
   schema: StructType,
   resultSet: SnowflakeResultSetSerializable,
-  proxyInfo: Option[ProxyInfo]
+  partitionIndex: Int,
+  proxyInfo: Option[ProxyInfo],
+  queryID: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -52,11 +64,51 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
+  var actualReadRowCount: Long = 0
+  val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = resultSet.getResultSet(jdbcProperties)
+  SnowflakeResultSetRDD.logger.info(
+    s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+       | partition ID:$partitionIndex expectedRowCount=
+       | $expectedRowCount
+       |""".stripMargin.filter(_ >= ' '))
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
+  var currentRowNotConsumedYet: Boolean = false
 
-  override def hasNext: Boolean = data.next()
+  override def hasNext: Boolean = {
+    // In some cases, hasNext() may be called but next() isn't.
+    // This will cause the row to be 'skipped'.
+    // So currentRowNotConsumedYet is introduced to make hasNext()
+    // can be called repeatedly.
+    if (currentRowNotConsumedYet) {
+      return currentRowNotConsumedYet
+    }
+
+    if (data.next()) {
+      // Move to the current row in the ResultSet, but it is not consumed yet.
+      currentRowNotConsumedYet = true
+      true
+    } else {
+      SnowflakeResultSetRDD.logger.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
+           | partition ID:$partitionIndex expectedRowCount=$expectedRowCount
+           | actualReadRowCount=$actualReadRowCount
+           |""".stripMargin.filter(_ >= ' '))
+
+      // Close the result set.
+      data.close()
+
+      if (actualReadRowCount != expectedRowCount) {
+        throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
+          s"""The actual read row count $actualReadRowCount is not equal to
+             | the expected row count $expectedRowCount for partition
+             | ID:$partitionIndex. Related query ID is $queryID
+             |""".stripMargin.filter(_ >= ' '))
+      }
+      false
+    }
+  }
 
   override def next(): T = {
     val converted = schema.fields.indices.map(index => {
@@ -112,6 +164,12 @@ case class ResultIterator[T: ClassTag](
         }
       }
     })
+
+    // Increase actual read row count
+    actualReadRowCount += 1
+
+    // The row is consumed, the iterator can move to next row.
+    currentRowNotConsumedYet = false
 
     if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
     else Row.fromSeq(converted).asInstanceOf[T]
