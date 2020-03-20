@@ -871,7 +871,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 }

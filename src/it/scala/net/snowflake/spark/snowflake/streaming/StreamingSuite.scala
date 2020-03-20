@@ -80,7 +80,7 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   def checkTestTable(expectedAnswer: Seq[Row]): Unit = {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("query", s"select * from $table order by value")
@@ -95,7 +95,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   // manual test only
   ignore("test") {
-    val spark = sqlContext.sparkSession
+    val spark = sparkSession
     import spark.implicits._
 
     DefaultJDBCWrapper.executeQueryInterruptibly(
@@ -132,7 +132,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   ignore("Test streaming writer") {
 
-    val spark = sqlContext.sparkSession
+    val spark = sparkSession
     import spark.implicits._
     val streamingStage = "streaming_test_stage"
 
@@ -211,7 +211,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   ignore("kafka") {
 
-    val spark = sqlContext.sparkSession
+    val spark = sparkSession
     val streamingStage = "streaming_test_stage"
 
     conn.createStage(name = streamingStage, overwrite = true)
@@ -247,7 +247,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   ignore("kafka1") {
 
-    val spark = sqlContext.sparkSession
+    val spark = sparkSession
     val streamingStage = "streaming_test_stage"
     val streamingTable = "streaming_test_table"
 

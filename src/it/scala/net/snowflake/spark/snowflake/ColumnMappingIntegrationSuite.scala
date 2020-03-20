@@ -39,7 +39,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         StructField("five", IntegerType)
       )
     )
-    df = sqlContext.createDataFrame(data, schema)
+    df = sparkSession.createDataFrame(data, schema)
   }
 
   override def afterAll(): Unit = {
@@ -63,7 +63,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
   }
 
   def checkTestTable(expectedAnswer: Seq[Row]): Unit = {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(connectorOptionsNoTable)
       .option("query", s"select * from $dbtable order by ONE")
@@ -135,7 +135,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       List(StructField("str", StringType), StructField("NUM", IntegerType))
     )
     val data1: RDD[Row] = sc.makeRDD(List(Row("a", 1), Row("b", 2)))
-    val df1 = sqlContext.createDataFrame(data1, schema1)
+    val df1 = sparkSession.createDataFrame(data1, schema1)
 
     // error by default
     assertThrows[SnowflakeSQLException] {
@@ -178,7 +178,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       )
     )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", true, 1), Row("b", false, 2)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     // error by default
     assertThrows[UnsupportedOperationException] {
@@ -216,7 +216,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"create or replace table $dbtable3 (num int, str string)")
     val schema = StructType(List(StructField("str", StringType)))
     val data: RDD[Row] = sc.makeRDD(List(Row("a"), Row("b")))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
       df.write
@@ -253,7 +253,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       List(StructField("str", StringType), StructField("useless", BooleanType))
     )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", true), Row("b", false)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
       df.write
@@ -298,7 +298,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         Row(new Date(System.currentTimeMillis()), 2)
       )
     )
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     df.write
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -323,7 +323,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
         Row(new Date(System.currentTimeMillis()), 2)
       )
     )
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
       df.write
@@ -346,7 +346,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       List(StructField("Foo", IntegerType), StructField("foo", IntegerType))
     )
     val data: RDD[Row] = sc.makeRDD(List(Row(1, 2), Row(2, 3)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
       df.write
@@ -373,7 +373,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       )
     )
     val data: RDD[Row] = sc.makeRDD(List(Row(1, 2, 4), Row(2, 3, 5)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     // no error
     df.write
@@ -407,7 +407,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       List(StructField("str", StringType), StructField("num", IntegerType))
     )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", 4), Row("b", 5)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     // no error
     df.write
@@ -442,7 +442,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       List(StructField("foo", StringType), StructField("bar", IntegerType))
     )
     val data: RDD[Row] = sc.makeRDD(List(Row("a", 4), Row("b", 5)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     assertThrows[UnsupportedOperationException] {
       df.write
@@ -464,7 +464,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       StructField("a1", IntegerType)
     ))
     val data: RDD[Row] = sc.makeRDD(List(Row("val", 4, 5)))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     // Create table and write data with column_mapping = "order"
     df.write.format("snowflake")
@@ -524,7 +524,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       StructField("c1", StringType)
     ))
     val data: RDD[Row] = sc.makeRDD(List(Row("A", "B", "C")))
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     // Create table and write data with column_mapping = "order"
     df.write.format("snowflake")

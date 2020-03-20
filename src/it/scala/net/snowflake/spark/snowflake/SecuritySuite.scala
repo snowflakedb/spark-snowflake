@@ -109,7 +109,7 @@ class SecuritySuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_write")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 

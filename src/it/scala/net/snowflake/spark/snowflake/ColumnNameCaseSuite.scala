@@ -36,7 +36,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     )
     val data = sc.makeRDD(List(Row(1, null), Row(null, "b")))
 
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     df.write
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -63,7 +63,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     )
     val data = sc.makeRDD(List(Row(1, null), Row(null, "b")))
 
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     df.write
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -95,7 +95,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
 
     val data: RDD[Row] = sc.makeRDD(List(Row(1, 2)))
 
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = sparkSession.createDataFrame(data, schema)
 
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)

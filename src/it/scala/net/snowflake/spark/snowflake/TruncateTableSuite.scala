@@ -25,7 +25,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     )
   )
 
-  lazy val df1: DataFrame = sqlContext.createDataFrame(
+  lazy val df1: DataFrame = sparkSession.createDataFrame(
     sc.parallelize(1 to 100)
       .map[Row](_ => {
         val rand = new Random(System.nanoTime())
@@ -41,7 +41,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     )
   )
 
-  lazy val df2: DataFrame = sqlContext.createDataFrame(
+  lazy val df2: DataFrame = sparkSession.createDataFrame(
     sc.parallelize(1 to 100)
       .map[Row](_ => {
         val rand = new Random(System.nanoTime())
@@ -279,7 +279,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
-    val oldRowCount = sqlContext.read
+    val oldRowCount = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", s"$table")
@@ -317,7 +317,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
           .save()
       }
 
-      val newRowCount = sqlContext.read
+      val newRowCount = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", s"$table")

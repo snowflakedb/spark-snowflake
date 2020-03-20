@@ -104,7 +104,7 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
   def testFilter(filter: String,
                  expectedWhere: String,
                  expectedAnswer: Seq[Row]): Unit = {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", s"$test_table")

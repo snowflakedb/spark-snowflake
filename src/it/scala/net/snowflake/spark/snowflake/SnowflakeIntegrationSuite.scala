@@ -149,7 +149,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Quoted column names work") {
-    val df = sqlContext.read
+    val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", s"$test_table3")
@@ -163,20 +163,20 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   test("DefaultSource can load Snowflake COPY unload output to a DataFrame") {
     checkAnswer(
-      sqlContext.sql("select * from test_table"),
+      sparkSession.sql("select * from test_table"),
       TestUtils.expectedData
     )
   }
 
   test("count() on DataFrame created from a Snowflake table") {
     checkAnswer(
-      sqlContext.sql("select count(*) from test_table"),
+      sparkSession.sql("select count(*) from test_table"),
       Seq(Row(TestUtils.expectedData.length))
     )
   }
 
   test("count() on DataFrame created from a Snowflake query") {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       // scalastyle:off
@@ -198,7 +198,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         |where testfloat = 3.0)
       """.stripMargin
     // scalastyle:on
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptions)
       .option("dbtable", query)
@@ -215,7 +215,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         |where testfloat = 3.0
       """.stripMargin
     // scalastyle:on
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("query", query)
@@ -224,7 +224,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("Can load output of Snowflake aggregation queries") {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(
@@ -237,14 +237,14 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   test("DefaultSource supports simple column filtering") {
     checkAnswer(
-      sqlContext.sql("select testbyte, testfloat from test_table"),
+      sparkSession.sql("select testbyte, testfloat from test_table"),
       Seq(Row(1, 1.0), Row(2, 3), Row(3, -3), Row(null, null))
     )
   }
 
   test("query with pruned and filtered scans") {
     // scalastyle:off
-    checkAnswer(sqlContext.sql("""
+    checkAnswer(sparkSession.sql("""
           |select testbyte, testdouble, testint
           |from test_table
           |where testfloat = 3.0
@@ -256,7 +256,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     // This test can be simplified once #98 is fixed.
     val tableName = s"roundtrip_save_and_load_$randomSuffix"
     try {
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(TestUtils.expectedData),
           TestUtils.testSchema
@@ -270,7 +270,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)
@@ -283,7 +283,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("ZD-3234 - query with a semicolon at the end") {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       // scalastyle:off
@@ -305,7 +305,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
           |AS 'a * b'
         """.stripMargin)
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         // scalastyle:off
@@ -336,7 +336,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     conn.createStatement.executeUpdate(s"drop table if exists $test_table_tmp")
 
     // Append data in first time, table doesn't exist yet
-    sqlContext
+    sparkSession
       .createDataFrame(sc.makeRDD(data), schema)
       .write
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -354,7 +354,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     checkAnswer(result1, data)
 
     // Append data in second time, the table must exist
-    sqlContext
+    sparkSession
       .createDataFrame(sc.makeRDD(data), schema)
       .write
       .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -379,7 +379,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ignore("roundtrip save and load with uppercase column names") {
     testRoundtripSaveAndLoad(
       s"roundtrip_write_and_read_with_uppercase_column_names_$randomSuffix",
-      sqlContext.createDataFrame(
+      sparkSession.createDataFrame(
         sc.parallelize(Seq(Row(1))),
         StructType(StructField("A", IntegerType) :: Nil)
       ),
@@ -391,7 +391,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ignore("save with column names that are reserved words") {
     testRoundtripSaveAndLoad(
       s"save_with_column_names_that_are_reserved_words_$randomSuffix",
-      sqlContext.createDataFrame(
+      sparkSession.createDataFrame(
         sc.parallelize(Seq(Row(1))),
         StructType(StructField("table", IntegerType) :: Nil)
       )
@@ -399,7 +399,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   ignore("save with one empty partition (regression test for #96)") {
-    val df = sqlContext.createDataFrame(
+    val df = sparkSession.createDataFrame(
       sc.parallelize(Seq(Row(1)), 2),
       StructType(StructField("foo", IntegerType) :: Nil)
     )
@@ -408,7 +408,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   }
 
   ignore("save with all empty partitions (regression test for #96)") {
-    val df = sqlContext.createDataFrame(
+    val df = sparkSession.createDataFrame(
       sc.parallelize(Seq.empty[Row], 2),
       StructType(StructField("foo", IntegerType) :: Nil)
     )
@@ -429,9 +429,9 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("multiple scans on same table") {
     // .rdd() forces the first query to be unloaded from Snowflake
-    val rdd1 = sqlContext.sql("select testint from test_table").rdd
+    val rdd1 = sparkSession.sql("select testint from test_table").rdd
     // Similarly, this also forces an unload:
-    sqlContext.sql("select testdouble from test_table").rdd
+    sparkSession.sql("select testdouble from test_table").rdd
     // If the unloads were performed into the same directory then this call would fail: the
     // second unload from rdd2 would have overwritten the integers with doubles, so we'd get
     // a NumberFormatException.
@@ -444,7 +444,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       val metadata = new MetadataBuilder().putLong("maxlength", 512).build()
       val schema =
         StructType(StructField("x", StringType, metadata = metadata) :: Nil)
-      sqlContext
+      sparkSession
         .createDataFrame(sc.parallelize(Seq(Row("a" * 512))), schema)
         .write
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -453,7 +453,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .mode(SaveMode.ErrorIfExists)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)
@@ -461,7 +461,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       checkAnswer(loadedDf, Seq(Row("a" * 512)))
       // This append should fail due to the string being longer than the maxlength
       intercept[SQLException] {
-        sqlContext
+        sparkSession
           .createDataFrame(sc.parallelize(Seq(Row("a" * 513))), schema)
           .write
           .format(SNOWFLAKE_SOURCE_NAME)
@@ -481,7 +481,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ) {
     val tableName = s"error_message_when_string_too_long_$randomSuffix"
     try {
-      val df = sqlContext.createDataFrame(
+      val df = sparkSession.createDataFrame(
         sc.parallelize(Seq(Row("a" * 512))),
         StructType(StructField("A", StringType) :: Nil)
       )
@@ -502,7 +502,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("SaveMode.Overwrite with schema-qualified table name (#97)") {
     val tableName = s"overwrite_schema_qualified_table_name$randomSuffix"
-    val df = sqlContext.createDataFrame(
+    val df = sparkSession.createDataFrame(
       sc.parallelize(Seq(Row(1))),
       StructType(StructField("a", IntegerType) :: Nil)
     )
@@ -531,7 +531,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   ignore("SaveMode.Overwrite with non-existent table") {
     testRoundtripSaveAndLoad(
       s"overwrite_non_existent_table$randomSuffix",
-      sqlContext.createDataFrame(
+      sparkSession.createDataFrame(
         sc.parallelize(Seq(Row(1))),
         StructType(StructField("a", IntegerType) :: Nil)
       ),
@@ -543,7 +543,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     val tableName = s"overwrite_existing_table$randomSuffix"
     try {
       // Create a table to overwrite
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(Seq(Row(1))),
           StructType(StructField("a", IntegerType) :: Nil)
@@ -556,7 +556,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
 
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(TestUtils.expectedData),
           TestUtils.testSchema
@@ -569,7 +569,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .save()
 
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)
@@ -599,7 +599,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       )
     )
 
-    sqlContext
+    sparkSession
       .createDataFrame(sc.parallelize(extraData), TestUtils.testSchema)
       .write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -609,14 +609,14 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .saveAsTable(test_table2)
 
     checkAnswer(
-      sqlContext.sql("select * from test_table2"),
+      sparkSession.sql("select * from test_table2"),
       TestUtils.expectedData ++ extraData
     )
   }
 
   ignore("Respect SaveMode.ErrorIfExists when table exists") {
     val rdd = sc.parallelize(TestUtils.expectedData)
-    val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
+    val df = sparkSession.createDataFrame(rdd, TestUtils.testSchema)
     df.createOrReplaceTempView(test_table) // to ensure that the table already exists
 
     // Check that SaveMode.ErrorIfExists throws an exception
@@ -632,7 +632,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
   ignore("Do nothing when table exists if SaveMode = Ignore") {
     val rdd = sc.parallelize(TestUtils.expectedData.drop(1))
-    val df = sqlContext.createDataFrame(rdd, TestUtils.testSchema)
+    val df = sparkSession.createDataFrame(rdd, TestUtils.testSchema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptions)
@@ -642,7 +642,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
 
     // Check that SaveMode.Ignore does nothing
     checkAnswer(
-      sqlContext.sql("select * from test_table"),
+      sparkSession.sql("select * from test_table"),
       TestUtils.expectedData
     )
   }

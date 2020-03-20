@@ -57,7 +57,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       )
     )
 
-    val df1_spark = sqlContext
+    val df1_spark = sparkSession
       .createDataFrame(
         sc.parallelize(1 to numRows1)
           .map[Row](value => {
@@ -75,7 +75,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       .cache()
 
     // Contains some nulls
-    val df2_spark = sqlContext
+    val df2_spark = sparkSession
       .createDataFrame(
         sc.parallelize(1 to numRows2)
           .map[Row](value => {
@@ -324,7 +324,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_join_right")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 
