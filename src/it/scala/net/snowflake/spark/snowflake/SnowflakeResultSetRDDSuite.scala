@@ -41,6 +41,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     s"test_table_large_result_$randomSuffix"
   private val test_table_inf: String = s"test_table_inf_$randomSuffix"
   private val test_table_write: String = s"test_table_write_$randomSuffix"
+  private val test_table_like: String = s"test_table_like_$randomSuffix"
 
   private lazy val test_table_number_rows = Seq(
     Row(
@@ -447,6 +448,28 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     tmpdf.createOrReplaceTempView("test_table_inf")
   }
 
+  private def setupTableForLike(): Unit = {
+    // Below test table is from Snowflake user Doc.
+    // https://docs.snowflake.net/manuals/sql-reference/functions/like.html#examples
+    jdbcUpdate(
+      s"""create or replace table $test_table_like (
+         |subject string)""".stripMargin)
+    jdbcUpdate(
+      s"""insert into $test_table_like values
+         | ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+         | ('Joe down'), ('Elaine'), (''), (null),
+         | ('100 times'), ('1000 times'), ('100%')
+         |""".stripMargin)
+
+    val tmpdf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", s"$test_table_like")
+      .load()
+
+    tmpdf.createOrReplaceTempView("test_table_like")
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -470,6 +493,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     setupTimestampTable()
     setupLargeResultTable()
     setupINFTable()
+    setupTableForLike()
   }
 
   test("testNumber") {
@@ -855,6 +879,86 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   }
 
+  test("test normal LIKE pushdown 1") {
+    // Table values in test_table_like
+    // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+    // ('Joe down'), ('Elaine'), (''), (null),
+    // ('100 times'), ('1000 times'), ('100%')
+
+    // Normal LIKE: subject like '%Jo%oe%'
+    val result1 = sparkSession.sql(
+      s"select * from test_table_like where subject like '%Jo%oe%' order by 1")
+
+    val expectedResult1 = Seq(
+      Row("Joe   Doe"), Row("John  Dddoe")
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+         |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
+         |LIKE '%Jo%oe%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+         |""".stripMargin,
+      result1,
+      expectedResult1
+    )
+  }
+
+  test("test normal LIKE pushdown 2") {
+    // Table values in test_table_like
+    // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+    // ('Joe down'), ('Elaine'), (''), (null),
+    // ('100 times'), ('1000 times'), ('100%')
+
+    // Normal LIKE: subject like '%Jo%oe%'
+    val result1 = sparkSession.sql(
+      s"select * from test_table_like where subject like '100%' order by 1")
+
+    val expectedResult1 = Seq(
+      Row("100 times"), Row("100%"), Row("1000 times")
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+         |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
+         |LIKE '100%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+         |""".stripMargin,
+      result1,
+      expectedResult1
+    )
+  }
+
+  test("test normal NOT LIKE pushdown") {
+    // Only run the test with Arrow format,
+    // there is empty string in the result, it is read as NULL for COPY UNLOAD.
+    if (!params.useCopyUnload) {
+      // Table values in test_table_like
+      // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+      // ('Joe down'), ('Elaine'), (''), (null),
+      // ('100 times'), ('1000 times'), ('100%')
+
+      // Normal NOT LIKE: subject not like '%Jo%oe%'
+      val result2 = sparkSession.sql(
+        s"select * from test_table_like where subject not like '%Jo%oe%' order by 1")
+
+      val expectedResult2 = Seq(
+        Row(""), Row("100 times"), Row("100%"), Row("1000 times"),
+        Row("Elaine"), Row("Joe down"), Row("John_down")
+      )
+
+      testPushdown(
+        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+           |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+           |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
+           |LIKE '%Jo%oe%' ) ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+           |""".stripMargin,
+        result2,
+        expectedResult2
+      )
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
@@ -868,6 +972,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_large_result")
       jdbcUpdate(s"drop table if exists $test_table_inf")
       jdbcUpdate(s"drop table if exists $test_table_write")
+      jdbcUpdate(s"drop table if exists $test_table_like")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
