@@ -31,7 +31,6 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import scala.util.Random
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.slf4j.LoggerFactory

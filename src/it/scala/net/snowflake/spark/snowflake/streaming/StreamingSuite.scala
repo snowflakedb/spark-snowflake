@@ -3,13 +3,14 @@ package net.snowflake.spark.snowflake.streaming
 import java.io.{DataOutputStream, File}
 import java.net.ServerSocket
 import java.nio.charset.Charset
+import java.util.concurrent.TimeUnit
 
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, IntegrationSuiteBase}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 import scala.util.Random
@@ -404,7 +405,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .options(connectorOptionsNoTable)
       .option("checkpointLocation", "check")
-      // .trigger(ProcessingTime("1 seconds"))
+      // .trigger(Trigger.ProcessingTime(1, TimeUnit.SECONDS))
       .option("dbtable", "streaming_test")
       .option("streaming_stage", "streaming_test")
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -444,7 +445,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .options(connectorOptionsNoTable)
       .option("checkpointLocation", "check")
-       .trigger(ProcessingTime("1 seconds"))
+      .trigger(Trigger.ProcessingTime(1, TimeUnit.SECONDS))
       .option("dbtable", "streaming_test")
       .option("column_mapping", "name")
       .option("streaming_stage", "streaming_test")

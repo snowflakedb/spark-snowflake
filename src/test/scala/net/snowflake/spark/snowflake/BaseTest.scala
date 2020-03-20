@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapreduce.InputFormat
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.mockito.Matchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
@@ -66,7 +66,7 @@ class BaseTest
     */
   protected var sc: SparkContext = _
 
-  protected var testSqlContext: SQLContext = _
+  protected var sparkSession: SparkSession = _
 
   protected var mockS3Client: AmazonS3Client = _
 
@@ -116,13 +116,17 @@ class BaseTest
           .withStatus(BucketLifecycleConfiguration.ENABLED)
       )
     )
+    sparkSession = SparkSession.builder
+      .master("local")
+      .appName("SnowflakeSourceSuite")
+      .config("spark.sql.shuffle.partitions", "6")
+      .getOrCreate()
   }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     s3FileSystem = FileSystem.get(new URI(s3TempDir), sc.hadoopConfiguration)
-    testSqlContext = new SQLContext(sc)
-    expectedDataDF = testSqlContext.createDataFrame(
+    expectedDataDF = sparkSession.createDataFrame(
       sc.parallelize(TestUtils.expectedData),
       TestUtils.testSchema
     )
@@ -130,7 +134,7 @@ class BaseTest
 
   override def afterEach(): Unit = {
     super.afterEach()
-    testSqlContext = null
+    sparkSession = null
     expectedDataDF = null
     s3FileSystem = null
     FileSystem.closeAll()
