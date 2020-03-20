@@ -12,7 +12,7 @@ class OnErrorSuite extends IntegrationSuiteBase {
     Array(StructField("var", StringType, nullable = false))
   )
 
-  lazy val df: DataFrame = sqlContext.createDataFrame(
+  lazy val df: DataFrame = sparkSession.createDataFrame(
     sc.parallelize(
       Seq(Row("{\"dsadas\nadsa\":12311}"), Row("{\"abc\":334}")) // invalid json key
     ),
@@ -50,7 +50,7 @@ class OnErrorSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Append)
       .save()
 
-    val result = sqlContext.read
+    val result = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table)

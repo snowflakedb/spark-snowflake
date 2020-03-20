@@ -48,7 +48,7 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadDf = sqlContext.read
+      val loadDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
@@ -81,7 +81,7 @@ class IssueSuite extends IntegrationSuiteBase {
     val tt: String = s"tt_$randomSuffix"
 
     try {
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(1 to numRows)
             .map[Row](value => {
@@ -103,7 +103,7 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", tt)
@@ -136,7 +136,7 @@ class IssueSuite extends IntegrationSuiteBase {
         else rand.nextString(10)
       }
 
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(1 to numRows)
             .map[Row](value => {
@@ -152,7 +152,7 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", tt)
@@ -183,7 +183,7 @@ class IssueSuite extends IntegrationSuiteBase {
         else rand.nextString(10)
       }
 
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(1 to numRows)
             .map[Row](value => {
@@ -204,7 +204,7 @@ class IssueSuite extends IntegrationSuiteBase {
 
       assert(Utils.getLastCopyLoad contains "TRUNCATECOLUMNS = TRUE")
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", tt)
@@ -236,7 +236,7 @@ class IssueSuite extends IntegrationSuiteBase {
         else rand.nextString(10)
       }
 
-      sqlContext
+      sparkSession
         .createDataFrame(
           sc.parallelize(1 to numRows)
             .map[Row](value => {
@@ -252,7 +252,7 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", tt)

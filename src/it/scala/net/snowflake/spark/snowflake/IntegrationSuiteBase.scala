@@ -129,14 +129,13 @@ trait IntegrationSuiteBase
     * no-matter what temp directory was generated and requested.
     */
   protected var sc: SparkContext = _
-  protected var sqlContext: SQLContext = _
   protected var conn: Connection = _
 
   protected var sparkSession: SparkSession = _
 
   def runSql(query: String): Unit = {
     log.debug("RUNNING: " + Utils.sanitizeQueryText(query))
-    sqlContext.sql(query).collect()
+    sparkSession.sql(query).collect()
   }
 
   def jdbcUpdate(query: String): Unit = {
@@ -175,12 +174,13 @@ trait IntegrationSuiteBase
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")
 
-    sqlContext = new TestHiveContext(sc, loadTestTables = false)
 
     // Use fewer partitions to make tests faster
-    sqlContext.setConf("spark.sql.shuffle.partitions", "6")
-
-    sparkSession = sqlContext.sparkSession
+    sparkSession = SparkSession.builder
+      .master("local")
+      .appName("SnowflakeSourceSuite")
+      .config("spark.sql.shuffle.partitions", "6")
+      .getOrCreate()
   }
 
   override def afterAll(): Unit = {
@@ -254,7 +254,7 @@ trait IntegrationSuiteBase
         .mode(saveMode)
         .save()
       assert(DefaultJDBCWrapper.tableExists(conn, tableName))
-      val loadedDf = sqlContext.read
+      val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tableName)

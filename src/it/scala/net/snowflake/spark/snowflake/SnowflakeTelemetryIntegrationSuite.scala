@@ -44,7 +44,7 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
       )
     )
 
-    val df1_spark = sqlContext
+    val df1_spark = sparkSession
       .createDataFrame(
         sc.parallelize(1 to numRows1)
           .map[Row](value => {
@@ -62,7 +62,7 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
       .cache()
 
     // Contains some nulls
-    val df2_spark = sqlContext
+    val df2_spark = sparkSession
       .createDataFrame(
         sc.parallelize(1 to numRows2)
           .map[Row](value => {
@@ -281,7 +281,7 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table2")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 

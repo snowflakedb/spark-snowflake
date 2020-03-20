@@ -458,7 +458,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table3")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sqlContext.sparkSession)
+      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 }

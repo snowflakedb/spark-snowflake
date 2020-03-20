@@ -47,7 +47,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   }
 
   test("unload non variant data") {
-    val df = sqlContext.read
+    val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)
@@ -61,7 +61,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     assert(df.length == 2)
   }
   test("unload variant data") {
-    val df = sqlContext.read
+    val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName1)

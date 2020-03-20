@@ -41,7 +41,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
   }
 
   def checkTestTable(expectedAnswer: Seq[Row]): Unit = {
-    val loadedDf = sqlContext.read
+    val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("query", s"select * from $test_table order by i")
