@@ -78,19 +78,19 @@ class SnowflakeSink(sqlContext: SQLContext,
     s"${STREAMING_OBJECT_PREFIX}_${PIPE_TOKEN}_$stageName"
 
   private lazy val format: SupportedFormat =
-    if (Utils.containVariant(schema.get)) SupportedFormat.JSON
+    if (Utils.containVariant(cachedSchema.get)) SupportedFormat.JSON
     else SupportedFormat.CSV
 
   private lazy val ingestService: SnowflakeIngestService = {
     val service =
-      openIngestionService(param, pipeName, format, schema.get, storage, conn)
+      openIngestionService(param, pipeName, format, cachedSchema.get, storage, conn)
     init()
     service
   }
 
   private val compress: Boolean = param.sfCompress
 
-  private var schema: Option[StructType] = None
+  private var cachedSchema: Option[StructType] = None
 
   private val streamingStartTime: Long = System.currentTimeMillis()
 
@@ -183,7 +183,7 @@ class SnowflakeSink(sqlContext: SQLContext,
 
     }
 
-    if (schema.isEmpty) schema = Some(data.schema)
+    if (cachedSchema.isEmpty) cachedSchema = Some(data.schema)
     // prepare data
     val rdd =
       DefaultSnowflakeWriter.dataFrameToRDD(
