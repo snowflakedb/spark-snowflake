@@ -149,7 +149,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, joinType, condition) =>
+              case Join(_, _, joinType, condition, _) =>
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)

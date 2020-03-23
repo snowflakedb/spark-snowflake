@@ -959,6 +959,105 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  // This is supported from Spark 3.0
+  test("test LIKE with ESCAPE pushdown 1") {
+    // Table values in test_table_like
+    // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+    // ('Joe down'), ('Elaine'), (''), (null),
+    // ('100 times'), ('1000 times'), ('100%')
+
+    // Normal NOT LIKE: subject not like '%Jo%oe%'
+    val result2 = sparkSession.sql(
+      s"select * from test_table_like where subject like '%J%h%^_do%' escape '^' order by 1")
+
+    val expectedResult2 = Seq(
+      Row("John_down")
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
+         |LIKE '%J%h%^_do%' ESCAPE '^' ) ) AS "SUBQUERY_1" ORDER BY
+         |( "SUBQUERY_1"."SUBJECT" ) ASC
+         |""".stripMargin,
+      result2,
+      expectedResult2
+    )
+  }
+
+  // There is a Spark issue, so below test case is ignored temporarily.
+  // Spark issue is filed: https://issues.apache.org/jira/browse/SPARK-31210
+  // With this SQL, the Spark transforms the LIKE as
+  // "StartsWith(subject#130, 100^)" so LIKE Pushdown is not triggered.
+  // This issue is duplicated to https://issues.apache.org/jira/browse/SPARK-30254
+  // Apache Spark engineers have fixed it. This test can be enabled in formal
+  // Apache Spark release.
+  // This is supported from Spark 3.0
+  ignore ("test LIKE with ESCAPE pushdown 2") {
+    // Table values in test_table_like
+    // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+    // ('Joe down'), ('Elaine'), (''), (null),
+    // ('100 times'), ('1000 times'), ('100%')
+
+    // Normal NOT LIKE: like '100^%' escape '^'
+    val result2 = sparkSession.sql(
+      s"select * from test_table_like where subject like '100^%' escape '^' order by 1")
+
+    val expectedResult2 = Seq(
+      Row("100%")
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
+         |like '100^%' escape '^' ) ) AS "SUBQUERY_1" ORDER BY
+         |( "SUBQUERY_1"."SUBJECT" ) ASC
+         |""".stripMargin,
+      result2,
+      expectedResult2
+    )
+  }
+
+  // This is supported from Spark 3.0
+  test("test NOT LIKE with ESCAPE pushdown") {
+    // Only run the test with Arrow format,
+    // there is empty string in the result, it is read as NULL for COPY UNLOAD.
+    if (!params.useCopyUnload) {
+      // Table values in test_table_like
+      // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
+      // ('Joe down'), ('Elaine'), (''), (null),
+      // ('100 times'), ('1000 times'), ('100%')
+
+      // Normal NOT LIKE: subject not like '%Jo%oe%'
+      val result2 = sparkSession.sql(
+        s"select * from test_table_like where subject not like '%J%h%^_do%' escape '^' order by 1")
+
+      val expectedResult2 = Seq(
+        Row(""),
+        Row("100 times"),
+        Row("100%"),
+        Row("1000 times"),
+        Row("Elaine"),
+        Row("Joe   Doe"),
+        Row("Joe down"),
+        Row("John  Dddoe")
+      )
+
+      testPushdown(
+        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+           |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
+           |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
+           |LIKE '%J%h%^_do%' ESCAPE '^' ) ) ) AS "SUBQUERY_1" ORDER BY
+           |( "SUBQUERY_1"."SUBJECT" ) ASC
+           |""".stripMargin,
+        result2,
+        expectedResult2
+      )
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
