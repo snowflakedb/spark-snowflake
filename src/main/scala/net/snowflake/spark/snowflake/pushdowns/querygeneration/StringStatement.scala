@@ -20,6 +20,9 @@ import org.apache.spark.sql.catalyst.expressions.{
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringStatement {
+  // ESCAPE CHARACTER for LIKE is supported from Spark 3.0
+  // The default escape character comes from the constructor of Like class.
+  private val DEFAULT_LIKE_ESCAPE_CHAR: Char = '\\'
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -52,11 +55,18 @@ private[querygeneration] object StringStatement {
             convertStatement(rightSide, fields)
         )
 
-      case Like(left, right) =>
+      // ESCAPE Char is supported from Spark 3.0
+      case Like(left, right, escapeChar) =>
+        val escapeClause =
+          if (escapeChar == DEFAULT_LIKE_ESCAPE_CHAR) {
+            ""
+          } else {
+            s"ESCAPE '${escapeChar}'"
+          }
         convertStatement(left, fields) + "LIKE" + convertStatement(
           right,
           fields
-        )
+        ) + escapeClause
 
       case _ => null
     })
