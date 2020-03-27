@@ -1,0 +1,51 @@
+version: '3'
+
+services:
+  master:
+    image: spark-base:2.4.5
+    command: master
+    ports:
+      - 8080:8080
+      - 7077:7077
+    environment:
+      - SPARK_HOME=/spark
+
+  worker_1:
+    image: spark-base:2.4.5
+    command: worker spark://master:7077
+    depends_on:
+      - master
+    ports:
+      - 8081:8081
+    environment:
+      - SPARK_HOME=/spark
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+
+  worker_2:
+    image: spark-base:2.4.5
+    command: worker spark://master:7077
+    depends_on:
+      - master
+    ports:
+      - 8082:8082
+    environment:
+      - SPARK_HOME=/spark
+      - SPARK_WORKER_WEBUI_PORT=8082
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+
+  testdriver:
+    image: spark-base:2.4.5
+    command: spark-submit \
+      --jars /spark/work/spark-snowflake_2.11-2.7.0-spark_2.4.jar,/spark/work/snowflake-jdbc-3.12.2.jar \
+      --master spark://master:7077 --deploy-mode client \
+      --class net.snowflake.spark.snowflake.ArrowPerfTest \
+      /spark/work/spark-snowflake-perf_2.11-2.7.0-spark_2.4.jar
+    depends_on:
+      - master
+    environment:
+      - SPARK_HOME=/spark
+      - SNOWFLAKE_TEST_ACCOUNT=aws
+      - SNOWFLAKE_TEST_CONFIG_SECRET=$SNOWFLAKE_TEST_CONFIG_SECRET

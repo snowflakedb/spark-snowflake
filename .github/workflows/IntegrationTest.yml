@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
      matrix:
-       scala_version: [ '2.12.8', '2.11.12' ]
+       scala_version: [ '2.11.12' ]
        spark_version: [ '2.4.0' ]
        use_copy_unload: [ 'false', 'true' ]
-       cloud_provider: [ 'aws', 'gcp' ]
+       cloud_provider: [ 'gcp' ]
     steps:
     - uses: actions/checkout@v2
     - name: Set up JDK 1.8
@@ -23,9 +23,9 @@ jobs:
       with:
         java-version: 1.8
     - name: Decrypt snowflake.json for testing
-      run: ./.github/scripts/decrypt_secret.sh
+      run: ./.github/scripts/decrypt_secret.sh snowflake.travis.json snowflake.travis.json.gpg
       env:
-        SNOWFLAKE_TEST_PROFILE_SECRET: ${{ secrets.SNOWFLAKE_TEST_PROFILE_SECRET }}
+        SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
     - name: Run tests
       run: ./.github/scripts/run-tests-github.sh
       env:
