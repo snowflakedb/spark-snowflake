@@ -1,0 +1,52 @@
+version: '3'
+
+services:
+  master:
+    image: $DOCKER_IMAGE_TAG
+    command: master
+    ports:
+      - 8080:8080
+      - 7077:7077
+    environment:
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+
+  worker_1:
+    image: $DOCKER_IMAGE_TAG
+    command: worker spark://master:7077
+    depends_on:
+      - master
+    ports:
+      - 8081:8081
+      - 18081:18081
+    environment:
+      - SPARK_WORKER_PORT=18081
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+
+  worker_2:
+    image: $DOCKER_IMAGE_TAG
+    command: worker spark://master:7077
+    depends_on:
+      - master
+    ports:
+      - 8082:8082
+      - 18082:18082
+    environment:
+      - SPARK_WORKER_PORT=18082
+      - SPARK_WORKER_WEBUI_PORT=8082
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+
+  testdriver:
+    image: $DOCKER_IMAGE_TAG
+    # Run test.
+    command: runtest
+    depends_on:
+      - master
+      - worker_1
+      - worker_2
+    environment:
+      - SNOWFLAKE_TEST_ACCOUNT=aws
+      - SNOWFLAKE_TEST_CONFIG_SECRET=$SNOWFLAKE_TEST_CONFIG_SECRET
