@@ -10,3 +10,7 @@ metastore_db/*
 check/
 snowflake.travis.json
 lib/
+ClusterTest/work/
+ClusterTest/target/
+ClusterTest/project/target
+ClusterTest/src/main/python/*.pyc

@@ -32,8 +32,13 @@ ENV RUN_TEST_SCRIPT=$RUN_TEST_SCRIPT
 ENV DECRYPT_SCRIPT=$DECRYPT_SCRIPT
 ENV ENTRYPOINT_SCRIPT=$ENTRYPOINT_SCRIPT
 
-#install the below packages on the ubuntu image
+# Install the below packages on the ubuntu image
 RUN apt-get update -qq && apt-get install -qq -y gnupg2 wget openjdk-8-jdk scala
+
+# Install python3 for pyspark test
+RUN apt-get install -y python3-pip python3-dev \
+  && pip3 install --upgrade pip \
+  && echo "export PYSPARK_PYTHON=python3" >> ~/.bashrc
 
 RUN mkdir /users
 WORKDIR /users
