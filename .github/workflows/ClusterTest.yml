@@ -26,15 +26,15 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
+    - name: The test depens on GITHUB_RUN_ID and GITHUB_SHA
+      run: echo GITHUB_RUN_ID=${GITHUB_RUN_ID} GITHUB_SHA=${GITHUB_SHA}
     - name: Build docker image for spark base
       run: .github/docker/build_image.sh
     - name: Run docker-compose test
       run: docker-compose -f .github/docker/docker-compose.yml up -d
-    - name: Sleep some time to wait for test done.
-      uses: jakejarvis/wait-action@master
-      with:
-        time: '120s'
-    - name: Show test result
-      run: docker logs docker_testdriver_1
+    - name: Decrypt snowflake.json for testing
+      run: ./.github/scripts/decrypt_secret.sh snowflake.travis.json snowflake.travis.json.gpg
+    - name: Wait test done and check result
+      run: .github/docker/check_result.sh
     - name: Clean up the container and image
       run: .github/docker/cleanup_docker.sh

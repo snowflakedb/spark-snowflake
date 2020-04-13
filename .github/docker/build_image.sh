@@ -2,6 +2,9 @@
 
 echo "This script should be run in repository root directory."
 
+echo "GITHUB_RUN_ID=$GITHUB_RUN_ID"
+echo "GITHUB_SHA=$GITHUB_SHA"
+
 # Build spark connector
 sbt ++2.11.12 package
 

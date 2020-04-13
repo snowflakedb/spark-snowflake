@@ -38,11 +38,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       // "com.google.guava" % "guava" % "14.0.1" % Test,
       // "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       // "org.mockito" % "mockito-core" % "1.10.19" % Test,
-      "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
+      "org.apache.commons" % "commons-lang3" % "3.5" % "provided, runtime",
       // Below is for Spark Streaming from Kafka test only
       // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
-      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, runtime",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",
+      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, runtime"
     ),
   )
