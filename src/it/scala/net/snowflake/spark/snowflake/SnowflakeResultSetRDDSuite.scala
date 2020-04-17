@@ -772,37 +772,33 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
-  // Negative test for uploading data to GCP hit exception
+  // Negative test for hitting exception when uploading data to cloud
   test("Test GCP uploading retry works") {
-    if ("gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
-      // Enable test hook to simulate upload error
-      TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
+    // Enable test hook to simulate upload error
+    TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
 
-      // Set max_retry_count to small value to avoid bock testcase too long.
-      thisConnectorOptionsNoTable += ("max_retry_count" -> "3")
+    // Set max_retry_count to small value to avoid bock testcase too long.
+    thisConnectorOptionsNoTable += ("max_retry_count" -> "5")
 
-      val tmpDF = sparkSession
-        .sql(s"select * from test_table_large_result where int_c < 1000")
+    val tmpDF = sparkSession
+      .sql(s"select * from test_table_large_result where int_c < 1000")
 
-      // Write the Data back to snowflake
-      jdbcUpdate(s"drop table if exists $test_table_write")
-      assertThrows[Exception] {
-        tmpDF.write
-          .format(SNOWFLAKE_SOURCE_NAME)
-          .options(thisConnectorOptionsNoTable)
-          .option("dbtable", test_table_write)
-          .option("truncate_table", "off")
-          .option("usestagingtable", "on")
-          .mode(SaveMode.Overwrite)
-          .save()
-      }
-
-      // Reset env.
-      thisConnectorOptionsNoTable -= "max_retry_count"
-      TestHook.disableTestHook()
-    } else {
-      println("Skip the test on non-GCP platform")
+    // Write the Data back to snowflake
+    jdbcUpdate(s"drop table if exists $test_table_write")
+    assertThrows[Exception] {
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .mode(SaveMode.Overwrite)
+        .save()
     }
+
+    // Reset env.
+    thisConnectorOptionsNoTable -= "max_retry_count"
+    TestHook.disableTestHook()
   }
 
   // Copy one table from AWS account to GCP account
