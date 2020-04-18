@@ -440,7 +440,7 @@ object CloudStorageOperations {
 
 }
 
-private class SingleElementIterator(fileName: String) extends Iterator[String] {
+private[io] class SingleElementIterator(fileName: String) extends Iterator[String] {
 
   private var name: Option[String] = Some(fileName)
 
@@ -469,9 +469,21 @@ private[io] object StorageInfo {
 }
 
 sealed trait CloudStorage {
-  protected val RETRY_SLEEP_TIME_UNIT_IN_MS: Long = 200
+  protected val RETRY_SLEEP_TIME_UNIT_IN_MS: Long = 100
   private var processedFileCount = 0
   protected val connection: Connection
+  protected val maxRetryCount: Int
+  protected val proxyInfo: Option[ProxyInfo]
+
+  protected def retrySleepTimeInMS(retry: Long): Long = {
+    var expectedTime: Long =
+      RETRY_SLEEP_TIME_UNIT_IN_MS * Math.pow(2, retry).toLong
+    // One sleep should be limited in 1 minute
+    expectedTime = Math.min(expectedTime, 60 * 1000)
+    // Add at most 20% noise to the waiting time.
+    expectedTime = (expectedTime * (1.0 - Random.nextFloat() * 0.2)).toLong
+    expectedTime
+  }
 
   protected def getFileName(fileIndex: Int,
                             format: SupportedFormat,
@@ -496,6 +508,150 @@ sealed trait CloudStorage {
              compress: Boolean = true): List[String] =
     uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
 
+  // Retrieve data for one partition and upload the result data to stage.
+  // This function is called on worker node.
+  protected def uploadPartition(rows: Iterator[String],
+                                format: SupportedFormat,
+                                compress: Boolean,
+                                directory: String,
+                                partitionID: Int,
+                                storageInfo: Option[Map[String, String]],
+                                fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
+                               )
+  : SingleElementIterator = {
+    val fileName = getFileName(partitionID, format, compress)
+
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+         | Start writing partition ID:$partitionID as $fileName
+         |""".stripMargin.filter(_ >= ' '))
+
+    // Either StorageInfo or fileTransferMetadata must be set.
+    if ((storageInfo.isEmpty && fileTransferMetadata.isEmpty)
+      || (storageInfo.isDefined && fileTransferMetadata.isDefined))
+    {
+      val errorMessage =
+        s"""Hit internal error: Either storageInfo or fileTransferMetadata
+           | must be set. storageInfo=${storageInfo.isDefined}
+           | fileTransferMetadata=${fileTransferMetadata.isDefined}
+           |""".stripMargin
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: $errorMessage
+           |""".stripMargin.filter(_ >= ' '))
+      throw new SnowflakeConnectorException(errorMessage)
+    }
+
+    // Retrieve the data for uploading
+    val startTime = System.currentTimeMillis()
+    val outputStream = new ByteArrayOutputStream(1024 * 1024)
+    var rowCount: Long = 0
+    while (rows.hasNext) {
+      outputStream.write(rows.next.getBytes("UTF-8"))
+      outputStream.write('\n')
+      rowCount += 1
+    }
+    val data = outputStream.toByteArray
+    outputStream.close()
+
+    if (data.nonEmpty) {
+      // Upload the file with retry and backoff.
+      // default maxRetryCount is 10 which is configurable.
+      var retryCount = 0
+      var error: Option[Throwable] = None
+      var uploadDone = false
+      do {
+        try {
+          val startUploadTime = System.currentTimeMillis()
+
+          if (storageInfo.isDefined) {
+            // Update data with StorageInfo
+            val uploadStream =
+              createUploadStream(fileName, Some(directory), compress, storageInfo.get)
+            uploadStream.write(data)
+            uploadStream.close()
+          } else if (fileTransferMetadata.isDefined) {
+            // Set up proxy info if it is configured.
+            val proxyProperties = new Properties()
+            proxyInfo match {
+              case Some(proxyInfoValue) =>
+                proxyInfoValue.setProxyForJDBC(proxyProperties)
+              case None =>
+            }
+
+            // Update data with FileTransferMetadata
+            val inStream = new ByteArrayInputStream(data)
+            SnowflakeFileTransferAgent.uploadWithoutConnection(
+              SnowflakeFileTransferConfig.Builder.newInstance()
+                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+                .setUploadStream(inStream)
+                .setRequireCompress(compress)
+                .setOcspMode(OCSPMode.FAIL_OPEN)
+                .setProxyProperties(proxyProperties)
+                .build())
+          }
+
+          TestHook.raiseExceptionIfTestFlagEnabled(
+            TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
+            "Negative test to raise error when uploading data to GCS"
+          )
+
+          val endTime = System.currentTimeMillis()
+          CloudStorageOperations.log.info(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+               | Finish writing partition ID:$partitionID:
+               | write row count is $rowCount.
+               | Uncompressed data size is ${Utils.getSizeString(data.size)}.
+               | Total process time is
+               | ${(endTime - startTime) / 1000.0}s including
+               | conversion_time=${(startUploadTime - startTime) / 1000.0}s
+               | and upload_time=${(endTime - startUploadTime) / 1000.0}s.
+               |""".stripMargin.filter(_ >= ' '))
+
+          // succeed upload, set done to break the loop
+          uploadDone = true
+          error = None
+        } catch {
+          // Hit exception when uploading the file, sleep some time and retry.
+          case e: Throwable => {
+            error = Some(e)
+            val errmsg = e.getMessage
+            CloudStorageOperations.log.info(
+              s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
+                 | retryCount=$retryCount: fileName=$fileName,
+                 | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
+                 |""".stripMargin.filter(_ >= ' ')
+            )
+          }
+            retryCount = retryCount + 1
+            // sleep some time and retry
+            Thread.sleep(retrySleepTimeInMS(retryCount))
+        }
+      } while (retryCount < maxRetryCount && !uploadDone)
+
+      // Fail to upload data after retry
+      if (!uploadDone) {
+        val errorMessage = error.get.getMessage
+        CloudStorageOperations.log.info(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
+             | after retry $retryCount times is [ $errorMessage ]
+             |""".stripMargin.filter(_ >= ' ')
+        )
+        throw error.get
+      }
+    } else {
+      val endTime = System.currentTimeMillis()
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+           | Finish writing partition ID:$partitionID:
+           | upload is skipped because partition is empty.
+           | Total process time is
+           | ${(endTime - startTime) / 1000.0}s.
+           |""".stripMargin.filter(_ >= ' '))
+    }
+
+    new SingleElementIterator(s"$directory/$fileName")
+  }
+
   protected def uploadRDD(data: RDD[String],
                           format: SupportedFormat = SupportedFormat.CSV,
                           dir: Option[String],
@@ -507,24 +663,23 @@ sealed trait CloudStorage {
         case Some(str: String) => str
         case None => Random.alphanumeric take 10 mkString ""
       }
+
+    // Some explain for newbies on spark connector:
+    // Bellow code is executed in distributed by spark FRAMEWORK
+    // 1. The master node executes "data.mapPartitionsWithIndex()"
+    // 2. Code snippet for CASE clause is executed by distributed worker nodes
     val files = data.mapPartitionsWithIndex {
       case (index, rows) =>
-        val fileName = getFileName(index, format, compress)
+        ///////////////////////////////////////////////////////////////////////
+        // Begin code snippet to be executed on worker
+        ///////////////////////////////////////////////////////////////////////
 
-        val outputStream =
-          createUploadStream(fileName, Some(directory), compress, storageInfo)
-        while (rows.hasNext) {
-          outputStream.write(rows.next.getBytes("UTF-8"))
-          outputStream.write('\n')
-        }
-        outputStream.close()
+        // Convert and upload the partition with the StorageInfo
+        uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
 
-        CloudStorageOperations.log.info(
-          SnowflakeResultSetRDD.WORKER_LOG_PREFIX +
-          s": upload file $directory/$fileName to stage"
-        )
-
-        new SingleElementIterator(s"$directory/$fileName")
+        ///////////////////////////////////////////////////////////////////////
+        // End code snippet to be executed on worker
+        ///////////////////////////////////////////////////////////////////////
     }
 
     files.collect().toList
@@ -590,7 +745,7 @@ sealed trait CloudStorage {
         }
         retryCount = retryCount + 1
         // sleep some time and retry
-        Thread.sleep(RETRY_SLEEP_TIME_UNIT_IN_MS * retryCount)
+        Thread.sleep(retrySleepTimeInMS(retryCount))
       }
     } while (retryCount < maxRetryCount)
 
@@ -650,7 +805,8 @@ case class InternalAzureStorage(param: MergedParameters,
                                 @transient override val connection: Connection)
     extends CloudStorage {
 
-  val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  override val maxRetryCount = param.maxRetryCount
+  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -826,8 +982,8 @@ case class ExternalAzureStorage(containerName: String,
                                 azureAccount: String,
                                 azureEndpoint: String,
                                 azureSAS: String,
-                                proxyInfo: Option[ProxyInfo],
-                                maxRetryCount: Int,
+                                override val proxyInfo: Option[ProxyInfo],
+                                override val maxRetryCount: Int,
                                 fileCountPerPartition: Int,
                                 pref: String = "",
                                 @transient override val connection: Connection)
@@ -949,7 +1105,8 @@ case class InternalS3Storage(param: MergedParameters,
                              parallelism: Int =
                                CloudStorageOperations.DEFAULT_PARALLELISM)
     extends CloudStorage {
-  val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  override val maxRetryCount = param.maxRetryCount
+  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -1147,8 +1304,8 @@ case class InternalS3Storage(param: MergedParameters,
 case class ExternalS3Storage(bucketName: String,
                              awsId: String,
                              awsKey: String,
-                             proxyInfo: Option[ProxyInfo],
-                             maxRetryCount: Int,
+                             override val proxyInfo: Option[ProxyInfo],
+                             override val maxRetryCount: Int,
                              fileCountPerPartition: Int,
                              awsToken: Option[String] = None,
                              pref: String = "",
@@ -1285,20 +1442,10 @@ case class InternalGcsStorage(param: MergedParameters,
                               @transient override val connection: Connection,
                               @transient stageManager: SFInternalStage)
   extends CloudStorage {
-  // proxy related properties
-  val proxyProperties: Properties = {
-    val proxyProperties = new Properties()
-    // Set up proxy info if it is configured.
-    param.proxyInfo match {
-      case Some(proxyInfoValue) =>
-        proxyInfoValue.setProxyForJDBC(proxyProperties)
-      case None =>
-    }
-    proxyProperties
-  }
 
+  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
   // Max retry count to upload a file
-  val maxRetryCount: Int = param.maxRetryCount
+  override val maxRetryCount: Int = param.maxRetryCount
 
   // Generate file transfer metadata objects for file upload. On GCS,
   // the file transfer metadata is pre-signed URL and related metadata.
@@ -1362,116 +1509,6 @@ case class InternalGcsStorage(param: MergedParameters,
     result.toList
   }
 
-  // Retrieve data for one partition and upload the result data to stage.
-  // The upload is done by JDBC internal API without JDBC connection.
-  // This function is called on worker node.
-  private def uploadPartition(rows: Iterator[String],
-                              format: SupportedFormat,
-                              compress: Boolean,
-                              directory: String,
-                              partitionID: Int,
-                              metadata: SnowflakeFileTransferMetadata)
-  : SingleElementIterator = {
-    val fileName = getFileName(partitionID, format, compress)
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Start writing partition ID:$partitionID as $fileName
-         |""".stripMargin.filter(_ >= ' '))
-
-    // Retrieve the data for uploading
-    val startTime = System.currentTimeMillis()
-    val outputStream = new ByteArrayOutputStream(1024 * 1024)
-    var rowCount: Long = 0
-    while (rows.hasNext) {
-      outputStream.write(rows.next.getBytes("UTF-8"))
-      outputStream.write('\n')
-      rowCount += 1
-    }
-    val data = outputStream.toByteArray
-
-    if (data.nonEmpty) {
-      // Upload the file with retry and backoff.
-      // default maxRetryCount is 10 which is configurable.
-      var retryCount = 0
-      var error: Option[Throwable] = None
-      var uploadDone = false
-      do {
-        try {
-          val startUploadTime = System.currentTimeMillis()
-          val inStream = new ByteArrayInputStream(data)
-          SnowflakeFileTransferAgent.uploadWithoutConnection(
-            SnowflakeFileTransferConfig.Builder.newInstance()
-              .setSnowflakeFileTransferMetadata(metadata)
-              .setUploadStream(inStream)
-              .setRequireCompress(compress)
-              .setOcspMode(OCSPMode.FAIL_OPEN)
-              .setProxyProperties(proxyProperties)
-              .build())
-          outputStream.close()
-
-          TestHook.raiseExceptionIfTestFlagEnabled(
-            TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-            "Negative test to raise error when uploading data to GCS"
-          )
-
-          val endTime = System.currentTimeMillis()
-          CloudStorageOperations.log.info(
-            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-               | Finish writing partition ID:$partitionID:
-               | write row count is $rowCount.
-               | Uncompressed data size is ${Utils.getSizeString(data.size)}.
-               | Total process time is
-               | ${(endTime - startTime) / 1000.0}s including
-               | conversion_time=${(startUploadTime - startTime) / 1000.0}s
-               | and upload_time=${(endTime - startUploadTime) / 1000.0}s.
-               |""".stripMargin.filter(_ >= ' '))
-
-          // succeed upload, set done to break the loop
-          uploadDone = true
-          error = None
-        } catch {
-          // Hit exception when uploading the file, sleep some time and retry.
-          case e: Throwable => {
-            error = Some(e)
-            val errmsg = e.getMessage
-            CloudStorageOperations.log.info(
-              s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
-                 | retryCount=$retryCount: fileName=$fileName,
-                 | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
-                 |""".stripMargin.filter(_ >= ' ')
-            )
-          }
-            retryCount = retryCount + 1
-            // sleep some time and retry
-            Thread.sleep(RETRY_SLEEP_TIME_UNIT_IN_MS * retryCount)
-        }
-      } while (retryCount < maxRetryCount && !uploadDone)
-
-      // Fail to upload data after retry
-      if (!uploadDone) {
-        val errorMessage = error.get.getMessage
-        CloudStorageOperations.log.info(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
-             | after retry $retryCount times is [ $errorMessage ]
-             |""".stripMargin.filter(_ >= ' ')
-        )
-        throw error.get
-      }
-    } else {
-      val endTime = System.currentTimeMillis()
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-           | Finish writing partition ID:$partitionID:
-           | upload is skipped because partition is empty.
-           | Total process time is
-           | ${(endTime - startTime) / 1000.0}s.
-           |""".stripMargin.filter(_ >= ' '))
-    }
-
-    new SingleElementIterator(s"$directory/$fileName")
-  }
-
   // The RDD upload on GCS is different to AWS and Azure
   // so override it separately.
   override def upload(data: RDD[String],
@@ -1508,11 +1545,11 @@ case class InternalGcsStorage(param: MergedParameters,
           metadatas.head
         }
         // Convert and upload the partition with the file transfer metadata
-        uploadPartition(rows, format, compress, directory, index, metadata)
+        uploadPartition(rows, format, compress, directory, index, None, Some(metadata))
 
-      ///////////////////////////////////////////////////////////////////////
-      // End code snippet to executed on worker
-      ///////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////
+        // End code snippet to executed on worker
+        ///////////////////////////////////////////////////////////////////////
     }
 
     files.collect().toList
