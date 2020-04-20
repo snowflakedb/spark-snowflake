@@ -18,7 +18,7 @@ import scala.util.Properties
 
 val sparkVersion = "2.4.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
-val sparkConnectorVersion = "2.7.0"
+val sparkConnectorVersion = "2.7.1"
 
 lazy val ItTest = config("it") extend Test
 

@@ -30,6 +30,8 @@ object ClusterTest {
 
   // Driver function to run the test.
   def main(args: Array[String]): Unit = {
+    log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
+
     val usage = s"""Two parameters are need: [local | remote] and
                     | testClassNames (using ';' to separate multiple classes)
                     |""".stripMargin

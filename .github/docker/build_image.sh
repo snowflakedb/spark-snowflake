@@ -2,18 +2,30 @@
 
 echo "This script should be run in repository root directory."
 
+echo "Below variables must be set by workflow and docker-conpose file"
 echo "GITHUB_RUN_ID=$GITHUB_RUN_ID"
 echo "GITHUB_SHA=$GITHUB_SHA"
+echo "TEST_SPARK_CONNECTOR_VERSION=$TEST_SPARK_CONNECTOR_VERSION"
+echo "TEST_SCALA_VERSION=$TEST_SCALA_VERSION"
+echo "TEST_COMPILE_SCALA_VERSION=$TEST_COMPILE_SCALA_VERSION"
+echo "TEST_JDBC_VERSION=$TEST_JDBC_VERSION"
+echo "TEST_SPARK_VERSION=$TEST_SPARK_VERSION"
+
+export SPARK_CONNECTOR_JAR_NAME=spark-snowflake_${TEST_SCALA_VERSION}-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar
+export JDBC_JAR_NAME=snowflake-jdbc-${TEST_JDBC_VERSION}.jar
+
+echo $SPARK_CONNECTOR_JAR_NAME
+echo $JDBC_JAR_NAME
 
 # Build spark connector
-sbt ++2.11.12 package
+sbt ++$TEST_COMPILE_SCALA_VERSION package
 
 # Build cluster test binaries
 cd ClusterTest
-sbt ++2.11.12 package
+sbt ++$TEST_COMPILE_SCALA_VERSION  package
 rm -fr work
 mkdir work
-cp target/scala-2.11/clustertest_2.11-1.0.jar work/
+cp target/scala-${TEST_SCALA_VERSION}/clustertest_${TEST_SCALA_VERSION}-1.0.jar work/
 cp src/main/python/*.py work
 cd work
 tar -czf testcase.tar.gz *
@@ -23,10 +35,10 @@ cd ../..
 docker build \
 --build-arg SPARK_URL=http://apache.spinellicreations.com/spark/spark-2.4.5/spark-2.4.5-bin-hadoop2.7.tgz \
 --build-arg SPARK_BINARY_NAME=spark-2.4.5-bin-hadoop2.7.tgz \
---build-arg JDBC_URL=https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.12.2/snowflake-jdbc-3.12.2.jar \
---build-arg JDBC_BINARY_NAME=snowflake-jdbc-3.12.2.jar \
---build-arg SPARK_CONNECTOR_LOCATION=target/scala-2.11/spark-snowflake_2.11-2.7.0-spark_2.4.jar \
---build-arg SPARK_CONNECTOR_BINARY_NAME=spark-snowflake_2.11-2.7.0-spark_2.4.jar \
+--build-arg JDBC_URL=https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/${TEST_JDBC_VERSION}/$JDBC_JAR_NAME \
+--build-arg JDBC_BINARY_NAME=$JDBC_JAR_NAME \
+--build-arg SPARK_CONNECTOR_LOCATION=target/scala-${TEST_SCALA_VERSION}/$SPARK_CONNECTOR_JAR_NAME \
+--build-arg SPARK_CONNECTOR_BINARY_NAME=$SPARK_CONNECTOR_JAR_NAME \
 --build-arg TEST_CASE_LOCATION=ClusterTest/work/testcase.tar.gz \
 --build-arg TEST_CASE_BINARY_NAME=testcase.tar.gz \
 --build-arg ENCRYPTED_SNOWFLAKE_TEST_CONFIG=snowflake.travis.json.gpg \

@@ -11,6 +11,7 @@ check/
 snowflake.travis.json
 lib/
 ClusterTest/work/
+ClusterTest/snowflake.travis.json
 ClusterTest/target/
 ClusterTest/project/target
 ClusterTest/src/main/python/*.pyc
