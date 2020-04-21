@@ -19,6 +19,11 @@ jobs:
     env:
         SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
         DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:2.4.5'
+        TEST_SPARK_CONNECTOR_VERSION: 2.7.1
+        TEST_SCALA_VERSION: 2.11
+        TEST_COMPILE_SCALA_VERSION: 2.11.12
+        TEST_JDBC_VERSION: 3.12.3
+        TEST_SPARK_VERSION: 2.4
 
     steps:
     - uses: actions/checkout@v2
@@ -27,7 +32,7 @@ jobs:
       with:
         java-version: 1.8
     - name: The test depens on GITHUB_RUN_ID and GITHUB_SHA
-      run: echo GITHUB_RUN_ID=${GITHUB_RUN_ID} GITHUB_SHA=${GITHUB_SHA}
+      run: echo GITHUB_RUN_ID=${GITHUB_RUN_ID} GITHUB_SHA=${GITHUB_SHA} SCALA=$TEST_SCALA_VERSION SCALA_COMPILE=$TEST_COMPILE_SCALA_VERSION SPARK_CONN=$TEST_SPARK_CONNECTOR_VERSION SPARK=$TEST_SPARK_VERSION JDBC=$TEST_JDBC_VERSION
     - name: Build docker image for spark base
       run: .github/docker/build_image.sh
     - name: Run docker-compose test

@@ -778,7 +778,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
 
     // Set max_retry_count to small value to avoid bock testcase too long.
-    thisConnectorOptionsNoTable += ("max_retry_count" -> "5")
+    thisConnectorOptionsNoTable += ("max_retry_count" -> "2")
 
     val tmpDF = sparkSession
       .sql(s"select * from test_table_large_result where int_c < 1000")
