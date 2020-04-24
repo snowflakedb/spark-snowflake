@@ -57,7 +57,7 @@ trait ClusterTestSuiteBase {
     val df = sqlContext.read
       .format(TestUtils.SNOWFLAKE_NAME)
       .options(sfOptionsNoTable)
-      // .option("query", s"select * from $sourceSchema.$sourceTableName limit 100")
+      // .option("query", s"select * from $sourceSchema.$sourceTableName limit 100000")
       .option("dbtable", sourceTableName)
       .option("sfSchema", sourceSchema)
       .load()

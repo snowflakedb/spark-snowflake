@@ -19,6 +19,10 @@ elif [ -n "${SPARK_HOSTNAME}" ]; then
   host_opts="-h ${SPARK_HOSTNAME}"
 fi
 
+echo "Decrept profile json, the current dir should be /users/spark/work"
+pwd
+bash decrypt_secret.sh $SNOWFLAKE_TEST_CONFIG $ENCRYPTED_SNOWFLAKE_TEST_CONFIG 
+
 ## Invocation shortcut commands
 #
 cmd=$1
