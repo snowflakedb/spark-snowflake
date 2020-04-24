@@ -14,10 +14,6 @@ echo "TEST_SPARK_VERSION=$TEST_SPARK_VERSION"
 export SPARK_HOME=/users/spark
 export SPARK_WORKDIR=/users/spark/work
 
-# Decrept profile json
-cd $SPARK_WORKDIR
-bash decrypt_secret.sh $SNOWFLAKE_TEST_CONFIG $ENCRYPTED_SNOWFLAKE_TEST_CONFIG 
-
 export SPARK_CONNECTOR_JAR_NAME=spark-snowflake_${TEST_SCALA_VERSION}-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar
 export JDBC_JAR_NAME=snowflake-jdbc-${TEST_JDBC_VERSION}.jar
 
@@ -25,13 +21,17 @@ echo "Important: if new test cases are added, script .github/docker/check_result
 # Run pyspark test
 # python3 has been installed in the container
 $SPARK_HOME/bin/spark-submit \
-      --conf "spark.pyspark.python=python3" --conf "spark.pyspark.driver.python=python3" \
       --jars $SPARK_WORKDIR/${SPARK_CONNECTOR_JAR_NAME},$SPARK_WORKDIR/${JDBC_JAR_NAME} \
+      --conf "spark.pyspark.python=python3" --conf "spark.pyspark.driver.python=python3" \
+      --conf "spark.executor.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR  -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_executor.properties" \
+      --conf "spark.driver.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_driver.properties" \
       --master spark://master:7077 --deploy-mode client \
       $SPARK_WORKDIR/ClusterTest.py remote
 
 $SPARK_HOME/bin/spark-submit \
       --jars $SPARK_WORKDIR/${SPARK_CONNECTOR_JAR_NAME},$SPARK_WORKDIR/${JDBC_JAR_NAME} \
+      --conf "spark.executor.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR  -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_executor.properties" \
+      --conf "spark.driver.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_driver.properties" \
       --master spark://master:7077 --deploy-mode client \
       --class net.snowflake.spark.snowflake.ClusterTest \
       $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;"

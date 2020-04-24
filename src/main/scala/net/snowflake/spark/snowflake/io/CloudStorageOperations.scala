@@ -550,7 +550,7 @@ sealed trait CloudStorage {
     }
 
     // Retrieve the data for uploading
-    val startTime = System.currentTimeMillis()
+    val startConvertTime = System.currentTimeMillis()
     val outputStream = new ByteArrayOutputStream(1024 * 1024)
     var rowCount: Long = 0
     while (rows.hasNext) {
@@ -560,6 +560,7 @@ sealed trait CloudStorage {
     }
     val data = outputStream.toByteArray
     outputStream.close()
+    val endConvertTime = System.currentTimeMillis()
 
     if (data.nonEmpty) {
       // Upload the file with retry and backoff.
@@ -567,9 +568,10 @@ sealed trait CloudStorage {
       var retryCount = 0
       var error: Option[Throwable] = None
       var uploadDone = false
+      var startUploadTime: Long = 0
       do {
         try {
-          val startUploadTime = System.currentTimeMillis()
+          startUploadTime = System.currentTimeMillis()
 
           if (storageInfo.isDefined) {
             // Update data with StorageInfo
@@ -597,22 +599,30 @@ sealed trait CloudStorage {
                 .setProxyProperties(proxyProperties)
                 .build())
           }
+          val endUploadTime = System.currentTimeMillis()
 
           TestHook.raiseExceptionIfTestFlagEnabled(
             TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
             "Negative test to raise error when uploading data to GCS"
           )
 
-          val endTime = System.currentTimeMillis()
+          val retryMessage = if (retryCount < 1) {
+            "NO_RETRY"
+          } else {
+            s"""successRetryCount=$retryCount upload time include retry time:
+               | ${(endUploadTime - endConvertTime) / 1000.0}s
+               |""".stripMargin
+          }
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
                | Finish writing partition ID:$partitionID $fileName
                | write row count is $rowCount.
                | Uncompressed data size is ${Utils.getSizeString(data.size)}.
                | Total process time is
-               | ${(endTime - startTime) / 1000.0}s including
-               | conversion_time=${(startUploadTime - startTime) / 1000.0}s
-               | and upload_time=${(endTime - startUploadTime) / 1000.0}s.
+               | ${(endUploadTime - startConvertTime) / 1000.0}s including
+               | conversion_time=${(endConvertTime - startConvertTime) / 1000.0}s
+               | and this upload_time=${(endUploadTime - startUploadTime) / 1000.0}s.
+               | $retryMessage
                |""".stripMargin.filter(_ >= ' '))
 
           // succeed upload, set done to break the loop
@@ -622,17 +632,23 @@ sealed trait CloudStorage {
           // Hit exception when uploading the file, sleep some time and retry.
           case e: Throwable => {
             error = Some(e)
-            val errmsg = e.getMessage
+            retryCount = retryCount + 1
+            val sleepTime = retrySleepTimeInMS(retryCount)
+            val stringWriter = new StringWriter
+            e.printStackTrace(new PrintWriter(stringWriter))
+            val errmsg = s"${e.getMessage}, stacktrace: ${stringWriter.toString}"
+
             CloudStorageOperations.log.info(
               s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
-                 | retryCount=$retryCount: fileName=$fileName,
+                 | retryCount=$retryCount fileName=$fileName
+                 | backoffTime=${sleepTime.toDouble / 1000.0}s
                  | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
                  |""".stripMargin.filter(_ >= ' ')
             )
-          }
-            retryCount = retryCount + 1
+
             // sleep some time and retry
-            Thread.sleep(retrySleepTimeInMS(retryCount))
+            Thread.sleep(sleepTime)
+          }
         }
       } while (retryCount < maxRetryCount && !uploadDone)
 
@@ -653,7 +669,7 @@ sealed trait CloudStorage {
            | Finish writing partition ID:$partitionID:
            | upload is skipped because partition is empty.
            | Total process time is
-           | ${(endTime - startTime) / 1000.0}s.
+           | ${(endTime - startConvertTime) / 1000.0}s.
            |""".stripMargin.filter(_ >= ' '))
     }
 
@@ -672,6 +688,13 @@ sealed trait CloudStorage {
         case None => Random.alphanumeric take 10 mkString ""
       }
 
+    val startTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Begin to process and upload data for ${data.getNumPartitions}
+         | partitions: directory=$directory ${format.toString} $compress
+         |""".stripMargin.filter(_ >= ' '))
+
     // Some explain for newbies on spark connector:
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
@@ -689,6 +712,13 @@ sealed trait CloudStorage {
         // End code snippet to be executed on worker
         ///////////////////////////////////////////////////////////////////////
     }
+
+    val endTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Finish uploading data for ${data.getNumPartitions} partitions in
+         | ${(endTime - startTime) / 1000.0}s.
+         |""".stripMargin.filter(_ >= ' '))
 
     files.collect().toList
   }
@@ -744,17 +774,22 @@ sealed trait CloudStorage {
         // Find problem to download the file, sleep some time and retry.
         case e: Throwable => {
           error = Some(e)
-          val errmsg = e.getMessage
+          retryCount = retryCount + 1
+          val sleepTime = retrySleepTimeInMS(retryCount)
+          val stringWriter = new StringWriter
+          e.printStackTrace(new PrintWriter(stringWriter))
+          val errmsg = s"${e.getMessage}, stacktrace: ${stringWriter.toString}"
+
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit download error:
-               | retryCount=$retryCount: fileName=$fileName,
+               | retryCount=$retryCount fileName=$fileName
+               | backoffTime=${sleepTime.toDouble / 1000}s
                | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
                |""".stripMargin.filter(_ >= ' ')
           )
+          // sleep some time and retry
+          Thread.sleep(sleepTime)
         }
-        retryCount = retryCount + 1
-        // sleep some time and retry
-        Thread.sleep(retrySleepTimeInMS(retryCount))
       }
     } while (retryCount < maxRetryCount)
 
@@ -1649,6 +1684,13 @@ case class InternalGcsStorage(param: MergedParameters,
         case None => Random.alphanumeric take 10 mkString ""
       }
 
+    val startTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Begin to process and upload data for ${data.getNumPartitions}
+         | partitions: directory=$directory ${format.toString} $compress
+         |""".stripMargin.filter(_ >= ' '))
+
     // Generate one pre-signed for each partition.
     val metadatas = generateFileTransferMetadatas(
       data, format, compress, directory, data.getNumPartitions)
@@ -1678,6 +1720,13 @@ case class InternalGcsStorage(param: MergedParameters,
         // End code snippet to executed on worker
         ///////////////////////////////////////////////////////////////////////
     }
+
+    val endTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Finish uploading data for ${data.getNumPartitions} partitions in
+         | ${(endTime - startTime) / 1000.0}s.
+         |""".stripMargin.filter(_ >= ' '))
 
     files.collect().toList
   }
