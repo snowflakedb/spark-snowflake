@@ -636,7 +636,9 @@ sealed trait CloudStorage {
             val sleepTime = retrySleepTimeInMS(retryCount)
             val stringWriter = new StringWriter
             e.printStackTrace(new PrintWriter(stringWriter))
-            val errmsg = s"${e.getMessage}, stacktrace: ${stringWriter.toString}"
+            val errmsg =
+              s"""${e.getClass.toString}, ${e.getMessage},
+                 | stacktrace: ${stringWriter.toString}""".stripMargin
 
             CloudStorageOperations.log.info(
               s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
@@ -951,7 +953,7 @@ case class InternalAzureStorage(param: MergedParameters,
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
              | Retrieve outputStream for uploading to internal stage:
              | file: $file client request id: $requestID
-
+             | container=${blob.getContainer.getName}
              |""".stripMargin.filter(_ >=
             ' '))
         new CipherOutputStream(azureOutput, cipher)
@@ -962,6 +964,8 @@ case class InternalAzureStorage(param: MergedParameters,
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
                | retrieving outputStream for uploading to internal stage:
                | file: $file client request id: $requestID
+               | container=${blob.getContainer.getName}
+               | URI=${blob.getUri.getAuthority}
                | error message: ${ex.getMessage}
                |""".stripMargin.filter(_ >=
               ' '))
@@ -1058,6 +1062,7 @@ case class InternalAzureStorage(param: MergedParameters,
            | Retrieve inputStream for downloading from internal stage:
            | file: $fileName client request id: $downloadRequestID
            | download attribute: $downloadAttributeRequestID
+           | container=${blob.getContainer.getName}
            |""".stripMargin.
           filter(_ >= ' '))
     } catch {
@@ -1067,6 +1072,8 @@ case class InternalAzureStorage(param: MergedParameters,
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
              | retrieve inputStream for downloading from internal stage:
              | file: $fileName client request id: $requestID
+             | container=${blob.getContainer.getName}
+             | URI=${blob.getUri.getAuthority}
              | error message: ${ex.getMessage}
              |""".stripMargin.filter(_ >=
             ' '))
@@ -1132,6 +1139,7 @@ case class ExternalAzureStorage(containerName: String,
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
            | Retrieve outputStream for uploading to external stage:
            | file: $file client request id: $requestID
+           | container=${blob.getContainer.getName}
            |""".stripMargin.filter(_ >= ' '))
 
       if (compress) {
@@ -1146,6 +1154,8 @@ case class ExternalAzureStorage(containerName: String,
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
              | Retrieve outputStream for uploading to external stage:
              | file: $file client request id: $requestID
+             | container=${blob.getContainer.getName}
+             | URI=${blob.getUri.getAuthority}
              | error message: ${ex.getMessage}
              |""".stripMargin.filter(_ >=
             ' '))
@@ -1207,6 +1217,7 @@ case class ExternalAzureStorage(containerName: String,
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
            | Retrieve inputStream for downloading from external stage:
            | file: $fileName client request id: $requestID
+           | container=${blob.getContainer.getName}
            |""".stripMargin.filter(_ >= ' '))
     } catch {
       case ex: Throwable =>
@@ -1215,6 +1226,8 @@ case class ExternalAzureStorage(containerName: String,
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
              | Retrieve inputStream for downloading from external stage:
              | file: $fileName client request id: $requestID
+             | container=${blob.getContainer.getName}
+             | URI=${blob.getUri.getAuthority}
              | error message: ${ex.getMessage}
              |""".stripMargin.filter(_ >=
             ' '))
