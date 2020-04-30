@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:18.04
 
 ARG SPARK_URL
 ARG SPARK_BINARY_NAME
