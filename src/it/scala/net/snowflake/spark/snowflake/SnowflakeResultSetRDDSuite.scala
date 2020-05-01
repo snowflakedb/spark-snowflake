@@ -19,11 +19,12 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
-import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
+import org.apache.spark.sql.types._
+import scala.util.Random
 
 // scalastyle:off println
 class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
@@ -115,7 +116,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   )
 
-  private def setupNumberTable(): Unit = {
+  lazy val setupNumberTable: Boolean = {
     jdbcUpdate(s"""create or replace table $test_table_number (
                      | int_c int, boolean_c boolean
                      | , num_1b1 number(3), num_1b2 number(2,1), num_1b3 number(3,1)
@@ -160,6 +161,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_number")
+    true
   }
 
   private lazy val test_table_string_binary_rows = Seq(
@@ -207,7 +209,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   )
 
-  private def setupStringBinaryTable(): Unit = {
+  lazy val setupStringBinaryTable: Boolean = {
     jdbcUpdate(s"""create or replace table $test_table_string_binary (
                   | int_c int,
                   | v varchar, v50 varchar(50), c char, c10 char(10),
@@ -237,6 +239,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_string_binary")
+    true
   }
 
   // Snowflake may output "23:59:59" as "23:59:59.",
@@ -286,7 +289,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   )
 
-  private def setupDateTimeTable(): Unit = {
+  lazy val setupDateTimeTable: Boolean = {
     jdbcUpdate(s"""create or replace table $test_table_date_time (
           | int_c int, date_c date, time_c0 time(0), time_c1 time(1), time_c2 time(2),
           | time_c3 time(3), time_c4 time(4), time_c5 time(5), time_c6 time(6),
@@ -314,6 +317,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_date_time")
+    true
   }
 
   private lazy val test_table_timestamp_rows = Seq(
@@ -349,7 +353,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   )
 
-  private def setupTimestampTable(): Unit = {
+  lazy val setupTimestampTable: Boolean = {
     jdbcUpdate(s"""create or replace table $test_table_timestamp (
                   | int_c int,
                   | ts_ltz_c timestamp_ltz(9), ts_ltz_c0 timestamp_ltz(0),
@@ -391,6 +395,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_timestamp")
+    true
   }
 
   private val largeStringValue =
@@ -405,7 +410,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
        |""".stripMargin.filter(_ >= ' ')
 
   val LARGE_TABLE_ROW_COUNT = 900000
-  private def setupLargeResultTable(): Unit = {
+  lazy val setupLargeResultTable = {
     jdbcUpdate(s"""create or replace table $test_table_large_result (
                   | int_c int, c_string string(1024) )""".stripMargin)
 
@@ -420,6 +425,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_large_result")
+    true
   }
 
   private lazy val test_table_inf_rows = Seq(
@@ -432,7 +438,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     )
   )
 
-  private def setupINFTable(): Unit = {
+  lazy val setupINFTable: Boolean = {
     jdbcUpdate(
       s"""create or replace table $test_table_inf (
          |c1 double, c2 double, c3 float, c4 float, c5 double)""".stripMargin)
@@ -447,9 +453,10 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_inf")
+    true
   }
 
-  private def setupTableForLike(): Unit = {
+  lazy val setupTableForLike: Boolean = {
     // Below test table is from Snowflake user Doc.
     // https://docs.snowflake.net/manuals/sql-reference/functions/like.html#examples
     jdbcUpdate(
@@ -469,6 +476,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
 
     tmpdf.createOrReplaceTempView("test_table_like")
+    true
   }
 
   override def beforeAll(): Unit = {
@@ -487,17 +495,10 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
     thisConnectorOptionsNoTable += ("s3maxfilesize" -> "1000001")
-
-    setupNumberTable()
-    setupStringBinaryTable()
-    setupDateTimeTable()
-    setupTimestampTable()
-    setupLargeResultTable()
-    setupINFTable()
-    setupTableForLike()
   }
 
   test("testNumber") {
+    setupNumberTable
     val result = sparkSession.sql("select * from test_table_number")
 
     testPushdown(
@@ -508,6 +509,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testStringBinary") {
+    setupStringBinaryTable
     // COPY UNLOAD can't be run because it doesn't support binary
     if (!params.useCopyUnload) {
       val result = sparkSession.sql("select * from test_table_string_binary")
@@ -522,6 +524,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testDateTime") {
+    setupDateTimeTable
     val result = sparkSession.sql("select * from test_table_date_time")
 
     testPushdown(
@@ -532,6 +535,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testTimestamp") {
+    setupTimestampTable
     // COPY UNLOAD can't be run because it only supports millisecond(0.001s).
     if (!params.useCopyUnload) {
       val result = sparkSession.sql("select * from test_table_timestamp")
@@ -545,6 +549,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testLargeResult") {
+    setupLargeResultTable
     if (!skipBigDataTest) {
       val tmpDF = sparkSession
         .sql("select * from test_table_large_result order by int_c")
@@ -572,6 +577,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testSparkScalaUDF") {
+    setupLargeResultTable
     if (!skipBigDataTest) {
       val squareUDF = (s: Int) => {
         s * s
@@ -602,6 +608,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("testDoubleINF") {
+    setupINFTable
     val tmpDF = sparkSession
       .sql(s"select * from test_table_inf")
 
@@ -609,7 +616,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     var resultSet: Array[Row] = tmpDF.collect()
     assert(resultSet.length == 1)
-    assert(resultSet(0).equals(test_table_inf_rows(0)))
+    assert(resultSet(0).equals(test_table_inf_rows.head))
 
     // Write the INF back to snowflake
     jdbcUpdate(s"drop table if exists $test_table_write")
@@ -639,6 +646,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // For USE_COPY_UNLOAD=TRUE, write an empty result doesn't really create the table
   // use separate Jira to fix it.
   test("testReadWriteEmptyResult") {
+    setupLargeResultTable
     val tmpDF = sparkSession
       .sql(s"select * from test_table_large_result where int_c < -1")
 
@@ -670,6 +678,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   // Some partitions are empty, but some are not
   test("testReadWriteSomePartitionsEmpty") {
+    setupLargeResultTable
     if (!skipBigDataTest) {
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
       val originalDF = sparkSession
@@ -714,6 +723,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   // large table read and write.
   test("testReadWriteLargeTable") {
+    setupLargeResultTable
     if (!skipBigDataTest) {
       val tmpDF = sparkSession
         .sql(s"select * from test_table_large_result order by int_c")
@@ -747,6 +757,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   // Negative test for GCP doesn't support use_copy_unload = true
   test("GCP only supports use_copy_unload = true") {
+    setupLargeResultTable
     if ("gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
       var oldValue: Option[String] = None
       if (thisConnectorOptionsNoTable.contains("use_copy_unload")) {
@@ -775,6 +786,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   // Negative test for hitting exception when uploading data to cloud
   test("Test GCP uploading retry works") {
+    setupLargeResultTable
     // Enable test hook to simulate upload error
     TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
 
@@ -877,6 +889,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("test normal LIKE pushdown 1") {
+    setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
     // ('Joe down'), ('Elaine'), (''), (null),
@@ -902,6 +915,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("test normal LIKE pushdown 2") {
+    setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
     // ('Joe down'), ('Elaine'), (''), (null),
@@ -927,6 +941,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("test normal NOT LIKE pushdown") {
+    setupTableForLike
     // Only run the test with Arrow format,
     // there is empty string in the result, it is read as NULL for COPY UNLOAD.
     if (!params.useCopyUnload) {
@@ -954,6 +969,59 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         expectedResult2
       )
     }
+  }
+
+  // This function is a sample code
+  ignore("Sample code to generate random data and write to snowflake") {
+    val thisSparkSession = SparkSession
+      .builder()
+      .appName("Spark SQL basic example")
+      .config("spark.some.config.option", "some-value")
+      .config("spark.master", "local")
+      .getOrCreate()
+
+    def getRandomString(len: Int): String = {
+      Random.alphanumeric take len mkString ""
+    }
+
+    val partitionCount = 2
+    val rowCountPerPartition = 1300000
+    // Create RDD which generates data with multiple partitions
+    val testRDD: RDD[Row] = thisSparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { _ => {
+          Row(Random.nextInt, Random.nextDouble(), getRandomString(50),
+            Random.nextInt, Random.nextDouble(), getRandomString(50),
+            Random.nextInt, Random.nextDouble(), getRandomString(50))
+        }
+        }.iterator
+      }
+      }
+    val schema = StructType(
+      List(
+        StructField("int1", IntegerType),
+        StructField("double1", DoubleType),
+        StructField("str1", StringType),
+        StructField("int2", IntegerType),
+        StructField("double2", DoubleType),
+        StructField("str2", StringType),
+        StructField("int3", IntegerType),
+        StructField("double3", DoubleType),
+        StructField("str3", StringType)
+      )
+    )
+
+    // Convert RDD to DataFrame
+    val df = thisSparkSession.createDataFrame(testRDD, schema)
+
+    // Write to snowflake
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", "test_sink")
+      .mode(SaveMode.Overwrite)
+      .save()
   }
 
   override def beforeEach(): Unit = {

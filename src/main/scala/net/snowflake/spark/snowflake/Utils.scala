@@ -382,14 +382,18 @@ object Utils {
 
   def runQuery(params: Map[String, String], query: String): ResultSet = {
     val conn = getJDBCConnection(params)
-    conn.createStatement().executeQuery(query)
+    val rs = conn.createStatement().executeQuery(query)
+    conn.close()
+    rs
   }
 
   // Java version
   def runQuery(params: java.util.Map[String, String],
                query: String): ResultSet = {
     val conn = getJDBCConnection(params)
-    conn.createStatement().executeQuery(query)
+    val rs = conn.createStatement().executeQuery(query)
+    conn.close()
+    rs
   }
 
   // Helper function for testing
