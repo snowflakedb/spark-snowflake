@@ -54,9 +54,6 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
            data: DataFrame,
            saveMode: SaveMode,
            params: MergedParameters): Unit = {
-
-
-
     val format: SupportedFormat =
       if (Utils.containVariant(data.schema)) SupportedFormat.JSON
       else SupportedFormat.CSV

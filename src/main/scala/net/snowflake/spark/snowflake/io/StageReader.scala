@@ -14,7 +14,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
 
-private[io] object StageReader {
+private[snowflake] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
@@ -46,18 +46,32 @@ private[io] object StageReader {
 
     // Verify it's the expected format
     val sch = res.getMetaData
-    assert(sch.getColumnCount == 3)
-    assert(sch.getColumnName(1) == "rows_unloaded")
-    assert(sch.getColumnTypeName(1) == "NUMBER") // First record must be in
-    assert(sch.getColumnName(3) == "output_bytes")
-    val first = res.next()
-    assert(first)
-
-    // report egress usage
-    sendEgressUsage(res.getLong(3), conn)
-
-    val second = res.next()
-    assert(!second)
+    if (sch.getColumnCount >= 3) {
+      // Format V1 for COPY INTO LOCATION. The result format is:
+      // rows_unloaded    input_bytes    output_bytes
+      // Format V2 for COPY INTO LOCATION. The result format is:
+      // ROW_COUNT    FILE_NAME     FILE_SIZE
+      val thirdColumnName = sch.getColumnName(3)
+      val thirdColumnType = sch.getColumnTypeName(3)
+      if (("output_bytes".equalsIgnoreCase(thirdColumnName)
+        || "FILE_SIZE".equalsIgnoreCase(thirdColumnName))
+        && "number".equalsIgnoreCase(thirdColumnType))
+      {
+        var dataSize: Long = 0
+        while (res.next) {
+          dataSize += res.getLong(3)
+        }
+        sendEgressUsage(dataSize, conn)
+      } else {
+        logger.warn(
+          s"""The result format of COPY INTO LOCATION is not recognized.
+             | $thirdColumnName $thirdColumnType""".stripMargin)
+      }
+    } else {
+      logger.warn(
+        s"""The result format of COPY INTO LOCATION is not recognized.
+           | ${sch.getColumnCount}""".stripMargin)
+    }
 
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
 
@@ -113,7 +127,7 @@ private[io] object StageReader {
 
   }
 
-  private def sendEgressUsage(bytes: Long, conn: Connection): Unit = {
+  private[snowflake] def sendEgressUsage(bytes: Long, conn: Connection): Unit = {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(OUTPUT_BYTES, bytes)
 
@@ -122,9 +136,6 @@ private[io] object StageReader {
       System.currentTimeMillis()
     )
     SnowflakeTelemetry.send(conn.getTelemetry)
-
     logger.debug(s"Data Egress Usage: $bytes bytes".stripMargin)
-
   }
-
 }

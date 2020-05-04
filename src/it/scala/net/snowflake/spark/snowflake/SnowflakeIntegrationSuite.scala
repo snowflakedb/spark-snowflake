@@ -299,10 +299,10 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
   test("Ability to query a UDF") {
     val funcName = s"testudf$randomSuffix"
     try {
-      Utils.runQuery(connectorOptionsNoTable, s"""
-          |CREATE OR REPLACE FUNCTION $funcName(a number, b number)
-          |RETURNS number
-          |AS 'a * b'
+      jdbcUpdate(
+        s"""CREATE OR REPLACE FUNCTION $funcName(a number, b number)
+           | RETURNS number
+           | AS 'a * b'
         """.stripMargin)
 
       val loadedDf = sparkSession.read
@@ -316,10 +316,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       checkAnswer(loadedDf.selectExpr("twelve"), Seq(Row(12)))
     } finally {
       // Clean up the UDF
-      Utils.runQuery(
-        connectorOptionsNoTable,
-        s"DROP FUNCTION IF EXISTS $funcName(number, number)"
-      )
+      jdbcUpdate(s"DROP FUNCTION IF EXISTS $funcName(number, number)")
     }
   }
 
