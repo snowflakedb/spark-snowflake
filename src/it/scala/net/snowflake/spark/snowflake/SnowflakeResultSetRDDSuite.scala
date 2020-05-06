@@ -784,6 +784,27 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  // Test sfURL to support the sfURL to begin with http:// or https://
+  test("Test sfURL begin with http:// or https://") {
+    setupLargeResultTable
+    val origSfURL = thisConnectorOptionsNoTable("sfURL")
+    val testURLs = List(s"http://$origSfURL", s"https://$origSfURL")
+    testURLs.foreach(url => {
+      thisConnectorOptionsNoTable -= "sfURL"
+      thisConnectorOptionsNoTable += ("sfURL" -> url)
+
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", s"$test_table_large_result")
+        .load()
+        .count()
+    })
+    // reset sfRUL
+    thisConnectorOptionsNoTable -= "sfURL"
+    thisConnectorOptionsNoTable += ("sfURL" -> origSfURL)
+  }
+
   // Negative test for hitting exception when uploading data to cloud
   test("Test GCP uploading retry works") {
     setupLargeResultTable

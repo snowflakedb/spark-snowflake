@@ -445,7 +445,13 @@ object Parameters {
       * URL pointing to the snowflake database, simply
       *   host:port
       */
-    def sfURL: String = parameters(PARAM_SF_URL)
+    def sfURL: String = {
+      var url = parameters(PARAM_SF_URL)
+      if (url.matches("https?://.*")) {
+        url = url.substring(url.indexOf("//") + 2)
+      }
+      url
+    }
 
     /**
       * Snowflake database name
@@ -549,10 +555,9 @@ object Parameters {
       */
     def setColumnMap(fromSchema: Option[StructType],
                      toSchema: Option[StructType]): Unit = {
-      assert(
-        parameters.get(PARAM_COLUMN_MAP).isEmpty,
-        "Column map is already declared"
-      )
+      if (parameters.get(PARAM_COLUMN_MAP).isDefined) {
+        throw new Exception("Column map is already declared")
+      }
       generatedColumnMap =
         if (columnMapping == "name" && fromSchema.isDefined && toSchema.isDefined) {
           val map = Utils.generateColumnMap(

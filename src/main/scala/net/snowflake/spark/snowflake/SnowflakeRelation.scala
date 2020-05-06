@@ -24,15 +24,11 @@ import org.apache.spark.sql._
 import org.slf4j.{Logger, LoggerFactory}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.SupportedFormat
+import net.snowflake.spark.snowflake.io.{SnowflakeResultSetRDD, StageReader, SupportedFormat}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.reflect.ClassTag
-import net.snowflake.client.jdbc.{
-  SnowflakeResultSet,
-  SnowflakeResultSetSerializable
-}
-import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
+import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 
 import scala.collection.JavaConversions
 
@@ -189,7 +185,6 @@ private[snowflake] case class SnowflakeRelation(
     val resultSet = statement.execute(bindVariableEnabled = false)(conn)
 
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
-    SnowflakeTelemetry.send(conn.getTelemetry)
 
     // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
     // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
@@ -202,7 +197,11 @@ private[snowflake] case class SnowflakeRelation(
             .getResultSetSerializables(params.expectedPartitionSize)
         )
         .toArray
-    printStatForSnowflakeResultSetRDD(resultSetSerializables)
+
+    val dataSize = printStatForSnowflakeResultSetRDD(resultSetSerializables)
+    StageReader.sendEgressUsage(dataSize, conn)
+    SnowflakeTelemetry.send(conn.getTelemetry)
+
     val queryID = resultSet.asInstanceOf[SnowflakeResultSet].getQueryID
     // The result set can be closed on master side, since is it not necessary.
     resultSet.close()
@@ -219,7 +218,7 @@ private[snowflake] case class SnowflakeRelation(
   // Print result set statistic information
   private def printStatForSnowflakeResultSetRDD(
     resultSetSerializables: Array[SnowflakeResultSetSerializable]
-  ): Unit = {
+  ): Long = {
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
     var totalUnCompressedSize: Long = 0
@@ -249,6 +248,7 @@ private[snowflake] case class SnowflakeRelation(
          | unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
          |""".stripMargin.filter(_ >= ' ')
     )
+    totalCompressedSize
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
@@ -256,8 +256,10 @@ private[snowflake] case class SnowflakeRelation(
     requiredColumns: Array[String],
     filters: Array[Filter]
   ): SnowflakeSQLStatement = {
-
-    assert(!requiredColumns.isEmpty)
+    if (requiredColumns.isEmpty) {
+      throw new Exception(
+        s"Required Columns must be provided when building a query for filters")
+    }
     // Always quote column names, and uppercase-cast them to make them
     // equivalent to being unquoted (unless already quoted):
     val columnList = requiredColumns

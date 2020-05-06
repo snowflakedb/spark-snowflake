@@ -223,9 +223,11 @@ object Utils {
   private def mapFromSource(src: Source): Map[String, String] = {
     var map = new mutable.HashMap[String, String]
     for (line <- src.getLines()) {
-
       val index = line.indexOf('=')
-      assert(index > 0, "Can't parse this line: " + line)
+      if (index < 1) {
+        throw new Exception(
+          s"Can't parse the line of $line. The index of '=' is $index")
+      }
       val key = line.substring(0, index).trim.toLowerCase
       val value = line.substring(index + 1).trim
       if (!key.startsWith("#")) {
