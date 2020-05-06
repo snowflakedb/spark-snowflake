@@ -479,6 +479,71 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     true
   }
 
+  def writeAndCheckForOneTable(sparkSession: SparkSession,
+                               sfOptions: Map[String, String],
+                               sourceTable: String,
+                               extraSelectClause: String,
+                               targetTable: String,
+                               tracePint: Boolean): Boolean = {
+    // Read data from source table
+    val sourceQuery = s"select * from $sourceTable $extraSelectClause"
+    val sourceDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptions)
+      .option("query", sourceQuery)
+      .load()
+
+    if (tracePint) {
+      println(s"Source Query is: $sourceQuery")
+      sourceDF.show()
+    }
+
+    // Write data to snowflake
+    jdbcUpdate(s"drop table if exists $targetTable")
+    sourceDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptions)
+      .option("dbtable", targetTable)
+      // .option("truncate_table", "off")
+      // .option("usestagingtable", "on")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Show the written table data.
+    if (tracePint) {
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptions)
+        .option("dbtable", s"$targetTable")
+        .load()
+        .show()
+    }
+
+    // Verify the result set to be identical by HASH_AGG()
+    val sourceHashAgg = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptions)
+      .option("query", s"select HASH_AGG(*) from $sourceTable $extraSelectClause")
+      .load()
+      .collect()(0)
+    val targetHashAgg = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptions)
+      .option("query", s"select HASH_AGG(*) from $targetTable")
+      .load()
+      .collect()(0)
+
+    if (tracePint) {
+      println(s"The content of source and target table are:" +
+        s"\n$sourceHashAgg\n$targetHashAgg")
+    }
+
+    assert(sourceHashAgg.equals(targetHashAgg),
+      s"The content of source and target table are not identical:" +
+        s"\n$sourceHashAgg\n$targetHashAgg")
+    true
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -520,6 +585,15 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         result,
         test_table_string_binary_rows
       )
+    }
+  }
+
+  test("test read write StringBinary") {
+    setupStringBinaryTable
+    // COPY UNLOAD can't be run because it doesn't support binary
+    if (!params.useCopyUnload) {
+      writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
+        test_table_string_binary, "", test_table_write, true)
     }
   }
 
@@ -787,11 +861,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // Test sfURL to support the sfURL to begin with http:// or https://
   test("Test sfURL begin with http:// or https://") {
     setupLargeResultTable
-    val origSfURL = thisConnectorOptionsNoTable("sfURL")
+    val origSfURL = thisConnectorOptionsNoTable("sfurl")
     val testURLs = List(s"http://$origSfURL", s"https://$origSfURL")
     testURLs.foreach(url => {
-      thisConnectorOptionsNoTable -= "sfURL"
-      thisConnectorOptionsNoTable += ("sfURL" -> url)
+      thisConnectorOptionsNoTable -= "sfurl"
+      thisConnectorOptionsNoTable += ("sfurl" -> url)
 
       sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -801,8 +875,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .count()
     })
     // reset sfRUL
-    thisConnectorOptionsNoTable -= "sfURL"
-    thisConnectorOptionsNoTable += ("sfURL" -> origSfURL)
+    thisConnectorOptionsNoTable -= "sfurl"
+    thisConnectorOptionsNoTable += ("sfurl" -> origSfURL)
   }
 
   // Negative test for hitting exception when uploading data to cloud

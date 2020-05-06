@@ -610,7 +610,7 @@ sealed trait CloudStorage {
             "NO_RETRY"
           } else {
             s"""successRetryCount=$retryCount upload time include retry time:
-               | ${(endUploadTime - endConvertTime) / 1000.0}s
+               | ${Utils.getTimeString(endUploadTime - endConvertTime)}.
                |""".stripMargin
           }
           CloudStorageOperations.log.info(
@@ -619,9 +619,9 @@ sealed trait CloudStorage {
                | write row count is $rowCount.
                | Uncompressed data size is ${Utils.getSizeString(data.size)}.
                | Total process time is
-               | ${(endUploadTime - startConvertTime) / 1000.0}s including
-               | conversion_time=${(endConvertTime - startConvertTime) / 1000.0}s
-               | and this upload_time=${(endUploadTime - startUploadTime) / 1000.0}s.
+               | ${Utils.getTimeString(endUploadTime - startConvertTime)} including
+               | conversion_time=${Utils.getTimeString(endConvertTime - startConvertTime)}
+               | and this upload_time=${Utils.getTimeString(endUploadTime - startUploadTime)}.
                | $retryMessage
                |""".stripMargin.filter(_ >= ' '))
 
@@ -643,7 +643,7 @@ sealed trait CloudStorage {
             CloudStorageOperations.log.info(
               s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
                  | retryCount=$retryCount fileName=$fileName
-                 | backoffTime=${sleepTime.toDouble / 1000.0}s
+                 | backoffTime=${Utils.getTimeString(sleepTime)}
                  | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
                  |""".stripMargin.filter(_ >= ' ')
             )
@@ -671,7 +671,7 @@ sealed trait CloudStorage {
            | Finish writing partition ID:$partitionID:
            | upload is skipped because partition is empty.
            | Total process time is
-           | ${(endTime - startConvertTime) / 1000.0}s.
+           | ${Utils.getTimeString(endTime - startConvertTime)}
            |""".stripMargin.filter(_ >= ' '))
     }
 
@@ -690,7 +690,6 @@ sealed trait CloudStorage {
         case None => Random.alphanumeric take 10 mkString ""
       }
 
-    val startTime = System.currentTimeMillis()
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
          | Begin to process and upload data for ${data.getNumPartitions}
@@ -714,13 +713,6 @@ sealed trait CloudStorage {
         // End code snippet to be executed on worker
         ///////////////////////////////////////////////////////////////////////
     }
-
-    val endTime = System.currentTimeMillis()
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Finish uploading data for ${data.getNumPartitions} partitions in
-         | ${(endTime - startTime) / 1000.0}s.
-         |""".stripMargin.filter(_ >= ' '))
 
     files.collect().toList
   }
@@ -751,7 +743,7 @@ sealed trait CloudStorage {
           // Generate inputStream for the cached data buffer.
           inputStream = new ByteArrayInputStream(cachedData)
           val endTime = System.currentTimeMillis()
-          val downloadTime = (endTime - startTime).toDouble / 1000.0
+          val downloadTime = Utils.getTimeString(endTime - startTime)
 
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: download
@@ -785,7 +777,7 @@ sealed trait CloudStorage {
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit download error:
                | retryCount=$retryCount fileName=$fileName
-               | backoffTime=${sleepTime.toDouble / 1000}s
+               | backoffTime=${Utils.getTimeString(sleepTime)}
                | maxRetryCount=$maxRetryCount error details: [ $errmsg ]
                |""".stripMargin.filter(_ >= ' ')
           )
@@ -1667,7 +1659,7 @@ case class InternalGcsStorage(param: MergedParameters,
           s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
              | Time to retrieve pre-signed URL for
              | ${index + 1} files is
-             | ${(endTime - startTime) / 1000.0} seconds.
+             | ${Utils.getTimeString(endTime - startTime)}.
              |""".stripMargin.filter(_ >= ' '))
       }
     }
@@ -1678,7 +1670,7 @@ case class InternalGcsStorage(param: MergedParameters,
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
          | Time to retrieve pre-signed URL for
          | ${data.getNumPartitions} files is
-         | ${(endTime - startTime) / 1000.0} seconds.
+         | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
 
     result.toList
@@ -1738,7 +1730,7 @@ case class InternalGcsStorage(param: MergedParameters,
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
          | Finish uploading data for ${data.getNumPartitions} partitions in
-         | ${(endTime - startTime) / 1000.0}s.
+         | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
 
     files.collect().toList

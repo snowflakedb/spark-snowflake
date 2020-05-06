@@ -276,7 +276,7 @@ trait IntegrationSuiteBase
       node
         .fields()
         .foreach(
-          entry => result = result + (entry.getKey -> entry.getValue.asText())
+          entry => result = result + (entry.getKey.toLowerCase -> entry.getValue.asText())
         )
 
     try {

@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.client.jdbc.SnowflakeDriver
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
 /**
@@ -212,13 +213,15 @@ private[snowflake] class JDBCWrapper {
       SparkContext.getOrCreate().getConf.get("spark.app.name", "")
     val scalaVersion = util.Properties.versionString
     val javaVersion = System.getProperty("java.version", "UNKNOWN")
+    val jdbcVersion = SnowflakeDriver.implementVersion
     val snowflakeClientInfo =
       s""" {
          | "spark.version" : "${esc(SPARK_VERSION)}",
          | "spark.snowflakedb.version" : "${esc(Utils.VERSION)}",
          | "spark.app.name" : "${esc(sparkAppName)}",
          | "scala.version" : "${esc(scalaVersion)}",
-         | "java.version" : "${esc(javaVersion)}"
+         | "java.version" : "${esc(javaVersion)}",
+         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}"
          |}""".stripMargin
     log.info(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)

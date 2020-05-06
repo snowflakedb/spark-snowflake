@@ -221,8 +221,10 @@ private[io] object StageWriter {
       val (storage, stage) = CloudStorageOperations.createStorageClient(
         params, conn, tempStage = true, None, "load")
 
+      val startTime = System.currentTimeMillis()
       val filesToCopy = storage.upload(rdd, format, None)
 
+      val startCopyInto = System.currentTimeMillis()
       if (filesToCopy.nonEmpty) {
         writeToTable(
           conn,
@@ -234,6 +236,15 @@ private[io] object StageWriter {
           format
         )
       }
+      val endTime = System.currentTimeMillis()
+
+      log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | Total job time is ${Utils.getTimeString(endTime - startTime)}
+             | including read & upload time:
+             | ${Utils.getTimeString(startCopyInto - startTime)}
+             | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
+             |""".stripMargin.filter(_ >= ' '))
     } finally {
       conn.close()
     }
@@ -535,6 +546,7 @@ private[io] object StageWriter {
                |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
                |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
                |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+               |    BINARY_FORMAT=BASE64
                |  )
            """.stripMargin) !
         case SupportedFormat.JSON =>
