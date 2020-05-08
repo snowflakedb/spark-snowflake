@@ -582,7 +582,7 @@ object Utils {
 
   // Get pretty size String
   def getSizeString(size: Long): String = {
-    if (size <  1024.toLong) {
+    if (size < 1024.toLong) {
       s"$size Bytes"
     } else if (size <  1024.toLong * 1024) {
       "%.2f KB".format(size.toDouble / 1024)
@@ -592,6 +592,19 @@ object Utils {
       "%.2f GB".format(size.toDouble / 1024 / 1024 / 1024)
     } else {
       "%.2f TB".format(size.toDouble / 1024 / 1024 / 1024 / 1024)
+    }
+  }
+
+  // Get pretty time String
+  def getTimeString(milliSeconds: Long): String = {
+    if (milliSeconds <  1000) {
+      s"$milliSeconds ms"
+    } else if (milliSeconds <  1000 * 60) {
+      "%.2f seconds".format(milliSeconds.toDouble / 1000)
+    } else if (milliSeconds <  1000 * 60 * 60) {
+      "%.2f minutes".format(milliSeconds.toDouble / 1000 / 60)
+    } else {
+      "%.2f hours".format(milliSeconds.toDouble / 1000 / 60 / 60)
     }
   }
 }

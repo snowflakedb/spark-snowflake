@@ -69,12 +69,21 @@ class UtilsSuite extends FunSuite with Matchers {
     )
   }
 
-  test("test Utils.getPrettySizeString") {
+  test("test Utils.getSizeString") {
     assert(Utils.getSizeString(100) === "100 Bytes")
     assert(Utils.getSizeString(1024) === "1.00 KB")
     assert(Utils.getSizeString((1.1 * 1024).toLong) === "1.10 KB")
     assert(Utils.getSizeString((1.25 * 1024 * 1024).toLong) === "1.25 MB")
     assert(Utils.getSizeString((1.88 * 1024 * 1024 * 1024 + 1).toLong) === "1.88 GB")
     assert(Utils.getSizeString((3.51 * 1024 * 1024 * 1024 * 1024 + 100).toLong) === "3.51 TB")
+  }
+
+  test("test Utils.getTimeString") {
+    assert(Utils.getTimeString(100) === "100 ms")
+    assert(Utils.getTimeString(1000) === "1.00 seconds")
+    assert(Utils.getTimeString((1.1 * 1000).toLong) === "1.10 seconds")
+    assert(Utils.getTimeString((1.25 * 1000 * 60).toLong) === "1.25 minutes")
+    assert(Utils.getTimeString((1.88 * 1000 * 60 * 60 + 1).toLong) === "1.88 hours")
+    assert(Utils.getTimeString((188 * 1000 * 60 * 60 + 1).toLong) === "188.00 hours")
   }
 }

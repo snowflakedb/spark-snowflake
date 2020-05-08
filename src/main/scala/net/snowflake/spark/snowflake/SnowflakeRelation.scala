@@ -17,6 +17,9 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.{PrintWriter, StringWriter}
+import java.sql.SQLException
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -182,7 +185,10 @@ private[snowflake] case class SnowflakeRelation(
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
     Utils.setLastSelect(statement.toString)
 
+    val startTime = System.currentTimeMillis()
     val resultSet = statement.execute(bindVariableEnabled = false)(conn)
+    val queryID = resultSet.asInstanceOf[SnowflakeResultSet].getQueryID
+    val endTime = System.currentTimeMillis()
 
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
 
@@ -198,13 +204,29 @@ private[snowflake] case class SnowflakeRelation(
         )
         .toArray
 
-    val dataSize = printStatForSnowflakeResultSetRDD(resultSetSerializables)
+    // The result set can be closed on master side, since is it not necessary.
+    try {
+      resultSet.close()
+    } catch {
+      case e: Exception => {
+        val stringWriter = new StringWriter
+        e.printStackTrace(new PrintWriter(stringWriter))
+        log.warn(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | Fail to close the original ResultSet, but it
+             | is not necessary anymore, so regard it as warning.
+             | ${e.getClass().getCanonicalName}; ${e.getMessage}
+             | ${stringWriter.toString}
+             |""".stripMargin.filter(_ >= ' ')
+        )
+      }
+    }
+
+    val dataSize = printStatForSnowflakeResultSetRDD(
+      resultSetSerializables, endTime - startTime, queryID)
+
     StageReader.sendEgressUsage(dataSize, conn)
     SnowflakeTelemetry.send(conn.getTelemetry)
-
-    val queryID = resultSet.asInstanceOf[SnowflakeResultSet].getQueryID
-    // The result set can be closed on master side, since is it not necessary.
-    resultSet.close()
 
     new SnowflakeResultSetRDD[T](
       resultSchema,
@@ -217,7 +239,9 @@ private[snowflake] case class SnowflakeRelation(
 
   // Print result set statistic information
   private def printStatForSnowflakeResultSetRDD(
-    resultSetSerializables: Array[SnowflakeResultSetSerializable]
+    resultSetSerializables: Array[SnowflakeResultSetSerializable],
+    queryTimeInMs: Long,
+    queryID: String
   ): Long = {
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
@@ -236,6 +260,7 @@ private[snowflake] case class SnowflakeRelation(
          | partitionCount=$partitionCount rowCount=$totalRowCount
          | compressSize=${Utils.getSizeString(totalCompressedSize)}
          | unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
+         | QueryTime=${Utils.getTimeString(queryTimeInMs)} QueryID=$queryID
          |""".stripMargin.filter(_ >= ' '))
 
     val aveCount = totalRowCount / partitionCount

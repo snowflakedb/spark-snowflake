@@ -446,11 +446,14 @@ object Parameters {
       *   host:port
       */
     def sfURL: String = {
-      var url = parameters(PARAM_SF_URL)
-      if (url.matches("https?://.*")) {
-        url = url.substring(url.indexOf("//") + 2)
+      val origUrl = parameters(PARAM_SF_URL)
+      val urlPattern = """(https?://)?(.*)""".r
+      origUrl match {
+        case urlPattern(_, url) => url
+        case _ => throw new IllegalArgumentException(
+          s"Input sfURL is invalid: $origUrl"
+        )
       }
-      url
     }
 
     /**
