@@ -275,7 +275,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     ),
     Row(
       BigDecimal(2),
-      Date.valueOf("0000-01-01"),
+      Date.valueOf("0001-01-01"),
       "00:00:01.",
       "00:00:00.1",
       "00:00:00.01",
@@ -305,7 +305,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
               | '00:00:00.000', '00:00:00.0000', '00:00:00.00000', '00:00:00.000000'
               | , '00:00:00.0000000', '00:00:00.00000000', '00:00:00.000000000'
            ), (
-              | 2, '0000-01-01', '00:00:01', '00:00:00.1', '00:00:00.01', '00:00:00.001'
+              | 2, '0001-01-01', '00:00:01', '00:00:00.1', '00:00:00.01', '00:00:00.001'
               | , '00:00:00.0001', '00:00:00.00001', '00:00:00.000001'
               | , '00:00:00.0000001', '00:00:00.00000001', '00:00:00.000000001'
            )""".stripMargin)
@@ -484,7 +484,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
                                sourceTable: String,
                                extraSelectClause: String,
                                targetTable: String,
-                               tracePint: Boolean): Boolean = {
+                               createTargetTable: Option[String],
+                               tracePrint: Boolean): Boolean = {
     // Read data from source table
     val sourceQuery = s"select * from $sourceTable $extraSelectClause"
     val sourceDF = sparkSession.read
@@ -493,30 +494,45 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .option("query", sourceQuery)
       .load()
 
-    if (tracePint) {
+    if (tracePrint) {
       println(s"Source Query is: $sourceQuery")
+      sourceDF.printSchema()
       sourceDF.show()
     }
 
     // Write data to snowflake
     jdbcUpdate(s"drop table if exists $targetTable")
-    sourceDF.write
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(sfOptions)
-      .option("dbtable", targetTable)
-      // .option("truncate_table", "off")
-      // .option("usestagingtable", "on")
-      .mode(SaveMode.Overwrite)
-      .save()
+    if (createTargetTable.isDefined) {
+      jdbcUpdate(createTargetTable.get)
+      sourceDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptions)
+        .option("dbtable", targetTable)
+        // .option("truncate_table", "off")
+        // .option("usestagingtable", "on")
+        .mode(SaveMode.Append)
+        .save()
+    } else {
+      sourceDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptions)
+        .option("dbtable", targetTable)
+        // .option("truncate_table", "off")
+        // .option("usestagingtable", "on")
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
 
     // Show the written table data.
-    if (tracePint) {
-      sparkSession.read
+    if (tracePrint) {
+      val targetDF = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(sfOptions)
         .option("dbtable", s"$targetTable")
         .load()
-        .show()
+
+      targetDF.printSchema()
+      targetDF.show()
     }
 
     // Verify the result set to be identical by HASH_AGG()
@@ -533,7 +549,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .load()
       .collect()(0)
 
-    if (tracePint) {
+    if (tracePrint) {
+      println(s"Source: $sourceTable Target: $targetTable")
       println(s"The content of source and target table are:" +
         s"\n$sourceHashAgg\n$targetHashAgg")
     }
@@ -541,6 +558,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     assert(sourceHashAgg.equals(targetHashAgg),
       s"The content of source and target table are not identical:" +
         s"\n$sourceHashAgg\n$targetHashAgg")
+
     true
   }
 
@@ -593,7 +611,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     // COPY UNLOAD can't be run because it doesn't support binary
     if (!params.useCopyUnload) {
       writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
-        test_table_string_binary, "", test_table_write, true)
+        test_table_string_binary, "", test_table_write, None, true)
     }
   }
 
@@ -606,6 +624,18 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       result,
       test_table_date_time_rows
     )
+  }
+
+  test("test read write Date Time") {
+    setupDateTimeTable
+    val createTableSql =
+      s"""create or replace table $test_table_write (
+         | int_c int, date_c date, time_c0 time(0), time_c1 time(1), time_c2 time(2),
+         | time_c3 time(3), time_c4 time(4), time_c5 time(5), time_c6 time(6),
+         | time_c7 time(7), time_c8 time(8), time_c9 time(9)
+          )""".stripMargin
+    writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
+      test_table_date_time, "", test_table_write, Some(createTableSql), true)
   }
 
   test("testTimestamp") {

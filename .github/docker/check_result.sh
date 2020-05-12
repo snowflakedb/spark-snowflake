@@ -16,12 +16,14 @@ echo "TEST_COMPILE_SCALA_VERSION=$TEST_COMPILE_SCALA_VERSION"
 echo "TEST_JDBC_VERSION=$TEST_JDBC_VERSION"
 echo "TEST_SPARK_VERSION=$TEST_SPARK_VERSION"
 
+export JDBC_JAR_NAME=snowflake-jdbc-${TEST_JDBC_VERSION}.jar
+
 echo "Start to downlod dependent libraries"
 # Below script is not parameterized yet.
 curl -s -o scala-library-2.11.12.jar https://repo1.maven.org/maven2/org/scala-lang/scala-library/2.11.12/scala-library-2.11.12.jar
 curl -s -o slf4j-log4j12-1.7.30.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-log4j12/1.7.30/slf4j-log4j12-1.7.30.jar
 curl -s -o slf4j-api-1.7.30.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.7.30/slf4j-api-1.7.30.jar
-curl -s -o snowflake-jdbc-download.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.12.2/snowflake-jdbc-3.12.2.jar
+curl -s -o snowflake-jdbc-download.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/${TEST_JDBC_VERSION}/${JDBC_JAR_NAME}
 curl -s -o log4j-1.2.17.jar https://repo1.maven.org/maven2/log4j/log4j/1.2.17/log4j-1.2.17.jar
 curl -s -o commons-codec-1.14.jar https://repo1.maven.org/maven2/commons-codec/commons-codec/1.14/commons-codec-1.14.jar
 
