@@ -2,9 +2,9 @@ name: Spark Cluster Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ spark_2.4 ]
   pull_request:
-    branches: [ master ]
+    branches: [ spark_2.4 ]
 
 jobs:
   test:
