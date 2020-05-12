@@ -2,9 +2,9 @@ name: Spark Cluster Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ spark_2.3 ]
   pull_request:
-    branches: [ master ]
+    branches: [ spark_2.3 ]
 
 jobs:
   test:
@@ -13,17 +13,17 @@ jobs:
     strategy:
       matrix:
         scala_version: [ '2.11.12' ]
-        spark_version: [ '2.4.0' ]
+        spark_version: [ '2.3.0' ]
         use_copy_unload: [ 'true' ]
         cloud_provider: [ 'gcp' ]
     env:
         SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
-        DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:2.4.5'
+        DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:2.3.4'
         TEST_SPARK_CONNECTOR_VERSION: 2.7.1
         TEST_SCALA_VERSION: 2.11
         TEST_COMPILE_SCALA_VERSION: 2.11.12
         TEST_JDBC_VERSION: 3.12.5
-        TEST_SPARK_VERSION: 2.4
+        TEST_SPARK_VERSION: 2.3
 
     steps:
     - uses: actions/checkout@v2

@@ -33,8 +33,8 @@ cd ../..
 
 # Build docker image
 docker build \
---build-arg SPARK_URL=http://apache.spinellicreations.com/spark/spark-2.4.5/spark-2.4.5-bin-hadoop2.7.tgz \
---build-arg SPARK_BINARY_NAME=spark-2.4.5-bin-hadoop2.7.tgz \
+--build-arg SPARK_URL=https://archive.apache.org/dist/spark/spark-2.3.4/spark-2.3.4-bin-hadoop2.7.tgz \
+--build-arg SPARK_BINARY_NAME=spark-2.3.4-bin-hadoop2.7.tgz \
 --build-arg JDBC_URL=https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/${TEST_JDBC_VERSION}/$JDBC_JAR_NAME \
 --build-arg JDBC_BINARY_NAME=$JDBC_JAR_NAME \
 --build-arg SPARK_CONNECTOR_LOCATION=target/scala-${TEST_SCALA_VERSION}/$SPARK_CONNECTOR_JAR_NAME \

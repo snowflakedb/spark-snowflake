@@ -16,7 +16,7 @@
 
 import scala.util.Properties
 
-val sparkVersion = "2.4.0"
+val sparkVersion = "2.3.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val sparkConnectorVersion = "2.7.1"
 
@@ -30,9 +30,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_2.4",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
-    crossScalaVersions := Seq("2.11.12", "2.12.8"),
+    version := s"${sparkConnectorVersion}-spark_2.3",
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
+    crossScalaVersions := Seq("2.11.12"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),

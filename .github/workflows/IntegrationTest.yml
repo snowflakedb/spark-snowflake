@@ -2,9 +2,9 @@ name: Spark Connector Integration Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ spark_2.3 ]
   pull_request:
-    branches: [ master ]
+    branches: [ spark_2.3 ]
 
 jobs:
   test:
@@ -13,7 +13,7 @@ jobs:
     strategy:
      matrix:
        scala_version: [ '2.11.12' ]
-       spark_version: [ '2.4.0' ]
+       spark_version: [ '2.3.0' ]
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure', 'gcp' ]
 
