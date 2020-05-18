@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.7.1"
+val sparkConnectorVersion = "2.7.2"
 val scalaVersionMajor = "2.11"
 val sparkVersionMajor = "2.4"
 val sparkVersion = s"${sparkVersionMajor}.0"
@@ -27,8 +27,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     name := "ClusterTest",
     organization := "net.snowflake",
     version := s"1.0",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.8"),
-    crossScalaVersions := Seq("2.11.12", "2.12.8"),
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
+    crossScalaVersions := Seq("2.11.12", "2.12.11"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
