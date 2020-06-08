@@ -1,5 +1,7 @@
 package net.snowflake.spark.snowflake
 
+import java.sql.Connection
+
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -10,6 +12,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{
   ArrayNode,
   ObjectNode
 }
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 
 object SnowflakeTelemetry {
@@ -20,7 +23,26 @@ object SnowflakeTelemetry {
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 
+  private var hasClientInfoSent = false
+
   private[snowflake] var output: ObjectNode = _
+
+  // The client info telemetry message is only sent one time.
+  def sendClientInfoTelemetryIfNotYet(extraValues: Map[String, String],
+                                      conn: Connection): Unit = {
+    if (!hasClientInfoSent) {
+      val metric = Utils.getClientInfoJson()
+      for ((key, value) <- extraValues) {
+        metric.put(key, value)
+      }
+      addLog(
+        (TelemetryTypes.SPARK_CLIENT_INFO, metric),
+        System.currentTimeMillis()
+      )
+      send(conn.getTelemetry)
+      hasClientInfoSent = true
+    }
+  }
 
   def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
     logger.debug(s"""
@@ -181,4 +203,5 @@ object TelemetryTypes extends Enumeration {
   val SPARK_STREAMING_START: Value = Value("spark_streaming_start")
   val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
   val SPARK_EGRESS: Value = Value("spark_egress")
+  val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
 }

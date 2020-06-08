@@ -21,8 +21,9 @@ import java.net.URI
 import java.sql.{Connection, ResultSet}
 import java.util.UUID
 
+import net.snowflake.client.jdbc.SnowflakeDriver
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import org.apache.spark.SparkContext
+import org.apache.spark.{SPARK_VERSION, SparkContext}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -33,6 +34,8 @@ import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{
   AmazonS3URI
 }
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -55,6 +58,31 @@ object Utils {
   val SNOWFLAKE_SOURCE_SHORT_NAME = "snowflake"
 
   val VERSION = "2.7.2"
+
+  /**
+    * The certified JDBC version to work with this spark connector version.
+    */
+  val CERTIFIED_JDBC_VERSION = "3.12.6"
+
+  /**
+    * Important:
+    * Never change the value of PROPERTY_NAME_OF_CONNECTOR_VERSION.
+    * Changing it will cause spark connector doesn't work in some cases.
+    */
+  val PROPERTY_NAME_OF_CONNECTOR_VERSION = "spark.snowflakedb.version"
+
+  /**
+    * Client info related variables
+    */
+  private[snowflake] lazy val sparkAppName =
+    SparkContext.getOrCreate().getConf.get("spark.app.name", "")
+  private[snowflake] lazy val scalaVersion =
+    util.Properties.versionNumberString
+  private[snowflake] lazy val javaVersion =
+    System.getProperty("java.version", "UNKNOWN")
+  private[snowflake] lazy val jdbcVersion =
+    SnowflakeDriver.implementVersion
+  private val mapper = new ObjectMapper()
 
   private[snowflake] val JDBC_DRIVER =
     "net.snowflake.client.jdbc.SnowflakeDriver"
@@ -606,5 +634,38 @@ object Utils {
     } else {
       "%.2f hours".format(milliSeconds.toDouble / 1000 / 60 / 60)
     }
+  }
+
+  // Very simple escaping
+  private def esc(s: String): String = {
+    s.replace("\"", "").replace("\\", "")
+  }
+
+  def getClientInfoString(): String = {
+    val snowflakeClientInfo =
+      s""" {
+         | "spark.version" : "${esc(SPARK_VERSION)}",
+         | "$PROPERTY_NAME_OF_CONNECTOR_VERSION" : "${esc(Utils.VERSION)}",
+         | "spark.app.name" : "${esc(sparkAppName)}",
+         | "scala.version" : "${esc(scalaVersion)}",
+         | "java.version" : "${esc(javaVersion)}",
+         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}"
+         |}""".stripMargin
+
+    snowflakeClientInfo
+  }
+
+  def getClientInfoJson(): ObjectNode = {
+    val metric: ObjectNode = mapper.createObjectNode()
+
+    metric.put("version", esc(VERSION))
+    metric.put("spark_version", esc(SPARK_VERSION))
+    metric.put("application_name", esc(sparkAppName))
+    metric.put("scala_version", esc(scalaVersion))
+    metric.put("java_version", esc(javaVersion))
+    metric.put("jdbc_version", esc(jdbcVersion))
+    metric.put("certified_jdbc_version", esc(CERTIFIED_JDBC_VERSION))
+
+    metric
   }
 }
