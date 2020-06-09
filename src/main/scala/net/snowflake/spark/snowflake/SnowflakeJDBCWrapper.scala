@@ -37,14 +37,12 @@ import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
-import org.apache.spark.{SPARK_VERSION, SparkContext}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import DefaultJDBCWrapper.DataBaseOperations
-import net.snowflake.client.jdbc.SnowflakeDriver
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 
 /**
@@ -203,26 +201,16 @@ private[snowflake] class JDBCWrapper {
       jdbcProperties.put(k.toLowerCase, v.toString)
     }
 
-    // Set info on the system level
-    // Very simple escaping
-    def esc(s: String): String = {
-      s.replace("\"", "").replace("\\", "")
+    // Only one JDBC version is certified for each spark connector.
+    if (!Utils.CERTIFIED_JDBC_VERSION.equals(Utils.jdbcVersion)) {
+      log.warn(
+        s"""JDBC ${Utils.jdbcVersion} is being used.
+           | But the certified JDBC version
+           | ${Utils.CERTIFIED_JDBC_VERSION} is recommended.
+           |""".stripMargin.filter(_ >= ' '))
     }
 
-    val sparkAppName =
-      SparkContext.getOrCreate().getConf.get("spark.app.name", "")
-    val scalaVersion = util.Properties.versionString
-    val javaVersion = System.getProperty("java.version", "UNKNOWN")
-    val jdbcVersion = SnowflakeDriver.implementVersion
-    val snowflakeClientInfo =
-      s""" {
-         | "spark.version" : "${esc(SPARK_VERSION)}",
-         | "spark.snowflakedb.version" : "${esc(Utils.VERSION)}",
-         | "spark.app.name" : "${esc(sparkAppName)}",
-         | "scala.version" : "${esc(scalaVersion)}",
-         | "java.version" : "${esc(javaVersion)}",
-         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}"
-         |}""".stripMargin
+    val snowflakeClientInfo = Utils.getClientInfoString()
     log.info(snowflakeClientInfo)
     System.setProperty("snowflake.client.info", snowflakeClientInfo)
 
@@ -247,6 +235,10 @@ private[snowflake] class JDBCWrapper {
           throw other
       }
     }
+
+    // Send client info telemetry message.
+    val extraValues = Map("sfurl" -> sfURL)
+    SnowflakeTelemetry.sendClientInfoTelemetryIfNotYet(extraValues, conn)
 
     conn
   }
