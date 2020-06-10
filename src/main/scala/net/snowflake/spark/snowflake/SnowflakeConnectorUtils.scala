@@ -116,3 +116,8 @@ class SnowflakePushdownException(message: String)
 class SnowflakeConnectorFeatureNotSupportException(message: String)
   extends Exception(message)
 
+class SnowflakePushdownUnsupportedException(message: String,
+                                            val unsupportedOperation: String,
+                                            val details: String,
+                                            val isKnownUnsupportedOperation: Boolean)
+  extends Exception(message)

@@ -77,5 +77,7 @@ class ClusterTestResult(builder: ClusterTestResultBuilder) {
          | '$reason'
          | ) """.stripMargin
     )
+
+    connection.close()
   }
 }

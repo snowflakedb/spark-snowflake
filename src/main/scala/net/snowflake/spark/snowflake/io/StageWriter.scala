@@ -246,6 +246,7 @@ private[io] object StageWriter {
              | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
              |""".stripMargin.filter(_ >= ' '))
     } finally {
+      SnowflakeTelemetry.send(conn.getTelemetry)
       conn.close()
     }
 

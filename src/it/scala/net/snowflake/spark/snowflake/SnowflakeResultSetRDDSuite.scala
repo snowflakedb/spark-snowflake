@@ -995,6 +995,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       )""".stripMargin
     )
     awsConn.createStatement.execute("GET @test_move_data/ file:///tmp/test_move_data")
+    awsConn.close()
 
     val gcpConn = Utils.getJDBCConnection(gcpOptionsNoTable)
     gcpConn.createStatement().execute("create or replace stage test_move_data")
@@ -1011,6 +1012,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
          |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
          |  )""".stripMargin
     )
+    gcpConn.close()
   }
 
   test("test normal LIKE pushdown 1") {
