@@ -77,7 +77,14 @@ private[snowflake] object StageReader {
 
     SnowflakeTelemetry.send(conn.getTelemetry)
 
-    storage.download(sqlContext.sparkContext, format, compress, prefix)
+    val resultRDD = storage.download(
+      sqlContext.sparkContext, format, compress, prefix)
+
+    // The connection can't be closed before download because the spark driver
+    // needs the connection to acquire the credential for distributed download.
+    conn.close()
+
+    resultRDD
   }
 
   private def buildUnloadStatement(

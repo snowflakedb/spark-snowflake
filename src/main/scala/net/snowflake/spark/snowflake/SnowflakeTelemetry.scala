@@ -62,12 +62,12 @@ object SnowflakeTelemetry {
   }
 
   def send(telemetry: Telemetry): Unit = {
-    var tmp: List[(ObjectNode, Long)] = Nil
+    var curLogs: List[(ObjectNode, Long)] = Nil
     this.synchronized {
-      tmp = logs
+      curLogs = logs
       logs = Nil
     }
-    tmp.foreach {
+    curLogs.foreach {
       case (log, timestamp) =>
         logger.debug(s"""
              |Send Telemetry
@@ -90,6 +90,40 @@ object SnowflakeTelemetry {
         if (isSFPlan) Some(TelemetryTypes.SPARK_PLAN, json) else None
       case _ => None
     }
+
+  /**
+    * Put the pushdown failure telemetry message to internal cache.
+    * The message will be sent later in batch.
+    *
+    * @param plan The logical plan to include the unsupported operations
+    * @param exception The pushdown unsupported exception
+    */
+  def addPushdownFailMessage(plan: LogicalPlan,
+                             exception: SnowflakePushdownUnsupportedException)
+  : Unit = {
+    logger.info(
+      s"""Pushdown fails because of operation: ${exception.unsupportedOperation}
+         | message: ${exception.getMessage}
+         | isKnown: ${exception.isKnownUnsupportedOperation}
+           """.stripMargin)
+
+    // Don't send telemetry message for known unsupported operations.
+    if (exception.isKnownUnsupportedOperation) {
+      return
+    }
+
+    val metric: ObjectNode = mapper.createObjectNode()
+    metric.put("version", Utils.VERSION)
+    metric.put("operation", exception.unsupportedOperation)
+    metric.put("message", exception.getMessage)
+    metric.put("details", exception.details)
+    metric.put("plan", plan.toString())
+
+    SnowflakeTelemetry.addLog(
+      (TelemetryTypes.SPARK_PUSHDOWN_FAIL, metric),
+      System.currentTimeMillis()
+    )
+  }
 
   /**
     * convert a plan tree to json
@@ -204,4 +238,5 @@ object TelemetryTypes extends Enumeration {
   val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
   val SPARK_EGRESS: Value = Value("spark_egress")
   val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
+  val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
 }

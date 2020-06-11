@@ -227,6 +227,7 @@ private[snowflake] case class SnowflakeRelation(
 
     StageReader.sendEgressUsage(dataSize, conn)
     SnowflakeTelemetry.send(conn.getTelemetry)
+    conn.close()
 
     new SnowflakeResultSetRDD[T](
       resultSchema,

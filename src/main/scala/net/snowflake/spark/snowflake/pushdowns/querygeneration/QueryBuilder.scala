@@ -1,11 +1,14 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
+import java.io.{PrintWriter, StringWriter}
 import java.util.NoSuchElementException
 
 import net.snowflake.spark.snowflake.{
   SnowflakePushdownException,
+  SnowflakePushdownUnsupportedException,
   SnowflakeRelation,
-  SnowflakeSQLStatement
+  SnowflakeSQLStatement,
+  SnowflakeTelemetry
 }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,6 +32,11 @@ import scala.reflect.ClassTag
   */
 private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   import QueryBuilder.convertProjections
+
+  /**
+    * Indicate whether any snowflake tables are involved in a query plan.
+    */
+  private var foundSnowflakeRelation = false
 
   /** This iterator automatically increments every time it is used,
     * and is for aliasing subqueries.
@@ -76,8 +84,28 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
       log.debug("Begin query generation.")
       generateQueries(plan).get
     } catch {
-      case _: MatchError | _: NoSuchElementException => {
-        log.debug("Could not generate a query for pushdown.")
+      // A telemetry message about push-down failure is sent if there are
+      // any snowflake tables in the query plan.
+      case e: SnowflakePushdownUnsupportedException => {
+        if (foundSnowflakeRelation) {
+          SnowflakeTelemetry.addPushdownFailMessage(plan, e)
+        }
+        null
+      }
+      case e @ (_: MatchError | _: NoSuchElementException) => {
+        if (foundSnowflakeRelation) {
+          val stringWriter = new StringWriter
+          e.printStackTrace(new PrintWriter(stringWriter))
+          SnowflakeTelemetry.addPushdownFailMessage(
+            plan,
+            new SnowflakePushdownUnsupportedException(
+              e.getMessage,
+              e.getClass.toString,
+              stringWriter.toString,
+              false
+            )
+          )
+        }
       }
       null
     }
@@ -112,6 +140,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   private def generateQueries(plan: LogicalPlan): Option[SnowflakeQuery] = {
     plan match {
       case l @ LogicalRelation(sfRelation: SnowflakeRelation, _, _, _) =>
+        foundSnowflakeRelation = true
         Some(SourceQuery(sfRelation, l.output, alias.next))
 
       case UnaryOp(child) =>

@@ -50,6 +50,7 @@ class BasicReadWriteSuite extends ClusterTestSuiteBase {
       connection
         .createStatement()
         .execute(s"drop table $targetSchema.$targetTableName")
+      connection.close()
     }
   }
 }
