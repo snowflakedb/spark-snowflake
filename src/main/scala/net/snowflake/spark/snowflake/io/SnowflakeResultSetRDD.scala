@@ -5,7 +5,12 @@ import java.util.Properties
 
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException}
+import net.snowflake.spark.snowflake.{
+  Conversions,
+  ProxyInfo,
+  SnowflakeConnectorException,
+  SnowflakeTelemetry
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +33,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
   sc: SparkContext,
   resultSets: Array[SnowflakeResultSetSerializable],
   proxyInfo: Option[ProxyInfo],
-  queryID: String
+  queryID: String,
+  sfURL: String
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] =
@@ -37,7 +43,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
-      queryID
+      queryID,
+      sfURL
     )
 
   override protected def getPartitions: Array[Partition] =
@@ -52,7 +59,8 @@ case class ResultIterator[T: ClassTag](
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
-  queryID: String
+  queryID: String,
+  sfURL: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -66,12 +74,34 @@ case class ResultIterator[T: ClassTag](
   }
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
-  val data: ResultSet = resultSet.getResultSet(jdbcProperties)
-  SnowflakeResultSetRDD.logger.info(
-    s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
-       | partition ID:$partitionIndex expectedRowCount=
-       | $expectedRowCount
-       |""".stripMargin.filter(_ >= ' '))
+  val data: ResultSet = {
+    try {
+      SnowflakeResultSetRDD.logger.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+           | partition ID:$partitionIndex expectedRowCount=
+           | $expectedRowCount
+           |""".stripMargin.filter(_ >=
+          ' '))
+      resultSet.getResultSet(jdbcProperties)
+    } catch {
+      case e: Exception => {
+        // Send OOB telemetry message if reading failure happens
+        SnowflakeTelemetry.sendTelemetryOOB(
+          sfURL,
+          this.getClass.getSimpleName,
+          operation = "read",
+          retryCount = 0,
+          maxRetryCount = 0,
+          success = false,
+          proxyInfo.isDefined,
+          Some(queryID),
+          Some(e))
+        // Re-throw the exception
+        throw e
+      }
+    }
+  }
+
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
   var currentRowNotConsumedYet: Boolean = false
@@ -85,28 +115,46 @@ case class ResultIterator[T: ClassTag](
       return currentRowNotConsumedYet
     }
 
-    if (data.next()) {
-      // Move to the current row in the ResultSet, but it is not consumed yet.
-      currentRowNotConsumedYet = true
-      true
-    } else {
-      SnowflakeResultSetRDD.logger.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
-           | partition ID:$partitionIndex expectedRowCount=$expectedRowCount
-           | actualReadRowCount=$actualReadRowCount
-           |""".stripMargin.filter(_ >= ' '))
-
-      // Close the result set.
-      data.close()
-
-      if (actualReadRowCount != expectedRowCount) {
-        throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
-          s"""The actual read row count $actualReadRowCount is not equal to
-             | the expected row count $expectedRowCount for partition
-             | ID:$partitionIndex. Related query ID is $queryID
+    try {
+      if (data.next()) {
+        // Move to the current row in the ResultSet, but it is not consumed yet.
+        currentRowNotConsumedYet = true
+        true
+      } else {
+        SnowflakeResultSetRDD.logger.info(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
+             | partition ID:$partitionIndex expectedRowCount=$expectedRowCount
+             | actualReadRowCount=$actualReadRowCount
              |""".stripMargin.filter(_ >= ' '))
+
+        // Close the result set.
+        data.close()
+
+        if (actualReadRowCount != expectedRowCount) {
+          throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
+            s"""The actual read row count $actualReadRowCount is not equal to
+               | the expected row count $expectedRowCount for partition
+               | ID:$partitionIndex. Related query ID is $queryID
+               |""".stripMargin.filter(_ >= ' '))
+        }
+        false
       }
-      false
+    } catch {
+      case e: Exception => {
+        // Send OOB telemetry message if reading failure happens
+        SnowflakeTelemetry.sendTelemetryOOB(
+          sfURL,
+          this.getClass.getSimpleName,
+          operation = "read",
+          retryCount = 0,
+          maxRetryCount = 0,
+          success = false,
+          useProxy = proxyInfo.isDefined,
+          queryID = Some(queryID),
+          exception = Some(e))
+        // Re-throw the exception
+        throw e
+      }
     }
   }
 

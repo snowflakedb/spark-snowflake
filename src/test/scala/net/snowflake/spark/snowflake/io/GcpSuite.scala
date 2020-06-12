@@ -24,7 +24,8 @@ import net.snowflake.spark.snowflake.{
 import org.scalatest.FunSuite
 
 class GcpSuite extends FunSuite {
-  val mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS)
+  var mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS
+                      ++ Map("sfurl" -> "sfctest0.snowflakecomputing.com"))
   val gcsStorage = InternalGcsStorage(mergedParams, "dummyStage", null, null)
 
   test("These functions are not supported for GCP") {
