@@ -6,6 +6,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   Concat,
   Expression,
+  Length,
   Like,
   Lower,
   StringLPad,
@@ -40,7 +41,7 @@ private[querygeneration] object StringStatement {
     Option(expr match {
       case _: Ascii | _: Lower | _: Substring | _: StringLPad | _: StringRPad |
           _: StringTranslate | _: StringTrim | _: StringTrimLeft |
-          _: StringTrimRight | _: Substring | _: Upper =>
+          _: StringTrimRight | _: Substring | _: Upper | _: Length =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
