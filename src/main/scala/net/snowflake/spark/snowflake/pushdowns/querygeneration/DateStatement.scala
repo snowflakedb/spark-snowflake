@@ -7,6 +7,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   Month,
   Quarter,
+  TruncDate,
+  TruncTimestamp,
   Year
 }
 
@@ -23,7 +25,8 @@ private[querygeneration] object DateStatement {
         ConstantString("DATEADD(day,") + convertStatement(days, fields) + "," +
           convertStatement(startDate, fields) + ")"
 
-      case _: Month | _: Quarter | _: Year =>
+      case _: Month | _: Quarter | _: Year |
+           _: TruncDate | _: TruncTimestamp =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
