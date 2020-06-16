@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 #
 # Run whitesource for components which need versioning
-
-set -e
-set -o pipefail
+# Catch error and exit only if not -2 or 0
+#
+# If an error occurs, return an error code instead of exit -1
+set +e
+# Fail if any command in pipe fails.
+set -o pipefail 
 
 cd ${WORKSPACE}
 
 # SCAN_DIRECTORIES is a comma-separated list (as a string) of file paths which contain all source code and build artifacts for this project
 SCAN_DIRECTORIES=$PWD
 
+# If your PROD_BRANCH is not master, you can define it here based on the need
+PROD_BRANCH="master"
+
 # PRODUCT_NAME is your team's name or overarching project name
 PRODUCT_NAME="spark-snowflake"
 
 # PROJECT_NAME is your project's name or repo name if your project spans multiple repositories
-PROJECT_NAME="spark-snowflake"
+PROJECT_NAME=${GIT_BRANCH}
 
-DATE=$(date +'%m-%d-%Y')
 
 if [[ -z "${JOB_BASE_NAME}" ]]; then
    echo "[ERROR] No JOB_BASE_NAME is set. Run this on Jenkins"
@@ -24,8 +29,11 @@ if [[ -z "${JOB_BASE_NAME}" ]]; then
 fi
 
 # Download the latest whitesource unified agent to do the scanning if there is no existing one
-if [ ! -f "wss-unified-agent.jar" ]; then
-   curl -LO https://github.com/whitesource/unified-agent-distribution/releases/latest/download/wss-unified-agent.jar
+curl -LO https://github.com/whitesource/unified-agent-distribution/releases/latest/download/wss-unified-agent.jar
+if [[ ! -f "wss-unified-agent.jar" ]]; then
+    echo "failed to download whitesource unified agent"
+    # if you want to fail the build when failing to download whitesource scanning agent, please use exit 1 
+    # exit 1
 fi
 
 # whitesource will scan the folder and detect the corresponding configuration
@@ -36,28 +44,57 @@ fi
 # SCAN_CONFIG is the path to your whitesource configuration file
 SCAN_CONFIG="whitesource/wss-sbt-agent.config"
 
-java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
-   -c ${SCAN_CONFIG} \
-   -project ${PROJECT_NAME} \
-   -product ${PRODUCT_NAME} \
-   -d ${SCAN_DIRECTORIES} \
-   -wss.url https://saas.whitesourcesoftware.com/agent \
-   -offline true
-
-if java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
-   -c ${SCAN_CONFIG} \
-   -project ${PROJECT_NAME} \
-   -product ${PRODUCT_NAME} \
-   -projectVersion baseline \
-   -requestFiles whitesource/update-request.txt \
-   -wss.url https://saas.whitesourcesoftware.com/agent ;
-then echo "checkPolicies=false" >> ${SCAN_CONFIG} && java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
-   -c ${SCAN_CONFIG} \
-   -project ${PROJECT_NAME} \
-   -product ${PRODUCT_NAME} \
-   -projectVersion ${DATE} \
-   -requestFiles whitesource/update-request.txt \
-   -wss.url https://saas.whitesourcesoftware.com/agent
+if [ "$GIT_BRANCH" != "$PROD_BRANCH" ]; then
+    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
+        -c ${SCAN_CONFIG} \
+        -project ${PROJECT_NAME} \
+        -product ${PRODUCT_NAME} \
+        -d ${SCAN_DIRECTORIES} \
+        -projectVersion ${GIT_COMMIT}
+    ERR=$?
+    if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
+        echo "failed to run whitesource scanning with feature branch"
+        # if you want to fail the build when failing to run whitesource with projectName feature branch, please use exit 1 
+        # exit 1
+    fi 
+else
+    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
+        -c ${SCAN_CONFIG} \
+        -project ${PROJECT_NAME} \
+        -product ${PRODUCT_NAME} \
+        -d ${SCAN_DIRECTORIES} \
+        -projectVersion ${GIT_COMMIT} \
+        -offline true
+        ERR=$?
+        if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
+            echo "failed to run whitesource scanning in offline mode"
+            # if you want to fail the build when failing to run whitesource scanning with offline mode, please use exit 1 
+            # exit 1
+        fi
+    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
+        -c ${SCAN_CONFIG} \
+        -project ${PROJECT_NAME} \
+        -product ${PRODUCT_NAME} \
+        -projectVersion baseline \
+        -requestFiles whitesource/update-request.txt 
+        ERR=$?
+        if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
+            echo "failed to run whitesource scanning with projectName baseline of master branch"
+            # if you want to fail the build when failing to run whitesource with projectName baseline, please use exit 1 
+            # exit 1
+        fi
+    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
+        -c ${SCAN_CONFIG} \
+        -project ${PROJECT_NAME} \
+        -product ${PRODUCT_NAME} \
+        -projectVersion ${GIT_COMMIT} \
+        -requestFiles whitesource/update-request.txt
+        ERR=$?
+        if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
+            echo "failed to run whitesource scanning with projectName GIT_COMMIT of master branch"
+            # if you want to fail the build when failing to run whitesource with projectName GIT_COMMIT, please use exit 1
+            # exit 1
+        fi 
 fi
 
 exit 0
