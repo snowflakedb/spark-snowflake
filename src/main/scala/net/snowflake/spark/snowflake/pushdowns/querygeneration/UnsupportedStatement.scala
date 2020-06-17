@@ -32,6 +32,10 @@ private[querygeneration] object UnsupportedStatement {
              ): Option[SnowflakeSQLStatement] = {
     val expr = expAttr._1
 
+    // This exception is not a real issue. It will be caught in
+    // QueryBuilder.treeRoot and a telemetry message will be sent if
+    // there are any snowflake tables in the query. It can't be done here
+    // because it is not clear whether there are any snowflake tables here.
     throw new SnowflakePushdownUnsupportedException(
       EXCEPTION_MESSAGE,
       expr.prettyName,

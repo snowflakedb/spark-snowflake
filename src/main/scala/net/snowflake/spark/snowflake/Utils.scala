@@ -658,13 +658,14 @@ object Utils {
   def getClientInfoJson(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
 
-    metric.put("version", esc(VERSION))
-    metric.put("spark_version", esc(SPARK_VERSION))
-    metric.put("application_name", esc(sparkAppName))
-    metric.put("scala_version", esc(scalaVersion))
-    metric.put("java_version", esc(javaVersion))
-    metric.put("jdbc_version", esc(jdbcVersion))
-    metric.put("certified_jdbc_version", esc(CERTIFIED_JDBC_VERSION))
+    metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
+    metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
+    metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
+    metric.put(TelemetryClientInfoFields.SCALA_VERSION, esc(scalaVersion))
+    metric.put(TelemetryClientInfoFields.JAVA_VERSION, esc(javaVersion))
+    metric.put(TelemetryClientInfoFields.JDBC_VERSION, esc(jdbcVersion))
+    metric.put(TelemetryClientInfoFields.CERTIFIED_JDBC_VERSION,
+      esc(CERTIFIED_JDBC_VERSION))
 
     metric
   }

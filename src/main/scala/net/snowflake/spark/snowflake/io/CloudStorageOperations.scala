@@ -318,6 +318,7 @@ object CloudStorageOperations {
             azureSAS = azureSAS,
             param.proxyInfo,
             param.maxRetryCount,
+            param.sfURL,
             param.expectedPartitionCount,
             pref = path,
             connection = conn
@@ -346,6 +347,7 @@ object CloudStorageOperations {
             awsKey = param.awsSecretKey.get,
             param.proxyInfo,
             param.maxRetryCount,
+            param.sfURL,
             param.expectedPartitionCount,
             pref = prefix,
             connection = conn
@@ -480,6 +482,7 @@ sealed trait CloudStorage {
   protected val connection: Connection
   protected val maxRetryCount: Int
   protected val proxyInfo: Option[ProxyInfo]
+  protected val sfURL: String
 
   // The first 10 sleep time in second will be like
   // 3, 6, 12, 24, 48, 96, 192, 300, 300, 300, etc
@@ -566,7 +569,7 @@ sealed trait CloudStorage {
       // Upload the file with retry and backoff.
       // default maxRetryCount is 10 which is configurable.
       var retryCount = 0
-      var error: Option[Throwable] = None
+      var error: Option[Exception] = None
       var uploadDone = false
       var startUploadTime: Long = 0
       do {
@@ -627,10 +630,9 @@ sealed trait CloudStorage {
 
           // succeed upload, set done to break the loop
           uploadDone = true
-          error = None
         } catch {
           // Hit exception when uploading the file, sleep some time and retry.
-          case e: Throwable => {
+          case e: Exception => {
             error = Some(e)
             retryCount = retryCount + 1
             val sleepTime = retrySleepTimeInMS(retryCount)
@@ -653,6 +655,20 @@ sealed trait CloudStorage {
           }
         }
       } while (retryCount < maxRetryCount && !uploadDone)
+
+      // Send OOB telemetry message if uploading failure happens
+      if (retryCount > 0) {
+        SnowflakeTelemetry.sendTelemetryOOB(
+          sfURL,
+          this.getClass.getSimpleName,
+          "write",
+          retryCount,
+          maxRetryCount,
+          uploadDone,
+          proxyInfo.isDefined,
+          None,
+          error)
+      }
 
       // Fail to upload data after retry
       if (!uploadDone) {
@@ -723,15 +739,16 @@ sealed trait CloudStorage {
                                     storageInfo: Map[String, String],
                                     maxRetryCount: Int): InputStream = {
     // download the file with retry and backoff and then consume.
-    // val maxRetryCount = 10
     var retryCount = 0
-    var error: Option[Throwable] = None
+    var error: Option[Exception] = None
+    var downloadDone = false
+    var inputStream: InputStream = null
 
     do {
       try {
         val startTime = System.currentTimeMillis()
         // Create original download stream
-        var inputStream = createDownloadStream(fileName, compress, storageInfo)
+        inputStream = createDownloadStream(fileName, compress, storageInfo)
 
         // If max retry count is greater than 1, enable the file download.
         // This provides a way to disable the file download if necessary.
@@ -761,12 +778,12 @@ sealed trait CloudStorage {
           )
         }
 
-        // succeed download return
+        // succeed download
+        downloadDone = true
         processedFileCount += 1
-        return inputStream
       } catch {
         // Find problem to download the file, sleep some time and retry.
-        case e: Throwable => {
+        case e: Exception => {
           error = Some(e)
           retryCount = retryCount + 1
           val sleepTime = retrySleepTimeInMS(retryCount)
@@ -785,10 +802,26 @@ sealed trait CloudStorage {
           Thread.sleep(sleepTime)
         }
       }
-    } while (retryCount < maxRetryCount)
+    } while (retryCount < maxRetryCount && !downloadDone)
 
-    // Fail to download data after retry
-    if (error.isDefined) {
+    // Send OOB telemetry message if downloading failure happens
+    if (retryCount > 0) {
+      SnowflakeTelemetry.sendTelemetryOOB(
+        sfURL,
+        this.getClass.getSimpleName,
+        "read",
+        retryCount,
+        maxRetryCount,
+        downloadDone,
+        proxyInfo.isDefined,
+        None,
+        error)
+    }
+
+    if (downloadDone) {
+      inputStream
+    } else {
+      // Fail to download data after retry
       val errorMessage = error.get.getMessage
       CloudStorageOperations.log.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
@@ -796,16 +829,6 @@ sealed trait CloudStorage {
            |""".stripMargin.filter(_ >= ' ')
       )
       throw error.get
-    } else {
-      // Suppose this never happens
-      val errorMessage = "Unknown error occurs, Contact Snowflake Support"
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit un-expected
-           | condition after retry $retryCount times is
-           | [ $retryCount/$maxRetryCount ]
-           |""".stripMargin.filter(_ >= ' ')
-      )
-      throw new Exception(errorMessage)
     }
   }
 
@@ -845,6 +868,7 @@ case class InternalAzureStorage(param: MergedParameters,
 
   override val maxRetryCount = param.maxRetryCount
   override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  override val sfURL = param.sfURL
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -950,7 +974,7 @@ case class InternalAzureStorage(param: MergedParameters,
             ' '))
         new CipherOutputStream(azureOutput, cipher)
       } catch {
-        case ex: Throwable =>
+        case ex: Exception =>
           val requestID = opContext.getClientRequestID
           CloudStorageOperations.log.error(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
@@ -1058,7 +1082,7 @@ case class InternalAzureStorage(param: MergedParameters,
            |""".stripMargin.
           filter(_ >= ' '))
     } catch {
-      case ex: Throwable =>
+      case ex: Exception =>
         val requestID = opContext.getClientRequestID
         CloudStorageOperations.log.error(
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
@@ -1091,6 +1115,7 @@ case class ExternalAzureStorage(containerName: String,
                                 azureSAS: String,
                                 override val proxyInfo: Option[ProxyInfo],
                                 override val maxRetryCount: Int,
+                                override val sfURL: String,
                                 fileCountPerPartition: Int,
                                 pref: String = "",
                                 @transient override val connection: Connection)
@@ -1140,7 +1165,7 @@ case class ExternalAzureStorage(containerName: String,
         azureOutput
       }
     } catch {
-      case ex: Throwable =>
+      case ex: Exception =>
         val requestID = opContext.getClientRequestID
         CloudStorageOperations.log.error(
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
@@ -1212,7 +1237,7 @@ case class ExternalAzureStorage(containerName: String,
            | container=${blob.getContainer.getName}
            |""".stripMargin.filter(_ >= ' '))
     } catch {
-      case ex: Throwable =>
+      case ex: Exception =>
         val requestID = opContext.getClientRequestID
         CloudStorageOperations.log.error(
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
@@ -1274,6 +1299,7 @@ case class InternalS3Storage(param: MergedParameters,
     extends CloudStorage {
   override val maxRetryCount = param.maxRetryCount
   override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  override val sfURL = param.sfURL
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -1473,6 +1499,7 @@ case class ExternalS3Storage(bucketName: String,
                              awsKey: String,
                              override val proxyInfo: Option[ProxyInfo],
                              override val maxRetryCount: Int,
+                             override val sfURL: String,
                              fileCountPerPartition: Int,
                              awsToken: Option[String] = None,
                              pref: String = "",
@@ -1613,6 +1640,7 @@ case class InternalGcsStorage(param: MergedParameters,
   override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
   // Max retry count to upload a file
   override val maxRetryCount: Int = param.maxRetryCount
+  override val sfURL = param.sfURL
 
   // Generate file transfer metadata objects for file upload. On GCS,
   // the file transfer metadata is pre-signed URL and related metadata.
