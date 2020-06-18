@@ -76,7 +76,7 @@ export PATH=build:$PATH
 echo publishing main branch...
 git checkout tags/$GITHUB_TAG_1
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  build/sbt package
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
@@ -90,7 +90,7 @@ whitesource/run_whitesource.sh
 echo publishing previous_spark_version branch...
 git checkout tags/$GITHUB_TAG_2
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  build/sbt package
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
@@ -104,7 +104,7 @@ whitesource/run_whitesource.sh
 echo publishing previous_spark_version branch...
 git checkout tags/$GITHUB_TAG_3
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  build/sbt package
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
