@@ -20,7 +20,9 @@ PROD_BRANCH="master"
 PRODUCT_NAME="spark-snowflake"
 
 # PROJECT_NAME is your project's name or repo name if your project spans multiple repositories
-PROJECT_NAME=${GIT_BRANCH}
+BRANCH_NAME=$(echo ${GIT_BRANCH} | cut -d'/' -f 2)
+
+PROJECT_NAME=$BRANCH_NAME
 
 
 if [[ -z "${JOB_BASE_NAME}" ]]; then
@@ -44,7 +46,7 @@ fi
 # SCAN_CONFIG is the path to your whitesource configuration file
 SCAN_CONFIG="whitesource/wss-sbt-agent.config"
 
-if [ "$GIT_BRANCH" != "$PROD_BRANCH" ]; then
+if [ "BRANCH_NAME" != "$PROD_BRANCH" ]; then
     java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
         -c ${SCAN_CONFIG} \
         -project ${PROJECT_NAME} \
