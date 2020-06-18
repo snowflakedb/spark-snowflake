@@ -16,7 +16,7 @@
 
 val sparkConnectorVersion = "2.7.2"
 val scalaVersionMajor = "2.11"
-val sparkVersionMajor = "2.4"
+val sparkVersionMajor = "2.2"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 

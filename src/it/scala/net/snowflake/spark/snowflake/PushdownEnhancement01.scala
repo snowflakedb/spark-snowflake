@@ -82,7 +82,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown date_trunc function") {
+  // date_trunc() is supported from spark 2.3
+  ignore("test pushdown date_trunc function") {
     jdbcUpdate(s"create or replace table $test_table_ts_trunc(ts timestamp_ntz)")
     jdbcUpdate(s"insert into $test_table_ts_trunc values ('2019-08-21 12:34:56.789')")
 
