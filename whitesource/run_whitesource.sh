@@ -22,7 +22,7 @@ PRODUCT_NAME="spark-snowflake"
 # PROJECT_NAME is your project's name or repo name if your project spans multiple repositories
 BRANCH_NAME=$(echo ${GIT_BRANCH} | cut -d'/' -f 2)
 
-GIT_COMMIT=$(echo git rev-parse HEAD)
+export GIT_COMMIT=`git rev-parse HEAD`
 
 PROJECT_NAME=$BRANCH_NAME
 
