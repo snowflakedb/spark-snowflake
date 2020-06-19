@@ -57,7 +57,7 @@ object Utils {
     */
   val SNOWFLAKE_SOURCE_SHORT_NAME = "snowflake"
 
-  val VERSION = "2.7.2"
+  val VERSION = "2.8.0"
 
   /**
     * The certified JDBC version to work with this spark connector version.
