@@ -20,7 +20,7 @@ export JDBC_JAR_NAME=snowflake-jdbc-${TEST_JDBC_VERSION}.jar
 
 echo "Start to downlod dependent libraries"
 # Below script is not parameterized yet.
-curl -s -o scala-library-2.11.12.jar https://repo1.maven.org/maven2/org/scala-lang/scala-library/2.11.12/scala-library-2.11.12.jar
+curl -s -o scala-library-${TEST_COMPILE_SCALA_VERSION}.jar https://repo1.maven.org/maven2/org/scala-lang/scala-library/${TEST_COMPILE_SCALA_VERSION}/scala-library-${TEST_COMPILE_SCALA_VERSION}.jar
 curl -s -o slf4j-log4j12-1.7.30.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-log4j12/1.7.30/slf4j-log4j12-1.7.30.jar
 curl -s -o slf4j-api-1.7.30.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.7.30/slf4j-api-1.7.30.jar
 curl -s -o snowflake-jdbc-download.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/${TEST_JDBC_VERSION}/${JDBC_JAR_NAME}
@@ -29,7 +29,7 @@ curl -s -o commons-codec-1.14.jar https://repo1.maven.org/maven2/commons-codec/c
 
 # Check the result
 echo "Start to check result. first paramter is totalTestCount, second is totalTmeout"
-$JAVA_HOME/bin/java -classpath ./ClusterTest/target/scala-${TEST_SCALA_VERSION}/clustertest_${TEST_SCALA_VERSION}-1.0.jar:./target/scala-${TEST_SCALA_VERSION}/spark-snowflake_${TEST_SCALA_VERSION}-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar:./snowflake-jdbc-download.jar:./scala-library-2.11.12.jar:./slf4j-log4j12-1.7.30.jar:./slf4j-api-1.7.30.jar:./log4j-1.2.17.jar:./commons-codec-1.14.jar \
+$JAVA_HOME/bin/java -classpath ./ClusterTest/target/scala-${TEST_SCALA_VERSION}/clustertest_${TEST_SCALA_VERSION}-1.0.jar:./target/scala-${TEST_SCALA_VERSION}/spark-snowflake_${TEST_SCALA_VERSION}-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar:./snowflake-jdbc-download.jar:./scala-library-${TEST_COMPILE_SCALA_VERSION}.jar:./slf4j-log4j12-1.7.30.jar:./slf4j-api-1.7.30.jar:./log4j-1.2.17.jar:./commons-codec-1.14.jar \
 	net.snowflake.spark.snowflake.ClusterTestCheckResult $TOTAL_TEST_CASE_COUNT $TOTAL_TIMEOUT_IN_SECONDS $@
 testStatus=$?
 

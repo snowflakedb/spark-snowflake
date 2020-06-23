@@ -21,6 +21,7 @@ object SnowflakeTelemetry {
 
   private val TELEMETRY_SOURCE = "spark_connector"
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
+  private val MAX_OUTPUT_NODE_COUNT = 1024
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
   private val logger = LoggerFactory.getLogger(getClass)
@@ -201,7 +202,7 @@ object SnowflakeTelemetry {
     val result = mapper.createObjectNode()
     var action = plan.nodeName
     var isSFPlan = false
-    val argsString = plan.argString
+    val argsString = plan.argString(MAX_OUTPUT_NODE_COUNT)
     val argsNode = mapper.createObjectNode()
     val children = mapper.createArrayNode()
 
@@ -219,7 +220,8 @@ object SnowflakeTelemetry {
       case Project(fields, _) =>
         argsNode.set("fields", expressionsToJson(fields))
 
-      case Join(_, _, joinType, Some(condition)) =>
+      // Snowflake doesn't support HINT for join, so just ignore the hint.
+      case Join(_, _, joinType, Some(condition), _) =>
         argsNode.put("type", joinType.toString)
         argsNode.set("conditions", expToJson(condition))
 

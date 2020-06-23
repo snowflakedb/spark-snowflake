@@ -29,12 +29,14 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_length: String = s"test_length_$randomSuffix"
   private val test_table_ts_trunc: String = s"test_ts_trunc_$randomSuffix"
   private val test_table_date_trunc: String = s"test_date_trunc_$randomSuffix"
+  private val test_table_decimal: String = s"test_decimal_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table_length")
       jdbcUpdate(s"drop table if exists $test_table_ts_trunc")
       jdbcUpdate(s"drop table if exists $test_table_date_trunc")
+      jdbcUpdate(s"drop table if exists $test_table_decimal")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -183,6 +185,34 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |from(select*from($test_table_date_trunc )as
          |"sf_connector_query_alias")as"subquery_0
          |"""".stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown MakeDecimal() function") {
+    jdbcUpdate(s"create or replace table $test_table_decimal(c1 string, c2 string)")
+    jdbcUpdate(s"insert into $test_table_decimal values ('123.456', null)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_decimal)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_decimal")
+
+    val result = sparkSession.sql(
+      "SELECT sum(cast(c1 AS DECIMAL(5, 0))), sum(cast(c2 AS DECIMAL(5, 0))) FROM test_table_decimal")
+    val expectedResult = Seq(Row(123, null))
+
+    testPushdown(
+      s"""select(to_decimal((sum((cast("subquery_0"."c1"asdecimal(5,0))
+         |*pow(10,0)))/pow(10,0)),15,0))as"subquery_1_col_0",
+         |(to_decimal((sum((cast("subquery_0"."c2"asdecimal(5,0))
+         |*pow(10,0)))/pow(10,0)),15,0))as"subquery_1_col_1"
+         |FROM ( SELECT * FROM ( $test_table_decimal ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" """.stripMargin,
       result,
       expectedResult
     )

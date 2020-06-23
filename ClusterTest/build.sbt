@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.7.2"
-val scalaVersionMajor = "2.11"
-val sparkVersionMajor = "2.4"
+val sparkConnectorVersion = "2.8.0"
+val scalaVersionMajor = "2.12"
+val sparkVersionMajor = "3.0"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
@@ -28,7 +28,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     organization := "net.snowflake",
     version := s"1.0",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    crossScalaVersions := Seq("2.11.12", "2.12.11"),
+    crossScalaVersions := Seq("2.12.11"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -37,7 +37,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.8",
       "net.snowflake" % "snowflake-jdbc" % "3.12.7",
-      // "net.snowflake" %% "spark-snowflake" % "2.7.0-spark_2.4",
+      // "net.snowflake" %% "spark-snowflake" % "2.8.0-spark_3.0",
       // "com.google.guava" % "guava" % "14.0.1" % Test,
       // "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       // "org.mockito" % "mockito-core" % "1.10.19" % Test,
