@@ -939,6 +939,16 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     TestHook.disableTestHook()
   }
 
+  test("Test Utils.runQuery") {
+    setupLargeResultTable
+    val rs = Utils.runQuery(thisConnectorOptionsNoTable, s"select * from $test_table_large_result")
+    var count = 0
+    while(rs.next()) {
+      count += 1
+    }
+    assert(count == LARGE_TABLE_ROW_COUNT)
+  }
+
   // Copy one table from AWS account to GCP account
   ignore("copy data from AWS to GCP") {
     val moveTableName = "LINEITEM_FROM_PARQUET"
