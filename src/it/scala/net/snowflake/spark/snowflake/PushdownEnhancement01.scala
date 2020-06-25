@@ -30,6 +30,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_ts_trunc: String = s"test_ts_trunc_$randomSuffix"
   private val test_table_date_trunc: String = s"test_date_trunc_$randomSuffix"
   private val test_table_decimal: String = s"test_decimal_$randomSuffix"
+  private val test_table_union_1: String = s"test_union_1_$randomSuffix"
+  private val test_table_union_2: String = s"test_union_2_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -37,6 +39,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_ts_trunc")
       jdbcUpdate(s"drop table if exists $test_table_date_trunc")
       jdbcUpdate(s"drop table if exists $test_table_decimal")
+      jdbcUpdate(s"drop table if exists $test_table_union_1")
+      jdbcUpdate(s"drop table if exists $test_table_union_2")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -214,6 +218,64 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |FROM ( SELECT * FROM ( $test_table_decimal ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" """.stripMargin,
       result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown union() and unionAll() function") {
+    jdbcUpdate(s"create or replace table $test_table_union_1(c1 varchar(10))")
+    jdbcUpdate(s"create or replace table $test_table_union_2(c1 varchar(10))")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('row1')")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('row2')")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('row2')")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('row3')")
+
+    val tmpDF1 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_union_1)
+      .load()
+
+    tmpDF1.createOrReplaceTempView("test_union_1")
+
+    val tmpDF2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_union_2)
+      .load()
+
+    tmpDF2.createOrReplaceTempView("test_union_2")
+
+    val df1 = sparkSession.sql("select c1 from test_union_1")
+    val df2 = sparkSession.sql("select c1 from test_union_2")
+    val resultUnion = df1.union(df2)
+
+    val expectedResult = Seq(
+      Row("row1"),
+      Row("row2"),
+      Row("row2"),
+      Row("row3"))
+
+    resultUnion.printSchema()
+    resultUnion.show()
+
+    testPushdown(
+      s"""(select * from($test_table_union_1)as"sf_connector_query_alias")
+         |union all
+         |(select * from($test_table_union_2)as"sf_connector_query_alias")
+         |""".stripMargin,
+      resultUnion,
+      expectedResult
+    )
+
+    val resultUnionAll = df1.unionAll(df2)
+
+    testPushdown(
+      s"""(select * from($test_table_union_1)as"sf_connector_query_alias")
+         |union all
+         |(select * from($test_table_union_2)as"sf_connector_query_alias")
+         |""".stripMargin,
+      resultUnionAll,
       expectedResult
     )
   }
