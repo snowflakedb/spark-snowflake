@@ -21,7 +21,7 @@ import java.net.URI
 import java.sql.{Connection, ResultSet}
 import java.util.UUID
 
-import net.snowflake.client.jdbc.SnowflakeDriver
+import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 
@@ -29,10 +29,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.io._
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{
-  AmazonS3Client,
-  AmazonS3URI
-}
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
@@ -412,18 +409,21 @@ object Utils {
 
   def runQuery(params: Map[String, String], query: String): ResultSet = {
     val conn = getJDBCConnection(params)
-    val rs = conn.createStatement().executeQuery(query)
+    val resultSerializables =
+      conn.createStatement()
+        .executeQuery(query)
+        .asInstanceOf[SnowflakeResultSet]
+        .getResultSetSerializables(Long.MaxValue)
     conn.close()
-    rs
+    // Long.MaxValue is passed to getResultSetSerializables(),
+    // so it is sure there is only one object in resultSerializables
+    resultSerializables.get(0).getResultSet
   }
 
   // Java version
   def runQuery(params: java.util.Map[String, String],
                query: String): ResultSet = {
-    val conn = getJDBCConnection(params)
-    val rs = conn.createStatement().executeQuery(query)
-    conn.close()
-    rs
+    runQuery(params.asScala.toMap, query)
   }
 
   // Helper function for testing
