@@ -680,6 +680,72 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("test COPY missing files and succeed") {
+    setupLargeResultTable
+    if (!skipBigDataTest) {
+      val tmpDF = sparkSession
+        .sql("select * from test_table_large_result order by int_c")
+
+      // Enable the test flag
+      TestHook.enableTestFlagOnly(
+        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_SUCCESS)
+
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Write the data to snowflake
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Disable the test flag
+      TestHook.disableTestHook()
+
+      // Verify row count is correct.
+      val rowCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", s"$test_table_write")
+        .load()
+        .count()
+      assert(rowCount == LARGE_TABLE_ROW_COUNT)
+    }
+  }
+
+  // Negative Test
+  test("test COPY missing files and fails") {
+    setupLargeResultTable
+    // Don't run this test for use_copy_unload=true
+    // because there are only 3 files (2 partitions) for this data size.
+    if (!skipBigDataTest && !params.useCopyUnload) {
+      val tmpDF = sparkSession
+        .sql("select * from test_table_large_result order by int_c")
+
+      // Enable 2 test flags.
+      TestHook.enableTestFlagOnly(
+        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_SUCCESS)
+      TestHook.enableTestFlag(
+        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)
+
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Some files are missed, so the spark job fails.
+      assertThrows[SnowflakeConnectorException] {
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+      }
+
+      // Disable the test flags
+      TestHook.disableTestHook()
+    }
+  }
+
   test("testSparkScalaUDF") {
     setupLargeResultTable
     if (!skipBigDataTest) {

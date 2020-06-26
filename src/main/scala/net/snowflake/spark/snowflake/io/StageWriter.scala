@@ -15,18 +15,18 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.sql.Connection
+import java.sql.{Connection, ResultSet}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
-import net.snowflake.spark.snowflake.io.StageWriter.log
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.SaveMode
 import org.slf4j.LoggerFactory
 
+import scala.collection._
 import scala.util.Random
 
 // Snowflake doesn't support DDL in tran, so the State Machine is
@@ -108,7 +108,8 @@ class WriteTableState(conn: Connection) {
                     params: MergedParameters,
                     file: String,
                     tempStage: String,
-                    format: SupportedFormat): Unit = {
+                    format: SupportedFormat,
+                    fileUploadResults: List[FileUploadResult]): Unit = {
     val targetTable = params.table.get
 
     beginTranIfNotBeginYet()
@@ -121,35 +122,18 @@ class WriteTableState(conn: Connection) {
       Option(targetTable)
     )
 
-    // Load the temporary data into the new file
-    val copyStatement =
-      StageWriter.copySql(
-        schema,
-        saveMode,
-        params,
-        targetTable,
-        file,
-        tempStage,
-        format,
-        conn
-      )
-    // copy
-    log.debug(Utils.sanitizeQueryText(copyStatement.toString))
-    // todo: handle on_error parameter on spark side
+    // Execute COPY INTO TABLE to load data
+    StageWriter.executeCopyIntoTable(
+      conn,
+      schema,
+      saveMode,
+      params,
+      targetTable,
+      file,
+      tempStage,
+      format,
+      fileUploadResults)
 
-    // report the number of skipped files.
-    // todo: replace table name to Identifier(?) after bug fixed
-    val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
-    if (params.continueOnError) {
-      var rowSkipped: Long = 0L
-      while (resultSet.next()) {
-        rowSkipped +=
-          resultSet.getLong("rows_parsed") -
-            resultSet.getLong("rows_loaded")
-      }
-      log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
-    }
-    Utils.setLastCopyLoad(copyStatement.toString)
     // post actions
     Utils.executePostActions(
       DefaultJDBCWrapper,
@@ -222,19 +206,27 @@ private[io] object StageWriter {
         params, conn, tempStage = true, None, "load")
 
       val startTime = System.currentTimeMillis()
-      val filesToCopy = storage.upload(rdd, format, None)
+      val fileUploadResults = storage.upload(rdd, format, None)
 
       val startCopyInto = System.currentTimeMillis()
-      if (filesToCopy.nonEmpty) {
+      if (fileUploadResults.nonEmpty) {
+        val firstFileName = fileUploadResults.head.fileName
         writeToTable(
           conn,
           schema,
           saveMode,
           params,
-          filesToCopy.head.substring(0, filesToCopy.head.indexOf("/")),
+          firstFileName.substring(0, firstFileName.indexOf("/")),
           stage,
-          format
+          format,
+          fileUploadResults
         )
+      } else {
+        log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | Skip to execute COPY INTO TABLE command because
+             | no file is uploaded.
+             |""".stripMargin.filter(_ >= ' '))
       }
       val endTime = System.currentTimeMillis()
 
@@ -261,11 +253,12 @@ private[io] object StageWriter {
                            params: MergedParameters,
                            file: String,
                            tempStage: String,
-                           format: SupportedFormat): Unit = {
+                           format: SupportedFormat,
+                           fileUploadResults: List[FileUploadResult]): Unit = {
     if (params.useStagingTable || !params.truncateTable) {
-      writeToTableWithStagingTable(conn, schema, saveMode, params, file, tempStage, format)
+      writeToTableWithStagingTable(conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
     } else {
-      writeToTableWithoutStagingTable(conn, schema, saveMode, params, file, tempStage, format)
+      writeToTableWithoutStagingTable(conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
     }
   }
 
@@ -273,12 +266,13 @@ private[io] object StageWriter {
     * load data from stage to table without staging table
     */
   private def writeToTableWithoutStagingTable(conn: Connection,
-                                           schema: StructType,
-                                           saveMode: SaveMode,
-                                           params: MergedParameters,
-                                           file: String,
-                                           tempStage: String,
-                                           format: SupportedFormat): Unit = {
+                                              schema: StructType,
+                                              saveMode: SaveMode,
+                                              params: MergedParameters,
+                                              file: String,
+                                              tempStage: String,
+                                              format: SupportedFormat,
+                                              fileUploadResults: List[FileUploadResult]): Unit = {
     val tableName: String = params.table.get.name
     val writeTableState = new WriteTableState(conn)
 
@@ -300,7 +294,14 @@ private[io] object StageWriter {
       }
 
       // Run COPY INTO and related commands
-      writeTableState.copyIntoTable(schema, saveMode, params, file, tempStage, format)
+      writeTableState.copyIntoTable(
+        schema,
+        saveMode,
+        params,
+        file,
+        tempStage,
+        format,
+        fileUploadResults)
 
       // Commit a user transaction
       writeTableState.commit()
@@ -319,12 +320,14 @@ private[io] object StageWriter {
     * This function is deprecated.
     */
   private def writeToTableWithStagingTable(conn: Connection,
-                           schema: StructType,
-                           saveMode: SaveMode,
-                           params: MergedParameters,
-                           file: String,
-                           tempStage: String,
-                           format: SupportedFormat): Unit = {
+                                           schema: StructType,
+                                           saveMode: SaveMode,
+                                           params: MergedParameters,
+                                           file: String,
+                                           tempStage: String,
+                                           format: SupportedFormat,
+                                           fileUploadResults: List[FileUploadResult])
+  : Unit = {
     val table = params.table.get
     val tempTable =
       TableName(
@@ -367,35 +370,18 @@ private[io] object StageWriter {
         Option(targetTable)
       )
 
-      // Load the temporary data into the new file
-      val copyStatement =
-        copySql(
-          schema,
-          saveMode,
-          params,
-          targetTable,
-          file,
-          tempStage,
-          format,
-          conn
-        )
-      // copy
-      log.debug(Utils.sanitizeQueryText(copyStatement.toString))
-      // todo: handle on_error parameter on spark side
+      // Execute COPY INTO TABLE to load data
+      StageWriter.executeCopyIntoTable(
+        conn,
+        schema,
+        saveMode,
+        params,
+        targetTable,
+        file,
+        tempStage,
+        format,
+        fileUploadResults)
 
-      // report the number of skipped files.
-      // todo: replace table name to Identifier(?) after bug fixed
-      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
-      if (params.continueOnError) {
-        var rowSkipped: Long = 0L
-        while (resultSet.next()) {
-          rowSkipped +=
-            resultSet.getLong("rows_parsed") -
-              resultSet.getLong("rows_loaded")
-        }
-        log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
-      }
-      Utils.setLastCopyLoad(copyStatement.toString)
       // post actions
       Utils.executePostActions(
         DefaultJDBCWrapper,
@@ -427,16 +413,200 @@ private[io] object StageWriter {
   }
 
   /**
+    * Execute COPY INTO table command.
+    * Firstly, it executes COPY INTO table commands without FILES clause.
+    * Internally, snowflake uses LIST to get files for a prefix.
+    * In rare cases, some files may be missing because the cloud service's
+    * eventually consistency.
+    * So it the return result for COPY command is checked. If any files are
+    * missed, an additional COPY INTO table with FILES clause is used to load
+    * the missed files.
+    */
+  private[io] def executeCopyIntoTable(conn: Connection,
+                                       schema: StructType,
+                                       saveMode: SaveMode,
+                                       params: MergedParameters,
+                                       targetTable: TableName,
+                                       file: String,
+                                       tempStage: String,
+                                       format: SupportedFormat,
+                                       fileUploadResults: List[FileUploadResult])
+  : Unit = {
+    // If a file is empty, there is no file are upload.
+    // So the expected files are non empty files.
+    val expectedFileSet = mutable.Set[String]()
+    fileUploadResults.foreach(fileUploadResult =>
+      if (fileUploadResult.fileSize > 0) {
+        expectedFileSet += fileUploadResult.fileName
+      })
+
+    // Indicate whether to use FILES clause in the copy command
+    var useFilesClause = false
+
+    // For testing purpose, only load part of files if the test flag is on.
+    // Expect the missed files are detected and loaded with 2nd COPY.
+    val firstCopyFileSet: Option[mutable.Set[String]] =
+      if (TestHook.isTestFlagEnabled(
+        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_SUCCESS)) {
+        useFilesClause = true
+        Some(expectedFileSet.grouped(2).toList.head)
+      } else {
+        Some(expectedFileSet)
+      }
+
+    // Generate COPY statement without FILES clause.
+    val copyStatement = StageWriter.copySql(
+      schema,
+      saveMode,
+      params,
+      targetTable,
+      file,
+      tempStage,
+      format,
+      conn,
+      useFilesClause,
+      firstCopyFileSet.get.toSet
+    )
+    log.debug(Utils.sanitizeQueryText(copyStatement.toString))
+
+    // execute the COPY INTO TABLE statement
+    val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
+
+    // Save the original COPY command even if additional COPY is run.
+    Utils.setLastCopyLoad(copyStatement.toString)
+
+    // Get missed files if there are any.
+    var missedFileSet = getCopyMissedFiles(params, resultSet, expectedFileSet)
+
+    // If any files are missed, execute 2nd COPY command
+    if (missedFileSet.nonEmpty) {
+      // Negative test:
+      // Only load part of missed files.
+      // Exception is raised for the failure.
+      val secondCopyFileSet: Option[mutable.Set[String]] =
+      if (TestHook.isTestFlagEnabled(
+        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
+        Some(missedFileSet.grouped(2).toList.head)
+      } else {
+        Some(missedFileSet)
+      }
+
+      // Generate copy command with missed files only
+      useFilesClause = true
+      val copyWithFileClause = StageWriter.copySql(
+        schema,
+        saveMode,
+        params,
+        targetTable,
+        file,
+        tempStage,
+        format,
+        conn,
+        useFilesClause,
+        secondCopyFileSet.get.toSet
+      )
+
+      def getMissedFileInfo(missedFileSet: mutable.Set[String]): String = {
+        s"""missedFileCount=${missedFileSet.size}
+           | Files: (${missedFileSet.mkString(", ")})
+           |""".stripMargin.filter(_ >= ' ')
+      }
+
+      // Log missed files info
+      log.warn(
+        s"""Some files are not loaded into the table, execute additional COPY
+           | to load them: ${getMissedFileInfo(missedFileSet)}
+           | """.stripMargin)
+
+      // Run the command
+      val resultSet = copyWithFileClause.execute(params.bindVariableEnabled)(conn)
+      missedFileSet = getCopyMissedFiles(params, resultSet, missedFileSet)
+
+      // It is expected all the files must be loaded.
+      if (missedFileSet.nonEmpty) {
+        throw new SnowflakeConnectorException(
+          s"""These files are missed when COPY INTO TABLE:
+             | ${getMissedFileInfo(missedFileSet)}
+             | """.stripMargin.filter(_ >= ' '))
+      }
+    }
+  }
+
+  // Check missed files for the COPY command
+  private def getCopyMissedFiles(params: MergedParameters,
+                                 copyResultSet: ResultSet,
+                                 expectedFileSet: mutable.Set[String])
+  : mutable.Set[String] = {
+    val COPY_INTO_TABLE_RESULT_COLUMN_FILE = "file"
+    val COPY_INTO_TABLE_RESULT_COLUMN_ROW_PARSED = "rows_parsed"
+    val COPY_INTO_TABLE_RESULT_COLUMN_ROW_LOADED = "rows_loaded"
+
+    // get column list from the COPY result set
+    val metadata = copyResultSet.getMetaData
+    val columnNameSet = mutable.Set[String]()
+    for (i <- 1 to metadata.getColumnCount) {
+      columnNameSet += metadata.getColumnName(i)
+    }
+
+    // Check the COPY result only when the result format is expected.
+    if (!columnNameSet.contains(COPY_INTO_TABLE_RESULT_COLUMN_FILE) ||
+      !columnNameSet.contains(COPY_INTO_TABLE_RESULT_COLUMN_ROW_PARSED) &&
+        !columnNameSet.contains(COPY_INTO_TABLE_RESULT_COLUMN_ROW_LOADED)) {
+      log.warn(
+        s"""Fail to check the COPY result because format is not supported.
+           | The column names are: ${columnNameSet.mkString(", ")}
+           | Expect to include $COPY_INTO_TABLE_RESULT_COLUMN_FILE and
+           | $COPY_INTO_TABLE_RESULT_COLUMN_ROW_PARSED and
+           | $COPY_INTO_TABLE_RESULT_COLUMN_ROW_LOADED
+           | """.stripMargin.filter(_ >= ' '))
+      return mutable.Set.empty
+    }
+
+    // The missed file set is initialized as the expected files set.
+    // The loaded files name are removed from it in the later iteration.
+    // The left files are missed files.
+    val missedFileSet = expectedFileSet.clone()
+    var rowSkipped: Long = 0L
+    while (copyResultSet.next()) {
+      if (params.continueOnError) {
+        rowSkipped +=
+          copyResultSet.getLong(COPY_INTO_TABLE_RESULT_COLUMN_ROW_PARSED) -
+            copyResultSet.getLong(COPY_INTO_TABLE_RESULT_COLUMN_ROW_LOADED)
+      }
+      // The file name from COPY ResultSet is <stage_name>/<prefix>/<filename>
+      // The file name in expectedFileSet is <prefix>/<filename>
+      val fileFullName = copyResultSet
+        .getString(COPY_INTO_TABLE_RESULT_COLUMN_FILE)
+      val fileNameWithoutStage: String =
+        fileFullName.substring(fileFullName.indexOf("/") + 1)
+      // Remove the found files from missed file set.
+      if (missedFileSet.contains(fileNameWithoutStage)) {
+        missedFileSet -= fileNameWithoutStage
+      } else {
+        log.warn(s"Load file which isn't uploaded by SC: $fileFullName")
+      }
+    }
+
+    if (params.continueOnError) {
+      log.error(s"ON_ERROR: Continue -> Skipped $rowSkipped rows")
+    }
+
+    missedFileSet
+  }
+
+  /**
     * Generate the COPY SQL command
     */
   private[io] def copySql(schema: StructType,
-                      saveMode: SaveMode,
-                      params: MergedParameters,
-                      table: TableName,
-                      file: String,
-                      tempStage: String,
-                      format: SupportedFormat,
-                      conn: Connection): SnowflakeSQLStatement = {
+                          saveMode: SaveMode,
+                          params: MergedParameters,
+                          table: TableName,
+                          prefix: String,
+                          tempStage: String,
+                          format: SupportedFormat,
+                          conn: Connection,
+                          useFilesClause: Boolean,
+                          filesToCopy: Set[String]): SnowflakeSQLStatement = {
 
     if (saveMode != SaveMode.Append && params.columnMap.isDefined) {
       throw new UnsupportedOperationException(
@@ -514,7 +684,7 @@ private[io] object StageWriter {
           }
       }
 
-    val fromString = ConstantString(s"FROM @$tempStage/$file") !
+    val fromString = ConstantString(s"FROM @$tempStage/$prefix/") !
 
     val mappingList: Option[List[(Int, String)]] = params.columnMap match {
       case Some(map) =>
@@ -579,9 +749,23 @@ private[io] object StageWriter {
         EmptySnowflakeSQLStatement()
       }
 
+    // Use FILES clause only when useFilesClause is true.
+    val filesClause = if (useFilesClause && filesToCopy.nonEmpty) {
+      // The original filename has a prefix which need to be removed
+      // because it has been included in 'fromString'
+      val filesWithoutPrefix = filesToCopy.map(
+        x => x.substring(x.lastIndexOf("/") + 1))
+      ConstantString(
+        s"""FILES = ( '${filesWithoutPrefix.mkString("' , '")}' )
+           |""".stripMargin) !
+    } else {
+      EmptySnowflakeSQLStatement()
+    }
+
     // todo: replace table name to Identifier(?) after bug fixed
     ConstantString("copy into") + table.name + mappingToString +
-      mappingFromString + formatString + truncateCol + purge + onError
+      mappingFromString + filesClause + formatString + truncateCol +
+      purge + onError
   }
 
 }

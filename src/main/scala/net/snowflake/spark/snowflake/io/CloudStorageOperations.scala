@@ -380,8 +380,9 @@ object CloudStorageOperations {
     format: SupportedFormat = SupportedFormat.CSV,
     dir: Option[String] = None,
     compress: Boolean = true
-  )(implicit storage: CloudStorage): List[String] =
-    storage.upload(data, format, dir, compress)
+  )(implicit storage: CloudStorage): List[String] = {
+    storage.upload(data, format, dir, compress).map(_.fileName)
+  }
 
   def deleteFiles(files: List[String])(implicit storage: CloudStorage,
                                        connection: Connection): Unit =
@@ -447,16 +448,20 @@ object CloudStorageOperations {
 
 }
 
-private[io] class SingleElementIterator(fileName: String) extends Iterator[String] {
+class FileUploadResult(val fileName: String,
+                       val fileSize: Int) extends Serializable {
+}
 
-  private var name: Option[String] = Some(fileName)
+private[io] class SingleElementIterator(fileUploadResult: FileUploadResult)
+  extends Iterator[FileUploadResult] {
+  private var data: Option[FileUploadResult] = Some(fileUploadResult)
 
-  override def hasNext: Boolean = name.isDefined
+  override def hasNext: Boolean = data.isDefined
 
-  override def next(): String = {
-    val t = name.get
-    name = None
-    t
+  override def next(): FileUploadResult = {
+    val result = data.get
+    data = None
+    result
   }
 }
 
@@ -516,7 +521,7 @@ sealed trait CloudStorage {
   def upload(data: RDD[String],
              format: SupportedFormat = SupportedFormat.CSV,
              dir: Option[String],
-             compress: Boolean = true): List[String] =
+             compress: Boolean = true): List[FileUploadResult] =
     uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
 
   // Retrieve data for one partition and upload the result data to stage.
@@ -691,14 +696,14 @@ sealed trait CloudStorage {
            |""".stripMargin.filter(_ >= ' '))
     }
 
-    new SingleElementIterator(s"$directory/$fileName")
+    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", data.size))
   }
 
   protected def uploadRDD(data: RDD[String],
                           format: SupportedFormat = SupportedFormat.CSV,
                           dir: Option[String],
                           compress: Boolean = true,
-                          storageInfo: Map[String, String]): List[String] = {
+                          storageInfo: Map[String, String]): List[FileUploadResult] = {
 
     val directory: String =
       dir match {
@@ -716,7 +721,7 @@ sealed trait CloudStorage {
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
     // 2. Code snippet for CASE clause is executed by distributed worker nodes
-    val files = data.mapPartitionsWithIndex {
+    val fileUploadResults = data.mapPartitionsWithIndex {
       case (index, rows) =>
         ///////////////////////////////////////////////////////////////////////
         // Begin code snippet to be executed on worker
@@ -730,7 +735,7 @@ sealed trait CloudStorage {
         ///////////////////////////////////////////////////////////////////////
     }
 
-    files.collect().toList
+    fileUploadResults.collect().toList
   }
 
   // Implement retry logic when download fails and finish the file download.
@@ -1709,7 +1714,7 @@ case class InternalGcsStorage(param: MergedParameters,
   override def upload(data: RDD[String],
                       format: SupportedFormat = SupportedFormat.CSV,
                       dir: Option[String],
-                      compress: Boolean = true): List[String] = {
+                      compress: Boolean = true): List[FileUploadResult] = {
 
     val directory: String =
       dir match {
@@ -1734,7 +1739,7 @@ case class InternalGcsStorage(param: MergedParameters,
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
     // 2. Code snippet for CASE clause is executed by distributed worker nodes
-    val files = data.mapPartitionsWithIndex {
+    val fileUploadResults = data.mapPartitionsWithIndex {
       case (index, rows) =>
         ///////////////////////////////////////////////////////////////////////
         // Begin code snippet to executed on worker
@@ -1761,7 +1766,7 @@ case class InternalGcsStorage(param: MergedParameters,
          | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
 
-    files.collect().toList
+    fileUploadResults.collect().toList
   }
 
   // GCS doesn't support streaming yet
