@@ -18,12 +18,12 @@ jobs:
         cloud_provider: [ 'gcp' ]
     env:
         SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
+        TEST_SPARK_VERSION: '3.0'
         DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:3.0.0'
-        TEST_SPARK_CONNECTOR_VERSION: '2.8.0'
         TEST_SCALA_VERSION: '2.12'
         TEST_COMPILE_SCALA_VERSION: '2.12.11'
-        TEST_JDBC_VERSION: '3.12.7'
-        TEST_SPARK_VERSION: '3.0'
+        TEST_SPARK_CONNECTOR_VERSION: '2.8.0'
+        TEST_JDBC_VERSION: '3.12.8'
 
     steps:
     - uses: actions/checkout@v2

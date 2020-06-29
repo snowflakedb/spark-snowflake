@@ -10,12 +10,20 @@ echo "TEST_SCALA_VERSION=$TEST_SCALA_VERSION"
 echo "TEST_COMPILE_SCALA_VERSION=$TEST_COMPILE_SCALA_VERSION"
 echo "TEST_JDBC_VERSION=$TEST_JDBC_VERSION"
 echo "TEST_SPARK_VERSION=$TEST_SPARK_VERSION"
+echo "SNOWFLAKE_TEST_CONFIG=$SNOWFLAKE_TEST_CONFIG"
 
 export SPARK_HOME=/users/spark
 export SPARK_WORKDIR=/users/spark/work
 
 export SPARK_CONNECTOR_JAR_NAME=spark-snowflake_${TEST_SCALA_VERSION}-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar
 export JDBC_JAR_NAME=snowflake-jdbc-${TEST_JDBC_VERSION}.jar
+
+# Check test file exists
+ls -al $SNOWFLAKE_TEST_CONFIG \
+       $SPARK_WORKDIR/${SPARK_CONNECTOR_JAR_NAME} \
+       $SPARK_WORKDIR/${JDBC_JAR_NAME} \
+       $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar \
+       $SPARK_WORKDIR/ClusterTest.py
 
 echo "Important: if new test cases are added, script .github/docker/check_result.sh MUST be updated"
 # Run pyspark test
