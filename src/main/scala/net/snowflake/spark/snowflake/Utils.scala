@@ -669,4 +669,28 @@ object Utils {
 
     metric
   }
+
+  /**
+    * Print JDBC ResultSet for debugging purpose
+    */
+  private[snowflake] def printResultSet(rs: ResultSet): Unit = {
+    try {
+      val columnCount = rs.getMetaData.getColumnCount
+      val sb = new StringBuilder
+      for (i <- 1 to columnCount) {
+        sb.append(s"${rs.getMetaData.getColumnName(i)}(${rs.getMetaData.getColumnTypeName(i)}) | ")
+      }
+      println(sb.toString())
+      while (rs.next) {
+        sb.clear()
+        for (i <- 1 to columnCount) {
+          sb.append(rs.getString(i)).append(" | ")
+        }
+        println(sb.toString())
+      }
+    } catch {
+      case e: Exception =>
+        println(s"Fail to print result set: ${e.getMessage}")
+    }
+  }
 }
