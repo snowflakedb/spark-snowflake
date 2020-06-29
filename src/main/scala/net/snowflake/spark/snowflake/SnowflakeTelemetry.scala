@@ -221,7 +221,8 @@ object SnowflakeTelemetry {
         argsNode.set("fields", expressionsToJson(fields))
 
       // Snowflake doesn't support HINT for join, so just ignore the hint.
-      case Join(_, _, joinType, Some(condition), _) =>
+      // HINT is new feature from spark 3.0
+      case Join(_, _, joinType, Some(condition)) =>
         argsNode.put("type", joinType.toString)
         argsNode.set("conditions", expToJson(condition))
 

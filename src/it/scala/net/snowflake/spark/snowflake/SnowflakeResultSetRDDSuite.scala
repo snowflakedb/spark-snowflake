@@ -1175,7 +1175,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   // This is supported from Spark 3.0
-  test("test LIKE with ESCAPE pushdown 1") {
+  ignore("test LIKE with ESCAPE pushdown 1") {
     setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
@@ -1210,7 +1210,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // Apache Spark engineers have fixed it. This test can be enabled in formal
   // Apache Spark release.
   // This is supported from Spark 3.0
-  test ("test LIKE with ESCAPE pushdown 2") {
+  ignore("test LIKE with ESCAPE pushdown 2") {
     setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
@@ -1238,7 +1238,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   // This is supported from Spark 3.0
-  test("test NOT LIKE with ESCAPE pushdown") {
+  ignore("test NOT LIKE with ESCAPE pushdown") {
     setupTableForLike
     // Only run the test with Arrow format,
     // there is empty string in the result, it is read as NULL for COPY UNLOAD.
