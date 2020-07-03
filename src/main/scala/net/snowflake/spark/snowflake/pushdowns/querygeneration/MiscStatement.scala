@@ -10,6 +10,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Ascending,
   Attribute,
+  CaseWhen,
   Cast,
   DenseRank,
   Descending,
@@ -119,6 +120,18 @@ private[querygeneration] object MiscStatement {
               useWindowFrame = false
             )
         }
+
+      case CaseWhen(branches, elseValue) =>
+        ConstantString("CASE") +
+          mkStatement(branches.map(conditionValue => {
+            ConstantString("WHEN") + convertStatement(conditionValue._1, fields) +
+              ConstantString("THEN") + convertStatement(conditionValue._2, fields)
+          }
+          ), " ") + { elseValue match {
+          case Some(value) => ConstantString("ELSE") + convertStatement(value, fields)
+          case None => EmptySnowflakeSQLStatement()
+        }} + ConstantString("END")
+
 
       case _ => null
     })
