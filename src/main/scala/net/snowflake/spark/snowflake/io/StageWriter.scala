@@ -715,8 +715,8 @@ private[io] object StageWriter {
                |    FIELD_DELIMITER='|'
                |    NULL_IF=()
                |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-               |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
-               |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF3'
+               |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
+               |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
                |    BINARY_FORMAT=BASE64
                |  )
            """.stripMargin) !

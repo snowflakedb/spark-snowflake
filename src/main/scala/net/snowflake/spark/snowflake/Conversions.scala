@@ -19,7 +19,9 @@ package net.snowflake.spark.snowflake
 
 import java.sql.Timestamp
 import java.text._
-import java.util.Date
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.{Date, TimeZone}
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
@@ -89,6 +91,14 @@ private[snowflake] object Conversions {
     }
   }
 
+  // For TZ and LTZ, Snowflake serializes with timezone
+  // Note - we use a pattern with timezone in the beginning, to make sure
+  // parsing with Timestamp standard fails for PATTERN_TZLTZ strings.
+  // For details of the format, check below URL
+  // https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html
+  private val PATTERN_WRITE_TZLTZ = "XX yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+  private val timestampWriteFormatter = DateTimeFormatter.ofPattern(PATTERN_WRITE_TZLTZ)
+
   // Thread local SimpleDateFormat for parsing/formatting
   private val snowflakeDateFormat = new ThreadLocal[SimpleDateFormat] {
     override protected def initialValue: SimpleDateFormat =
@@ -108,7 +118,12 @@ private[snowflake] object Conversions {
   }
 
   def formatTimestamp(t: Timestamp): String = {
-    snowflakeTimestampFormat.format(t)
+    // For writing to snowflake, time zone needs to be included
+    // in the timestamp string. The spark default timezone is used.
+    timestampWriteFormatter.format(
+      ZonedDateTime.of(
+        t.toLocalDateTime(),
+        TimeZone.getDefault.toZoneId))
   }
 
   // All strings are converted into double-quoted strings, with

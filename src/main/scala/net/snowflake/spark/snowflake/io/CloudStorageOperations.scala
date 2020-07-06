@@ -570,6 +570,9 @@ sealed trait CloudStorage {
     outputStream.close()
     val endConvertTime = System.currentTimeMillis()
 
+    // import java.nio.charset.StandardCharsets
+    // println(new String(data, StandardCharsets.UTF_8))
+
     if (data.nonEmpty) {
       // Upload the file with retry and backoff.
       // default maxRetryCount is 10 which is configurable.
