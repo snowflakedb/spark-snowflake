@@ -32,6 +32,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_decimal: String = s"test_decimal_$randomSuffix"
   private val test_table_union_1: String = s"test_union_1_$randomSuffix"
   private val test_table_union_2: String = s"test_union_2_$randomSuffix"
+  private val test_table_case_when_1: String = s"test_case_when_1_$randomSuffix"
+  private val test_table_case_when_2: String = s"test_case_when_2_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -41,6 +43,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_decimal")
       jdbcUpdate(s"drop table if exists $test_table_union_1")
       jdbcUpdate(s"drop table if exists $test_table_union_2")
+      jdbcUpdate(s"drop table if exists $test_table_case_when_1")
+      jdbcUpdate(s"drop table if exists $test_table_case_when_2")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -277,6 +281,80 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |""".stripMargin,
       resultUnionAll,
       expectedResult
+    )
+  }
+
+  test("test pushdown casewhen() function with other") {
+    jdbcUpdate(s"create or replace table $test_table_case_when_1(gender string)")
+    jdbcUpdate(s"insert into $test_table_case_when_1 values (null)")
+    jdbcUpdate(s"insert into $test_table_case_when_1 values ('M')")
+    jdbcUpdate(s"insert into $test_table_case_when_1 values ('F')")
+    jdbcUpdate(s"insert into $test_table_case_when_1 values ('MMM')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_case_when_1)
+      .load()
+
+    val result = tmpDF.withColumn("new_gender",
+      functions.when(tmpDF("gender") === "M", "Male")
+        .when(tmpDF("gender") === "F", "Female")
+        .otherwise("Other"))
+
+    result.show()
+
+    val expectedResult = Seq(
+      Row("F", "Female"),
+      Row("M", "Male"),
+      Row("MMM", "Other"),
+      Row(null, "Other"),
+    )
+
+    testPushdown(
+      s""" select ("subquery_0"."gender") as "subquery_1_col_0",(case
+         |when ("subquery_0"."gender"='m') then 'male'
+         |when ("subquery_0"."gender"='f' ) then 'female'
+         |else 'other' end)
+         |as "subquery_1_col_1" from ( select * from ($test_table_case_when_1)
+         |as "sf_connector_query_alias" ) as "subquery_0" """.stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown casewhen() function without other") {
+    jdbcUpdate(s"create or replace table $test_table_case_when_2(gender string)")
+    jdbcUpdate(s"insert into $test_table_case_when_2 values (null)")
+    jdbcUpdate(s"insert into $test_table_case_when_2 values ('M')")
+    jdbcUpdate(s"insert into $test_table_case_when_2 values ('F')")
+    jdbcUpdate(s"insert into $test_table_case_when_2 values ('MMM')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_case_when_2)
+      .load()
+
+    val resultNoOther = tmpDF.withColumn("new_gender",
+      functions.when(tmpDF("gender") === "M", "Male"))
+
+    resultNoOther.show()
+
+    val expectedResultNoOther = Seq(
+      Row("F", null),
+      Row("M", "Male"),
+      Row("MMM", null),
+      Row(null, null),
+    )
+
+    testPushdown(
+      s""" select ("subquery_0"."gender") as "subquery_1_col_0",(case
+         |when ("subquery_0"."gender"='m') then 'male' end )
+         |as "subquery_1_col_1" from ( select * from ($test_table_case_when_2)
+         |as "sf_connector_query_alias" ) as "subquery_0" """.stripMargin,
+      resultNoOther,
+      expectedResultNoOther
     )
   }
 
