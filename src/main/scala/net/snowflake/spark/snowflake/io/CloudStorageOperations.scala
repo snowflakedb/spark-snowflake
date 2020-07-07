@@ -449,7 +449,7 @@ object CloudStorageOperations {
 }
 
 class FileUploadResult(val fileName: String,
-                       val fileSize: Int) extends Serializable {
+                       val fileSize: Long) extends Serializable {
 }
 
 private[io] class SingleElementIterator(fileUploadResult: FileUploadResult)
@@ -537,9 +537,15 @@ sealed trait CloudStorage {
   : SingleElementIterator = {
     val fileName = getFileName(partitionID, format, compress)
 
+    // Upload data when reading data if upload retry is disabled.
+    // It can save some memory for writing to snowflake.
+    // NOTE: For GCP, the data have to be cached and then uploaded.
+    val disable_cache_data = maxRetryCount <= 1 && storageInfo.isDefined
+
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Start writing partition ID:$partitionID as $fileName
+         | disable_cache_data=$disable_cache_data
          |""".stripMargin.filter(_ >= ' '))
 
     // Either StorageInfo or fileTransferMetadata must be set.
@@ -559,27 +565,67 @@ sealed trait CloudStorage {
 
     // Retrieve the data for uploading
     val startConvertTime = System.currentTimeMillis()
-    val outputStream = new ByteArrayOutputStream(1024 * 1024)
     var rowCount: Long = 0
-    while (rows.hasNext) {
-      outputStream.write(rows.next.getBytes("UTF-8"))
-      outputStream.write('\n')
-      rowCount += 1
-    }
-    val data = outputStream.toByteArray
-    outputStream.close()
+    var dataSize: Long = 0
+    val readData: Option[Array[Byte]] =
+      if (disable_cache_data) {
+        // Don't cache data, write to output stream when reading.
+        var uploadStream: Option[OutputStream] = None
+        while (rows.hasNext) {
+          // Move the upload stream creation to avoid uploading empty files.
+          if (uploadStream.isEmpty) {
+            uploadStream = Some(createUploadStream(
+              fileName, Some(directory), compress, storageInfo.get))
+          }
+          val oneRow = rows.next.getBytes("UTF-8")
+          uploadStream.get.write(oneRow)
+          uploadStream.get.write('\n')
+          rowCount += 1
+          dataSize += (oneRow.size + 1)
+        }
+        if (uploadStream.isDefined) {
+          uploadStream.get.close()
+        }
+        None
+      } else {
+        // cache the data in buffer
+        val outputStream = new ByteArrayOutputStream(1024 * 1024)
+        while (rows.hasNext) {
+          outputStream.write(rows.next.getBytes("UTF-8"))
+          outputStream.write('\n')
+          rowCount += 1
+        }
+        val data = outputStream.toByteArray
+        outputStream.close()
+        Some(data)
+      }
     val endConvertTime = System.currentTimeMillis()
 
     // import java.nio.charset.StandardCharsets
     // println(new String(data, StandardCharsets.UTF_8))
 
-    if (data.nonEmpty) {
+    if (disable_cache_data) {
+      // The data has been uploaded while reading,
+      // pass through to skip the file upload in this step.
+      val endTime = System.currentTimeMillis()
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+           | Finish writing partition ID:$partitionID:
+           | without cache data. Total process time is
+           | ${Utils.getTimeString(endTime - startConvertTime)}
+           | write row count is $rowCount.
+           | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
+           | (Data size = 0 means file is empty, no file is uploaded)
+           |""".stripMargin.filter(_ >= ' '))
+    } else if (readData.isDefined && readData.get.nonEmpty) {
       // Upload the file with retry and backoff.
       // default maxRetryCount is 10 which is configurable.
       var retryCount = 0
       var error: Option[Exception] = None
       var uploadDone = false
       var startUploadTime: Long = 0
+      val data = readData.get
+      dataSize = data.size
       do {
         try {
           startUploadTime = System.currentTimeMillis()
@@ -699,7 +745,7 @@ sealed trait CloudStorage {
            |""".stripMargin.filter(_ >= ' '))
     }
 
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", data.size))
+    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize))
   }
 
   protected def uploadRDD(data: RDD[String],
