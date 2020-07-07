@@ -4,15 +4,10 @@ import java.io.{PrintWriter, StringWriter}
 import java.sql.Connection
 
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.{
-  ArrayNode,
-  ObjectNode
-}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
@@ -21,7 +16,6 @@ object SnowflakeTelemetry {
 
   private val TELEMETRY_SOURCE = "spark_connector"
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
-  private val MAX_OUTPUT_NODE_COUNT = 1024
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
   private val logger = LoggerFactory.getLogger(getClass)
@@ -151,18 +145,6 @@ object SnowflakeTelemetry {
   }
 
   /**
-    * Generate json node for giving spark plan tree,
-    * if only the tree is complete (root is ReturnAnswer) Snowflake plan
-    */
-  def planToJson(plan: LogicalPlan): Option[(TelemetryTypes, ObjectNode)] =
-    plan.nodeName match {
-      case "ReturnAnswer" =>
-        val (isSFPlan, json) = planTree(plan)
-        if (isSFPlan) Some(TelemetryTypes.SPARK_PLAN, json) else None
-      case _ => None
-    }
-
-  /**
     * Put the pushdown failure telemetry message to internal cache.
     * The message will be sent later in batch.
     *
@@ -195,110 +177,6 @@ object SnowflakeTelemetry {
     )
   }
 
-  /**
-    * convert a plan tree to json
-    */
-  private def planTree(plan: LogicalPlan): (Boolean, ObjectNode) = {
-    val result = mapper.createObjectNode()
-    var action = plan.nodeName
-    var isSFPlan = false
-    val argsString = plan.argString(MAX_OUTPUT_NODE_COUNT)
-    val argsNode = mapper.createObjectNode()
-    val children = mapper.createArrayNode()
-
-    plan match {
-      case LogicalRelation(sfRelation: SnowflakeRelation, _, _, _) =>
-        isSFPlan = true
-        action = "SnowflakeRelation"
-        val schema = mapper.createArrayNode()
-        sfRelation.schema.fields.map(_.dataType.typeName).foreach(schema.add)
-        argsNode.set("schema", schema)
-
-      case Filter(condition, _) =>
-        argsNode.set("conditions", expToJson(condition))
-
-      case Project(fields, _) =>
-        argsNode.set("fields", expressionsToJson(fields))
-
-      // Snowflake doesn't support HINT for join, so just ignore the hint.
-      case Join(_, _, joinType, Some(condition), _) =>
-        argsNode.put("type", joinType.toString)
-        argsNode.set("conditions", expToJson(condition))
-
-      case Aggregate(groups, fields, _) =>
-        argsNode.set("field", expressionsToJson(fields))
-        argsNode.set("group", expressionsToJson(groups))
-
-      case Limit(condition, _) =>
-        argsNode.set("condition", expToJson(condition))
-
-      case LocalLimit(condition, _) =>
-        argsNode.set("condition", expToJson(condition))
-
-      case Sort(orders, isGlobal, _) =>
-        argsNode.put("global", isGlobal)
-        argsNode.set("order", expressionsToJson(orders))
-
-      case Window(namedExpressions, _, _, _) =>
-        argsNode.set("expression", expressionsToJson(namedExpressions))
-
-      case Union(_) =>
-      case Expand(_, _, _) =>
-      case _ =>
-    }
-
-    plan.children.foreach(x => {
-      val (isSF, js) = planTree(x)
-      if (isSF) isSFPlan = true
-      children.add(js)
-    })
-
-    result.put("action", action)
-    if (argsNode.toString == "{}") {
-      result.put("args", argsString)
-    } else {
-      result.set("args", argsNode)
-    }
-    result.set("children", children)
-    (isSFPlan, result)
-
-  }
-
-  /**
-    * Expression to Json array
-    */
-  private def expressionsToJson(name: Seq[Expression]): ArrayNode = {
-    val result = mapper.createArrayNode()
-    name.map(expToJson).foreach(result.add)
-    result
-  }
-
-  /**
-    * Expression to Json object
-    */
-  private def expToJson(exp: Expression): ObjectNode = {
-    val result = mapper.createObjectNode()
-    if (exp.children.isEmpty) {
-      result.put("source", exp.nodeName)
-      result.put("type", exp.dataType.typeName)
-    } else {
-      result.put("operator", exp.nodeName)
-      val parameters = mapper.createArrayNode()
-      sortArgs(exp.nodeName, exp.children.map(expToJson))
-        .foreach(parameters.add)
-      result.set("parameters", parameters)
-    }
-    result
-  }
-
-  // Since order of arguments in some spark expression is random,
-  // sort them to provide fixed result for testing.
-  private def sortArgs(operator: String,
-                       args: Seq[ObjectNode]): Seq[ObjectNode] =
-    operator match {
-      case "And" | "Or" => args.sortBy(_.toString)
-      case _ => args
-    }
 }
 
 object TelemetryTypes extends Enumeration {
