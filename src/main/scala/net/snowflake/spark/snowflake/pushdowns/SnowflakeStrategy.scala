@@ -1,7 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns
 
 import net.snowflake.spark.snowflake.SnowflakeConnectorFeatureNotSupportException
-import net.snowflake.spark.snowflake.SnowflakeTelemetry.{addLog, planToJson}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -18,13 +17,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 class SnowflakeStrategy extends Strategy {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-    try {
-      planToJson(plan).foreach(addLog(_, System.currentTimeMillis()))
-    } catch {
-      case e: Exception =>
-        log.error(s"Can't cast Spark Plan to JSON: ${e.getMessage}")
-    }
-
     try {
       buildQueryRDD(plan.transform({
         case Project(Nil, child) => child
