@@ -149,57 +149,6 @@ package object querygeneration {
     }
   }
 
-  /** This takes a query in the shape produced by QueryBuilder and
-    * performs the necessary indentation for pretty printing.
-    *
-    * @note Warning: This is a hacky implementation that isn't very 'functional' at all.
-    * In fact, it's quite imperative.
-    *
-    * This is useful for logging and debugging.
-    */
-  private[querygeneration] final def prettyPrint(query: String): String = {
-    log.debug(s"""Attempting to prettify query $query...""")
-
-    val opener = "\\(SELECT"
-    val closer = "\\) AS \\\"SUBQUERY_[0-9]{1,10}\\\""
-
-    val breakPoints = "(" + "(?=" + opener + ")" + "|" + "(?=" + closer + ")" +
-      "|" + "(?<=" + closer + ")" + ")"
-
-    var remainder = query
-    var indent = 0
-
-    val str = new StringBuilder
-    var inSuffix: Boolean = false
-
-    while (remainder.length > 0) {
-      val prefix = "\n" + "\t" * indent
-      val parts = remainder.split(breakPoints, 2)
-      str.append(prefix + parts.head)
-
-      if (parts.length >= 2 && parts.last.length > 0) {
-        val n: Char = parts.last.head
-
-        if (n == '(') {
-          indent += 1
-        } else {
-
-          if (!inSuffix) {
-            indent -= 1
-            inSuffix = true
-          }
-
-          if (n == ')') {
-            inSuffix = false
-          }
-        }
-        remainder = parts.last
-      } else remainder = ""
-    }
-
-    str.toString()
-  }
-
   final def mkStatement(
     seq: Seq[SnowflakeSQLStatement],
     delimiter: SnowflakeSQLStatement
