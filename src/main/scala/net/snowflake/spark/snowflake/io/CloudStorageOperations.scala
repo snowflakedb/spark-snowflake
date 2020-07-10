@@ -544,30 +544,9 @@ sealed trait CloudStorage {
   : SingleElementIterator = {
     val fileName = getFileName(partitionID, format, compress)
 
-    // When the upload task fails for non-fatal error, this task will be
-    // rescheduled by spark until the max attempt number is arrived.
-    // In some case, the task failure is caused by cloud service throttling.
-    // The default sleep time in spark (3 seconds) is not enough,
-    // so we do exponential backoff here.
-    val attemptNumber = TaskContext.get().attemptNumber()
-    var backoffInfo = "no_backoff"
-    if (attemptNumber > 0) {
-      // This part is tested manually.
-      // It is difficult to test with integration test because
-      // IT uses local cluster, for local cluster, maxTaskFailures
-      // is always 1. In debugger, manually set MAX_LOCAL_TASK_FAILURES
-      // in SparkContext can test the retry works.
-      val sleepTime = retrySleepTimeInMS(attemptNumber)
-      backoffInfo = s"""attemptNumber=$attemptNumber backoffTime=
-                       |${Utils.getTimeString(sleepTime)}
-                       |""".stripMargin.filter(_ >= ' ')
-      Thread.sleep(sleepTime)
-    }
-
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Start writing partition ID:$partitionID as $fileName
-         | $backoffInfo
          |""".stripMargin.filter(_ >= ' '))
 
     // Either StorageInfo or fileTransferMetadata must be set.
@@ -658,28 +637,31 @@ sealed trait CloudStorage {
              |""".stripMargin.filter(_ >= ' ')
       }
 
-      // Unit Test code only
-      if (TestHook.isTestFlagEnabled(
-        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)) {
-        if (attemptNumber > 1) {
-          TestHook.disableTestHook()
-        }
-        TestHook.raiseExceptionIfTestFlagEnabled(
-          TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-          "Negative test to raise error when uploading data to GCS"
-        )
-      }
+      // Unit Test code only. This part is tested manually.
+      // It is difficult to test with integration test because
+      // IT uses local cluster, for local cluster, maxTaskFailures
+      // is always 1. In debugger, manually set MAX_LOCAL_TASK_FAILURES
+      // in SparkContext can test the retry works.
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
+        "Negative test to raise error when uploading data to GCS"
+      )
 
       CloudStorageOperations.log.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
            | Finish writing partition ID:$partitionID $fileName
            | write row count is $rowCount.
            | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
-           | $processTimeInfo $backoffInfo
+           | $processTimeInfo
            |""".stripMargin.filter(_ >= ' '))
     } catch {
       // Hit exception when uploading the file
       case e: Exception => {
+        val attemptNumber = TaskContext.get().attemptNumber()
+        val sleepTime = retrySleepTimeInMS(attemptNumber + 1)
+        // Sleep exponential time based on the attempt number.
+        Thread.sleep(sleepTime)
+
         val stringWriter = new StringWriter
         e.printStackTrace(new PrintWriter(stringWriter))
         val errmsg =
@@ -688,7 +670,9 @@ sealed trait CloudStorage {
 
         CloudStorageOperations.log.info(
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
-             | partition ID:$partitionID $fileName $backoffInfo
+             | partition ID:$partitionID $fileName
+             | attemptNumber=$attemptNumber
+             | backoffTime=${Utils.getTimeString(sleepTime)}
              | error details: [ $errmsg ]
              |""".stripMargin.filter(_ >= ' ')
         )
