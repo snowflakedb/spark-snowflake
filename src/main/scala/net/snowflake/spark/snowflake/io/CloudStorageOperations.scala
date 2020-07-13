@@ -319,6 +319,7 @@ object CloudStorageOperations {
             param.proxyInfo,
             param.maxRetryCount,
             param.sfURL,
+            param.useExponentialBackoff,
             param.expectedPartitionCount,
             pref = path,
             connection = conn
@@ -348,6 +349,7 @@ object CloudStorageOperations {
             param.proxyInfo,
             param.maxRetryCount,
             param.sfURL,
+            param.useExponentialBackoff,
             param.expectedPartitionCount,
             pref = prefix,
             connection = conn
@@ -488,6 +490,7 @@ sealed trait CloudStorage {
   protected val maxRetryCount: Int
   protected val proxyInfo: Option[ProxyInfo]
   protected val sfURL: String
+  protected val useExponentialBackoff: Boolean
 
   // The first 10 sleep time in second will be like
   // 3, 6, 12, 24, 48, 96, 192, 300, 300, 300, etc
@@ -572,18 +575,8 @@ sealed trait CloudStorage {
           s"""${e.getClass.toString}, ${e.getMessage},
              | stacktrace: ${stringWriter.toString}""".stripMargin
 
-        val attemptNumber = TaskContext.get().attemptNumber()
-        val sleepTime = retrySleepTimeInMS(attemptNumber + 1)
-        CloudStorageOperations.log.info(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
-             | partition ID:$partitionID $fileName
-             | attemptNumber=$attemptNumber
-             | backoffTime=${Utils.getTimeString(sleepTime)}
-             | error details: [ $errmsg ]
-             |""".stripMargin.filter(_ >= ' ')
-        )
-
         // Send OOB telemetry message if uploading failure happens
+        val attemptNumber = TaskContext.get().attemptNumber()
         SnowflakeTelemetry.sendTelemetryOOB(
           sfURL,
           this.getClass.getSimpleName,
@@ -596,7 +589,29 @@ sealed trait CloudStorage {
           Some(e))
 
         // Sleep exponential time based on the attempt number.
-        Thread.sleep(sleepTime)
+        if (useExponentialBackoff) {
+          val sleepTime = retrySleepTimeInMS(attemptNumber + 1)
+          CloudStorageOperations.log.info(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
+               | partition ID:$partitionID $fileName
+               | attemptNumber=$attemptNumber
+               | backoffTime=${Utils.getTimeString(sleepTime)}
+               | error details: [ $errmsg ]
+               |""".stripMargin.filter(_ >= ' ')
+          )
+          Thread.sleep(sleepTime)
+        } else {
+          CloudStorageOperations.log.warn(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit upload error:
+               | partition ID:$partitionID $fileName
+               | attemptNumber=$attemptNumber
+               | Skip exponential backoff sleep because
+               | ${Parameters.PARAM_USE_EXPONENTIAL_BACKOFF} is 'off'.
+               | Please enable it if necessary, for example, cloud service
+               | throttling issues happen.
+               |""".stripMargin.filter(_ >= ' ')
+          )
+        }
         // re-throw the exception
         throw e
       }
@@ -888,6 +903,7 @@ case class InternalAzureStorage(param: MergedParameters,
   override val maxRetryCount = param.maxRetryCount
   override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
   override val sfURL = param.sfURL
+  override val useExponentialBackoff = param.useExponentialBackoff
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -1135,6 +1151,7 @@ case class ExternalAzureStorage(containerName: String,
                                 override val proxyInfo: Option[ProxyInfo],
                                 override val maxRetryCount: Int,
                                 override val sfURL: String,
+                                override val useExponentialBackoff: Boolean,
                                 fileCountPerPartition: Int,
                                 pref: String = "",
                                 @transient override val connection: Connection)
@@ -1319,6 +1336,7 @@ case class InternalS3Storage(param: MergedParameters,
   override val maxRetryCount = param.maxRetryCount
   override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
   override val sfURL = param.sfURL
+  override val useExponentialBackoff = param.useExponentialBackoff
 
   override protected def getStageInfo(
     isWrite: Boolean,
@@ -1519,6 +1537,7 @@ case class ExternalS3Storage(bucketName: String,
                              override val proxyInfo: Option[ProxyInfo],
                              override val maxRetryCount: Int,
                              override val sfURL: String,
+                             override val useExponentialBackoff: Boolean,
                              fileCountPerPartition: Int,
                              awsToken: Option[String] = None,
                              pref: String = "",
@@ -1660,6 +1679,7 @@ case class InternalGcsStorage(param: MergedParameters,
   // Max retry count to upload a file
   override val maxRetryCount: Int = param.maxRetryCount
   override val sfURL = param.sfURL
+  override val useExponentialBackoff = param.useExponentialBackoff
 
   // Generate file transfer metadata objects for file upload. On GCS,
   // the file transfer metadata is pre-signed URL and related metadata.

@@ -986,53 +986,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
-  // Some partitions are empty, but some are not
-  // Test cache data is disabled.
-  test("testReadWriteSomePartitionsEmpty without data cache") {
-    setupLargeResultTable
-    if (!skipBigDataTest) {
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
-      val originalDF = sparkSession
-        .sql(s"select * from test_table_large_result")
-
-      // Use UDF to avoid FILTER to be push-down.
-      import org.apache.spark.sql.functions._
-      val betweenUdf = udf((x: Integer, min: Integer, max: Integer) => {
-        if (x >= min && x < max) true else false
-      })
-      val tmpDF = originalDF.filter(
-        betweenUdf(col("int_c"), lit(400000), lit(500000)))
-
-      var resultSet: Array[Row] = tmpDF.collect()
-      val sourceLength = resultSet.length
-      assert(sourceLength == 100000)
-
-      // Write the Data back to snowflake
-      jdbcUpdate(s"drop table if exists $test_table_write")
-      tmpDF.write
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_write)
-        .option("truncate_table", "off")
-        .option("usestagingtable", "on")
-        .option("max_retry_count", "1")
-        .mode(SaveMode.Overwrite)
-        .save()
-
-      // Read back the written data.
-      val readBackDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", s"$test_table_write")
-        .load()
-
-      resultSet = readBackDF.collect()
-      assert(resultSet.length == sourceLength)
-
-      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
-    }
-  }
-
   // large table read and write.
   test("testReadWriteLargeTable") {
     setupLargeResultTable
@@ -1131,6 +1084,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     // Write the Data back to snowflake
     jdbcUpdate(s"drop table if exists $test_table_write")
+    // Test use_exponential_backoff is 'on' or 'off'
     assertThrows[Exception] {
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -1138,6 +1092,18 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .option("dbtable", test_table_write)
         .option("truncate_table", "off")
         .option("usestagingtable", "on")
+        .option("use_exponential_backoff", "on")
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+    assertThrows[Exception] {
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .option("use_exponential_backoff", "off")
         .mode(SaveMode.Overwrite)
         .save()
     }
