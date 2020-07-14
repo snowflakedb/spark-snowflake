@@ -126,6 +126,11 @@ object Parameters {
     "expected_partition_count"
   )
   val PARAM_MAX_RETRY_COUNT: String = knownParam("max_retry_count")
+  // When a spark task fails because of a throttling issue,
+  // the task should use exponential backoff for next retry.
+  val PARAM_USE_EXPONENTIAL_BACKOFF: String = knownParam(
+    "use_exponential_backoff"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -169,7 +174,8 @@ object Parameters {
     PARAM_USE_COPY_UNLOAD -> "false",
     PARAM_USE_PROXY -> "false",
     PARAM_EXPECTED_PARTITION_COUNT -> "1000",
-    PARAM_MAX_RETRY_COUNT -> "10"
+    PARAM_MAX_RETRY_COUNT -> "10",
+    PARAM_USE_EXPONENTIAL_BACKOFF -> "off"
   )
 
   /**
@@ -551,6 +557,9 @@ object Parameters {
 
     def maxRetryCount: Int = {
       parameters.getOrElse(PARAM_MAX_RETRY_COUNT, "10").toInt
+    }
+    def useExponentialBackoff: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_USE_EXPONENTIAL_BACKOFF, "false"))
     }
 
     /**

@@ -18,6 +18,14 @@ import scala.util.Properties
 
 val sparkVersion = "3.0.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
+
+/*
+ * Don't change the variable name "sparkConnectorVersion" because
+ * jenkins job "BumpUpSparkConnectorVersion" depends on it.
+ * If it has to be changed, please also change the script:
+ * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
+ * in snowflake repository.
+ */
 val sparkConnectorVersion = "2.8.0"
 
 lazy val ItTest = config("it") extend Test
