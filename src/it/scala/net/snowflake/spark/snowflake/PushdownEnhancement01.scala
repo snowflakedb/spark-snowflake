@@ -407,20 +407,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(2, "F")
     )
 
+    // The query plan is some different on spark 2.3
     testPushdown(
-      s"""select ("subquery_1"."id") as "subquery_5_col_0" ,
-         |("subquery_1"."gender") as "subquery_5_col_1" from (
+      s"""select ("subquery_1"."id") as "subquery_4_col_0" ,
+         |("subquery_1"."gender") as "subquery_4_col_1" from (
          |  select * from (
          |    select * from ($test_table_left_semi_join_left) as "sf_connector_query_alias"
          |  ) as "subquery_0" where ("subquery_0"."id" is not null)
          |) as "subquery_1" where exists (
          |  select * from (
-         |    select ("subquery_3"."id") as "subquery_4_col_0" from (
-         |      select * from (
-         |        select * from ($test_table_left_semi_join_right) as "sf_connector_query_alias"
-         |      ) as "subquery_2" where ("subquery_2"."id" is not null)
+         |    select ("subquery_2"."id") as "subquery_3_col_0" from (
+         |      select * from ($test_table_left_semi_join_right) as "sf_connector_query_alias"
+         |      ) as "subquery_2"
          |    ) as "subquery_3"
-         |  ) as "subquery_4" where("subquery_1"."id" = "subquery_4"."subquery_4_col_0")
+         |  where("subquery_1"."id" = "subquery_3"."subquery_3_col_0")
          |)""".stripMargin,
       resultSemi,
       expectedResultSemi
@@ -434,18 +434,17 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(4, "MMM")
     )
 
+    // The query plan is some different on spark 2.3
     testPushdown(
-      s"""select ("subquery_0"."id") as "subquery_4_col_0",
-         |("subquery_0"."gender") as "subquery_4_col_1" from (
+      s"""select ("subquery_0"."id") as "subquery_3_col_0",
+         |("subquery_0"."gender") as "subquery_3_col_1" from (
          |  select * from ($test_table_left_semi_join_left) as "sf_connector_query_alias"
          |) as "subquery_0" where not exists (
          |  select * from (
-         |    select ("subquery_2"."id") as "subquery_3_col_0" from (
-         |      select * from (
+         |    select ("subquery_1"."id") as "subquery_2_col_0" from (
          |        select * from ($test_table_left_semi_join_right) as "sf_connector_query_alias"
-         |      ) as "subquery_1" where ("subquery_1"."id" is not null)
-         |    ) as "subquery_2"
-         |  ) as "subquery_3" where ("subquery_0"."id" = "subquery_3"."subquery_3_col_0")
+         |    ) as "subquery_1"
+         |  ) as "subquery_2" where ("subquery_0"."id" = "subquery_2"."subquery_2_col_0")
          |)""".stripMargin,
       resultAnti,
       expectedResultAnti
