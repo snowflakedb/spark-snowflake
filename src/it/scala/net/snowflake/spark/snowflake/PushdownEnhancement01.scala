@@ -34,6 +34,13 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_union_2: String = s"test_union_2_$randomSuffix"
   private val test_table_case_when_1: String = s"test_case_when_1_$randomSuffix"
   private val test_table_case_when_2: String = s"test_case_when_2_$randomSuffix"
+  private val test_table_left_semi_join_left: String = s"test_table_left_semi_join_left_$randomSuffix"
+  private val test_table_left_semi_join_right: String = s"test_table_left_semi_join_right_$randomSuffix"
+  private val test_table_shift_left: String = s"test_table_shift_left_$randomSuffix"
+  private val test_table_shift_right: String = s"test_table_shift_right_$randomSuffix"
+  private val test_table_in: String = s"test_table_in_$randomSuffix"
+  private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
+  private val test_table_cast: String = s"test_table_cast_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -45,6 +52,13 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_union_2")
       jdbcUpdate(s"drop table if exists $test_table_case_when_1")
       jdbcUpdate(s"drop table if exists $test_table_case_when_2")
+      jdbcUpdate(s"drop table if exists $test_table_left_semi_join_left")
+      jdbcUpdate(s"drop table if exists $test_table_left_semi_join_right")
+      jdbcUpdate(s"drop table if exists $test_table_shift_left")
+      jdbcUpdate(s"drop table if exists $test_table_shift_right")
+      jdbcUpdate(s"drop table if exists $test_table_in")
+      jdbcUpdate(s"drop table if exists $test_table_in_set")
+      jdbcUpdate(s"drop table if exists $test_table_cast")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -355,6 +369,261 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |as "sf_connector_query_alias" ) as "subquery_0" """.stripMargin,
       resultNoOther,
       expectedResultNoOther
+    )
+  }
+
+  test("test pushdown left semi join and left anti join function") {
+    jdbcUpdate(s"create or replace table $test_table_left_semi_join_left(id int, gender string)")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (1, null)")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (2, 'M')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (2, 'F')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (4, 'MMM')")
+
+    jdbcUpdate(s"create or replace table $test_table_left_semi_join_right(id int, name string)")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (1, 'test')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (2, 'allen')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (3, 'apple')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (3, 'join')")
+
+    val tmpDFLeft = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_left_semi_join_left)
+      .load()
+
+    val tmpDFRight = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_left_semi_join_right)
+      .load()
+
+    val resultSemi = tmpDFLeft.join(tmpDFRight, tmpDFLeft("id") === tmpDFRight("id"), "leftsemi")
+
+    resultSemi.show()
+
+    val expectedResultSemi = Seq(
+      Row(1, null),
+      Row(2, "M"),
+      Row(2, "F"),
+    )
+
+    testPushdown(
+      s"""select ("subquery_1"."id") as "subquery_5_col_0" ,
+         |("subquery_1"."gender") as "subquery_5_col_1" from (
+         |  select * from (
+         |    select * from ($test_table_left_semi_join_left) as "sf_connector_query_alias"
+         |  ) as "subquery_0" where ("subquery_0"."id" is not null)
+         |) as "subquery_1" where exists (
+         |  select * from (
+         |    select ("subquery_3"."id") as "subquery_4_col_0" from (
+         |      select * from (
+         |        select * from ($test_table_left_semi_join_right) as "sf_connector_query_alias"
+         |      ) as "subquery_2" where ("subquery_2"."id" is not null)
+         |    ) as "subquery_3"
+         |  ) as "subquery_4" where("subquery_1"."id" = "subquery_4"."subquery_4_col_0")
+         |)""".stripMargin,
+      resultSemi,
+      expectedResultSemi
+    )
+
+    val resultAnti = tmpDFLeft.join(tmpDFRight, tmpDFLeft("id") === tmpDFRight("id"), "leftanti")
+
+    resultAnti.show()
+
+    val expectedResultAnti = Seq(
+      Row(4, "MMM"),
+    )
+
+    testPushdown(
+      s"""select ("subquery_0"."id") as "subquery_4_col_0",
+         |("subquery_0"."gender") as "subquery_4_col_1" from (
+         |  select * from ($test_table_left_semi_join_left) as "sf_connector_query_alias"
+         |) as "subquery_0" where not exists (
+         |  select * from (
+         |    select ("subquery_2"."id") as "subquery_3_col_0" from (
+         |      select * from (
+         |        select * from ($test_table_left_semi_join_right) as "sf_connector_query_alias"
+         |      ) as "subquery_1" where ("subquery_1"."id" is not null)
+         |    ) as "subquery_2"
+         |  ) as "subquery_3" where ("subquery_0"."id" = "subquery_3"."subquery_3_col_0")
+         |)""".stripMargin,
+      resultAnti,
+      expectedResultAnti
+    )
+  }
+
+  test("test pushdown ShiftLeft() function") {
+    jdbcUpdate(s"create or replace table $test_table_shift_left(value int)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (null)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (-5)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (-1)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (0)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (1)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (5)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_shift_left)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_shift_left")
+
+    val result = sparkSession.sql("SELECT shiftleft(value, 1) from test_table_shift_left;")
+
+    result.show()
+
+    val expectedResult = Seq(
+      Row(null),
+      Row(-10),
+      Row(-2),
+      Row(0),
+      Row(2),
+      Row(10),
+    )
+
+    testPushdown(
+      s"""select( bitshiftleft( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+         |  select * from ($test_table_shift_left) as "sf_connector_query_alias"
+         |  ) as "subquery_0" """.stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown ShiftRight() function") {
+    jdbcUpdate(s"create or replace table $test_table_shift_right(value int)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (null)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (-5)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (-1)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (0)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (1)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (5)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_shift_right)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_shift_right")
+
+    val result = sparkSession.sql("SELECT shiftright(value, 1) from test_table_shift_right;")
+
+    result.show()
+
+    val expectedResult = Seq(
+      Row(null),
+      Row(-3),
+      Row(-1),
+      Row(0),
+      Row(0),
+      Row(2),
+    )
+
+    testPushdown(
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+         |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
+         |  ) as "subquery_0" """.stripMargin,
+      result,
+      expectedResult
+    )
+
+    val resultShift2 = sparkSession.sql("SELECT shiftright(value, 2) from test_table_shift_right;")
+
+    resultShift2.show()
+
+    val expectedResultShift2 = Seq(
+      Row(null),
+      Row(-2),
+      Row(-1),
+      Row(0),
+      Row(0),
+      Row(1),
+    )
+
+    testPushdown(
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 2)) as "subquery_1_col_0" from (
+         |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
+         |  ) as "subquery_0" """.stripMargin,
+      resultShift2,
+      expectedResultShift2
+    )
+  }
+
+  test("test pushdown IN() function") {
+    jdbcUpdate(s"create or replace table $test_table_in(value int)")
+    jdbcUpdate(s"insert into $test_table_in values (null)")
+    jdbcUpdate(s"insert into $test_table_in values (-5)")
+    jdbcUpdate(s"insert into $test_table_in values (-1)")
+    jdbcUpdate(s"insert into $test_table_in values (0)")
+    jdbcUpdate(s"insert into $test_table_in values (1)")
+    jdbcUpdate(s"insert into $test_table_in values (5)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_in)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_in")
+
+    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 1);")
+
+    result.show()
+
+    val expectedResult = Seq(
+      Row(-5),
+      Row(1),
+    )
+
+    testPushdown(
+      s"""select * from (
+         |  select * from ($test_table_in) as "sf_connector_query_alias"
+         |  ) as "subquery_0" where "subquery_0"."value" in (-5,123,1) """.stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown INSET() function") {
+    jdbcUpdate(s"create or replace table $test_table_in_set(value int, name string)")
+    jdbcUpdate(s"insert into $test_table_in_set values (null, 'test')")
+    jdbcUpdate(s"insert into $test_table_in_set values (-5, 'test1')")
+    jdbcUpdate(s"insert into $test_table_in_set values (-1, 'test2')")
+    jdbcUpdate(s"insert into $test_table_in_set values (0, 'test3')")
+    jdbcUpdate(s"insert into $test_table_in_set values (1, 'test4')")
+    jdbcUpdate(s"insert into $test_table_in_set values (5, 'test5')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_in_set)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_in_set")
+
+    // if number of values is greater than 10, spark will convert IN to INSET
+    val result = sparkSession.sql("SELECT value from test_table_in_set where value in " +
+      "(-5, 1,2,3,4,5,6,7,8,9,10,11,12,13,14) and name in " +
+      "('test1','test2','test3','test4','test6','test7','test8','test9','1','2','3','4','5','6');")
+
+    result.show()
+
+    val expectedResult = Seq(
+      Row(-5),
+      Row(1),
+    )
+
+    // Not sure whether the order of the values in the IN cluster changes.
+    testPushdown(
+      s"""select "value" from $test_table_in_set where(
+         |value in (5,10,14,1,6,9,13,2,-5,12,7,3,11,8,4))
+         |and (
+         |name in ('test3','test1','test8','3','test7','test9','6','test2','test4','5','1','4','test6','2'))
+         |""".stripMargin,
+      result,
+      expectedResult
     )
   }
 
