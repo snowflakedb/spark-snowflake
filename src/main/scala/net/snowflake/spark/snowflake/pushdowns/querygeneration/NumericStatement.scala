@@ -75,7 +75,8 @@ private[querygeneration] object NumericStatement {
 
       case PromotePrecision(child) => convertStatement(child, fields)
 
-      case CheckOverflow(child, t, _) =>
+      // The 3rd parameter is new from spark 3.0
+      case CheckOverflow(child, t) =>
         MiscStatement.getCastType(t) match {
           case Some(cast) =>
             ConstantString("CAST") +

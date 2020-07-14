@@ -178,7 +178,8 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, joinType, condition, _) =>
+              // The 5th parameter is new from spark 3.0
+              case Join(_, _, joinType, condition) =>
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)
