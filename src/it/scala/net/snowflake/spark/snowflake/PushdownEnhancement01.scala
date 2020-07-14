@@ -322,7 +322,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row("F", "Female"),
       Row("M", "Male"),
       Row("MMM", "Other"),
-      Row(null, "Other"),
+      Row(null, "Other")
     )
 
     testPushdown(
@@ -359,7 +359,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row("F", null),
       Row("M", "Male"),
       Row("MMM", null),
-      Row(null, null),
+      Row(null, null)
     )
 
     testPushdown(
@@ -404,7 +404,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     val expectedResultSemi = Seq(
       Row(1, null),
       Row(2, "M"),
-      Row(2, "F"),
+      Row(2, "F")
     )
 
     testPushdown(
@@ -431,7 +431,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     resultAnti.show()
 
     val expectedResultAnti = Seq(
-      Row(4, "MMM"),
+      Row(4, "MMM")
     )
 
     testPushdown(
@@ -469,7 +469,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_shift_left")
 
-    val result = sparkSession.sql("SELECT shiftleft(value, 1) from test_table_shift_left;")
+    val result = sparkSession.sql("SELECT shiftleft(value, 1) from test_table_shift_left")
 
     result.show()
 
@@ -479,7 +479,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(-2),
       Row(0),
       Row(2),
-      Row(10),
+      Row(10)
     )
 
     testPushdown(
@@ -508,7 +508,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_shift_right")
 
-    val result = sparkSession.sql("SELECT shiftright(value, 1) from test_table_shift_right;")
+    val result = sparkSession.sql("SELECT shiftright(value, 1) from test_table_shift_right")
 
     result.show()
 
@@ -518,7 +518,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(-1),
       Row(0),
       Row(0),
-      Row(2),
+      Row(2)
     )
 
     testPushdown(
@@ -529,7 +529,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       expectedResult
     )
 
-    val resultShift2 = sparkSession.sql("SELECT shiftright(value, 2) from test_table_shift_right;")
+    val resultShift2 = sparkSession.sql("SELECT shiftright(value, 2) from test_table_shift_right")
 
     resultShift2.show()
 
@@ -539,7 +539,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(-1),
       Row(0),
       Row(0),
-      Row(1),
+      Row(1)
     )
 
     testPushdown(
@@ -568,13 +568,13 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_in")
 
-    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 1);")
+    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 1)")
 
     result.show()
 
     val expectedResult = Seq(
       Row(-5),
-      Row(1),
+      Row(1)
     )
 
     testPushdown(
@@ -606,13 +606,13 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     // if number of values is greater than 10, spark will convert IN to INSET
     val result = sparkSession.sql("SELECT value from test_table_in_set where value in " +
       "(-5, 1,2,3,4,5,6,7,8,9,10,11,12,13,14) and name in " +
-      "('test1','test2','test3','test4','test6','test7','test8','test9','1','2','3','4','5','6');")
+      "('test1','test2','test3','test4','test6','test7','test8','test9','1','2','3','4','5','6')")
 
     result.show()
 
     val expectedResult = Seq(
       Row(-5),
-      Row(1),
+      Row(1)
     )
 
     // Not sure whether the order of the values in the IN cluster changes.
