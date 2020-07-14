@@ -1384,6 +1384,57 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  // Write large partition (uncompressed size > 2 GB)
+  test("test large partition") {
+    // Only run this test on AWS/Azure because
+    // uncompressed data is not cached on them.
+    if (!"gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
+      val thisSparkSession = SparkSession
+        .builder()
+        .appName("Spark SQL basic example")
+        .config("spark.some.config.option", "some-value")
+        .config("spark.master", "local")
+        .getOrCreate()
+
+      def getRandomString(len: Int): String = {
+        Random.alphanumeric take len mkString ""
+      }
+
+      val partitionCount = 1
+      val rowCountPerPartition = 1024 * 1024
+      val strValue = getRandomString(512)
+      // Create RDD which generates 1 large partition
+      val testRDD: RDD[Row] = thisSparkSession.sparkContext
+        .parallelize(Seq[Int](), partitionCount)
+        .mapPartitions { _ => {
+          (1 to rowCountPerPartition).map { _ => {
+            Row(strValue, strValue, strValue, strValue)
+          }
+          }.iterator
+        }
+        }
+      val schema = StructType(
+        List(
+          StructField("str1", StringType),
+          StructField("str2", StringType),
+          StructField("str3", StringType),
+          StructField("str4", StringType)
+        )
+      )
+
+      // Convert RDD to DataFrame
+      val df = thisSparkSession.createDataFrame(testRDD, schema)
+
+      // Write to snowflake
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", "test_sink")
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+  }
+
   // This function is a sample code
   ignore("Sample code to generate random data and write to snowflake") {
     val thisSparkSession = SparkSession
