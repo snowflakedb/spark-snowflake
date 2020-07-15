@@ -8,7 +8,8 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeRelation,
   SnowflakeSQLStatement,
-  SnowflakeTelemetry
+  SnowflakeTelemetry,
+  SnowflakeFailMessage
 }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -202,7 +203,16 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         }
         Some(UnionQuery(children, alias.next, Some(output)))
 
-      case _ => None
+      case _ =>
+        // This exception is not a real issue. It will be caught in
+        // QueryBuilder.treeRoot and a telemetry message will be sent if
+        // there are any snowflake tables in the query.
+        throw new SnowflakePushdownUnsupportedException(
+          SnowflakeFailMessage.FAIL_PUSHDOWN_GENERATE_QUERY,
+          plan.nodeName,
+          plan.getClass.getName,
+          false
+        )
     }
   }
 }
