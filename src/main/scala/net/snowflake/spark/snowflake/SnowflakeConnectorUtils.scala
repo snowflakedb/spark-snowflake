@@ -116,6 +116,11 @@ class SnowflakePushdownException(message: String)
 class SnowflakeConnectorFeatureNotSupportException(message: String)
   extends Exception(message)
 
+object SnowflakeFailMessage {
+  final val FAIL_PUSHDOWN_STATEMENT = "pushdown failed"
+  final val FAIL_PUSHDOWN_GENERATE_QUERY = "pushdown failed in generateQueries"
+}
+
 class SnowflakePushdownUnsupportedException(message: String,
                                             val unsupportedOperation: String,
                                             val details: String,

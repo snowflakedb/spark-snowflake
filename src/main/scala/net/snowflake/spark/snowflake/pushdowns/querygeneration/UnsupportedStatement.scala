@@ -14,9 +14,6 @@ import org.apache.spark.sql.execution.aggregate.ScalaUDAF
   * to stop the push-down to snowflake.
   */
 private[querygeneration] object UnsupportedStatement {
-
-  final val EXCEPTION_MESSAGE = "pushdown failed"
-
   /** Used mainly by QueryGeneration.convertStatement. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
     * be matched and the fields that define the valid fields in the current expression
@@ -37,7 +34,7 @@ private[querygeneration] object UnsupportedStatement {
     // there are any snowflake tables in the query. It can't be done here
     // because it is not clear whether there are any snowflake tables here.
     throw new SnowflakePushdownUnsupportedException(
-      EXCEPTION_MESSAGE,
+      SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT,
       expr.prettyName,
       expr.sql,
       isKnownUnsupportedOperation(expr))
