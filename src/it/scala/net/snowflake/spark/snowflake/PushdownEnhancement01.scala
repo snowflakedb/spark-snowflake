@@ -300,10 +300,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown casewhen() function with other") {
     jdbcUpdate(s"create or replace table $test_table_case_when_1(gender string)")
-    jdbcUpdate(s"insert into $test_table_case_when_1 values (null)")
-    jdbcUpdate(s"insert into $test_table_case_when_1 values ('M')")
-    jdbcUpdate(s"insert into $test_table_case_when_1 values ('F')")
-    jdbcUpdate(s"insert into $test_table_case_when_1 values ('MMM')")
+    jdbcUpdate(s"insert into $test_table_case_when_1 values (null), ('M'), ('F'), ('MMM')")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -339,10 +336,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown casewhen() function without other") {
     jdbcUpdate(s"create or replace table $test_table_case_when_2(gender string)")
-    jdbcUpdate(s"insert into $test_table_case_when_2 values (null)")
-    jdbcUpdate(s"insert into $test_table_case_when_2 values ('M')")
-    jdbcUpdate(s"insert into $test_table_case_when_2 values ('F')")
-    jdbcUpdate(s"insert into $test_table_case_when_2 values ('MMM')")
+    jdbcUpdate(s"insert into $test_table_case_when_2 values (null), ('M'), ('F'), ('MMM')")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -374,16 +368,10 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown left semi join and left anti join function") {
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_left(id int, gender string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (1, null)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (2, 'M')")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (2, 'F')")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (4, 'MMM')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (1, null), (2, 'M'), (2, 'F'), (4, 'MMM')")
 
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_right(id int, name string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (1, 'test')")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (2, 'allen')")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (3, 'apple')")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (3, 'join')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (1, 'test'), (2, 'allen'), (3, 'apple'), (3, 'join')")
 
     val tmpDFLeft = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -454,12 +442,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown ShiftLeft() function") {
     jdbcUpdate(s"create or replace table $test_table_shift_left(value int)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (null)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (-5)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (-1)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (0)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (1)")
-    jdbcUpdate(s"insert into $test_table_shift_left values (5)")
+    jdbcUpdate(s"insert into $test_table_shift_left values (null), (-5), (-1), (0), (1), (5)")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -493,12 +476,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown ShiftRight() function") {
     jdbcUpdate(s"create or replace table $test_table_shift_right(value int)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (null)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (-5)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (-1)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (0)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (1)")
-    jdbcUpdate(s"insert into $test_table_shift_right values (5)")
+    jdbcUpdate(s"insert into $test_table_shift_right values (null), (-5), (-1), (0), (1), (5)")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -553,12 +531,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown IN() function") {
     jdbcUpdate(s"create or replace table $test_table_in(value int)")
-    jdbcUpdate(s"insert into $test_table_in values (null)")
-    jdbcUpdate(s"insert into $test_table_in values (-5)")
-    jdbcUpdate(s"insert into $test_table_in values (-1)")
-    jdbcUpdate(s"insert into $test_table_in values (0)")
-    jdbcUpdate(s"insert into $test_table_in values (1)")
-    jdbcUpdate(s"insert into $test_table_in values (5)")
+    jdbcUpdate(s"insert into $test_table_in values (null), (-5), (-1), (0), (1), (5)")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -568,19 +541,33 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_in")
 
-    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 1)")
+    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 'test', " +
+      "(select value from test_table_in where value > 4))")
 
     result.show()
 
     val expectedResult = Seq(
       Row(-5),
-      Row(1)
+      Row(5)
     )
 
     testPushdown(
       s"""select * from (
          |  select * from ($test_table_in) as "sf_connector_query_alias"
-         |  ) as "subquery_0" where "subquery_0"."value" in (-5,123,1) """.stripMargin,
+         |) as "subquery_0" where (
+         |  cast ("subquery_0"."value" as varchar) in (
+         |    '-5','123','test',cast (
+         |      (
+         |        select * from (
+         |          select * from ($test_table_in) as" sf_connector_query_alias"
+         |        ) as "subquery_0" where (
+         |          ("subquery_0"."value"is not null) and ("subquery_0"."value">4)
+         |        )
+         |      ) as varchar
+         |    )
+         |  )
+         |)
+         |""".stripMargin,
       result,
       expectedResult
     )
@@ -588,12 +575,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown INSET() function") {
     jdbcUpdate(s"create or replace table $test_table_in_set(value int, name string)")
-    jdbcUpdate(s"insert into $test_table_in_set values (null, 'test')")
-    jdbcUpdate(s"insert into $test_table_in_set values (-5, 'test1')")
-    jdbcUpdate(s"insert into $test_table_in_set values (-1, 'test2')")
-    jdbcUpdate(s"insert into $test_table_in_set values (0, 'test3')")
-    jdbcUpdate(s"insert into $test_table_in_set values (1, 'test4')")
-    jdbcUpdate(s"insert into $test_table_in_set values (5, 'test5')")
+    jdbcUpdate(s"insert into $test_table_in_set values (null, 'test'), (-5, 'test1'), " +
+      s"(-1, 'test2'), (0, 'test3'), (1, 'test4'), (5, 'test5')")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -617,10 +600,60 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     // Not sure whether the order of the values in the IN cluster changes.
     testPushdown(
-      s"""select "value" from $test_table_in_set where(
-         |value in (5,10,14,1,6,9,13,2,-5,12,7,3,11,8,4))
-         |and (
-         |name in ('test3','test1','test8','3','test7','test9','6','test2','test4','5','1','4','test6','2'))
+      s"""select("subquery_1"."value") as "subquery_2_col_0" from (
+         |  select * from (
+         |    select * from ($test_table_in_set) as "sf_connector_query_alias"
+         |  ) as "subquery_0" where (
+         |    "subquery_0"."value" in (3,8,11,13,9,5,2,12,10,6,1,4,7,14,-5)
+         |    and
+         |    "subquery_0"."name" in ('test4','test3','3','5','test2','test7','test1','6','test8','1','test6','4','2','test9')
+         |  )
+         |) as "subquery_1"
+         |""".stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown INSET() function with timestamps and double") {
+    jdbcUpdate(s"create or replace table $test_table_in_set(value double, cur_time timestamp)")
+    jdbcUpdate(s"insert into $test_table_in_set values " +
+      s"(null, TO_TIMESTAMP_NTZ('2014-01-01 16:00:22')), " +
+      s"(-5.1, TO_TIMESTAMP_NTZ('2014-01-01 16:00:33')), " +
+      s"(1.1, TO_TIMESTAMP_NTZ('2014-01-01 16:00:00')), " +
+      s"(0.1, TO_TIMESTAMP_NTZ('2014-01-01 16:00:00'))")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_in_set)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_in_set")
+
+    // if number of values is greater than 10, spark will convert IN to INSET
+    val result = sparkSession.sql("SELECT value, cur_time from test_table_in_set where value in " +
+      "(-5.1, 1.1,2,3,4,5,6,7,8,9,10,11,12,13,14.14) and cur_time in " +
+      "('2014-01-01 16:00:00.000', '2014-01-01 16:00:01.000', '2014-01-01 16:00:02.000'," +
+      " '2014-01-01 16:00:03.000', '2014-01-01 16:00:04.000', '2014-01-01 16:00:05.000'," +
+      " '2014-01-01 16:00:06.000', '2014-01-01 16:00:07.000', '2014-01-01 16:00:08.000'," +
+      " '2014-01-01 16:00:09.000', '2014-01-01 16:00:10.000', '2014-01-01 16:00:11.000')")
+
+    result.show(truncate=false)
+
+    val expectedResult = Seq(
+      Row(1.1, Timestamp.valueOf("2014-01-01 16:00:00"))
+    )
+
+    testPushdown(
+      s"""select * from (select * from ($test_table_in_set) as "sf_connector_query_alias") as "subquery_0"
+         |where( "subquery_0"."value" in
+         |  (12.0,14.14,3.0,4.0,13.0,1.1,7.0,5.0,11.0,8.0,-5.1,2.0,6.0,9.0,10.0) and cast
+         |  ("subquery_0"."cur_time"as varchar) in
+         |  ('2014-01-0116:00:08.000','2014-01-0116:00:07.000','2014-01-0116:00:04.000','2014-01-0116:00:05.000',
+         |  '2014-01-0116:00:00.000','2014-01-0116:00:10.000','2014-01-0116:00:09.000','2014-01-0116:00:03.000',
+         |  '2014-01-0116:00:06.000','2014-01-0116:00:01.000','2014-01-0116:00:02.000','2014-01-0116:00:11.000')
+         |)
          |""".stripMargin,
       result,
       expectedResult

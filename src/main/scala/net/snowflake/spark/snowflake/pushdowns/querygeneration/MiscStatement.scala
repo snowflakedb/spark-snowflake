@@ -4,6 +4,8 @@ import net.snowflake.spark.snowflake.{
   ConstantString,
   EmptySnowflakeSQLStatement,
   IntVariable,
+  SnowflakeFailMessage,
+  SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
 import org.apache.spark.sql.catalyst.expressions.{
@@ -31,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowSpecDefinition
 }
 import org.apache.spark.sql.types.{Decimal, _}
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractors for everything else. */
 private[querygeneration] object MiscStatement {
@@ -168,8 +171,16 @@ private[querygeneration] object MiscStatement {
   private final def setToExpr(set: Set[Any]): Seq[Expression] = {
     set.map {
       case d: Decimal => Literal(d, DecimalType(d.precision, d.scale))
-      case s: String => Literal(s, StringType)
+      case s @ (_:String | _:UTF8String) => Literal(s, StringType)
+      case d: Double => Literal(d, DoubleType)
       case e: Expression => e
+      case default =>
+        throw new SnowflakePushdownUnsupportedException(
+          SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR,
+          default.getClass.toString + " @ " + In.getClass.toString,
+          "Class " + default.getClass.toString + " is not supported in the 'in()' expression",
+          false
+        )
     }.toSeq
   }
 

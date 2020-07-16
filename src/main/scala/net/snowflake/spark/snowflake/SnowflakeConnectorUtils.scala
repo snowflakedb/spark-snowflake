@@ -119,6 +119,7 @@ class SnowflakeConnectorFeatureNotSupportException(message: String)
 object SnowflakeFailMessage {
   final val FAIL_PUSHDOWN_STATEMENT = "pushdown failed"
   final val FAIL_PUSHDOWN_GENERATE_QUERY = "pushdown failed in generateQueries"
+  final val FAIL_PUSHDOWN_SET_TO_EXPR = "pushdown failed in setToExpr"
 }
 
 class SnowflakePushdownUnsupportedException(message: String,
