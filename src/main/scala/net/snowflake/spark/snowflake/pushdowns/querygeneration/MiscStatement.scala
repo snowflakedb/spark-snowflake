@@ -175,10 +175,13 @@ private[querygeneration] object MiscStatement {
       case d: Double => Literal(d, DoubleType)
       case e: Expression => e
       case default =>
+        // This exception will not break the connector. It will be caught in
+        // QueryBuilder.treeRoot and a telemetry message will be sent if
+        // there are any snowflake tables in the query.
         throw new SnowflakePushdownUnsupportedException(
           SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR,
-          default.getClass.toString + " @ " + In.getClass.toString,
-          "Class " + default.getClass.toString + " is not supported in the 'in()' expression",
+          s"${default.getClass.getSimpleName} @ MiscStatement.setToExpr",
+          "Class " + default.getClass.getName + " is not supported in the 'in()' expression",
           false
         )
     }.toSeq
