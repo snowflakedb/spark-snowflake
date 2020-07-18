@@ -214,10 +214,16 @@ trait IntegrationSuiteBase
   def testPushdown(reference: String,
                    result: DataFrame,
                    expectedAnswer: Seq[Row],
-                   bypass: Boolean = false): Unit = {
+                   bypass: Boolean = false,
+                   printSqlText: Boolean = false): Unit = {
 
     // Verify the query issued is what we expect
     checkAnswer(result, expectedAnswer)
+
+    // It is used to retrieve expected query text.
+    if (printSqlText) {
+      println(Utils.getLastSelect)
+    }
 
     if (!bypass) {
       assert(
