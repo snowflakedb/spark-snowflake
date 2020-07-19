@@ -144,13 +144,17 @@ private[snowflake] object FilterPushdown {
       case LessThanOrEqual(attr, value) => buildComparison(attr, value, "<=")
       case GreaterThanOrEqual(attr, value) => buildComparison(attr, value, ">=")
       case In(attr, values: Array[Any]) =>
-        val dataType = getTypeForAttribute(schema, attr).get
-        val valueStrings =
-          pushdowns.querygeneration
-            .mkStatement(values.map(v => buildValueWithType(dataType, v)), ", ")
-        Some(
-          ConstantString("(") + wrap(attr) + "IN" + "(" + valueStrings + "))"
-        )
+        values match {
+          case Array() => Some(ConstantString("false").toStatement)
+          case _ =>
+            val dataType = getTypeForAttribute(schema, attr).get
+            val valueStrings =
+              pushdowns.querygeneration
+                .mkStatement(values.map(v => buildValueWithType(dataType, v)), ", ")
+            Some(
+              ConstantString("(") + wrap(attr) + "IN" + "(" + valueStrings + "))"
+            )
+        }
       case IsNull(attr) => Some(ConstantString("(") + wrap(attr) + "IS NULL)")
       case IsNotNull(attr) =>
         Some(ConstantString("(") + wrap(attr) + "IS NOT NULL)")

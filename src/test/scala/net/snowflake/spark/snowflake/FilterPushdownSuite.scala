@@ -53,7 +53,8 @@ class FilterPushdownSuite extends FunSuite {
       StringStartsWith("test_string", "prefix"),
       StringEndsWith("test_string", "suffix"),
       StringContains("test_string", "infix"),
-      In("test_int", Array(2, 3, 4))
+      In("test_int", Array(2, 3, 4)),
+      In("test_int", Array.empty[Any])
     )
     val whereClause = buildWhereStatement(testSchema, filters)
     // scalastyle:off
@@ -68,6 +69,7 @@ class FilterPushdownSuite extends FunSuite {
         | AND ENDSWITH( test_string , 'suffix' )
         | AND CONTAINS( test_string , 'infix' )
         | AND ( test_int IN ( 2 , 3 , 4 ))
+        | AND false
         |""".stripMargin.filter(_ >= ' ')
     // scalastyle:on
     assert(whereClause.toString.replaceAll(" ", "") === expectedWhereClause.replaceAll(" ", ""))

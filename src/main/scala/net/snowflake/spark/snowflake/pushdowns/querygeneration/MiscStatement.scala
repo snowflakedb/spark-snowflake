@@ -61,10 +61,15 @@ private[querygeneration] object MiscStatement {
           )
 
       case In(child, list) =>
-        blockStatement(
-          convertStatement(child, fields) + "IN" +
-            blockStatement(convertStatements(fields, list: _*))
-        )
+        list match {
+          case Seq() =>
+            ConstantString("false").toStatement
+          case _ =>
+            blockStatement(
+              convertStatement(child, fields) + "IN" +
+                blockStatement(convertStatements(fields, list: _*))
+            )
+        }
 
       case InSet(child, hset) =>
         convertStatement(In(child, setToExpr(hset)), fields)
