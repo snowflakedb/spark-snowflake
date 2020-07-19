@@ -30,9 +30,16 @@ private[querygeneration] object BooleanStatement {
     val fields = expAttr._2
 
     Option(expr match {
-      case In(child, list) if list.forall(_.isInstanceOf[Literal]) =>
-        convertStatement(child, fields) + "IN" +
-          blockStatement(convertStatements(fields, list: _*))
+      case In(child, list) if list.forall(_.isInstanceOf[Literal]) => {
+        list match {
+          case Nil =>
+            ConstantString("false").toStatement
+          case _ =>
+            convertStatement(child, fields) + "IN" +
+              blockStatement(convertStatements(fields, list: _*))
+        }
+
+      }
       case IsNull(child) =>
         blockStatement(convertStatement(child, fields) + "IS NULL")
       case IsNotNull(child) =>
