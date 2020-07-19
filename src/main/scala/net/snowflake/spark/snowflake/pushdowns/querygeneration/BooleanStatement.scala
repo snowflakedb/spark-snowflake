@@ -38,7 +38,6 @@ private[querygeneration] object BooleanStatement {
             convertStatement(child, fields) + "IN" +
               blockStatement(convertStatements(fields, list: _*))
         }
-
       }
       case IsNull(child) =>
         blockStatement(convertStatement(child, fields) + "IS NULL")
