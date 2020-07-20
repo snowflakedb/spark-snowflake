@@ -110,6 +110,59 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("test pushdown boolean functions: NOT/Contains/EndsWith/StartsWith") {
+    jdbcUpdate(s"create or replace table $test_table_basic(name String, value1 Integer, value2 Integer)")
+    jdbcUpdate(s"insert into $test_table_basic values ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    tmpDF.printSchema()
+    tmpDF.createOrReplaceTempView("test_table_basic")
+
+    val resultDF =
+      sparkSession
+        .sql(s"select * " +
+          " from test_table_basic where name != 'Ray'" +
+          " OR (name like '%ay')" +
+          " OR (name like 'Emi%')" +
+          " OR (name like '%i%')" +
+          " OR (not (value1 >= 5))" +
+          " OR (not (value1 <= 6))" +
+          " OR (not (value2 >  7))" +
+          " OR (not (value2 <  8))" )
+
+    resultDF.show(10, false)
+
+    val expectedResult = Seq(
+      Row("Ray"  , 1, 9),
+      Row("Ray"  , 2, 8),
+      Row("Ray"  , 3, 7),
+      Row("Emily", 4, 6),
+      Row("Emily", 5, 5)
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_basic )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         | WHERE ( ( ( (
+         |    "SUBQUERY_0"."NAME" != 'Ray' )
+         | OR "SUBQUERY_0"."NAME" LIKE '%ay' )
+         | OR ( "SUBQUERY_0"."NAME" LIKE 'Emi%'
+         | OR "SUBQUERY_0"."NAME" LIKE '%i%' ) )
+         | OR ( ( ( "SUBQUERY_0"."VALUE1" < 5 )
+         | OR ( "SUBQUERY_0"."VALUE1" > 6 ) )
+         | OR ( ( "SUBQUERY_0"."VALUE2" <= 7 )
+         | OR ( "SUBQUERY_0"."VALUE2" >= 8 ) ) ) )
+         |""".stripMargin,
+      resultDF,
+      expectedResult, false, true
+    )
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }

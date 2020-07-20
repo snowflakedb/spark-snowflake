@@ -44,6 +44,9 @@ private[querygeneration] object BooleanStatement {
               convertStatement(left, fields) + "!=" +
                 convertStatement(right, fields)
             )
+          // NOT ( GreaterThanOrEqual, LessThanOrEqual,
+          // GreaterThan and LessThan ) have been optimized by spark
+          // and are handled by BinaryOperator in BasicStatement.
           case GreaterThanOrEqual(left, right) =>
             convertStatement(LessThan(left, right), fields)
           case LessThanOrEqual(left, right) =>
