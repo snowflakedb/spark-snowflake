@@ -14,6 +14,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   CaseWhen,
   Cast,
+  Coalesce,
   DenseRank,
   Descending,
   Expression,
@@ -135,6 +136,14 @@ private[querygeneration] object MiscStatement {
           case None => EmptySnowflakeSQLStatement()
         }} + ConstantString("END")
 
+      case Coalesce(columns) =>
+        ConstantString(expr.prettyName.toUpperCase) +
+          blockStatement(
+            mkStatement(
+              columns.map(convertStatement(_, fields)),
+              ", "
+            )
+          )
 
       case _ => null
     })
