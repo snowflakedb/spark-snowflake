@@ -41,6 +41,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_in: String = s"test_table_in_$randomSuffix"
   private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
   private val test_table_cast: String = s"test_table_cast_$randomSuffix"
+  private val test_table_coalesce = "test_table_coalesce_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -59,6 +60,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_in")
       jdbcUpdate(s"drop table if exists $test_table_in_set")
       jdbcUpdate(s"drop table if exists $test_table_cast")
+      jdbcUpdate(s"drop table if exists $test_table_coalesce")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -655,6 +657,58 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  '2014-01-0116:00:00.000','2014-01-0116:00:10.000','2014-01-0116:00:09.000','2014-01-0116:00:03.000',
          |  '2014-01-0116:00:06.000','2014-01-0116:00:01.000','2014-01-0116:00:02.000','2014-01-0116:00:11.000')
          |)
+         |""".stripMargin,
+      result,
+      expectedResult
+    )
+  }
+
+  test("test pushdown COALESCE()") {
+    jdbcUpdate(s"create or replace table $test_table_coalesce(c1 int, c2 int, c3 int)")
+    jdbcUpdate(s"""insert into $test_table_coalesce values
+               | (1,    2,    3   ),
+               | (null, 2,    3   ),
+               | (null, null, 3   ),
+               | (null, null, null),
+               | (1,    null, 3   ),
+               | (1,    null, null),
+               | (1,    2,    null)
+               |""".stripMargin)
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_coalesce)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_coalesce")
+
+    val result = sparkSession.sql(
+      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
+
+    result.show(truncate=false)
+
+    val expectedResult = Seq(
+      Row(1, 2, 3, 1, 1, -6),
+      Row(null, 2, 3, 2, 6, -6),
+      Row(null, null, 3, 3, 6, -6),
+      Row(null, null, null, null, 6, -6),
+      Row(1, null, 3, 1, 1, -6),
+      Row(1, null, null, 1, 1, -6),
+      Row(1, 2, null, 1, 1, -6)
+    )
+
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
+         |( COALESCE( "SUBQUERY_0"."C1" ,
+         |            "SUBQUERY_0"."C2" ,
+         |            "SUBQUERY_0"."C3" ) ) AS "SUBQUERY_1_COL_3" ,
+         | ( COALESCE ( "SUBQUERY_0"."C1" , 6 ) ) AS "SUBQUERY_1_COL_4" ,
+         | ( COALESCE ( -6 , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_5"
+         | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       result,
       expectedResult
