@@ -101,7 +101,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             plan,
             new SnowflakePushdownUnsupportedException(
               e.getMessage,
-              e.getClass.toString,
+              s"${e.getClass.toString} @ QueryBuilder.treeRoot",
               stringWriter.toString,
               false
             )
