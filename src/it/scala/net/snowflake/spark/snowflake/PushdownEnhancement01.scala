@@ -41,7 +41,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_in: String = s"test_table_in_$randomSuffix"
   private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
   private val test_table_cast: String = s"test_table_cast_$randomSuffix"
-  private val test_table_coalesce = "test_table_coalesce_$randomSuffix"
+  private val test_table_coalesce = s"test_table_coalesce_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
