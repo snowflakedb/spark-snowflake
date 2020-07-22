@@ -15,7 +15,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   CaseWhen,
   Cast,
   Coalesce,
-  DenseRank,
   Descending,
   Expression,
   If,
@@ -23,15 +22,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   InSet,
   Literal,
   MakeDecimal,
-  PercentRank,
-  Rank,
   ScalarSubquery,
   ShiftLeft,
   ShiftRight,
   SortOrder,
-  UnscaledValue,
-  WindowExpression,
-  WindowSpecDefinition
+  UnscaledValue
 }
 import org.apache.spark.sql.types.{Decimal, _}
 import org.apache.spark.unsafe.types.UTF8String
@@ -105,26 +100,6 @@ private[querygeneration] object MiscStatement {
           case _ => null
         }
 
-      case WindowExpression(func, spec) =>
-        func match {
-          // These functions in Snowflake support a window frame.
-          // Note that pushdown for these may or may not yet be supported in the connector.
-          case _: Rank | _: DenseRank | _: PercentRank =>
-            convertStatement(func, fields) + " OVER " + windowBlock(
-              spec,
-              fields,
-              useWindowFrame = true
-            )
-
-          // These do not.
-          case _ =>
-            convertStatement(func, fields) + " OVER " + windowBlock(
-              spec,
-              fields,
-              useWindowFrame = false
-            )
-        }
-
       case CaseWhen(branches, elseValue) =>
         ConstantString("CASE") +
           mkStatement(branches.map(conditionValue => {
@@ -147,34 +122,6 @@ private[querygeneration] object MiscStatement {
 
       case _ => null
     })
-  }
-
-  private final def windowBlock(
-    spec: WindowSpecDefinition,
-    fields: Seq[Attribute],
-    useWindowFrame: Boolean
-  ): SnowflakeSQLStatement = {
-    val partitionBy =
-      if (spec.partitionSpec.isEmpty) {
-        EmptySnowflakeSQLStatement()
-      } else {
-        ConstantString("PARTITION BY") +
-          mkStatement(spec.partitionSpec.map(convertStatement(_, fields)), ",")
-      }
-
-    val orderBy =
-      if (spec.orderSpec.isEmpty) {
-        EmptySnowflakeSQLStatement()
-      } else {
-        ConstantString("ORDER BY") +
-          mkStatement(spec.orderSpec.map(convertStatement(_, fields)), ",")
-      }
-
-    val fromTo =
-      if (!useWindowFrame || spec.orderSpec.isEmpty) ""
-      else " " + spec.frameSpecification.sql
-
-    blockStatement(partitionBy + orderBy + fromTo)
   }
 
   private final def setToExpr(set: Set[Any]): Seq[Expression] = {
