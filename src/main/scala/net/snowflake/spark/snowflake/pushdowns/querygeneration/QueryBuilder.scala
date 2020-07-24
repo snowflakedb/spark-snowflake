@@ -89,7 +89,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
       // any snowflake tables in the query plan.
       case e: SnowflakePushdownUnsupportedException => {
         if (foundSnowflakeRelation) {
-          SnowflakeTelemetry.addPushdownFailMessage(plan, e)
+          SnowflakeTelemetry.addPushdownFailMessage(e)
         }
         null
       }
@@ -98,7 +98,6 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           val stringWriter = new StringWriter
           e.printStackTrace(new PrintWriter(stringWriter))
           SnowflakeTelemetry.addPushdownFailMessage(
-            plan,
             new SnowflakePushdownUnsupportedException(
               e.getMessage,
               s"${e.getClass.toString} @ QueryBuilder.treeRoot",
