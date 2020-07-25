@@ -83,6 +83,8 @@ private[querygeneration] object NumericStatement {
           case _ => convertStatement(child, fields)
         }
 
+      // Spark has resolved PI() as 3.141592653589793
+      // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
       case Rand(seed) =>

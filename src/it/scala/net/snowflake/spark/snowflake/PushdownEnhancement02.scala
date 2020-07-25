@@ -33,11 +33,13 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
   private val test_table_basic: String = s"test_basic_$randomSuffix"
   private val test_table_rank = s"test_table_rank_$randomSuffix"
+  private val test_table_number = s"test_table_number_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table_basic")
       jdbcUpdate(s"drop table if exists $test_table_rank")
+      jdbcUpdate(s"drop table if exists $test_table_number")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -452,6 +454,58 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         resultDF,
         expectedResult, false, true
       )
+    }
+  }
+
+  test("test pushdown number functions: PI() and Round()/Random") {
+    // Don't run test with use_copy_unload because COPY UNLOAD converts
+    // PI value 3.141592653589793 to 3.141592654
+    if (!params.useCopyUnload) {
+      jdbcUpdate(s"create or replace table $test_table_number " +
+        s"(d1 decimal(38, 10), f1 float)")
+      jdbcUpdate(s"insert into $test_table_number values " +
+        s"(-1.9, -1.9),  (-1.1, -1.1), (0, 0), (1.1, 1.1), (1.9, 1.9)")
+
+      val tmpDF = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_number)
+        .load()
+
+      tmpDF.createOrReplaceTempView("test_table_number")
+
+      val resultDF =
+        sparkSession
+          .sql(s"select round(d1), round(f1), PI()" +
+            " from test_table_number")
+
+      resultDF.printSchema()
+      resultDF.show(10, false)
+
+      val PI = 3.141592653589793
+      val expectedResult = Seq(
+        Row(BigDecimal(-2), (-2).toDouble, PI),
+        Row(BigDecimal(-1), (-1).toDouble, PI),
+        Row(BigDecimal(0), (0).toDouble, PI),
+        Row(BigDecimal(1), (1).toDouble, PI),
+        Row(BigDecimal(2), (2).toDouble, PI)
+      )
+
+      testPushdown(
+        s"""SELECT ( ROUND ( "SUBQUERY_0"."D1" , 0 ) ) AS "SUBQUERY_1_COL_0",
+           |( ROUND ( "SUBQUERY_0"."F1" , 0 ) ) AS "SUBQUERY_1_COL_1",
+           |( 3.141592653589793 ) AS "SUBQUERY_1_COL_2" FROM
+           |( SELECT * FROM ( $test_table_number ) AS
+           |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+           |""".stripMargin,
+        resultDF,
+        expectedResult
+      )
+
+      // Can't assert the returned value for random(). So just run it.
+      sparkSession
+        .sql(s"select d1, random(100), random() from test_table_number")
+        .show()
     }
   }
 
