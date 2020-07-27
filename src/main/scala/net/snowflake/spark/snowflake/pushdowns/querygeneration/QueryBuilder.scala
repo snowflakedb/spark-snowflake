@@ -154,13 +154,17 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
               AggregateQuery(fields, groups, subQuery, alias.next)
             case Limit(limitExpr, _) =>
               SortLimitQuery(Some(limitExpr), Seq.empty, subQuery, alias.next)
-            case Limit(limitExpr, Sort(orderExpr, true, _)) =>
-              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
-
-            case Sort(orderExpr, true, Limit(limitExpr, _)) =>
-              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
-            case Sort(orderExpr, true, _) =>
-              SortLimitQuery(None, orderExpr, subQuery, alias.next)
+            case Sort(_, _, _) => {
+              // Sort can't be pushdown because the order can't be guaranteed
+              // if the result set has more than 1 partitions. This exception
+              // will be caught in QueryBuilder.treeRoot.
+              throw new SnowflakePushdownUnsupportedException(
+                SnowflakeFailMessage.FAIL_PUSHDOWN_GENERATE_QUERY_UNARYOP,
+                plan.nodeName,
+                plan.getClass.getName,
+                true
+              )
+            }
 
             case Window(windowExpressions, _, _, _) =>
               WindowQuery(

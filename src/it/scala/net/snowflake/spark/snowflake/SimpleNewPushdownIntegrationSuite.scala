@@ -143,17 +143,16 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3 order by p desc limit 1
       """.stripMargin)
 
+    // From 2.8.2, SORT is not pushdown to snowflake
     testPushdown(
-      s"""SELECT * FROM
-                     |	(SELECT * FROM
-                     |		(SELECT * FROM
-                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
-                     |		) AS "subquery_0"
-                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
-                     |	) AS "subquery_1"
-                     | ORDER BY ("subquery_1"."P") DESC
-                     |) AS "subquery_2"
-                     | LIMIT 1
+      s"""SELECT * FROM (
+         |  SELECT * FROM (
+         |    $test_table2
+         |  ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |WHERE ( ( ( "SUBQUERY_0"."P" IS NOT NULL )
+         |   AND ( "SUBQUERY_0"."P" > 1 ) )
+         |   AND ( "SUBQUERY_0"."P" < 3 ) )
       """.stripMargin,
       result,
       Seq(Row(2, 2))
@@ -167,17 +166,16 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3) as foo order by f,o desc
       """.stripMargin)
 
+    // From 2.8.2, SORT is not pushdown to snowflake
     testPushdown(
-      s"""SELECT * FROM
-                     |	(SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O") AS "subquery_2_col_1"
-                     | FROM
-                     |		(SELECT * FROM
-                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
-                     |		) AS "subquery_0"
-                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
-                     |	) AS "subquery_1"
-                     |) AS "subquery_2"
-                     | ORDER BY ("subquery_2"."subquery_2_col_0") ASC, ("subquery_2"."subquery_2_col_1") DESC
+      s"""
+         |SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O") AS "subquery_2_col_1"
+         | FROM
+         |		(SELECT * FROM
+         |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
+         |		) AS "subquery_0"
+         |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+         |	) AS "subquery_1"
       """.stripMargin,
       result,
       Seq(Row(2, 3), Row(2, 2))

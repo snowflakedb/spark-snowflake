@@ -1214,11 +1214,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("Joe   Doe"), Row("John  Dddoe")
     )
 
+    // From 2.8.2, SORT is not pushdwon to snowflake
     testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_like )
          |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
          |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '%Jo%oe%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+         |LIKE '%Jo%oe%' )
          |""".stripMargin,
       result1,
       expectedResult1
@@ -1240,11 +1241,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("100 times"), Row("100%"), Row("1000 times")
     )
 
+    // From 2.8.2, SORT is not pushdwon to snowflake
     testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_like )
          |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
          |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '100%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+         |LIKE '100%' )
          |""".stripMargin,
       result1,
       expectedResult1
@@ -1270,11 +1272,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         Row("Elaine"), Row("Joe down"), Row("John_down")
       )
 
+      // From 2.8.2, SORT is not pushdwon to snowflake
       testPushdown(
-        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+        s"""SELECT * FROM ( SELECT * FROM ( $test_table_like )
            |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
            |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
-           |LIKE '%Jo%oe%' ) ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
+           |LIKE '%Jo%oe%' ) )
            |""".stripMargin,
         result2,
         expectedResult2
@@ -1298,12 +1301,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("John_down")
     )
 
+    // From 2.8.2, SORT is not pushdwon to snowflake
     testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
          |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '%J%h%^_do%' ESCAPE '^' ) ) AS "SUBQUERY_1" ORDER BY
-         |( "SUBQUERY_1"."SUBJECT" ) ASC
+         |LIKE '%J%h%^_do%' ESCAPE '^' )
          |""".stripMargin,
       result2,
       expectedResult2
@@ -1333,12 +1336,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("100%")
     )
 
+    // From 2.8.2, SORT is not pushdwon to snowflake
     testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
          |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |like '100^%' escape '^' ) ) AS "SUBQUERY_1" ORDER BY
-         |( "SUBQUERY_1"."SUBJECT" ) ASC
+         |like '100^%' escape '^' )
          |""".stripMargin,
       result2,
       expectedResult2
@@ -1371,12 +1374,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         Row("John  Dddoe")
       )
 
+      // From 2.8.2, SORT is not pushdwon to snowflake
       testPushdown(
-        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
+        s"""SELECT * FROM ( SELECT * FROM ( $test_table_like )
            |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
            |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
-           |LIKE '%J%h%^_do%' ESCAPE '^' ) ) ) AS "SUBQUERY_1" ORDER BY
-           |( "SUBQUERY_1"."SUBJECT" ) ASC
+           |LIKE '%J%h%^_do%' ESCAPE '^' ) )
            |""".stripMargin,
         result2,
         expectedResult2

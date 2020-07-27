@@ -509,6 +509,45 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
+  // This case is different to the next case
+  test("test pushdown functions: Limit -> Sort") {
+    jdbcUpdate(s"create or replace table $test_table_number " +
+      s"(d1 decimal(38, 10), f1 float)")
+    jdbcUpdate(s"insert into $test_table_number values " +
+      s"(-1.9, 1.9),  (-1.1, 1.1), (0, 0), (1.1, -1.1), (1.9, -1.9)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_number)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_number")
+
+    val resultDF =
+      sparkSession
+        .sql(s"select * " +
+          " from test_table_number")
+      .limit(3)
+      .sort("f1")
+
+    val expectedResult = Seq(
+      Row(BigDecimal(0),  (0).toDouble),
+      Row(BigDecimal(-1.1), (1.1).toDouble),
+      Row(BigDecimal(-1.9), (1.9).toDouble),
+    )
+
+    // From 2.8.2, SORT is not pushdown to snowflake
+    testPushdown(
+      s"""SELECT * FROM (
+         |  SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0" LIMIT 3
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }

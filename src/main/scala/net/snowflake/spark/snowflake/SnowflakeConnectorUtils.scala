@@ -122,6 +122,7 @@ object SnowflakeFailMessage {
   final val FAIL_PUSHDOWN_GENERATE_QUERY = "pushdown failed in generateQueries"
   final val FAIL_PUSHDOWN_SET_TO_EXPR = "pushdown failed in setToExpr"
   final val FAIL_PUSHDOWN_AGGREGATE_EXPRESSION = "pushdown failed for aggregate expression"
+  final val FAIL_PUSHDOWN_GENERATE_QUERY_UNARYOP = "pushdown failed in generateQueries for UnaryOp"
 }
 
 class SnowflakePushdownUnsupportedException(message: String,
