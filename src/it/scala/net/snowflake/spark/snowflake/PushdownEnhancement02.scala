@@ -16,14 +16,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Date, Timestamp}
+import java.sql._
 import java.util.TimeZone
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Expand
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 import scala.reflect.internal.util.TableDef
@@ -33,11 +33,13 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
   private val test_table_basic: String = s"test_basic_$randomSuffix"
   private val test_table_number = s"test_table_number_$randomSuffix"
+  private val test_table_date = s"test_table_date_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table_basic")
       jdbcUpdate(s"drop table if exists $test_table_number")
+      jdbcUpdate(s"drop table if exists $test_table_date")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -215,6 +217,53 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         .sql(s"select d1, random(100), random() from test_table_number")
         .show()
     }
+  }
+
+  test("test pushdown functions date_add/date_sub/add_months") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d1 date)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('2020-07-28')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.select(
+      col("d1"),
+      add_months(col("d1"),3).as("add_months"),
+      add_months(col("d1"),-3).as("sub_months"),
+      date_add(col("d1"),4).as("date_add"),
+      date_sub(col("d1"),4).as("date_sub")
+    )
+
+    val expectedResult = Seq(
+      Row(
+        Date.valueOf("2020-07-28"),
+        Date.valueOf("2020-10-28"),
+        Date.valueOf("2020-04-28"),
+        Date.valueOf("2020-08-01"),
+        Date.valueOf("2020-07-24"))
+    )
+
+    testPushdown(
+      s"""SELECT (
+         |  "SUBQUERY_0"."D1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , 3 ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , -3 ) ) AS "SUBQUERY_1_COL_2" ,
+         |  ( DATEADD(day, 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_3" ,
+         |  ( DATEADD(day, (0 - ( 4 )), "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_4"
+         |FROM (
+         |  SELECT * FROM (
+         |    $test_table_date
+         |  ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   override def beforeEach(): Unit = {
