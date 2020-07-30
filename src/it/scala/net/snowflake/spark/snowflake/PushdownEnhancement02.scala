@@ -32,6 +32,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   private val test_table_rank = s"test_table_rank_$randomSuffix"
   private val test_table_number = s"test_table_number_$randomSuffix"
   private val test_table_date = s"test_table_date_$randomSuffix"
+  private val test_table_regex = s"test_table_regex_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -39,6 +40,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_rank")
       jdbcUpdate(s"drop table if exists $test_table_number")
       jdbcUpdate(s"drop table if exists $test_table_date")
+      jdbcUpdate(s"drop table if exists $test_table_regex")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -589,6 +591,60 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |    $test_table_date
          |  ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
+  }
+
+  test("test pushdown function: REGEXP_REPLACE()") {
+    jdbcUpdate(s"create or replace table $test_table_regex " +
+      s"(c1 string, c2 string, c3 string, c4 string)")
+    // Note: there is only one backslash logically for c4.
+    jdbcUpdate(s"""insert into $test_table_regex values
+               | ('Customers - (NY)', '100-200', 'hello world', 'hello\\\\world')
+               | """.stripMargin)
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_regex)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_regex")
+
+    val resultDF = sparkSession.sql(
+      s"""select regexp_replace(c1, "\\\\(|\\\\)","") as remove_parenthesis,
+         | regexp_replace(c2, "(\\\\d+)", "num") as replace_num,
+         | regexp_replace(c3, " ", "") as remove_space,
+         | c4,
+         | regexp_replace(c4, "\\\\\\\\", "\\\\\\\\\\\\\\\\") as double_backslash,
+         | regexp_replace("const str", " ", "-") as regex_const
+         | from test_table_regex
+         |""".stripMargin)
+    resultDF.printSchema()
+    resultDF.show()
+
+    // The expected result is generated when pushdown is disabled.
+    val expectedResult = Seq(
+      Row("Customers - NY", "num-num", "helloworld",
+        "hello\\world", "hello\\\\world", "const-str")
+    )
+
+    testPushdown(
+      s"""SELECT
+         |  ( REGEXP_REPLACE ( "SUBQUERY_0"."C1" , '\\\\(|\\\\)' , '' ) )
+         |      AS "SUBQUERY_1_COL_0" ,
+         |  ( REGEXP_REPLACE ( "SUBQUERY_0"."C2" , '(\\\\d+)' , 'num' ) )
+         |      AS "SUBQUERY_1_COL_1" ,
+         |  ( REGEXP_REPLACE ( "SUBQUERY_0"."C3" , ' ' , '' ) )
+         |      AS "SUBQUERY_1_COL_2" ,
+         |  ( "SUBQUERY_0"."C4" ) AS "SUBQUERY_1_COL_3" ,
+         |  ( REGEXP_REPLACE ( "SUBQUERY_0"."C4" , '\\\\\\\\' , '\\\\\\\\\\\\\\\\' ) )
+         |      AS "SUBQUERY_1_COL_4" ,
+         |  ( 'const-str' ) AS "SUBQUERY_1_COL_5"
+         |FROM ( SELECT * FROM ( $test_table_regex )
+         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       resultDF,
       expectedResult

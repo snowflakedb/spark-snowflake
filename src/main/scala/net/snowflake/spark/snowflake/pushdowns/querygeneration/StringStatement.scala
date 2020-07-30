@@ -92,6 +92,24 @@ private[querygeneration] object StringStatement {
           null
         }
 
+      case RegExpReplace(subject, regexp, rep) =>
+        def unEscape(stmt: SnowflakeSQLStatement): String = {
+          stmt.toString.replaceAll("\\\\", "\\\\\\\\")
+        }
+
+        // The 'regexp' and 'rep' expression need to be converted
+        // before passing them to snowflake. For example,
+        // the original query is REGEXP_REPLACE("C2", "(\\d+)", "num")
+        // the 'regexp' here becomes "(\d+)". Before being passed to
+        // snowflake, it needs to be converted back to "(\\d+)".
+        // Note: REGEXP_REPLACE() with Const String has been optimized by Spark
+        //       so REGEXP_REPLACE() on Const String can't be seen here.
+        ConstantString(expr.prettyName.toUpperCase) +
+          blockStatement(
+            convertStatement(subject, fields) + "," +
+              unEscape(convertStatement(regexp, fields)) + "," +
+              unEscape(convertStatement(rep, fields)))
+
       case _ => null
     })
   }
