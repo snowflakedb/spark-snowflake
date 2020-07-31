@@ -93,7 +93,7 @@ private[querygeneration] object StringStatement {
         }
 
       case RegExpReplace(subject, regexp, rep) =>
-        def unEscape(stmt: SnowflakeSQLStatement): String = {
+        def unescape(stmt: SnowflakeSQLStatement): String = {
           stmt.toString.replaceAll("\\\\", "\\\\\\\\")
         }
 
@@ -107,8 +107,8 @@ private[querygeneration] object StringStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(
             convertStatement(subject, fields) + "," +
-              unEscape(convertStatement(regexp, fields)) + "," +
-              unEscape(convertStatement(rep, fields)))
+              unescape(convertStatement(regexp, fields)) + "," +
+              unescape(convertStatement(rep, fields)))
 
       case _ => null
     })
