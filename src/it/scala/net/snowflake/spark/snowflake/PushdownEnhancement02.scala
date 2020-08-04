@@ -584,8 +584,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |  "SUBQUERY_0"."D1" ) AS "SUBQUERY_1_COL_0" ,
          |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , 3 ) ) AS "SUBQUERY_1_COL_1" ,
          |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , -3 ) ) AS "SUBQUERY_1_COL_2" ,
-         |  ( DATEADD(day, 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_3" ,
-         |  ( DATEADD(day, (0 - ( 4 )), "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_4"
+         |  ( DATEADD('DAY', 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_3" ,
+         |  ( DATEADD('DAY', (0 - ( 4 )), "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_4"
          |FROM (
          |  SELECT * FROM (
          |    $test_table_date
