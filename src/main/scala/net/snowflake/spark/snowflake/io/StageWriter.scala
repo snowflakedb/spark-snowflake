@@ -577,8 +577,9 @@ private[io] object StageWriter {
       // The file name in expectedFileSet is <prefix>/<filename>
       val fileFullName = copyResultSet
         .getString(COPY_INTO_TABLE_RESULT_COLUMN_FILE)
+      val index =  fileFullName.substring(0, fileFullName.lastIndexOf("/")).lastIndexOf("/")
       val fileNameWithoutStage: String =
-        fileFullName.substring(fileFullName.indexOf("/") + 1)
+        fileFullName.substring(index + 1)
       // Remove the found files from missed file set.
       if (missedFileSet.contains(fileNameWithoutStage)) {
         missedFileSet -= fileNameWithoutStage

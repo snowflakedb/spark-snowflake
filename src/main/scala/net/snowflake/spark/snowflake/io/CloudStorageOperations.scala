@@ -65,7 +65,7 @@ import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{
 }
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.spark.snowflake._
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Parameters._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
@@ -328,29 +328,55 @@ object CloudStorageOperations {
         )
 
       case s3_url(bucket, prefix) =>
-        require(param.awsAccessKey.isDefined, "missing aws access key")
-        require(param.awsSecretKey.isDefined, "missing aws secret key")
-
+        // There are two ways to authenticate S3.
+        var awsAccessKey: String= null
+        var awsSecretKey: String= null
+        var awsTokenOption: Option[String] = None
         val sql =
-          s"""
-             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
-             |url = 's3://$bucket/$prefix'
-             |credentials =
-             |(aws_key_id='${param.awsAccessKey.get}' aws_secret_key='${param.awsSecretKey.get}')
+          if (param.awsAccessKey.isDefined && param.awsSecretKey.isDefined) {
+            awsAccessKey = param.awsAccessKey.get
+            awsSecretKey = param.awsSecretKey.get
+            s"""
+               |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+               |url = 's3://$bucket/$prefix'
+               |credentials =
+               |(aws_key_id='${param.awsAccessKey.get}' aws_secret_key='${param.awsSecretKey.get}
+        ')
          """.stripMargin
+          } else if (param.parameters.contains(PARAM_TEMP_KEY_ID) &&
+            param.parameters.contains(PARAM_TEMP_KEY_SECRET) &&
+            param.parameters.contains(PARAM_TEMP_SESSION_TOKEN)) {
+            awsAccessKey = param.parameters.get(PARAM_TEMP_KEY_ID).get
+            awsSecretKey = param.parameters.get(PARAM_TEMP_KEY_SECRET).get
+            awsTokenOption = param.parameters.get(PARAM_TEMP_SESSION_TOKEN)
+            // create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+            s"""
+               |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+               |url = 's3://$bucket/$prefix'
+               |credentials = (
+               | aws_key_id='$awsAccessKey'
+               | aws_secret_key='$awsSecretKey'
+               | aws_token='${awsTokenOption.get}'
+               | )
+         """.stripMargin
+          } else {
+            // todo, rais exception
+            throw new Exception("required parameter is not set for aws security key")
+          }
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
 
         (
           ExternalS3Storage(
             bucketName = bucket,
-            awsId = param.awsAccessKey.get,
-            awsKey = param.awsSecretKey.get,
+            awsId = awsAccessKey,
+            awsKey = awsSecretKey,
             param.proxyInfo,
             param.maxRetryCount,
             param.sfURL,
             param.useExponentialBackoff,
             param.expectedPartitionCount,
+            awsToken = awsTokenOption,
             pref = prefix,
             connection = conn
           ),
