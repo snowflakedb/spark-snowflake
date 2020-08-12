@@ -68,6 +68,14 @@ trait IntegrationSuiteBase
   protected lazy val skipBigDataTest : Boolean =
     "true".equalsIgnoreCase(System.getenv(SKIP_BIG_DATA_TEST))
 
+  // Some integration tests are for extra test coverage,
+  // they are not necessary to run in all test env.
+  // Typically, the test is run in one test env.
+  // By default, it is false
+  final val EXTRA_TEST_FOR_COVERAGE = "EXTRA_TEST_FOR_COVERAGE"
+  protected lazy val extraTestForCoverage : Boolean =
+    "true".equalsIgnoreCase(System.getenv(EXTRA_TEST_FOR_COVERAGE))
+
   protected lazy val configsFromEnv: Map[String, String] = {
     var settingsMap = new mutable.HashMap[String, String]
     Parameters.KNOWN_PARAMETERS foreach { param =>

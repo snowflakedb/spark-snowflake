@@ -8,16 +8,29 @@ import java.util.concurrent.TimeUnit
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations}
-import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, IntegrationSuiteBase}
+import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, IntegrationSuiteBase, Utils}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.scalactic.source.Position
+import org.scalatest.Tag
 
 import scala.util.Random
 
 class StreamingSuite extends IntegrationSuiteBase {
 
-  val table = s"test_table_${Random.alphanumeric take 10 mkString ""}"
+  override def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit pos: Position): Unit = {
+    if (extraTestForCoverage) {
+      super.test(testName, testTags: _*)(testFun)(pos)
+    } else {
+      println(s"Skip test StreamingSuite.'$testName'.")
+    }
+  }
+
+  val streamingTable = s"test_table_streaming_$randomSuffix"
+  val streamingStage = s"streaming_test_stage_$randomSuffix"
+  // Random port number [10001-60000]
+  val testServerPort = Random.nextInt(50000) + 10001
 
   private class NetworkService(val port: Int,
                                val data: Seq[String],
@@ -84,13 +97,14 @@ class StreamingSuite extends IntegrationSuiteBase {
     val loadedDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("query", s"select * from $table order by value")
+      .option("query", s"select * from $streamingTable order by value")
       .load()
     checkAnswer(loadedDf, expectedAnswer)
   }
 
   override def afterAll(): Unit = {
-    conn.dropTable(table)
+    conn.dropTable(streamingTable)
+    conn.dropStage(streamingStage)
     super.afterAll()
   }
 
@@ -107,7 +121,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     val lines = spark.readStream
       .format("socket")
       .option("host", "localhost")
-      .option("port", 5678)
+      .option("port", testServerPort)
       .load()
     val words = lines.as[String].flatMap(_.split(" "))
 
@@ -115,7 +129,7 @@ class StreamingSuite extends IntegrationSuiteBase {
     removeDirectory(new File(checkpoint))
 
     new Thread(
-      new NetworkService2(5678, sleepBeforeAll = 5, sleepAfterEach = 5)
+      new NetworkService2(testServerPort, sleepBeforeAll = 5, sleepAfterEach = 5)
     ).start()
 
     val query = words.writeStream
@@ -131,23 +145,47 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore("Test streaming writer") {
+  // Wait for spark streaming write done.
+  def waitForWriteDone(tableName: String,
+                       expectedRowCount: Int,
+                       maxWaitTimeInMs: Int,
+                       intervalInMs: Int): Boolean = {
+    var result = false
+    Thread.sleep(intervalInMs)
+    var sleepTime = intervalInMs
+    while (sleepTime < maxWaitTimeInMs && !result) {
+      val rs = Utils.runQuery(connectorOptionsNoExternalStageNoTable,
+        query = s"select count(*) from $tableName")
+      rs.next()
+      val rowCount = rs.getLong(1)
+      println(s"Get row count: $rowCount : retry ${sleepTime/intervalInMs}")
+      if (rowCount >= expectedRowCount) {
+        // Sleep done.
+        result = true
+      } else {
+        sleepTime += intervalInMs
+        Thread.sleep(intervalInMs)
+      }
+    }
+    result
+  }
+
+  test("Test streaming writer") {
 
     val spark = sparkSession
     import spark.implicits._
-    val streamingStage = "streaming_test_stage"
 
     conn.createStage(name = streamingStage, overwrite = true)
 
     DefaultJDBCWrapper.executeQueryInterruptibly(
       conn,
-      s"create or replace table $table (value string)"
+      s"create or replace table $streamingTable (value string)"
     )
 
     val lines = spark.readStream
       .format("socket")
       .option("host", "localhost")
-      .option("port", 5678)
+      .option("port", testServerPort)
       .load()
     val words = lines.as[String].flatMap(_.split(" "))
 
@@ -158,7 +196,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     new Thread(
       new NetworkService(
-        5678,
+        testServerPort,
         Seq(
           "one two",
           "three four five",
@@ -166,9 +204,9 @@ class StreamingSuite extends IntegrationSuiteBase {
           "1 2 3 4 5",
           "6 7 8 9 0"
         ),
-        sleepBeforeAll = 5,
-        sleepAfterAll = 10,
-        sleepAfterEach = 5
+        sleepBeforeAll = 10,
+        sleepAfterAll = 1,
+        sleepAfterEach = 1
       )
     ).start()
 
@@ -176,12 +214,18 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .option("checkpointLocation", checkpoint)
       .options(connectorOptionsNoExternalStageNoTable)
-      .option("dbtable", table)
+      .option("dbtable", streamingTable)
       .option("streaming_stage", streamingStage)
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
 
-    query.awaitTermination(150000)
+    // Max wait time: 5 minutes, retry interval: 30 seconds.
+    if (!waitForWriteDone(streamingTable, 20, 300000, 30000)) {
+      println(s"Don't find expected row count in target table. " +
+        s"The root cause could be the snow pipe is too slow. " +
+        "It is a SC issue, only if it is reproduced consistently.")
+    }
+    query.stop()
 
     checkTestTable(
       Seq(
@@ -213,13 +257,12 @@ class StreamingSuite extends IntegrationSuiteBase {
   ignore("kafka") {
 
     val spark = sparkSession
-    val streamingStage = "streaming_test_stage"
 
     conn.createStage(name = streamingStage, overwrite = true)
 
     DefaultJDBCWrapper.executeQueryInterruptibly(
       conn,
-      s"create or replace table $table (key string, value string)"
+      s"create or replace table $streamingTable (key string, value string)"
     )
 
     val checkpoint = "check"
@@ -237,7 +280,7 @@ class StreamingSuite extends IntegrationSuiteBase {
       .outputMode("append")
       .option("checkpointLocation", "check")
       .options(connectorOptionsNoTable)
-      .option("dbtable", table)
+      .option("dbtable", streamingTable)
       .option("streaming_stage", streamingStage)
       .format(SNOWFLAKE_SOURCE_NAME)
       .start()
@@ -249,7 +292,6 @@ class StreamingSuite extends IntegrationSuiteBase {
   ignore("kafka1") {
 
     val spark = sparkSession
-    val streamingStage = "streaming_test_stage"
     val streamingTable = "streaming_test_table"
 
     conn.createStage(name = streamingStage, overwrite = true)
@@ -308,7 +350,7 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   }
 
-  ignore("test context") {
+  test("test context") {
     val tempStage = false
     val storage: CloudStorage = CloudStorageOperations
       .createStorageClient(
