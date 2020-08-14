@@ -578,6 +578,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     thisConnectorOptionsNoTable += ("partition_size_in_mb" -> "20")
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
     thisConnectorOptionsNoTable += ("s3maxfilesize" -> "1000001")
+    thisConnectorOptionsNoTable += ("jdbc_query_result_format" -> "arrow")
   }
 
   test("testNumber") {

@@ -18,6 +18,7 @@ package net.snowflake.spark.snowflake
 
 import java.net.Proxy.Type
 import java.net.{InetSocketAddress, Proxy}
+import java.security.InvalidKeyException
 import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
@@ -141,5 +142,27 @@ class MiscSuite01 extends FunSuite with Matchers {
     assertThrows[IllegalArgumentException]({
       param.proxyInfo.get.setProxyForAzure()
     })
+  }
+
+  test("test SnowflakeConnectorUtils.handleS3Exception") {
+    // positive test
+    val ex1 = new Exception("test S3Exception",
+      new InvalidKeyException("test InvalidKeyException"))
+    assertThrows[SnowflakeConnectorException]({
+      SnowflakeConnectorUtils.handleS3Exception(ex1)
+    })
+
+    // negative test
+    val ex2 = new IllegalArgumentException("test IllegalArgumentException")
+    assertThrows[IllegalArgumentException]({
+      SnowflakeConnectorUtils.handleS3Exception(ex2)
+    })
+  }
+
+  test("test SnowflakeFailMessage") {
+    println(SnowflakeFailMessage.FAIL_PUSHDOWN_AGGREGATE_EXPRESSION)
+    println(SnowflakeFailMessage.FAIL_PUSHDOWN_GENERATE_QUERY)
+    println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
+    println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
 }
