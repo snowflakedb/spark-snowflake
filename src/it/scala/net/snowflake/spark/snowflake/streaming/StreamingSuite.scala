@@ -19,11 +19,14 @@ import scala.util.Random
 
 class StreamingSuite extends IntegrationSuiteBase {
 
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit pos: Position): Unit = {
+  // This test suite only run when env EXTRA_TEST_FOR_COVERAGE is set as true
+  override def test(testName: String, testTags: Tag*)(
+    testFun: => Any
+  )(implicit pos: Position): Unit = {
     if (extraTestForCoverage) {
       super.test(testName, testTags: _*)(testFun)(pos)
     } else {
-      println(s"Skip test StreamingSuite.'$testName'.")
+      super.ignore(testName, testTags: _*)(testFun)(pos)
     }
   }
 
