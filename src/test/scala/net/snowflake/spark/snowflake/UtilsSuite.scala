@@ -17,8 +17,11 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.File
 import java.net.URI
 
+import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
+import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FunSuite, Matchers}
 
 /**
@@ -85,5 +88,43 @@ class UtilsSuite extends FunSuite with Matchers {
     assert(Utils.getTimeString((1.25 * 1000 * 60).toLong) === "1.25 minutes")
     assert(Utils.getTimeString((1.88 * 1000 * 60 * 60 + 1).toLong) === "1.88 hours")
     assert(Utils.getTimeString((188 * 1000 * 60 * 60 + 1).toLong) === "188.00 hours")
+  }
+
+  private def writeTempFile(content: String): (File, String, String) = {
+    val temp_file = File.createTempFile("test_file_", ".csv")
+    val temp_file_full_name = temp_file.getPath
+    val temp_file_name = temp_file.getName
+    FileUtils.write(temp_file, content)
+    (temp_file, temp_file_full_name, temp_file_name)
+  }
+
+  test("test Utils.readMapFromFile/readMapFromString") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("SnowflakeSourceSuite")
+    val sc = SparkContext.getOrCreate(conf)
+
+    // Test valid map file
+    val mapContentString = "#key0 = value0\nkey1=value1\nkey2=value2"
+    val (file, fullName, name) = writeTempFile(mapContentString)
+    try {
+      val resultMap = Utils.readMapFromFile(sc, fullName)
+      assert(resultMap.size == 2)
+      assert(resultMap("key1").equals("value1"))
+      assert(resultMap("key2").equals("value2"))
+    } finally {
+      FileUtils.deleteQuietly(file)
+    }
+
+    // negative invalid mapstring.
+    assertThrows[Exception]({
+      Utils.readMapFromString("invalid_map_string")
+    })
+  }
+
+  test("misc in Utils") {
+    assert(Utils.getLastCopyUnload == null)
+    assert(Utils.getLastPutCommand == null)
+    assert(Utils.getLastGetCommand == null)
   }
 }
