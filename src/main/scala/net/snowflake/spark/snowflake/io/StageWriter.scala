@@ -573,12 +573,16 @@ private[io] object StageWriter {
           copyResultSet.getLong(COPY_INTO_TABLE_RESULT_COLUMN_ROW_PARSED) -
             copyResultSet.getLong(COPY_INTO_TABLE_RESULT_COLUMN_ROW_LOADED)
       }
-      // The file name from COPY ResultSet is <stage_name>/<prefix>/<filename>
+      // The file name from COPY ResultSet is different for
+      // external/internal stage.
+      // For internal stage, it is like: <stage_name>/<prefix>/<filename>
+      // For external stage, it is like:
+      // s3://<bucket>/<system_prefix>/<prefix>/<filename>
       // The file name in expectedFileSet is <prefix>/<filename>
       val fileFullName = copyResultSet
         .getString(COPY_INTO_TABLE_RESULT_COLUMN_FILE)
       val fileNameWithoutStage: String =
-        fileFullName.substring(fileFullName.indexOf("/") + 1)
+        fileFullName.replaceAll(".*/([^/]+/[^/]+)$", "$1")
       // Remove the found files from missed file set.
       if (missedFileSet.contains(fileNameWithoutStage)) {
         missedFileSet -= fileNameWithoutStage
