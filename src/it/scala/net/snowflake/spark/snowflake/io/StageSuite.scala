@@ -411,6 +411,53 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
+  // Manually test AWS external stage
+  // You need to set below 3 environment variables.
+  private val MAN_TEST_AWS_TEMPDIR = "MAN_TEST_AWS_TEMPDIR"
+  private val MAN_TEST_AWS_ACCESS_KEY = "MAN_TEST_AWS_ACCESS_KEY"
+  private val MAN_TEST_AWS_SECRET_KEY = "MAN_TEST_AWS_SECRET_KEY"
+  ignore ("manual test with s3 external stage") {
+    if (System.getenv(MAN_TEST_AWS_TEMPDIR) != null &&
+      System.getenv(MAN_TEST_AWS_ACCESS_KEY) != null &&
+      System.getenv(MAN_TEST_AWS_SECRET_KEY) != null) {
+      var sfOptionsNoTable = connectorOptionsNoTable
+      setupLargeResultTable(sfOptionsNoTable)
+
+      // Set AWS external stage options
+      sfOptionsNoTable += ("tempdir" -> System.getenv(MAN_TEST_AWS_TEMPDIR))
+      sfOptionsNoTable += ("awsaccesskey" -> System.getenv(MAN_TEST_AWS_ACCESS_KEY))
+      sfOptionsNoTable += ("awssecretkey" -> System.getenv(MAN_TEST_AWS_SECRET_KEY))
+
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_large_result)
+        .load()
+
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .option("purge", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val dfTarget = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .load()
+      assert(dfTarget.count() == LARGE_TABLE_ROW_COUNT)
+
+      Utils.runQuery(
+        sfOptionsNoTable,
+        s"drop table if exists $test_table_large_result"
+      )
+    }
+  }
+
   test("misc for CloudStorageOperations") {
     // Below test are for test coverage only.
     // If their value needs to be changed in the future,
