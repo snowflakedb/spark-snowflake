@@ -1,8 +1,15 @@
 package net.snowflake.spark.snowflake.io
 
-import java.io.ByteArrayInputStream
+import java.io.{ByteArrayInputStream, File, FileOutputStream}
+import java.util.zip.GZIPOutputStream
 
+import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{TaskAttemptContext, TaskAttemptID}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.scalatest.FunSuite
 
 class RecordReaderSuite extends FunSuite {
@@ -45,7 +52,11 @@ class RecordReaderSuite extends FunSuite {
        """.stripMargin
     val file = record1 + record2
 
-    val recordReader: SFRecordReader = new SFRecordReader(SupportedFormat.JSON)
+    val recordReader: SFRecordReader = new SFJsonInputFormat()
+      .createRecordReader(new FileSplit(),
+        new TaskAttemptContextImpl(new Configuration(),
+        new TaskAttemptID()))
+      .asInstanceOf[SFRecordReader]
 
     recordReader.addStream(new ByteArrayInputStream(file.getBytes))
 
@@ -73,4 +84,53 @@ class RecordReaderSuite extends FunSuite {
 
   }
 
+  test("test read CSV file") {
+    // First file is uncompressed file
+    val temp_file1 = File.createTempFile("test_file_", ".csv")
+    val temp_file_full_name1 = temp_file1.getPath
+    // second file is compressed file
+    val temp_file2 = File.createTempFile("test_file_", ".csv.gz")
+    val temp_file_full_name2 = temp_file2.getPath
+    val data = "Mike,100,\nBob,200,\nJohn,300,\n"
+
+    try {
+      // write file1 for uncompressed data
+      FileUtils.write(temp_file1, data)
+
+      // write file2 for compressed data
+      val gzOutStream = new GZIPOutputStream(new FileOutputStream(temp_file2))
+      gzOutStream.write(data.getBytes)
+      gzOutStream.close()
+
+      var fileSplit = new FileSplit(new Path(temp_file_full_name1), 0, data.length, null)
+      val context: TaskAttemptContext =
+        new TaskAttemptContextImpl(new Configuration(),
+          new TaskAttemptID())
+      val recordReader: SFRecordReader = new SFCSVInputFormat()
+      .createRecordReader(fileSplit, context)
+          .asInstanceOf[SFRecordReader]
+
+      // initialize with file1, and test some functions.
+      recordReader.initialize(fileSplit, context)
+      var rowCount = 0
+      while (recordReader.nextKeyValue()) {
+        val key = recordReader.getCurrentKey
+        val value = recordReader.getCurrentValue
+        val progress = recordReader.getProgress
+        rowCount += 1
+        println(s"$rowCount $key $progress $value")
+      }
+      assert(rowCount == 3)
+      recordReader.close()
+
+      // Initialize with file1
+      fileSplit = new FileSplit(new Path(temp_file_full_name2), 0, data.length, null)
+      recordReader.initialize(fileSplit, context)
+      // test close
+      recordReader.close()
+    } finally {
+      FileUtils.deleteQuietly(temp_file1)
+      FileUtils.deleteQuietly(temp_file2)
+    }
+  }
 }

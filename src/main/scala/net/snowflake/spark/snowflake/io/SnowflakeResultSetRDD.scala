@@ -5,6 +5,7 @@ import java.util.Properties
 
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake.{
   Conversions,
   ProxyInfo,
@@ -82,6 +83,13 @@ case class ResultIterator[T: ClassTag](
            | $expectedRowCount
            |""".stripMargin.filter(_ >=
           ' '))
+
+      // Inject test
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_ARROW_FAIL_OPEN_RESULT_SET,
+        "Negative test to raise error when opening a result set"
+      )
+
       resultSet.getResultSet(jdbcProperties)
     } catch {
       case e: Exception => {
@@ -129,6 +137,12 @@ case class ResultIterator[T: ClassTag](
 
         // Close the result set.
         data.close()
+
+        // Inject test
+        TestHook.raiseExceptionIfTestFlagEnabled(
+          TestHookFlag.TH_ARROW_FAIL_READ_RESULT_SET,
+          "Negative test to raise error when retrieve rows"
+        )
 
         if (actualReadRowCount != expectedRowCount) {
           throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
