@@ -103,6 +103,19 @@ trait IntegrationSuiteBase
     scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
   }
 
+  protected def replaceOption(originalOptions: Map[String, String],
+                              optionName: String,
+                              optionValue: String): Map[String, String] = {
+    var resultOptions: Map[String, String] = Map()
+    originalOptions.foreach(tup => {
+      if (!tup._1.equalsIgnoreCase(optionName)) {
+        resultOptions += tup
+      }
+    })
+    resultOptions += (optionName -> optionValue)
+    resultOptions
+  }
+
   protected var connectorOptions: Map[String, String] = _
   protected var connectorOptionsNoTable: Map[String, String] = _
 

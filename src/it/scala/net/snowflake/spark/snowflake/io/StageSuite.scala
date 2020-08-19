@@ -100,19 +100,6 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
-  private def replaceOption(originalOptions: Map[String, String],
-                            optionName: String,
-                            optionValue: String): Map[String, String] = {
-    var resultOptions: Map[String, String] = Map()
-    originalOptions.foreach(tup => {
-      if (!tup._1.equalsIgnoreCase(optionName)) {
-        resultOptions += tup
-      }
-    })
-    resultOptions += (optionName -> optionValue)
-    resultOptions
-  }
-
   test("test s3 internal stage functions") {
     val sfOptionsNoTable: Map[String, String] =
       replaceOption(
