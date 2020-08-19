@@ -84,7 +84,7 @@ case class ResultIterator[T: ClassTag](
            |""".stripMargin.filter(_ >=
           ' '))
 
-      // Inject test
+      // Inject Exception for test purpose
       TestHook.raiseExceptionIfTestFlagEnabled(
         TestHookFlag.TH_ARROW_FAIL_OPEN_RESULT_SET,
         "Negative test to raise error when opening a result set"
@@ -138,7 +138,7 @@ case class ResultIterator[T: ClassTag](
         // Close the result set.
         data.close()
 
-        // Inject test
+        // Inject Exception for test purpose
         TestHook.raiseExceptionIfTestFlagEnabled(
           TestHookFlag.TH_ARROW_FAIL_READ_RESULT_SET,
           "Negative test to raise error when retrieve rows"

@@ -78,9 +78,10 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     val gmtTimezone = TimeZone.getTimeZone("GMT")
     TimeZone.setDefault(gmtTimezone)
 
-    connectorOptionsNoTable.foreach(tup => {
-      thisConnectorOptionsNoTable += tup
-    })
+    // Set max_retry_count to cover the use case:
+    // read data without caching data for use_copy_unload = true
+    thisConnectorOptionsNoTable = replaceOption(
+      connectorOptionsNoTable, "max_retry_count", "1")
   }
 
   test("test pushdown length() function") {
