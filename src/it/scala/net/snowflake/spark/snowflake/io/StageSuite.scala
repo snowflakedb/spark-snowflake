@@ -17,6 +17,7 @@
 package net.snowflake.spark.snowflake.io
 
 import java.io.File
+import net.snowflake.client.jdbc.SnowflakeFileTransferMetadataV1
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
@@ -446,12 +447,120 @@ class StageSuite extends IntegrationSuiteBase {
   }
 
   test("misc for CloudStorageOperations") {
-    // Below test are for test coverage only.
-    // If their value needs to be changed in the future,
-    // feel free to update this test.
-    assert(CloudStorageOperations.DEFAULT_PARALLELISM.equals(10))
-    assert(CloudStorageOperations.S3_MAX_RETRIES.equals(6))
-    assert(CloudStorageOperations.S3_MAX_TIMEOUT_MS.equals(30 * 1000))
+    println(CloudStorageOperations.DEFAULT_PARALLELISM)
+    println(CloudStorageOperations.S3_MAX_RETRIES)
+    println(CloudStorageOperations.S3_MAX_TIMEOUT_MS)
+    println(CloudStorageOperations.AES)
+    println(CloudStorageOperations.AMZ_KEY)
+    println(CloudStorageOperations.AMZ_IV)
+    println(CloudStorageOperations.DATA_CIPHER)
+    println(CloudStorageOperations.KEY_CIPHER)
+    println(CloudStorageOperations.AMZ_MATDESC)
+    println(CloudStorageOperations.AZ_ENCRYPTIONDATA)
+    println(CloudStorageOperations.AZ_IV)
+    println(CloudStorageOperations.AZ_KEY_WRAP)
+    println(CloudStorageOperations.AZ_KEY)
+    println(CloudStorageOperations.AZ_MATDESC)
+  }
+
+  test("test CloudStorage.checkUploadMetadata") {
+    val sfOptionsNoTable: Map[String, String] =
+      replaceOption(
+        connectorOptionsNoTable,
+        "sfurl",
+        "sfctest0.snowflakecomputing.com"
+      )
+
+    val param = Parameters.MergedParameters(sfOptionsNoTable)
+    val connection = DefaultJDBCWrapper.getConnector(param)
+
+    try {
+      // The credential for the external stage is fake.
+      val s3ExternalStage = ExternalS3Storage(
+        bucketName = "test_fake_bucket",
+        awsId = "TEST_TEST_TEST_TEST1",
+        awsKey = "TEST_TEST_TEST_TEST_TEST_TEST_TEST_TEST2",
+        param.proxyInfo,
+        param.maxRetryCount,
+        param.sfURL,
+        param.useExponentialBackoff,
+        param.expectedPartitionCount,
+        pref = "test_dir",
+        connection = connection
+      )
+
+      val storageInfo: Map[String, String] = Map()
+      val fileTransferMetadata = new SnowflakeFileTransferMetadataV1(
+        null, null, null, null, null, null, null)
+
+      // Test the target function with negative and positive cases
+      assertThrows[SnowflakeConnectorException]({
+        s3ExternalStage.checkUploadMetadata(None, None)
+      })
+      assertThrows[SnowflakeConnectorException]({
+        s3ExternalStage.checkUploadMetadata(Some(storageInfo), Some(fileTransferMetadata))
+      })
+      s3ExternalStage.checkUploadMetadata(None, Some(fileTransferMetadata))
+      s3ExternalStage.checkUploadMetadata(Some(storageInfo), None)
+    } finally {
+      connection.close()
+    }
+  }
+
+  test("inject test with azure internal stage") {
+    var sfOptionsNoTable: Map[String, String] =
+      replaceOption(
+        connectorOptionsNoTable,
+        "sfurl",
+        "sfctest0.east-us-2.azure.snowflakecomputing.com"
+      )
+    // Avoid multiple retry because this is negative test
+    sfOptionsNoTable = replaceOption(sfOptionsNoTable, "max_retry_count", "1")
+    // setup test table
+    setupLargeResultTable(sfOptionsNoTable)
+
+    try {
+      sfOptionsNoTable =
+        replaceOption(sfOptionsNoTable, "use_copy_unload", "true")
+      // inject exception
+      TestHook.enableTestFlagOnly(TestHookFlag.TH_FAIL_CREATE_DOWNLOAD_STREAM)
+      assertThrows[Exception] {
+        sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(sfOptionsNoTable)
+          .option("dbtable", s"$test_table_large_result")
+          .load()
+          .collect()
+      }
+
+      // disable copy unload , the write will fail
+      sfOptionsNoTable =
+        replaceOption(sfOptionsNoTable, "use_copy_unload", "false")
+      // inject exception
+      TestHook.enableTestFlagOnly(TestHookFlag.TH_FAIL_CREATE_UPLOAD_STREAM)
+      assertThrows[Throwable] {
+        val df = sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(sfOptionsNoTable)
+          .option("dbtable", s"$test_table_large_result")
+          .load()
+
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(sfOptionsNoTable)
+          .option("dbtable", test_table_write)
+          .option("truncate_table", "off")
+          .option("usestagingtable", "on")
+          .mode(SaveMode.Overwrite)
+          .save()
+      }
+    } finally {
+      Utils.runQuery(
+        sfOptionsNoTable,
+        s"drop table if exists $test_table_large_result"
+      )
+      TestHook.disableTestHook()
+    }
   }
 }
 // scalastyle:on println

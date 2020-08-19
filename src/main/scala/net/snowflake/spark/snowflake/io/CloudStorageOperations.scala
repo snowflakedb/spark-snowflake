@@ -61,7 +61,8 @@ import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{
 }
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{
   BlobRequestOptions,
-  CloudBlobClient
+  CloudBlobClient,
+  CloudBlockBlob
 }
 import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
 import net.snowflake.spark.snowflake._
@@ -80,21 +81,20 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
 object CloudStorageOperations {
-  private[io] final val DEFAULT_PARALLELISM = 10
-  private[io] final val S3_MAX_RETRIES = 6
-  private[io] final val S3_MAX_TIMEOUT_MS = 30 * 1000
-  private final val AES = "AES"
-  private final val AMZ_KEY: String = "x-amz-key"
-  private final val AMZ_IV: String = "x-amz-iv"
-  private final val DATA_CIPHER: String = "AES/CBC/PKCS5Padding"
-  private final val KEY_CIPHER: String = "AES/ECB/PKCS5Padding"
-  private final val AMZ_MATDESC = "x-amz-matdesc"
-
-  private final val AZ_ENCRYPTIONDATA = "encryptiondata"
-  private final val AZ_IV = "ContentEncryptionIV"
-  private final val AZ_KEY_WRAP = "WrappedContentKey"
-  private final val AZ_KEY = "EncryptedKey"
-  private final val AZ_MATDESC = "matdesc"
+  private[io] val DEFAULT_PARALLELISM = 10
+  private[io] val S3_MAX_RETRIES = 6
+  private[io] val S3_MAX_TIMEOUT_MS = 30 * 1000
+  private[io] val AES = "AES"
+  private[io] val AMZ_KEY = "x-amz-key"
+  private[io] val AMZ_IV = "x-amz-iv"
+  private[io] val DATA_CIPHER = "AES/CBC/PKCS5Padding"
+  private[io] val KEY_CIPHER = "AES/ECB/PKCS5Padding"
+  private[io] val AMZ_MATDESC = "x-amz-matdesc"
+  private[io] val AZ_ENCRYPTIONDATA = "encryptiondata"
+  private[io] val AZ_IV = "ContentEncryptionIV"
+  private[io] val AZ_KEY_WRAP = "WrappedContentKey"
+  private[io] val AZ_KEY = "EncryptedKey"
+  private[io] val AZ_MATDESC = "matdesc"
 
   val log: Logger = LoggerFactory.getLogger(getClass)
 
@@ -527,6 +527,24 @@ sealed trait CloudStorage {
              compress: Boolean = true): List[FileUploadResult] =
     uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
 
+  private[io] def checkUploadMetadata(storageInfo: Option[Map[String, String]],
+                                      fileTransferMetadata:Option[SnowflakeFileTransferMetadata]): Unit =
+  {
+    if ((storageInfo.isEmpty && fileTransferMetadata.isEmpty)
+      || (storageInfo.isDefined && fileTransferMetadata.isDefined))
+    {
+      val errorMessage =
+        s"""Hit internal error: Either storageInfo or fileTransferMetadata
+           | must be set. storageInfo=${storageInfo.isDefined}
+           | fileTransferMetadata=${fileTransferMetadata.isDefined}
+           |""".stripMargin
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: $errorMessage
+           |""".stripMargin.filter(_ >= ' '))
+      throw new SnowflakeConnectorException(errorMessage)
+    }
+  }
+
   // Retrieve data for one partition and upload the result data to stage.
   // This function is called on worker node.
   // When spark task fails, this task will be rescheduled by spark until
@@ -548,19 +566,7 @@ sealed trait CloudStorage {
     val fileName = getFileName(partitionID, format, compress)
 
     // Either StorageInfo or fileTransferMetadata must be set.
-    if ((storageInfo.isEmpty && fileTransferMetadata.isEmpty)
-      || (storageInfo.isDefined && fileTransferMetadata.isDefined))
-    {
-      val errorMessage =
-        s"""Hit internal error: Either storageInfo or fileTransferMetadata
-           | must be set. storageInfo=${storageInfo.isDefined}
-           | fileTransferMetadata=${fileTransferMetadata.isDefined}
-           |""".stripMargin
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: $errorMessage
-           |""".stripMargin.filter(_ >= ' '))
-      throw new SnowflakeConnectorException(errorMessage)
-    }
+    checkUploadMetadata(storageInfo, fileTransferMetadata)
 
     try {
       // Read data and upload to cloud storage
@@ -889,8 +895,7 @@ sealed trait CloudStorage {
 
   def deleteFile(fileName: String): Unit
 
-  def deleteFiles(fileNames: List[String]): Unit =
-    fileNames.foreach(deleteFile)
+  def deleteFiles(fileNames: List[String]): Unit
 
   def fileExists(fileName: String): Boolean
 }
@@ -999,29 +1004,20 @@ case class InternalAzureStorage(param: MergedParameters,
           null.asInstanceOf[AccessCondition],
           null.asInstanceOf[BlobRequestOptions],
           opContext)
+
         val requestID = opContext.getClientRequestID
-        CloudStorageOperations.log.info(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-             | Retrieve outputStream for uploading to internal stage:
-             | file: $file client request id: $requestID
-             | container=${blob.getContainer.getName}
-             |""".stripMargin.filter(_ >=
-            ' '))
+        StorageUtils.logAzureInfo(true, "internal", file,
+          requestID, blob.getContainer.getName)
+
+        // Inject Exception for test
+        TestHook.raiseExceptionIfTestFlagEnabled(
+          TestHookFlag.TH_FAIL_CREATE_UPLOAD_STREAM,
+          "Negative test to raise error when creating upload stream"
+        )
         new CipherOutputStream(azureOutput, cipher)
       } catch {
         case ex: Exception =>
-          val requestID = opContext.getClientRequestID
-          CloudStorageOperations.log.error(
-            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
-               | retrieving outputStream for uploading to internal stage:
-               | file: $file client request id: $requestID
-               | container=${blob.getContainer.getName}
-               | URI=${blob.getUri.getAuthority}
-               | error message: ${ex.getMessage}
-               |""".stripMargin.filter(_ >=
-              ' '))
-          // Re-throw
-          throw ex
+          throw StorageUtils.logAzureException(true, "internal", file,  blob, opContext, ex)
       }
     }
 
@@ -1099,7 +1095,6 @@ case class InternalAzureStorage(param: MergedParameters,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      val downloadRequestID = opContext.getClientRequestID
 
       // Set up download attribute and retrieve requestID
       opContext = new OperationContext
@@ -1107,29 +1102,19 @@ case class InternalAzureStorage(param: MergedParameters,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      val downloadAttributeRequestID = opContext.getClientRequestID
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-           | Retrieve inputStream for downloading from internal stage:
-           | file: $fileName client request id: $downloadRequestID
-           | download attribute: $downloadAttributeRequestID
-           | container=${blob.getContainer.getName}
-           |""".stripMargin.
-          filter(_ >= ' '))
+
+      val requestID = opContext.getClientRequestID
+      StorageUtils.logAzureInfo(false, "internal", fileName,
+        requestID, blob.getContainer.getName)
+
+      // Inject test
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_FAIL_CREATE_DOWNLOAD_STREAM,
+        "Negative test to raise error when creating a download stream"
+      )
     } catch {
       case ex: Exception =>
-        val requestID = opContext.getClientRequestID
-        CloudStorageOperations.log.error(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
-             | retrieve inputStream for downloading from internal stage:
-             | file: $fileName client request id: $requestID
-             | container=${blob.getContainer.getName}
-             | URI=${blob.getUri.getAuthority}
-             | error message: ${ex.getMessage}
-             |""".stripMargin.filter(_ >=
-            ' '))
-        // Re-throw
-        throw ex
+        throw StorageUtils.logAzureException(false, "internal", fileName,  blob, opContext, ex)
     }
 
     val inputStream: InputStream =
@@ -1187,13 +1172,7 @@ case class ExternalAzureStorage(containerName: String,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      val requestID = opContext.getClientRequestID
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-           | Retrieve outputStream for uploading to external stage:
-           | file: $file client request id: $requestID
-           | container=${blob.getContainer.getName}
-           |""".stripMargin.filter(_ >= ' '))
+      StorageUtils.logAzureInfo(true, "external", file, opContext.getClientRequestID, blob.getContainer.getName)
 
       if (compress) {
         new GZIPOutputStream(azureOutput)
@@ -1202,18 +1181,7 @@ case class ExternalAzureStorage(containerName: String,
       }
     } catch {
       case ex: Exception =>
-        val requestID = opContext.getClientRequestID
-        CloudStorageOperations.log.error(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
-             | Retrieve outputStream for uploading to external stage:
-             | file: $file client request id: $requestID
-             | container=${blob.getContainer.getName}
-             | URI=${blob.getUri.getAuthority}
-             | error message: ${ex.getMessage}
-             |""".stripMargin.filter(_ >=
-            ' '))
-        // Re-throw
-        throw ex
+        throw StorageUtils.logAzureException(true, "external", fileName,  blob, opContext, ex)
     }
   }
 
@@ -1265,27 +1233,10 @@ case class ExternalAzureStorage(containerName: String,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      val requestID = opContext.getClientRequestID
-      CloudStorageOperations.log.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-           | Retrieve inputStream for downloading from external stage:
-           | file: $fileName client request id: $requestID
-           | container=${blob.getContainer.getName}
-           |""".stripMargin.filter(_ >= ' '))
+      StorageUtils.logAzureInfo(false, "external", fileName, opContext.getClientRequestID, blob.getContainer.getName)
     } catch {
       case ex: Exception =>
-        val requestID = opContext.getClientRequestID
-        CloudStorageOperations.log.error(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
-             | Retrieve inputStream for downloading from external stage:
-             | file: $fileName client request id: $requestID
-             | container=${blob.getContainer.getName}
-             | URI=${blob.getUri.getAuthority}
-             | error message: ${ex.getMessage}
-             |""".stripMargin.filter(_ >=
-            ' '))
-        // Re-throw
-        throw ex
+        throw StorageUtils.logAzureException(false, "external", fileName,  blob, opContext, ex)
     }
 
     val inputStream: InputStream =
@@ -1721,24 +1672,13 @@ case class InternalGcsStorage(param: MergedParameters,
       // Output time for retrieving every 1000 pre-signed URLs
       // to indicate the progress for big data.
       if ((index % printStep) == (printStep - 1)) {
-        val endTime = System.currentTimeMillis()
-        CloudStorageOperations.log.info(
-          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-             | Time to retrieve pre-signed URL for
-             | ${index + 1} files is
-             | ${Utils.getTimeString(endTime - startTime)}.
-             |""".stripMargin.filter(_ >= ' '))
+        StorageUtils.logPresignedUrlGenerateProgress(data.getNumPartitions, index + 1, startTime)
       }
     }
 
     // Output the total time for retrieving pre-signed URLs
-    val endTime = System.currentTimeMillis()
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Time to retrieve pre-signed URL for
-         | ${data.getNumPartitions} files is
-         | ${Utils.getTimeString(endTime - startTime)}.
-         |""".stripMargin.filter(_ >= ' '))
+    StorageUtils.logPresignedUrlGenerateProgress(data.getNumPartitions,
+      data.getNumPartitions, startTime)
 
     result.toList
   }
@@ -1850,6 +1790,68 @@ case class InternalGcsStorage(param: MergedParameters,
                                              ): InputStream = {
     throw new SnowflakeConnectorFeatureNotSupportException(
       "Internal error: createDownloadStream() should not be called for GCS")
+  }
+}
+
+object StorageUtils {
+  private val log = CloudStorageOperations.log
+
+  private[io] def logAzureInfo(isUpload: Boolean,
+                               stageType: String,
+                               file: String,
+                               requestID: String,
+                               containerName: String): Unit = {
+
+    val streamInfo = if (isUpload) {
+      s"outputStream for uploading to"
+    } else {
+      s"inputStream for downloading from"
+    }
+    log.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+         | Retrieve $streamInfo $stageType stage:
+         | file: $file client request id: $requestID
+         | container=$containerName
+         |""".stripMargin.filter(_ >=
+        ' '))
+  }
+
+  private[io] def logAzureException(isUpload: Boolean,
+                                    stageType: String,
+                                    file: String,
+                                    blob: CloudBlockBlob,
+                                    opContext: OperationContext,
+                                    ex: Exception): Exception = {
+    val streamInfo = if (isUpload) {
+      s"outputStream for uploading to"
+    } else {
+      s"inputStream for downloading from"
+    }
+
+    log.error(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Hit error when
+         | Retrieve $streamInfo $stageType stage:
+         | file: $file client request id: ${opContext.getClientRequestID}
+         | container=${blob.getContainer.getName}
+         | URI=${blob.getUri.getAuthority}
+         | error message: ${ex.getMessage}
+         |""".stripMargin.filter(_ >=
+        ' '))
+
+    // Return the exception because the caller needs to re-throw it
+    ex
+  }
+
+  private[io] def logPresignedUrlGenerateProgress(total: Int,
+                                                  index: Int,
+                                                  startTime: Long): Unit = {
+    val endTime = System.currentTimeMillis()
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+         | Time to retrieve pre-signed URL for
+         | $index/$total files is
+         | ${Utils.getTimeString(endTime - startTime)}.
+         |""".stripMargin.filter(_ >= ' '))
   }
 }
 
