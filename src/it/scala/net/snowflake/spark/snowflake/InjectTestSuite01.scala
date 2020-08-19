@@ -75,6 +75,16 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
   test("inject exceptions for Arrow read") {
     try {
       if (!params.useCopyUnload) {
+        // Enable test hook to simulate error when closing a result set on driver.
+        // This exception doesn't affect the final result
+        TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET)
+        sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(connectorOptionsNoTable)
+          .option("dbtable", s"$test_table_basic")
+          .load()
+          .collect()
+
         // Enable test hook to simulate error when opening a result set.
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_FAIL_OPEN_RESULT_SET)
         assertThrows[Exception]({
