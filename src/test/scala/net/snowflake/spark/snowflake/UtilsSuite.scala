@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URI
 
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FunSuite, Matchers}
 
@@ -120,6 +121,19 @@ class UtilsSuite extends FunSuite with Matchers {
     assertThrows[Exception]({
       Utils.readMapFromString("invalid_map_string")
     })
+  }
+
+  test("test Utils.genEpilogueSql()") {
+    val sfOptions: Map[String, String] = Map.empty
+    val param = Parameters.MergedParameters(sfOptions)
+    val sql = s"""alter session unset timezone,
+                 |date_output_format,
+                 |timestamp_ntz_output_format,
+                 |timestamp_ltz_output_format,
+                 |timestamp_tz_output_format;
+                 |""".stripMargin.filter(_ >= ' ').replaceAll(" ", "")
+    assert(sql.equals(Utils.genEpilogueSql(param)
+      .toString.filter(_ >= ' ').replaceAll(" ", "")))
   }
 
   test("misc in Utils") {

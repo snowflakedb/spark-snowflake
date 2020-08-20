@@ -33,6 +33,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   private val test_table_number = s"test_table_number_$randomSuffix"
   private val test_table_date = s"test_table_date_$randomSuffix"
   private val test_table_regex = s"test_table_regex_$randomSuffix"
+  private val test_table_pre_action = s"test_table_pre_action_$randomSuffix"
+  private val test_table_post_action = s"test_table_post_action_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -41,6 +43,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_number")
       jdbcUpdate(s"drop table if exists $test_table_date")
       jdbcUpdate(s"drop table if exists $test_table_regex")
+      jdbcUpdate(s"drop table if exists $test_table_pre_action")
+      jdbcUpdate(s"drop table if exists $test_table_post_action")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -649,6 +653,36 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       resultDF,
       expectedResult
     )
+  }
+
+  test("test options: preaction and postaction") {
+    jdbcUpdate(s"create or replace table $test_table_regex " +
+      s"(c1 string, c2 string, c3 string, c4 string)")
+    jdbcUpdate(s"""insert into $test_table_regex values
+                  | ('Customers - (NY)', '100-200', 'hello world', 'hello\\\\world')
+                  | """.stripMargin)
+
+    // Make sure pre/post action table doesn't exist
+    jdbcUpdate(s"drop table if exists $test_table_pre_action")
+    jdbcUpdate(s"drop table if exists $test_table_post_action")
+
+    val preActions = s"create table $test_table_pre_action  (c1 string);" +
+      s"insert into $test_table_pre_action values('abc')"
+    val postActions = s"create table $test_table_post_action  (c1 string);" +
+      s"insert into $test_table_post_action values('abc'),('123');"
+    val rowCount = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_regex)
+      .option(Parameters.PARAM_PREACTIONS, preActions)
+      .option(Parameters.PARAM_POSTACTIONS, postActions)
+      .load()
+      .count()
+    assert(rowCount == 1)
+
+    // Check pre/post actions are executed as expected.
+    assert(getRowCount(test_table_pre_action) == 1)
+    assert(getRowCount(test_table_post_action) == 2)
   }
 
   override def beforeEach(): Unit = {

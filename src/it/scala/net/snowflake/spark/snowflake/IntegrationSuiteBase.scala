@@ -116,6 +116,15 @@ trait IntegrationSuiteBase
     resultOptions
   }
 
+  protected def getRowCount(tableName: String,
+                            sfOptions: Map[String, String] = connectorOptionsNoTable
+                           ): Long = {
+    val rs = Utils.runQuery(sfOptions,
+      s"select count(*) from $tableName")
+    rs.next()
+    rs.getLong(1)
+  }
+
   protected var connectorOptions: Map[String, String] = _
   protected var connectorOptionsNoTable: Map[String, String] = _
 
