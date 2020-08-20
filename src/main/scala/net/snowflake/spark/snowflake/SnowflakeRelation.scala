@@ -32,6 +32,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
+import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 
 import scala.collection.JavaConversions
 
@@ -207,6 +208,11 @@ private[snowflake] case class SnowflakeRelation(
     // The result set can be closed on master side, since is it not necessary.
     try {
       resultSet.close()
+      // Inject negative test
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET,
+        "Negative test to raise error when driver closes a result set"
+      )
     } catch {
       case e: Exception => {
         val stringWriter = new StringWriter
