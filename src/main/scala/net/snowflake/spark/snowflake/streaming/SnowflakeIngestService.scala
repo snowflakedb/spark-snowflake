@@ -92,7 +92,14 @@ class SnowflakeIngestService(param: MergedParameters,
     val ct = System.currentTimeMillis()
     IngestContextManager.logger.debug("closing ingest service")
     notClosed = false
-    Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
+    try {
+      Await.result(process, WAITING_TIME_ON_TERMINATION minutes)
+    } catch {
+      case e: Exception =>
+        IngestContextManager.logger.error(
+          s"Fail to close ingest service because of exception: ${e.getMessage}"
+        )
+    }
     if (!pipeDropped) {
       IngestContextManager.logger.error(
         s"closing ingest service time out, please drop pipe: $pipeName manually"
