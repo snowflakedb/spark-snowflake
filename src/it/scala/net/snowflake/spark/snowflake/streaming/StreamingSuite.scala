@@ -31,7 +31,8 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   val streamingTable = s"test_table_streaming_$randomSuffix"
-  val streamingStage = s"streaming_test_stage_$randomSuffix"
+  val streamStagePrefix = "STREAMING_TEST_STAGE_"
+  val streamingStage = s"$streamStagePrefix$randomSuffix"
   // Random port number [10001-60000]
   val testServerPort = Random.nextInt(50000) + 10001
 
@@ -107,7 +108,11 @@ class StreamingSuite extends IntegrationSuiteBase {
 
   override def afterAll(): Unit = {
     conn.dropTable(streamingTable)
-    conn.dropStage(streamingStage)
+    // NOTE: The stage name can't be dropped here.
+    // The Ingest is multiple-threads, if the stage is dropped in afterAll().
+    // The Ingest thread may need access it. It will fail.
+    // dropOldStages() is used to drop old stages in the begin of test.
+    // conn.dropStage(streamingStage)
     super.afterAll()
   }
 
@@ -174,6 +179,8 @@ class StreamingSuite extends IntegrationSuiteBase {
   }
 
   test("Test streaming writer") {
+    // Drop stages which were create 48 hours ago
+    dropOldStages(streamStagePrefix, 48)
 
     val spark = sparkSession
     import spark.implicits._
@@ -229,6 +236,7 @@ class StreamingSuite extends IntegrationSuiteBase {
         "It is a SC issue, only if it is reproduced consistently.")
     }
     query.stop()
+    query.awaitTermination(10000)
 
     checkTestTable(
       Seq(

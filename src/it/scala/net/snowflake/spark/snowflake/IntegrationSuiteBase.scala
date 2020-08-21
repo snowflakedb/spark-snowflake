@@ -17,8 +17,8 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.Connection
-import java.time.ZonedDateTime
+import java.sql.{Connection, Timestamp}
+import java.time.{LocalDateTime, ZonedDateTime}
 import java.util.TimeZone
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
@@ -101,6 +101,25 @@ trait IntegrationSuiteBase
   // Used for internal integration testing in SF env.
   protected def readConfigValueFromEnv(name: String): Option[String] = {
     scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
+  }
+
+  protected def dropOldStages(stagePrefix: String, hoursAgo: Long): Unit = {
+    val rs = conn.createStatement().executeQuery(
+      s"SHOW STAGES LIKE '$stagePrefix%'")
+
+    val today = Timestamp.valueOf(LocalDateTime.now())
+    val expireTs = Timestamp.valueOf(
+      LocalDateTime.now().minusHours(hoursAgo))
+    println(s"Start clean up on $today. Drop test stages created before $expireTs")
+
+    while (rs.next()) {
+      val createTs = rs.getTimestamp("created_on")
+      val name = rs.getString("name")
+      if (expireTs.compareTo(createTs) > 0) {
+        println(s"On $today, drop stage $name created_on: $createTs")
+        conn.createStatement().executeQuery(s"drop stage if exists $name")
+      }
+    }
   }
 
   protected def replaceOption(originalOptions: Map[String, String],
