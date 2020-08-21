@@ -127,13 +127,6 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
     (df, schema, rowCountPerPartition * partitionCount)
   }
 
-  private def getRowCount(tableName: String): Long = {
-    val rs = Utils.runQuery(connectorOptionsNoTable,
-      s"select count(*) from $tableName")
-    rs.next()
-    rs.getLong(1)
-  }
-
   test("test SnowflakeRelation.insert()") {
     val sfOptionsNoTable: Map[String, String] =
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_write)

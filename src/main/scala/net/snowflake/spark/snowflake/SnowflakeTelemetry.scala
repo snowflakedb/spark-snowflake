@@ -17,6 +17,15 @@ object SnowflakeTelemetry {
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
+  // Setter and Getter are introduced for testing purpose
+  private[snowflake] def set_logs(newLogs: List[(ObjectNode, Long)]): Unit = {
+    this.synchronized {
+      logs = newLogs
+    }
+  }
+  private[snowflake] def get_logs(): List[(ObjectNode, Long)] = {
+    logs
+  }
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 

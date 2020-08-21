@@ -57,56 +57,6 @@ private[snowflake] object FilterPushdown {
     keepNameCase: Boolean
   ): Option[SnowflakeSQLStatement] = {
 
-    // Builds an escaped value, based on the expected datatype
-    def buildValueWithType(dataType: DataType,
-                           value: Any): SnowflakeSQLStatement = {
-      dataType match {
-        case StringType =>
-          StringVariable(
-            value.toString
-              .replace("'", "''")
-              .replace("\\", "\\\\")
-          ) !
-        case DateType =>
-          StringVariable(value.asInstanceOf[Date].toString) + "::DATE"
-        case TimestampType =>
-          StringVariable(value.asInstanceOf[Timestamp].toString) + "::TIMESTAMP(3)"
-        case _ =>
-          value match {
-            case v: Int => IntVariable(v) !
-            case v: Long => LongVariable(v) !
-            case v: Short => ShortVariable(v) !
-            case v: Boolean => BooleanVariable(v) !
-            case v: Float => FloatVariable(v) !
-            case v: Double => DoubleVariable(v) !
-            case v: Byte => ByteVariable(v) !
-            case _ => ConstantString(value.toString) !
-          }
-      }
-
-    }
-
-    // Builds an escaped value, based on the value itself
-    def buildValue(value: Any): SnowflakeSQLStatement = {
-      value match {
-        case x: String =>
-          StringVariable(
-            x.replace("'", "''")
-              .replace("\\", "\\\\")
-          ) !
-        case x: Date => StringVariable(x.toString) + "::DATE"
-        case x: Timestamp => StringVariable(x.toString) + "::TIMESTAMP(3)"
-        case x: Int => IntVariable(x) !
-        case x: Long => LongVariable(x) !
-        case x: Short => ShortVariable(x) !
-        case x: Boolean => BooleanVariable(x) !
-        case x: Float => FloatVariable(x) !
-        case x: Double => DoubleVariable(x) !
-        case x: Byte => ByteVariable(x) !
-        case _ => ConstantString(value.toString) !
-      }
-    }
-
     // Builds a simple comparison string
     def buildComparison(attr: String,
                         value: Any,
@@ -188,6 +138,57 @@ private[snowflake] object FilterPushdown {
       Some(schema(attribute).dataType)
     } else {
       None
+    }
+  }
+
+  // Builds an escaped value, based on the expected datatype
+  private[snowflake] def buildValueWithType(dataType: DataType,
+                                            value: Any)
+  : SnowflakeSQLStatement = {
+    dataType match {
+      case StringType =>
+        StringVariable(
+          value.toString
+            .replace("'", "''")
+            .replace("\\", "\\\\")
+        ) !
+      case DateType =>
+        StringVariable(value.asInstanceOf[Date].toString) + "::DATE"
+      case TimestampType =>
+        StringVariable(value.asInstanceOf[Timestamp].toString) + "::TIMESTAMP(3)"
+      case _ =>
+        value match {
+          case v: Int => IntVariable(v) !
+          case v: Long => LongVariable(v) !
+          case v: Short => ShortVariable(v) !
+          case v: Boolean => BooleanVariable(v) !
+          case v: Float => FloatVariable(v) !
+          case v: Double => DoubleVariable(v) !
+          case v: Byte => ByteVariable(v) !
+          case _ => ConstantString(value.toString) !
+        }
+    }
+
+  }
+
+  // Builds an escaped value, based on the value itself
+  private[snowflake] def buildValue(value: Any): SnowflakeSQLStatement = {
+    value match {
+      case x: String =>
+        StringVariable(
+          x.replace("'", "''")
+            .replace("\\", "\\\\")
+        ) !
+      case x: Date => StringVariable(x.toString) + "::DATE"
+      case x: Timestamp => StringVariable(x.toString) + "::TIMESTAMP(3)"
+      case x: Int => IntVariable(x) !
+      case x: Long => LongVariable(x) !
+      case x: Short => ShortVariable(x) !
+      case x: Boolean => BooleanVariable(x) !
+      case x: Float => FloatVariable(x) !
+      case x: Double => DoubleVariable(x) !
+      case x: Byte => ByteVariable(x) !
+      case _ => ConstantString(value.toString) !
     }
   }
 }
