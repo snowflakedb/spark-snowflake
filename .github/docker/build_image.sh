@@ -47,7 +47,7 @@ docker build \
 --build-arg SPARK_ENV_SCRIPT=.github/docker/spark-env.sh \
 --build-arg LOG4J_EXECUTOR_PROPERTIES=.github/docker/log4j_executor.properties \
 --build-arg LOG4J_DRIVER_PROPERTIES=.github/docker/log4j_driver.properties \
---build-arg RUN_TEST_SCRIPT=ClusterTest/run_cluster_test.sh \
+--build-arg RUN_TEST_SCRIPT=$RUN_TEST_SCRIPT \
 --build-arg ENTRYPOINT_SCRIPT=.github/docker/entrypoint.sh \
 --tag $DOCKER_IMAGE_TAG -f .github/docker/Dockerfile .
 

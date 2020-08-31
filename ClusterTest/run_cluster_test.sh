@@ -25,7 +25,7 @@ ls -al $SNOWFLAKE_TEST_CONFIG \
        $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar \
        $SPARK_WORKDIR/ClusterTest.py
 
-echo "Important: if new test cases are added, script .github/docker/check_result.sh MUST be updated"
+echo "Important: if new test cases are added, script .github/workflow/ClusterTest*.yml MUST be updated"
 # Run pyspark test
 # python3 has been installed in the container
 $SPARK_HOME/bin/spark-submit \

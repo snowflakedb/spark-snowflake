@@ -18,7 +18,9 @@ package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
 import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, TestUtils}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 
 import scala.util.Random
 
@@ -40,6 +42,43 @@ trait ClusterTestSuiteBase {
               resultBuilder: ClusterTestResultBuilder): Unit
 
   protected def randomSuffix: String = Math.abs(Random.nextLong()).toString
+
+  protected def generateDataFrame(sparkSession: SparkSession,
+                                   partitionCount: Int,
+                                  rowCountPerPartition: Int): DataFrame = {
+    def getRandomString(len: Int): String = {
+      Random.alphanumeric take len mkString ""
+    }
+
+    // Create RDD which generates data with multiple partitions
+    val testRDD: RDD[Row] = sparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { i => {
+          Row(Random.nextInt, Random.nextDouble(), getRandomString(50),
+            Random.nextInt, Random.nextDouble(), getRandomString(50),
+            Random.nextInt, Random.nextDouble(), getRandomString(50))
+        }
+        }.iterator
+      }
+      }
+    val schema = StructType(
+      List(
+        StructField("int1", IntegerType),
+        StructField("double1", DoubleType),
+        StructField("str1", StringType),
+        StructField("int2", IntegerType),
+        StructField("double2", DoubleType),
+        StructField("str2", StringType),
+        StructField("int3", IntegerType),
+        StructField("double3", DoubleType),
+        StructField("str3", StringType)
+      )
+    )
+
+    // Convert RDD to DataFrame
+    return sparkSession.createDataFrame(testRDD, schema)
+  }
 
   // Utility function to read one table and write to another.
   protected def readWriteSnowflakeTable(sparkSession: SparkSession,

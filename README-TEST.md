@@ -131,7 +131,7 @@ net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite can be a good templa
 * Create a new class in the same directory for example ClusterTest/src/main/scala/net/snowflake/spark/snowflake/testsuite/MyNewTestSuite.scala
 * This class must inherit from `trait ClusterTestSuiteBase`. It needs to implement: `runImpl(SparkSession,ClusterTestResultBuilder)`
 * Update ClusterTest/run_cluster_test.sh to run the new test. It can be submitted together with other test case or separately.
-* Update TOTAL_TEST_CASE_COUNT in .github/docker/check_result.sh to make sure it is correct.
+* Update TOTAL_TEST_CASE_COUNT in .github/workflows/ClusterTest*.yml to make sure it is correct.
 
 ### Test case development tips
 IntelliJ can be used to develop the test case. You can set below to debug the test case in IntelliJ.

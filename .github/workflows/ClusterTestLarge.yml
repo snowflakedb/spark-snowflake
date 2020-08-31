@@ -1,4 +1,4 @@
-name: Spark Cluster Test
+name: Spark Large Cluster Test
 
 on:
   push:
@@ -36,15 +36,15 @@ jobs:
     - name: Build docker image for spark base
       run: .github/docker/build_image.sh
       env:
-        RUN_TEST_SCRIPT: "ClusterTest/run_cluster_test.sh"  # Test script name
+        RUN_TEST_SCRIPT: "ClusterTest/run_cluster_test_large.sh"  # Test script name
     - name: Run docker-compose test
-      run: docker-compose -f .github/docker/docker-compose.yml up -d
+      run: docker-compose -f .github/docker/docker-compose-large.yml up -d
     - name: Decrypt snowflake.json for testing
       run: ./.github/scripts/decrypt_secret.sh snowflake.travis.json snowflake.travis.json.gpg
     - name: Wait test done and check result
       run: .github/docker/check_result.sh
       env:
-        TOTAL_TEST_CASE_COUNT: 3          # There are 3 test cases in total
-        TOTAL_TIMEOUT_IN_SECONDS: 3600    # Execution timeout is 1 hour
+        TOTAL_TEST_CASE_COUNT: 8          # There is 10 test case in total
+        TOTAL_TIMEOUT_IN_SECONDS: 600    # Execution timeout is 10 min
     - name: Clean up the container and image
       run: .github/docker/cleanup_docker.sh
