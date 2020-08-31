@@ -574,7 +574,7 @@ sealed trait CloudStorage {
                         storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
-      case e: Exception => {
+      case e: Throwable => {
         val stringWriter = new StringWriter
         e.printStackTrace(new PrintWriter(stringWriter))
         val errmsg =
@@ -592,7 +592,7 @@ sealed trait CloudStorage {
           false,
           proxyInfo.isDefined,
           None,
-          Some(e))
+          Some(new Exception(e)))
 
         // Sleep exponential time based on the attempt number.
         if (useExponentialBackoff) {

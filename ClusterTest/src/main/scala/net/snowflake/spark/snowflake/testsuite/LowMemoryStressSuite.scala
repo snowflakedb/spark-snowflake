@@ -97,6 +97,11 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
     executorMem = sparkSession.sparkContext.getExecutorMemoryStatus
     log.info(s"""executors memory: $executorMem""")
 
+    // Test succeed.
+    resultBuilder
+      .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
+      .withReason("Success")
+
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
     if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
