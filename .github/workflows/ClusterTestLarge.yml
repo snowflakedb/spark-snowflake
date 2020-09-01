@@ -44,7 +44,7 @@ jobs:
     - name: Wait test done and check result
       run: .github/docker/check_result.sh
       env:
-        TOTAL_TEST_CASE_COUNT: 8          # There is 10 test case in total
+        TOTAL_TEST_CASE_COUNT: 10          # There is 10 test case in total
         TOTAL_TIMEOUT_IN_SECONDS: 600    # Execution timeout is 10 min
     - name: Clean up the container and image
       run: .github/docker/cleanup_docker.sh
