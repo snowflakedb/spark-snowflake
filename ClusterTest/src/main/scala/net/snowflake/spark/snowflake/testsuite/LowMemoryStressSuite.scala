@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, TestUtils}
+import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
@@ -94,13 +94,30 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       .option("dbtable", test_big_partition)
       .mode(SaveMode.Overwrite)
       .save()
-    executorMem = sparkSession.sparkContext.getExecutorMemoryStatus
-    log.info(s"""executors memory: $executorMem""")
 
-    // Test succeed.
-    resultBuilder
-      .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
-      .withReason("Success")
+    var noOOMError = true
+    try {
+      // Write to snowflake with multi-part feature off
+      df.write
+        .format(TestUtils.SNOWFLAKE_NAME)
+        .options(TestUtils.sfOptionsNoTable)
+        .option("dbtable", test_big_partition)
+        .option(Parameters.PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD, "off")
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+    catch {
+      case e: Throwable => {
+        // Test succeed
+        noOOMError = false
+        resultBuilder
+          .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
+          .withReason("Success")
+      }
+    }
+    if (noOOMError) {
+      throw new Exception("Expecting OOM error but didn't catch that.")
+    }
 
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
