@@ -4,7 +4,7 @@ echo "This script should be run in repository root directory."
 
 # If new test cases are added in ClusterTest/run_cluster_test.sh
 # TOTAL_TEST_CASE_COUNT may be updated
-export TOTAL_TEST_CASE_COUNT=2
+export TOTAL_TEST_CASE_COUNT=3
 export TOTAL_TIMEOUT_IN_SECONDS=3600
 
 echo "Below variables must be set by workflow and docker-conpose file"
