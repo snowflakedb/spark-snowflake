@@ -723,11 +723,13 @@ sealed trait CloudStorage {
       "Negative test to raise error when uploading data to GCS"
     )
 
-    TestHook.raiseExceptionIfTestFlagEnabledWithMaxCount(
-      TestHookFlag.TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT,
-      "Negative test to raise error when uploading data to GCS",
-      2
-    )
+    // When attempt number is smaller than 2, throw exception
+    if (TaskContext.get().attemptNumber() < 2) {
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT,
+        "Negative test to raise error when uploading data for the first two attempts"
+      )
+    }
 
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:

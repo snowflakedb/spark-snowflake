@@ -27,8 +27,6 @@ object TestHookFlag extends Enumeration {
 object TestHook {
   val log: Logger = LoggerFactory.getLogger(getClass)
 
-  var exceptionCount: Int = 0;
-
   private val ENABLED_TEST_FLAGS =
     new scala.collection.mutable.HashSet[TestHookFlag]()
 
@@ -84,25 +82,6 @@ object TestHook {
     if (isTestFlagEnabled(testFlag)) {
       throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
         s"$TEST_MESSAGE_PREFIX  $errorMessage")
-    }
-  }
-
-  // Reset exception count
-  private[snowflake] def resetExceptionCount() : Unit = {
-    exceptionCount = 0
-  }
-
-  // Raise exception if the specific test flag is enabled if exceptionCount < maxExceptionCount
-  private[snowflake] def raiseExceptionIfTestFlagEnabledWithMaxCount(testFlag: TestHookFlag,
-                                                                     errorMessage: String,
-                                                                     maxExceptionCount: Int)
-  : Unit = {
-    if (isTestFlagEnabled(testFlag)) {
-      exceptionCount += 1
-      if (exceptionCount <= maxExceptionCount) {
-        throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
-          s"$TEST_MESSAGE_PREFIX  $errorMessage")
-      }
     }
   }
 }

@@ -160,7 +160,6 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     val tmpDF = getDataFrame()
     // Test use_exponential_backoff is 'on' or 'off'
     // Test fails for two times and pass the third time
-    TestHook.resetExceptionCount()
     tmpDF.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
@@ -170,7 +169,6 @@ class UploadRetrySuite extends IntegrationSuiteBase{
       .option("use_exponential_backoff", "on")
       .mode(SaveMode.Overwrite)
       .save()
-    TestHook.resetExceptionCount()
     tmpDF.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
@@ -196,7 +194,6 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     val tmpDF = getDataFrame()
     // Test use_exponential_backoff is 'on' or 'off'
     // Test fails for two times and pass the third time
-    TestHook.resetExceptionCount()
     assertThrows[Exception] {
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -208,7 +205,6 @@ class UploadRetrySuite extends IntegrationSuiteBase{
         .mode(SaveMode.Overwrite)
         .save()
     }
-    TestHook.resetExceptionCount()
     assertThrows[Exception] {
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
