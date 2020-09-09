@@ -713,15 +713,13 @@ sealed trait CloudStorage {
            |""".stripMargin.filter(_ >= ' ')
     }
 
-    // Unit Test code only. This part is tested manually.
-    // It is difficult to test with integration test because
-    // IT uses local cluster, for local cluster, maxTaskFailures
-    // is always 1. In debugger, manually set MAX_LOCAL_TASK_FAILURES
-    // in SparkContext can test the retry works.
-    TestHook.raiseExceptionIfTestFlagEnabled(
-      TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-      "Negative test to raise error when uploading data to GCS"
-    )
+    // When attempt number is smaller than 2, throw exception
+    if (TaskContext.get().attemptNumber() < 2) {
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
+        "Negative test to raise error when uploading data for the first two attempts"
+      )
+    }
 
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
