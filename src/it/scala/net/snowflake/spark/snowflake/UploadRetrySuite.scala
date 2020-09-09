@@ -155,7 +155,7 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     setUpSparkContext(3)
 
     // Enable test hook to simulate upload error
-    TestHook.enableTestFlagOnly(TestHookFlag.TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT)
+    TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
 
     val tmpDF = getDataFrame()
     // Test use_exponential_backoff is 'on' or 'off'
@@ -189,7 +189,7 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     setUpSparkContext(2)
 
     // Enable test hook to simulate upload error
-    TestHook.enableTestFlagOnly(TestHookFlag.TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT)
+    TestHook.enableTestFlagOnly(TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION)
 
     val tmpDF = getDataFrame()
     // Test use_exponential_backoff is 'on' or 'off'
