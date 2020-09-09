@@ -13,6 +13,7 @@ object TestHookFlag extends Enumeration {
   val TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE = Value("TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE")
   val TH_WRITE_ERROR_AFTER_COPY_INTO = Value("TH_WRITE_ERROR_AFTER_COPY_INTO")
   val TH_GCS_UPLOAD_RAISE_EXCEPTION = Value("TH_GCS_UPLOAD_RAISE_EXCEPTION")
+  val TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT = Value("TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT")
   val TH_COPY_INTO_TABLE_MISS_FILES_SUCCESS = Value("TH_COPY_INTO_TABLE_MISS_FILES_SUCCESS")
   val TH_COPY_INTO_TABLE_MISS_FILES_FAIL = Value("TH_COPY_INTO_TABLE_MISS_FILES_FAIL")
   val TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET = Value("TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET")
@@ -25,6 +26,8 @@ object TestHookFlag extends Enumeration {
 
 object TestHook {
   val log: Logger = LoggerFactory.getLogger(getClass)
+
+  var exceptionCount: Int = 0;
 
   private val ENABLED_TEST_FLAGS =
     new scala.collection.mutable.HashSet[TestHookFlag]()
@@ -81,6 +84,25 @@ object TestHook {
     if (isTestFlagEnabled(testFlag)) {
       throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
         s"$TEST_MESSAGE_PREFIX  $errorMessage")
+    }
+  }
+
+  // Reset exception count
+  private[snowflake] def resetExceptionCount() : Unit = {
+    exceptionCount = 0
+  }
+
+  // Raise exception if the specific test flag is enabled if exceptionCount < maxExceptionCount
+  private[snowflake] def raiseExceptionIfTestFlagEnabledWithMaxCount(testFlag: TestHookFlag,
+                                                                     errorMessage: String,
+                                                                     maxExceptionCount: Int)
+  : Unit = {
+    if (isTestFlagEnabled(testFlag)) {
+      exceptionCount += 1
+      if (exceptionCount <= maxExceptionCount) {
+        throw new SnowflakeSQLException(ErrorCode.INTERNAL_ERROR,
+          s"$TEST_MESSAGE_PREFIX  $errorMessage")
+      }
     }
   }
 }

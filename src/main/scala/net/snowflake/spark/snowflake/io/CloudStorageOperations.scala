@@ -723,6 +723,12 @@ sealed trait CloudStorage {
       "Negative test to raise error when uploading data to GCS"
     )
 
+    TestHook.raiseExceptionIfTestFlagEnabledWithMaxCount(
+      TestHookFlag.TH_UPLOAD_RAISE_EXCEPTION_WITH_COUNT,
+      "Negative test to raise error when uploading data to GCS",
+      2
+    )
+
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Finish writing partition ID:$partitionID $fileName
