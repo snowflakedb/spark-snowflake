@@ -35,7 +35,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
   resultSets: Array[SnowflakeResultSetSerializable],
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfURL: String
+  sfFullURL: String
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] =
@@ -45,7 +45,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
       queryID,
-      sfURL
+      sfFullURL
     )
 
   override protected def getPartitions: Array[Partition] =
@@ -61,7 +61,7 @@ case class ResultIterator[T: ClassTag](
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfURL: String
+  sfFullURL: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -90,12 +90,20 @@ case class ResultIterator[T: ClassTag](
         "Negative test to raise error when opening a result set"
       )
 
-      resultSet.getResultSet(jdbcProperties)
+      resultSet.getResultSet(
+        SnowflakeResultSetSerializable
+          .ResultSetRetrieveConfig
+          .Builder
+          .newInstance()
+          .setProxyProperties(jdbcProperties)
+          .setSfFullURL(sfFullURL)
+          .build()
+      )
     } catch {
       case e: Exception => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
-          sfURL,
+          sfFullURL,
           this.getClass.getSimpleName,
           operation = "read",
           retryCount = 0,
@@ -157,7 +165,7 @@ case class ResultIterator[T: ClassTag](
       case e: Exception => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
-          sfURL,
+          sfFullURL,
           this.getClass.getSimpleName,
           operation = "read",
           retryCount = 0,
