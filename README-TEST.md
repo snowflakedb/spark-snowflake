@@ -169,3 +169,36 @@ Files in ClusterTest
 * src/main/scala//net/snowflake/spark/snowflake/ClusterTest.scala: The driver class to run test
 * src/main/scala//net/snowflake/spark/snowflake/testsuite/ClusterTestSuiteBase.scala: Test case base class.
 * Files in src/main/scala: the Scala test related files.
+
+## Specific test case description
+### Low memory test
+Test uploading large partition with a small amount of memory is defined in Cluster Test. The partition used in the test is of size 227 MB after compression and 330 MB before compression. By limiting the size of executor memory, multiple OOM errors can be reproduced.
+
+The first one is Garbage Collect OOM, which happens when the executor does not have enough memory to execute Java GC. Then the connector hit OOM while trying to write data into a buffer. The processed size column indicates the processed data size before OOM. The connector hits close OOM when it tries to copy the buffer into a byte array.
+
+Before Mingli's multi-part upload was finished, OOM happens like the following:
+
+| --executor-memory | processed size     | OOM       |
+| ----------------- | ------------------ | --------- |
+| 800m              | 0                  | GC OOM    |
+| 950m              | 67 MB              | write OOM |
+| 1g                | 134 MB             | write OOM |
+| 1.2g              | 134 MB             | write OOM |
+| 1.25g             | 227 MB (full size) | close OOM |
+| 1.5g              | 227 MB (full size) | close OOM |
+| 1.55g             | 227 MB (full size) | None      |
+
+After multi-part upload was implemented:
+
+| --executor-memory | processed size     | OOM       |
+| ----------------- | ------------------ | --------- |
+| 800m              | 0                  | GC OOM    |
+| 950m              | 227 MB (full size) | None      |
+
+To better understand why this 227 MB file requires around at least 1G memory to be processed, please refer to this link: https://www.tutorialdocs.com/article/spark-memory-management.html 
+
+### Throttling simulation test
+
+A test hook was added to partition uploading function. When the test hook flag is enabled, the hook will fail twice and pass the thrid time. 
+
+Two intergration tests were added and Spark retry counts are set to 2 and 3 respectively. The test that only retries twice will throw exception, while the test that retries three times will pass without exception.
