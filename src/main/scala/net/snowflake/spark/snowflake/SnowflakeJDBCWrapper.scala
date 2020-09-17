@@ -175,11 +175,7 @@ private[snowflake] class JDBCWrapper {
     }
 
     // Set up proxy info if it is configured.
-    params.proxyInfo match {
-      case Some(proxyInfoValue) =>
-        proxyInfoValue.setProxyForJDBC(jdbcProperties)
-      case None =>
-    }
+    params.setJDBCProxyIfNecessary(jdbcProperties)
 
     // Adding Authenticator parameter
     params.sfAuthenticator match {

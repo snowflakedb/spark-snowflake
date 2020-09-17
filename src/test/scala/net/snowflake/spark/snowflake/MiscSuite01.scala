@@ -47,7 +47,7 @@ class MiscSuite01 extends FunSuite with Matchers {
 
     // Set proxy for JDBC
     val jdbcProperties = new Properties()
-    proxyInfo.setProxyForJDBC(jdbcProperties)
+    param.setJDBCProxyIfNecessary(jdbcProperties)
     assert(jdbcProperties.getProperty(
       SFSessionProperty.USE_PROXY.getPropertyKey).equals("true"))
     assert(jdbcProperties.getProperty(
@@ -89,7 +89,7 @@ class MiscSuite01 extends FunSuite with Matchers {
 
     // Set proxy for JDBC
     val jdbcProperties = new Properties()
-    proxyInfo.setProxyForJDBC(jdbcProperties)
+    param.setJDBCProxyIfNecessary(jdbcProperties)
     assert(jdbcProperties.getProperty(
       SFSessionProperty.USE_PROXY.getPropertyKey).equals("true"))
     assert(jdbcProperties.getProperty(

@@ -19,9 +19,9 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 import java.sql.{Connection, ResultSet}
-import java.util.UUID
+import java.util.{Properties, UUID}
 
-import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet}
+import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.{SPARK_VERSION, SparkContext}
 
@@ -64,7 +64,7 @@ object Utils {
   /**
     * The certified JDBC version to work with this spark connector version.
     */
-  val CERTIFIED_JDBC_VERSION = "3.12.9"
+  val CERTIFIED_JDBC_VERSION = "3.12.12"
 
   /**
     * Important:
@@ -198,12 +198,15 @@ object Utils {
     map.toMap
   }
 
+  private[snowflake] def getMergedParameters(params: Map[String, String])
+  : MergedParameters = {
+    val lcParams = params.map { case (key, value) => (key.toLowerCase, value) }
+    MergedParameters(Parameters.DEFAULT_PARAMETERS ++ lcParams)
+  }
+
   def getJDBCConnection(params: Map[String, String]): Connection = {
     val wrapper = new JDBCWrapper()
-    val lcParams = params.map { case (key, value) => (key.toLowerCase, value) }
-    val mergedParams = MergedParameters(
-      Parameters.DEFAULT_PARAMETERS ++ lcParams
-    )
+    val mergedParams = getMergedParameters(params)
     wrapper.getConnector(mergedParams)
   }
 
@@ -353,7 +356,18 @@ object Utils {
     conn.close()
     // Long.MaxValue is passed to getResultSetSerializables(),
     // so it is sure there is only one object in resultSerializables
-    resultSerializables.get(0).getResultSet
+    val mergedParams = getMergedParameters(params)
+    val jdbcProperties = new Properties()
+    mergedParams.setJDBCProxyIfNecessary(jdbcProperties)
+    resultSerializables.get(0).getResultSet(
+      SnowflakeResultSetSerializable
+        .ResultSetRetrieveConfig
+        .Builder
+        .newInstance()
+        .setProxyProperties(jdbcProperties)
+        .setSfFullURL(mergedParams.sfFullURL)
+        .build()
+    )
   }
 
   // Java version

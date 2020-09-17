@@ -241,7 +241,7 @@ private[snowflake] case class SnowflakeRelation(
       resultSetSerializables,
       params.proxyInfo,
       queryID,
-      params.sfURL
+      params.sfFullURL
     )
   }
 
