@@ -177,7 +177,7 @@ Test uploading large partition with a small amount of memory is defined in Clust
 
 The connector hit OOM while trying to write data into a buffer. The processed size column indicates the processed data size before OOM.
 
-Before Mingli's multi-part upload was finished, OOM happens like the following:
+Before multi-part upload (SNOW-187770) was finished, OOM happens like the following:
 
 | --executor-memory | processed size     | OOM       |
 | ----------------- | ------------------ | --------- |
