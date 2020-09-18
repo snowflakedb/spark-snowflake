@@ -53,6 +53,6 @@ $SPARK_HOME/bin/spark-submit \
       --conf "spark.driver.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_driver.properties" \
       --master spark://master:7077 --deploy-mode client \
       --class net.snowflake.spark.snowflake.ClusterTest \
-      --driver-memory 900m \
-      --executor-memory 900m \
+      --driver-memory 600m \
+      --executor-memory 600m \
       $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.LowMemoryStressSuite;"

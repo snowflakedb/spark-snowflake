@@ -36,56 +36,45 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       Random.alphanumeric take len mkString ""
     }
 
+    val randomString1 = getRandomString(50000)
+    val randomString2 = getRandomString(50000)
+    val randomString3 = getRandomString(50000)
+    val randomString4 = getRandomString(50000)
+    val randomString5 = getRandomString(50000)
+    val randomString6 = getRandomString(50000)
+    val randomString7 = getRandomString(50000)
+    val randomString8 = getRandomString(50000)
     val partitionCount = 1
-    val rowCountPerPartition = 1300000
+    val rowCountPerPartition = 800
     // Create RDD which generates data with multiple partitions
     val testRDD: RDD[Row] = sparkSession.sparkContext
       .parallelize(Seq[Int](), partitionCount)
       .mapPartitions { _ => {
         (1 to rowCountPerPartition).map { i => {
-          Row(Random.nextInt, Random.nextDouble(), getRandomString(50),
-            Random.nextInt, Random.nextDouble(), getRandomString(50),
-            Random.nextInt, Random.nextDouble(), getRandomString(50))
+          Row(randomString1, randomString2,
+              randomString3, randomString4,
+              randomString5, randomString6,
+              randomString7, randomString8)
         }
         }.iterator
       }
       }
     val schema = StructType(
       List(
-        StructField("int1", IntegerType),
-        StructField("double1", DoubleType),
         StructField("str1", StringType),
-        StructField("int2", IntegerType),
-        StructField("double2", DoubleType),
         StructField("str2", StringType),
-        StructField("int3", IntegerType),
-        StructField("double3", DoubleType),
-        StructField("str3", StringType)
+        StructField("str3", StringType),
+        StructField("str4", StringType),
+        StructField("str5", StringType),
+        StructField("str6", StringType),
+        StructField("str7", StringType),
+        StructField("str8", StringType)
       )
     )
     val test_big_partition = s"test_big_partition_$randomSuffix"
 
-    val sampleRow = Row(Random.nextInt, Random.nextDouble(), getRandomString(50),
-      Random.nextInt, Random.nextDouble(), getRandomString(50),
-      Random.nextInt, Random.nextDouble(), getRandomString(50))
-
-    val rowSize = SizeEstimator.estimate(sampleRow.toSeq.map {
-      value => value.asInstanceOf[AnyRef]
-    })
-
-    val partitionSize = rowSize * rowCountPerPartition / 1024 / 1024
-
-    log.info(s"""partition count: $partitionCount, row per partition: $rowCountPerPartition""")
-    log.info(s"""size of a row: $rowSize Bytes, partition size: $partitionSize MB""")
-
-    var executorMem = sparkSession.sparkContext.getExecutorMemoryStatus
-    log.info(s"""executors memory: $executorMem""")
-
     // Convert RDD to DataFrame
     val df = sparkSession.createDataFrame(testRDD, schema)
-
-    executorMem = sparkSession.sparkContext.getExecutorMemoryStatus
-    log.info(s"""executors memory: $executorMem""")
 
     // Write to snowflake
     df.write
@@ -94,6 +83,9 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       .option("dbtable", test_big_partition)
       .mode(SaveMode.Overwrite)
       .save()
+
+    log.info(
+      s"""Finished the first multi-part upload test ======================""".stripMargin)
 
     var noOOMError = true
     try {
