@@ -62,7 +62,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       BigDecimal("123456789012345"),
       BigDecimal("123456789.01234"),
       BigDecimal("0.012345678901234"),
-      BigDecimal("1234567890123456789012345"),
+      BigDecimal("1234567890123456789012345"), // pragma: allowlist secret
       BigDecimal("12345678901234567890.01234"),
       BigDecimal("1234567890.012345678901234"),
       1.1,

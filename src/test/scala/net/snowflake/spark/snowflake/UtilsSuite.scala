@@ -68,7 +68,7 @@ class UtilsSuite extends FunSuite with Matchers {
       removeCreds("s3n://bucket/path/to/temp/dir") === "s3n://bucket/path/to/temp/dir"
     )
     assert(
-      removeCreds("s3n://ACCESSKEY:SECRETKEY@bucket/path/to/temp/dir") ===
+      removeCreds("s3n://ACCESSKEY:SECRETKEY@bucket/path/to/temp/dir") === // pragma: allowlist secret
         "s3n://bucket/path/to/temp/dir"
     )
   }
