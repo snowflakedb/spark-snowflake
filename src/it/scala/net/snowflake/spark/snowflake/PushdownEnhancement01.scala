@@ -750,19 +750,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     // The expected result is generated when pushdown is disabled.
     val expectedResult = Seq(
       Row("snowflake",
-        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73",
-        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f",
-        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73",
-        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f",
-        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def"),
+        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73", // pragma: allowlist secret
+        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f", // pragma: allowlist secret
+        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73", // pragma: allowlist secret
+        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f", // pragma: allowlist secret
+        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def"), // pragma: allowlist secret
       Row("spark",
-        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73",
-        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff",
-        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73",
-        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff",
-        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def")
+        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73", // pragma: allowlist secret
+        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff", // pragma: allowlist secret
+        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73", // pragma: allowlist secret
+        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff", // pragma: allowlist secret
+        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def") // pragma: allowlist secret
     )
 
+    val const_sha_value = "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def" // pragma: allowlist secret
     testPushdown(
       s"""SELECT
          |  ("SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
@@ -774,7 +775,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |      AS "SUBQUERY_1_COL_3" ,
          |  (SHA2 ( HEX_DECODE_STRING (CAST("SUBQUERY_0"."C2" AS STRING)),512))
          |      AS "SUBQUERY_1_COL_4" ,
-         |  ( '4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def' )
+         |  ( '$const_sha_value' )
          |      AS "SUBQUERY_1_COL_5"
          |FROM ( SELECT * FROM ( $test_table_sha2 )
          |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"

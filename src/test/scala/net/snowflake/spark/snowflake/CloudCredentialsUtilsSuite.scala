@@ -74,7 +74,7 @@ class CloudCredentialsUtilsSuite extends FunSuite {
 
     {
       val creds =
-        CloudCredentialsUtils.load("s3://URIID:URIKEY@bucket/path", conf)
+        CloudCredentialsUtils.load("s3://URIID:URIKEY@bucket/path", conf) // pragma: allowlist secret
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
@@ -99,7 +99,7 @@ class CloudCredentialsUtilsSuite extends FunSuite {
 
     {
       val creds =
-        CloudCredentialsUtils.load("s3n://URIID:URIKEY@bucket/path", conf)
+        CloudCredentialsUtils.load("s3n://URIID:URIKEY@bucket/path", conf) // pragma: allowlist secret
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
@@ -124,7 +124,7 @@ class CloudCredentialsUtilsSuite extends FunSuite {
 
     {
       val creds =
-        CloudCredentialsUtils.load("s3a://URIID:URIKEY@bucket/path", conf)
+        CloudCredentialsUtils.load("s3a://URIID:URIKEY@bucket/path", conf) // pragma: allowlist secret
       assert(creds.getAWSAccessKeyId === "URIID")
       assert(creds.getAWSSecretKey === "URIKEY")
     }
