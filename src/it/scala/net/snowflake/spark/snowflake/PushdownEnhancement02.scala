@@ -172,7 +172,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown WindowExpression: Rank without PARTITION BY") {
+  ignore("test pushdown WindowExpression: Rank without PARTITION BY") {
     // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
     if (!params.useCopyUnload) {
       jdbcUpdate(s"create or replace table $test_table_rank" +
@@ -223,7 +223,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
-  test("test pushdown WindowExpression: Rank with PARTITION BY") {
+  ignore("test pushdown WindowExpression: Rank with PARTITION BY") {
     // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
     if (!params.useCopyUnload) {
       jdbcUpdate(s"create or replace table $test_table_rank" +
@@ -275,7 +275,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
-  test("test pushdown WindowExpression: DenseRank without PARTITION BY") {
+  ignore("test pushdown WindowExpression: DenseRank without PARTITION BY") {
     // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
     if (!params.useCopyUnload) {
       jdbcUpdate(s"create or replace table $test_table_rank" +
@@ -326,7 +326,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
-  test("test pushdown WindowExpression: DenseRank with PARTITION BY") {
+  ignore("test pushdown WindowExpression: DenseRank with PARTITION BY") {
     // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
     if (!params.useCopyUnload) {
       jdbcUpdate(s"create or replace table $test_table_rank" +
@@ -515,7 +515,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   // Test Limit combine with Sort
-  test("test pushdown functions: Limit -> Sort") {
+  ignore("test pushdown functions: Limit -> Sort") {
     jdbcUpdate(s"create or replace table $test_table_number " +
       s"(d1 decimal(38, 10), f1 float)")
     jdbcUpdate(s"insert into $test_table_number values " +
@@ -554,7 +554,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown functions date_add/date_sub/add_months") {
+  ignore("test pushdown functions date_add/date_sub/add_months") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
     jdbcUpdate(s"insert into $test_table_date values " +
@@ -601,7 +601,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown function: REGEXP_REPLACE()") {
+  ignore("test pushdown function: REGEXP_REPLACE()") {
     jdbcUpdate(s"create or replace table $test_table_regex " +
       s"(c1 string, c2 string, c3 string, c4 string)")
     // Note: there is only one backslash logically for c4.
@@ -683,6 +683,44 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     // Check pre/post actions are executed as expected.
     assert(getRowCount(test_table_pre_action) == 1)
     assert(getRowCount(test_table_post_action) == 2)
+  }
+
+  test("test pushdown functions date_add only") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d1 date)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('2020-07-28')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.select(
+      col("d1"),
+      date_add(col("d1"),4).as("date_add")
+    )
+
+    val expectedResult = Seq(
+      Row(
+        Date.valueOf("2020-07-28"),
+        Date.valueOf("2020-08-01"))
+    )
+
+    testPushdown(
+      s"""SELECT (
+         |  "SUBQUERY_0"."D1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( DATEADD('DAY', 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_1"
+         |FROM (
+         |  SELECT * FROM (
+         |    $test_table_date
+         |  ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   override def beforeEach(): Unit = {

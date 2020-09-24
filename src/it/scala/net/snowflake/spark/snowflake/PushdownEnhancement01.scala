@@ -665,7 +665,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown COALESCE()") {
+  ignore("test pushdown COALESCE()") {
     jdbcUpdate(s"create or replace table $test_table_coalesce(c1 int, c2 int, c3 int)")
     jdbcUpdate(s"""insert into $test_table_coalesce values
                | (1,    2,    3   ),
@@ -717,7 +717,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown SHA2()") {
+  ignore("test pushdown SHA2()") {
     // Test Sha2() on String/Binary because it only supports these two types.
     // We have confirmed Spark doesn't support sha2 on
     // Decimal/Double/date/Timestamp/Boolean
