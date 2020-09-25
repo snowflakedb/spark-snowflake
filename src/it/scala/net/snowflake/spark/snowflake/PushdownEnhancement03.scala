@@ -55,7 +55,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     })
   }
 
-  test("test pushdown function: unix_timestamp() for String") {
+  ignore("test pushdown function: unix_timestamp() for String") {
     jdbcUpdate(
       s"""create or replace table $test_table_unix_timestamp (
       | s1_standard string, s2_ddMMyy string, s3_dd_MM_yyyy string,
@@ -142,7 +142,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown function: unix_timestamp() with timestamp/date") {
+  ignore("test pushdown function: unix_timestamp() with timestamp/date") {
     jdbcUpdate(s"create or replace table $test_table_unix_timestamp " +
       s"(d1 date, ntz timestamp_ntz, ltz timestamp_ltz, tz timestamp_tz)")
     jdbcUpdate(s"""insert into $test_table_unix_timestamp values
@@ -191,7 +191,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown function: TimeSub()/TimeAdd()") {
+  ignore("test pushdown function: TimeSub()/TimeAdd()") {
     jdbcUpdate(s"create or replace table $test_table_time_add " +
       s"(d1 date, ntz timestamp_ntz, ltz timestamp_ltz, tz timestamp_tz)")
     jdbcUpdate(s"""insert into $test_table_time_add values
@@ -282,7 +282,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
-  test("test TimeSub/TimeAdd combines with unix_timestamp") {
+  ignore("test TimeSub/TimeAdd combines with unix_timestamp") {
     jdbcUpdate(s"create or replace table $test_table_unix_timestamp (s1 string, s2 string)")
     // dataformat 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\''
     jdbcUpdate(s"insert into $test_table_unix_timestamp values ('2017-12-31T12:12:12Z', '2017.12.31T12:12:12Z')")
