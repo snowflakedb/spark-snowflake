@@ -29,12 +29,10 @@ import org.apache.spark.sql.types._
 class PushdownEnhancement03 extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
   private val test_table_unix_timestamp: String = s"test_table_unix_timestamp_$randomSuffix"
-  private val test_table_time_add: String = s"test_table_time_add_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table_unix_timestamp")
-      jdbcUpdate(s"drop table if exists $test_table_time_add")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -164,97 +162,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ( DATE_PART('epoch_second', ( "SUBQUERY_0"."TZ" ) ) )
          |    AS "SUBQUERY_1_COL_3"
          |FROM ( SELECT * FROM ( $test_table_unix_timestamp )
-         |   AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-         |""".stripMargin,
-      resultDF,
-      expectedResult
-    )
-  }
-
-  test("test pushdown function: TimeSub()/TimeAdd()") {
-    jdbcUpdate(s"create or replace table $test_table_time_add " +
-      s"(d1 date, ntz timestamp_ntz, ltz timestamp_ltz, tz timestamp_tz)")
-    jdbcUpdate(s"""insert into $test_table_time_add values
-                  | ('2017-01-01', '2017-01-01 12:12:12',
-                  | '2017-01-01 12:12:12', '2017-01-01 12:12:12')
-                  | """.stripMargin)
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_time_add)
-      .load()
-
-    val resultDF = tmpDF.select(
-      col("ntz"),
-      col("ntz") + expr("INTERVAL 1 days"),
-      col("ntz") + expr("INTERVAL -1 hours"),
-      col("ntz") - expr("INTERVAL 1 minutes"),
-      col("ntz") - expr("INTERVAL -1 seconds"),
-      col("ltz") - expr("INTERVAL -2 months")
-        + expr("INTERVAL 2 days")
-        - expr("INTERVAL 2 minutes"),
-      col("tz") + expr("INTERVAL 3 months -3 days 3 minutes"),
-      col("tz") - expr("INTERVAL 4 months -4 days -4 seconds"),
-      col("tz") + expr("INTERVAL 5 months -5 days -5 seconds")
-        - expr("INTERVAL 5 months -5 days 6 minutes"),
-      col("tz") + expr("INTERVAL 0 seconds"), // special value 0
-      col("tz") - expr("INTERVAL 0 hours")
-    )
-
-    // resultDF.printSchema()
-    // resultDF.show(truncate = false)
-
-    // The expected result is generated when pushdown is disabled.
-    val expectedResult = Seq(Row(
-      Timestamp.valueOf("2017-01-01 12:12:12"), // origin
-      Timestamp.valueOf("2017-01-02 12:12:12"), // + +1 days
-      Timestamp.valueOf("2017-01-01 11:12:12"), // + -1 hours
-      Timestamp.valueOf("2017-01-01 12:11:12"), // - +1 minutes
-      Timestamp.valueOf("2017-01-01 12:12:13"), // - -1 seconds
-      Timestamp.valueOf("2017-03-03 12:10:12"), // (- -2 months) (+ +2 days) (- +2 minutes)
-      Timestamp.valueOf("2017-03-29 12:15:12"), // + (3 months -3 days 3 minutes)
-      Timestamp.valueOf("2016-09-05 12:12:16"), // - (4 months -4 days -4 seconds)
-      Timestamp.valueOf("2017-01-01 12:06:07"), // + (5 months -5 days -5 seconds)
-                                                // - (5 months -5 days 6 minutes)
-      Timestamp.valueOf("2017-01-01 12:12:12"), // + 0
-      Timestamp.valueOf("2017-01-01 12:12:12")  // - 0
-    ))
-
-    testPushdown(
-      s"""SELECT
-         |  ( "SUBQUERY_0"."NTZ" ) AS "SUBQUERY_1_COL_0" ,
-         |  ( DATEADD ( 'DAY', 1, "SUBQUERY_0"."NTZ" ) )
-         |    AS "SUBQUERY_1_COL_1" ,
-         |  ( DATEADD ( 'MICROSECOND', -3600000000, "SUBQUERY_0"."NTZ" ) )
-         |    AS "SUBQUERY_1_COL_2" ,
-         |  ( DATEADD ( 'MICROSECOND', (0 - (60000000)), "SUBQUERY_0"."NTZ" ) )
-         |    AS "SUBQUERY_1_COL_3" ,
-         |  ( DATEADD ( 'MICROSECOND', (0 - (-1000000)), "SUBQUERY_0"."NTZ" ) )
-         |    AS "SUBQUERY_1_COL_4" ,
-         |  ( DATEADD ( 'MICROSECOND', (0 - (120000000)),
-         |      DATEADD ( 'DAY', 2,
-         |        DATEADD ( 'MONTH', (0 - (-2)), "SUBQUERY_0"."LTZ" ) ) ) )
-         |        AS "SUBQUERY_1_COL_5" ,
-         |  ( DATEADD ( 'MONTH', 3,
-         |      DATEADD ( 'DAY', -3,
-         |        DATEADD ( 'MICROSECOND', 180000000, "SUBQUERY_0"."TZ" ) ) ) )
-         |        AS "SUBQUERY_1_COL_6" ,
-         |  ( DATEADD ( 'MONTH', (0 - (4)),
-         |      DATEADD ( 'DAY', (0 - (-4)),
-         |        DATEADD ( 'MICROSECOND', (0 - (-4000000)), "SUBQUERY_0"."TZ"))))
-         |        AS "SUBQUERY_1_COL_7" ,
-         |  ( DATEADD ( 'MONTH', (0 - (5)),
-         |      DATEADD ( 'DAY', (0 - (-5)),
-         |         DATEADD ( 'MICROSECOND', (0 - (360000000)),
-         |           DATEADD ( 'MONTH', 5,
-         |             DATEADD ( 'DAY', -5,
-         |               DATEADD ( 'MICROSECOND', -5000000,
-         |                 "SUBQUERY_0"."TZ" ) ) ) ) ) ) )
-         |                 AS "SUBQUERY_1_COL_8" ,
-         |  ( "SUBQUERY_0"."TZ" ) AS "SUBQUERY_1_COL_9" ,
-         |  ( "SUBQUERY_0"."TZ" ) AS "SUBQUERY_1_COL_10"
-         |FROM ( SELECT * FROM ( $test_table_time_add )
          |   AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       resultDF,
