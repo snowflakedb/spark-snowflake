@@ -690,6 +690,31 @@ object Parameters {
     def postActions: Array[String] = parameters(PARAM_POSTACTIONS).split(";")
 
     /**
+      * Temporary AWS credentials which are passed to Snowflake. These only need to be supplied by
+      * the user when Hadoop is configured to authenticate to S3 via IAM roles assigned to EC2
+      * instances.
+      */
+    def temporaryAWSCredentials: Option[AWSCredentials] = {
+      for (accessKey <- parameters.get(PARAM_TEMP_KEY_ID);
+           secretAccessKey <- parameters.get(PARAM_TEMP_KEY_SECRET);
+           sessionToken <- parameters.get(PARAM_TEMP_SESSION_TOKEN))
+        yield
+          new BasicSessionCredentials(accessKey, secretAccessKey, sessionToken)
+    }
+
+    /**
+      * SAS Token to be passed to Snowflake to access data in Azure storage.
+      * We currently don't support full storage account key so this has to be
+      * provided if customer would like to load data through their storage
+      * account directly.
+      */
+    def temporaryAzureStorageCredentials
+      : Option[StorageCredentialsSharedAccessSignature] = {
+      for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
+        yield new StorageCredentialsSharedAccessSignature(sas)
+    }
+
+    /**
       * Truncate table when overwriting.
       * Keep the table schema
       */

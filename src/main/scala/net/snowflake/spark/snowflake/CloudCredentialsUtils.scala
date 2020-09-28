@@ -26,9 +26,35 @@ import net.snowflake.client.jdbc.internal.amazonaws.auth.{
   InstanceProfileCredentialsProvider
 }
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SQLContext
 
 private[snowflake] object CloudCredentialsUtils {
+
+  /**
+    * Generates a credentials string for use in Snowflake COPY in-out statements.
+    */
+  def getSnowflakeCredentialsString(
+    sqlContext: SQLContext,
+    params: MergedParameters
+  ): SnowflakeSQLStatement = {
+    params.rootTempDirStorageType match {
+      case FSType.LocalFile =>
+        throw new UnsupportedOperationException(
+          "only supports Azure and S3 stage"
+        )
+      case FSType.Azure =>
+        val creds = getAzureCreds(params)
+        getSnowflakeCredentialsStringForAzure(creds)
+      case FSType.S3 =>
+        val creds = getAWSCreds(sqlContext, params)
+        getSnowflakeCredentialsStringForAWS(creds)
+      case _ =>
+        EmptySnowflakeSQLStatement()
+    }
+  }
+
   def getSnowflakeCredentialsStringForAWS(
     creds: AWSCredentials
   ): SnowflakeSQLStatement = {
@@ -58,6 +84,28 @@ private[snowflake] object CloudCredentialsUtils {
        |    AZURE_SAS_TOKEN='$sasToken'
        |)
        |""".stripMargin.trim) !
+  }
+
+  def getAWSCreds(sqlContext: SQLContext,
+                  params: MergedParameters): AWSCredentials = {
+    if (params.rootTempDirStorageType == FSType.S3) {
+      params.temporaryAWSCredentials.getOrElse(
+        CloudCredentialsUtils
+          .load(params.rootTempDir, sqlContext.sparkContext.hadoopConfiguration)
+      )
+    } else {
+      null
+    }
+  }
+
+  def getAzureCreds(
+    params: MergedParameters
+  ): StorageCredentialsSharedAccessSignature = {
+    if (params.rootTempDirStorageType == FSType.Azure) {
+      params.temporaryAzureStorageCredentials.orNull
+    } else {
+      null
+    }
   }
 
   private def getS3Credentials(uri: URI, conf: Configuration) : (String, String) = {
