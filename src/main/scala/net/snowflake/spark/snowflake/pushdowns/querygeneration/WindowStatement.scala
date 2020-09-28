@@ -37,14 +37,14 @@ private[querygeneration] object WindowStatement {
       // Handle Window Expression. (It is moved from MiscStatement)
       case WindowExpression(func, spec) =>
         func match {
-//          // These functions in Snowflake support a window frame.
-//          // Note that pushdown for these may or may not yet be supported in the connector.
-//          case _: Rank | _: DenseRank | _: PercentRank =>
-//            convertStatement(func, fields) + " OVER " + windowBlock(
-//              spec,
-//              fields,
-//              useWindowFrame = true
-//            )
+          // These functions in Snowflake support a window frame.
+          // Note that pushdown for these may or may not yet be supported in the connector.
+          case _: Rank | _: DenseRank | _: PercentRank =>
+            convertStatement(func, fields) + " OVER " + windowBlock(
+              spec,
+              fields,
+              useWindowFrame = true
+            )
 
           // These do not.
           case _ =>
@@ -56,8 +56,7 @@ private[querygeneration] object WindowStatement {
         }
 
       // Handle supported window function
-//      case _: RowNumber | _: Rank | _: DenseRank =>
-      case _: RowNumber =>
+      case _: RowNumber | _: Rank | _: DenseRank =>
         ConstantString(expr.prettyName.toUpperCase) + "()"
 
       // Until July 21 2020, PercentRank can't be pushdown to snowflake.

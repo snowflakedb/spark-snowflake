@@ -18,10 +18,10 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import java.net.URI
 
-import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement, Utils}
+import net.snowflake.spark.snowflake.Utils
 import org.scalatest.{FunSuite, Matchers}
+import net.snowflake.spark.snowflake.Utils
 import net.snowflake.spark.snowflake.pushdowns.querygeneration._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
   * Unit tests for helper functions
@@ -43,44 +43,6 @@ class PushdownSuite01 extends FunSuite with Matchers {
       "G yyyy-MM-dd HH:mm:ss").isEmpty)
     assert(DateStatement.getSnowflakeTimestampFormat(
       "yyyy-MM-dd'T'HH:mm:ss'Z").isEmpty)
-  }
-
-  private def isEqualSkipWhite(left: String, right: String): Boolean = {
-    left.replaceAll("\\s+", "").equalsIgnoreCase(
-      right.replaceAll("\\s+", "")
-    )
-  }
-
-  test("test DateStatement.generateDateAddStatement") {
-    val childStmt = new SnowflakeSQLStatement() + ConstantString("TEST_COLUMN_1")
-
-    val interval1 = new CalendarInterval(1, 2, 123456)
-    assert(
-      isEqualSkipWhite(
-        DateStatement.generateDateAddStatement(true, interval1, childStmt).toString,
-        "DATEADD ( 'MONTH', (0 - (1)), DATEADD ( 'DAY', (0 - (2)), DATEADD ( 'MICROSECOND', (0 - (123456)), TEST_COLUMN_1 ) ) )"
-      )
-    )
-    assert(
-      isEqualSkipWhite(
-        DateStatement.generateDateAddStatement(false, interval1, childStmt).toString,
-        "DATEADD ( 'MONTH', 1, DATEADD ( 'DAY', 2, DATEADD ( 'MICROSECOND', 123456, TEST_COLUMN_1 ) ) )"
-      )
-    )
-
-    val interval2 = new CalendarInterval(1, 0, 123456)
-    assert(
-      isEqualSkipWhite(
-        DateStatement.generateDateAddStatement(true, interval2, childStmt).toString,
-        "DATEADD ( 'MONTH', (0 - (1)), DATEADD ( 'MICROSECOND', (0 - (123456)), TEST_COLUMN_1 ) )"
-      )
-    )
-    assert(
-      isEqualSkipWhite(
-        DateStatement.generateDateAddStatement(false, interval2, childStmt).toString,
-        "DATEADD ( 'MONTH', 1, DATEADD ( 'MICROSECOND', 123456, TEST_COLUMN_1 ) )"
-      )
-    )
   }
 }
 
