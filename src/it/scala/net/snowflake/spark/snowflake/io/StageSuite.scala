@@ -102,13 +102,12 @@ class StageSuite extends IntegrationSuiteBase {
   }
 
   test("test s3 internal stage functions") {
-    var sfOptionsNoTable: Map[String, String] =
+    val sfOptionsNoTable: Map[String, String] =
       replaceOption(
         connectorOptionsNoTable,
         "sfurl",
         "sfctest0.snowflakecomputing.com"
       )
-    sfOptionsNoTable += ("upload_chunk_size_in_mb" -> "5")
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
     val connection = DefaultJDBCWrapper.getConnector(param)
