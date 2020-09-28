@@ -1439,10 +1439,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
-  // NOTE: To release SC 2.8.2 safer, SNOW-199334 reverts AWS multiple-part
-  // upload enhancement, so this test case is disabled.
-  // When the feature is re-enabled, this test should be re-enabled too.
-  ignore("test upload with AWS multiple parts upload API") {
+  test("test upload with AWS multiple parts upload API") {
     val partitionCount = 1
     val rowCountPerPartition = 1024 * 50
     // It is enough to run this test on AWS for Arrow
