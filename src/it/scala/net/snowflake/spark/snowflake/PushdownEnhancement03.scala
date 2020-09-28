@@ -56,19 +56,13 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
   }
 
   test("test pushdown function: unix_timestamp() for String") {
-    jdbcUpdate(
-      s"""create or replace table $test_table_unix_timestamp (
-      | s1_standard string, s2_ddMMyy string, s3_dd_MM_yyyy string,
-      | s4_yyyyMMdd string, s5_yyMMdd string, s6_MMdd string,
-      | s7_ddMMyyyy string, s8_SSS string, s9_literal1 string,
-      | s10_literal2 string)
-      |""".stripMargin)
+    jdbcUpdate(s"create or replace table $test_table_unix_timestamp " +
+      s"(s1_standard string, s2_ddMMyy string, s3_dd_MM_yyyy string," +
+      s"s4_yyyyMMdd string, s5_yyMMdd string, s6_MMdd string, s7_ddMMyyyy string)")
     // Note: Spark default format is "yyyy-MM-dd HH:mm:ss"
     jdbcUpdate(s"""insert into $test_table_unix_timestamp values
                | ('2017-01-01 12:12:12', '31072020', '31/07/2020',
-               | '20200731', '200731', '0731', '31072020',
-               | '2017/01/30 12:12:12.123', '2017.01.01T12:12:12Z',
-               | 'year: 2012, month: 01, day: 30')
+               | '20200731', '200731', '0731', '31072020')
                | """.stripMargin)
 
     val tmpDF = sparkSession.read
@@ -85,9 +79,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       unix_timestamp(col("s5_yyMMdd"), "yyMMdd"),
       unix_timestamp(col("s6_MMdd"), "MMdd"),
       unix_timestamp(col("s7_ddMMyyyy"), "ddMMyyyy"),
-      unix_timestamp(col("s8_SSS"), "yyyy/MM/dd HH:mm:ss.SSS"),
-      unix_timestamp(col("s9_literal1"), "yyyy.MM.dd'T'HH:mm:ss'Z'"),
-      unix_timestamp(col("s10_literal2"), "'year: 'yyyy', month: 'MM', day: 'dd")
     )
 
     // resultDF.printSchema()
@@ -95,9 +86,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
     // The expected result is generated when pushdown is disabled.
     val expectedResult = Seq(
-      Row(1483272732L, 1596153600L, 1596153600L,
-        1596153600L, 1596153600L, 18230400L, 1596153600L,
-        1485778332L, 1483272732L, 1327881600L
+      Row(1483272732.toLong, 1596153600.toLong, 1596153600.toLong,
+        1596153600.toLong, 1596153600.toLong, 18230400.toLong, 1596153600.toLong
       )
     )
 
@@ -123,17 +113,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |      'MMdd' ) ) ) AS "SUBQUERY_1_COL_5" ,
          |  ( DATE_PART('epoch_second',
          |    TO_TIMESTAMP ( "SUBQUERY_0"."S7_DDMMYYYY" ,
-         |      'ddMMyyyy' ) ) ) AS "SUBQUERY_1_COL_6" ,
-         |  ( DATE_PART('EPOCH_SECOND',
-         |    TO_TIMESTAMP ( "SUBQUERY_0"."S8_SSS" ,
-         |      'yyyy/MM/dd HH:MI:ss.FF3' ) ) ) AS "SUBQUERY_1_COL_7",
-         |  ( DATE_PART('EPOCH_SECOND',
-         |    TO_TIMESTAMP ( "SUBQUERY_0"."S9_LITERAL1" ,
-         |      'yyyy.MM.dd"T"HH:MI:ss"Z"' ) ) ) AS "SUBQUERY_1_COL_8",
-         |  ( DATE_PART('EPOCH_SECOND',
-         |    TO_TIMESTAMP ( "SUBQUERY_0"."S10_LITERAL2" ,
-         |      '"year: "yyyy", month: "MM", day: "dd' ) ) )
-         |        AS "SUBQUERY_1_COL_9"
+         |      'ddMMyyyy' ) ) ) AS "SUBQUERY_1_COL_6"
          |FROM ( SELECT * FROM ( $test_table_unix_timestamp )
          |   AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
@@ -275,66 +255,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ( "SUBQUERY_0"."TZ" ) AS "SUBQUERY_1_COL_9" ,
          |  ( "SUBQUERY_0"."TZ" ) AS "SUBQUERY_1_COL_10"
          |FROM ( SELECT * FROM ( $test_table_time_add )
-         |   AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-         |""".stripMargin,
-      resultDF,
-      expectedResult
-    )
-  }
-
-  test("test TimeSub/TimeAdd combines with unix_timestamp") {
-    jdbcUpdate(s"create or replace table $test_table_unix_timestamp (s1 string, s2 string)")
-    // dataformat 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\''
-    jdbcUpdate(s"insert into $test_table_unix_timestamp values ('2017-12-31T12:12:12Z', '2017.12.31T12:12:12Z')")
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_unix_timestamp)
-      .load()
-
-    tmpDF.createOrReplaceTempView("test_table_unix_timestamp")
-
-    val resultDF = sparkSession.sql(
-      s"""select
-         |  s1,
-         |  CAST(unix_timestamp(s1, "yyyy-MM-dd'T'HH:mm:ss'Z'") AS TIMESTAMP) - interval 4 hours,
-         |  CAST(unix_timestamp(s2, "yyyy.MM.dd'T'HH:mm:ss'Z'") AS TIMESTAMP) + interval 4 minutes,
-         |  CAST(unix_timestamp(s2, "yyyy.MM.dd'T'HH:mm:ssZ") AS TIMESTAMP) + interval 4 seconds
-         | from test_table_unix_timestamp
-         | """.stripMargin
-    )
-
-    // resultDF.printSchema()
-    // resultDF.show(truncate = false)
-
-    // The expected result is generated when pushdown is disabled.
-    val expectedResult = Seq(Row(
-      "2017-12-31T12:12:12Z",
-      Timestamp.valueOf("2017-12-31 08:12:12"), // - 4 hours
-      Timestamp.valueOf("2017-12-31 12:16:12"), // + 4 minutes
-      Timestamp.valueOf("2017-12-31 12:12:16")  // + 4 seconds
-    ))
-
-    testPushdown(
-      s"""SELECT
-         |  ( "SUBQUERY_0"."S1" ) AS "SUBQUERY_1_COL_0" ,
-         |  ( DATEADD ( 'MICROSECOND', (0 - (14400000000)),
-         |    CAST ( DATE_PART('EPOCH_SECOND',
-         |                     TO_TIMESTAMP ("SUBQUERY_0"."S1" ,
-         |                                   'yyyy-MM-dd"T"HH:MI:ss"Z"' )
-         |           ) AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_1" ,
-         |  ( DATEADD ( 'MICROSECOND', 240000000,
-         |    CAST ( DATE_PART('EPOCH_SECOND',
-         |                     TO_TIMESTAMP ("SUBQUERY_0"."S2" ,
-         |                                   'yyyy.MM.dd"T"HH:MI:ss"Z"' )
-         |           ) AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_2",
-         |  ( DATEADD ( 'MICROSECOND', 4000000,
-         |    CAST ( DATE_PART('EPOCH_SECOND',
-         |                     TO_TIMESTAMP ("SUBQUERY_0"."S2" ,
-         |                                   'yyyy.MM.dd"T"HH:MI:ssZ' )
-         |            ) AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_3"
-         |FROM ( SELECT * FROM ( $test_table_unix_timestamp )
          |   AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       resultDF,
