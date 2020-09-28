@@ -56,11 +56,6 @@ object Utils {
 
   val VERSION = "2.8.2"
 
-  // This is the runtime spark version.
-  // It may be different with SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION
-  // which is the compiling spark version.
-  val RUNTIME_SPARK_VERSION = SPARK_VERSION
-
   /**
     * The certified JDBC version to work with this spark connector version.
     */
@@ -587,20 +582,19 @@ object Utils {
   }
 
   // Very simple escaping
-  private[snowflake] def esc(s: String): String = {
+  private def esc(s: String): String = {
     s.replace("\"", "").replace("\\", "")
   }
 
   def getClientInfoString(): String = {
     val snowflakeClientInfo =
       s""" {
-         | "spark.version" : "${esc(Utils.RUNTIME_SPARK_VERSION)}",
+         | "spark.version" : "${esc(SPARK_VERSION)}",
          | "$PROPERTY_NAME_OF_CONNECTOR_VERSION" : "${esc(Utils.VERSION)}",
          | "spark.app.name" : "${esc(sparkAppName)}",
          | "scala.version" : "${esc(scalaVersion)}",
          | "java.version" : "${esc(javaVersion)}",
-         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}",
-         | "spark.version.compile" : "${esc(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION)}"
+         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}"
          |}""".stripMargin
 
     snowflakeClientInfo
@@ -609,7 +603,8 @@ object Utils {
   def getClientInfoJson(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
 
-    SnowflakeTelemetry.addCommonFields(metric)
+    metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
+    metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
     metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
     metric.put(TelemetryClientInfoFields.SCALA_VERSION, esc(scalaVersion))
     metric.put(TelemetryClientInfoFields.JAVA_VERSION, esc(javaVersion))

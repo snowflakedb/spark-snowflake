@@ -161,7 +161,6 @@ class SnowflakeSink(sqlContext: SQLContext,
           APP_NAME,
           (data.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode
         ) // use hashcode, hide app name
-        SnowflakeTelemetry.addCommonFields(metric)
         metric.put(START_TIME, time)
         lastMetricSendTime = time
         val rate = metric.putObject(LOAD_RATE)
@@ -210,7 +209,6 @@ class SnowflakeSink(sqlContext: SQLContext,
       APP_NAME,
       (sqlContext.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode
     )
-    SnowflakeTelemetry.addCommonFields(message)
     message.put(START_TIME, streamingStartTime)
 
     SnowflakeTelemetry.addLog(
@@ -230,7 +228,6 @@ class SnowflakeSink(sqlContext: SQLContext,
       APP_NAME,
       (sqlContext.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode
     )
-    SnowflakeTelemetry.addCommonFields(message)
     message.put(START_TIME, streamingStartTime)
     message.put(END_TIME, endTime)
 
