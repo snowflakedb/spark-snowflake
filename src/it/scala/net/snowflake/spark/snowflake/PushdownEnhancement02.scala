@@ -16,13 +16,17 @@
 
 package net.snowflake.spark.snowflake
 
+import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.IntegerType
+
+import scala.reflect.internal.util.TableDef
 
 // scalastyle:off println
 class PushdownEnhancement02 extends IntegrationSuiteBase {
@@ -507,48 +511,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         .sql(s"select d1, random(100), random() from test_table_number")
         .show()
     }
-  }
-
-  // Test Limit combine with Sort
-  test("test pushdown functions: Limit -> Sort") {
-    jdbcUpdate(s"create or replace table $test_table_number " +
-      s"(d1 decimal(38, 10), f1 float)")
-    jdbcUpdate(s"insert into $test_table_number values " +
-      s"(-1.9, 1.9),  (-1.1, 1.1), (0, 0), (1.1, -1.1), (1.9, -1.9)")
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_number)
-      .load()
-
-    tmpDF.createOrReplaceTempView("test_table_number")
-
-    val resultDF =
-      sparkSession
-        .sql(s"select * " +
-          " from test_table_number")
-      .limit(3)
-      .sort("f1")
-
-    val expectedResult = Seq(
-      Row(BigDecimal(0),  (0).toDouble),
-      Row(BigDecimal(-1.1), (1.1).toDouble),
-      Row(BigDecimal(-1.9), (1.9).toDouble),
-    )
-
-    testPushdown(
-      s"""SELECT * FROM (
-         |  SELECT * FROM (
-         |    SELECT * FROM (
-         |      $test_table_number
-         |    ) AS "SF_CONNECTOR_QUERY_ALIAS"
-         |  ) AS "SUBQUERY_0" LIMIT 3
-         |) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."F1" ) ASC
-         |""".stripMargin,
-      resultDF,
-      expectedResult, false, true
-    )
   }
 
   test("test options: preaction and postaction") {
