@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 
@@ -39,11 +38,6 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     * Indicate whether any snowflake tables are involved in a query plan.
     */
   private var foundSnowflakeRelation = false
-
-  /**
-    * Logger for pushdown processing
-    */
-  private[querygeneration] val log = LoggerFactory.getLogger(getClass)
 
   /** This iterator automatically increments every time it is used,
     * and is for aliasing subqueries.
@@ -95,7 +89,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
       // any snowflake tables in the query plan.
       case e: SnowflakePushdownUnsupportedException => {
         if (foundSnowflakeRelation) {
-          SnowflakeTelemetry.addPushdownFailMessage(e)
+          SnowflakeTelemetry.addPushdownFailMessage(plan, e)
         }
         null
       }
@@ -104,6 +98,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           val stringWriter = new StringWriter
           e.printStackTrace(new PrintWriter(stringWriter))
           SnowflakeTelemetry.addPushdownFailMessage(
+            plan,
             new SnowflakePushdownUnsupportedException(
               e.getMessage,
               s"${e.getClass.toString} @ QueryBuilder.treeRoot",
@@ -160,6 +155,11 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
               AggregateQuery(fields, groups, subQuery, alias.next)
             case Limit(limitExpr, _) =>
               SortLimitQuery(Some(limitExpr), Seq.empty, subQuery, alias.next)
+            case Limit(limitExpr, Sort(orderExpr, true, _)) =>
+              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
+
+            case Sort(orderExpr, true, Limit(limitExpr, _)) =>
+              SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
             case Sort(orderExpr, true, _) =>
               SortLimitQuery(None, orderExpr, subQuery, alias.next)
 

@@ -56,11 +56,6 @@ object Utils {
 
   val VERSION = "2.8.2"
 
-  // This is the runtime spark version.
-  // It may be different with SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION
-  // which is the compiling spark version.
-  val RUNTIME_SPARK_VERSION = SPARK_VERSION
-
   /**
     * The certified JDBC version to work with this spark connector version.
     */
@@ -159,6 +154,75 @@ object Utils {
     */
   def makeTempPath(tempRoot: String): String =
     Utils.joinUrls(tempRoot, UUID.randomUUID().toString)
+
+  /**
+    * Checks whether the S3 bucket for the given UI has an object lifecycle configuration to
+    * ensure cleanup of temporary files. If no applicable configuration is found, this method logs
+    * a helpful warning for the user.
+    */
+  def checkThatBucketHasObjectLifecycleConfiguration(
+    tempDir: String,
+    tempDirStorageType: FSType,
+    s3Client: AmazonS3Client
+  ): Unit = {
+
+    tempDirStorageType match {
+      case FSType.S3 =>
+        try {
+          val s3URI = new AmazonS3URI(Utils.fixS3Url(tempDir))
+          val bucket = s3URI.getBucket
+          val bucketLifecycleConfiguration =
+            s3Client.getBucketLifecycleConfiguration(bucket)
+          val key = Option(s3URI.getKey).getOrElse("")
+          val someRuleMatchesTempDir =
+            bucketLifecycleConfiguration.getRules.asScala.exists { rule =>
+              // Note: this only checks that there is an active rule which matches
+              // the temp directory; it does not actually check that the rule will
+              // delete the files. This check is still better than nothing, though,
+              // and we can always improve it later.
+              rule.getStatus == BucketLifecycleConfiguration.ENABLED && key
+                .startsWith(rule.getPrefix)
+            }
+          if (!someRuleMatchesTempDir) {
+            log.warn(
+              s"The S3 bucket $bucket does not have an object lifecycle configuration to " +
+                "ensure cleanup of temporary files. Consider configuring `tempdir` " +
+                "to point to a bucket with an object lifecycle policy that automatically " +
+                "deletes files after an expiration period. For more information, see " +
+                "https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html"
+            )
+          }
+        } catch {
+          case NonFatal(e) =>
+            log.warn(
+              "An error occurred while trying to read the S3 bucket lifecycle configuration",
+              e
+            )
+        }
+      case _ =>
+        Unit
+    }
+  }
+
+  /**
+    * Given a URI, verify that the Hadoop FileSystem for that URI is not the S3 block FileSystem.
+    * `spark-snowflakedb` cannot use this FileSystem because the files written to it will not be
+    * readable by Snowflake (and vice versa).
+    */
+  def checkFileSystem(uri: URI, hadoopConfig: Configuration): Unit = {
+    val fs = FileSystem.get(uri, hadoopConfig)
+
+    // Note that we do not want to use isInstanceOf here, since we're only interested in detecting
+    // exact matches. We compare the class names as strings in order to avoid introducing a binary
+    // dependency on classes which belong to the `hadoop-aws` JAR, as that artifact is not present
+    // in some environments (such as EMR). See #92 for details.
+    if (fs.getClass.getCanonicalName == "org.apache.hadoop.fs.s3.S3FileSystem") {
+      throw new IllegalArgumentException(
+        "spark-snowflakedb does not support the S3 Block FileSystem. " +
+          "Please reconfigure `tempdir` to use a s3n:// or s3a:// scheme."
+      )
+    }
+  }
 
   // Reads a Map from a file using the format
   //     key = value
@@ -587,20 +651,19 @@ object Utils {
   }
 
   // Very simple escaping
-  private[snowflake] def esc(s: String): String = {
+  private def esc(s: String): String = {
     s.replace("\"", "").replace("\\", "")
   }
 
   def getClientInfoString(): String = {
     val snowflakeClientInfo =
       s""" {
-         | "spark.version" : "${esc(Utils.RUNTIME_SPARK_VERSION)}",
+         | "spark.version" : "${esc(SPARK_VERSION)}",
          | "$PROPERTY_NAME_OF_CONNECTOR_VERSION" : "${esc(Utils.VERSION)}",
          | "spark.app.name" : "${esc(sparkAppName)}",
          | "scala.version" : "${esc(scalaVersion)}",
          | "java.version" : "${esc(javaVersion)}",
-         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}",
-         | "spark.version.compile" : "${esc(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION)}"
+         | "snowflakedb.jdbc.version" : "${esc(jdbcVersion)}"
          |}""".stripMargin
 
     snowflakeClientInfo
@@ -609,7 +672,8 @@ object Utils {
   def getClientInfoJson(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
 
-    SnowflakeTelemetry.addCommonFields(metric)
+    metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
+    metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
     metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
     metric.put(TelemetryClientInfoFields.SCALA_VERSION, esc(scalaVersion))
     metric.put(TelemetryClientInfoFields.JAVA_VERSION, esc(javaVersion))

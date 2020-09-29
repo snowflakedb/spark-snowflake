@@ -116,12 +116,12 @@ class SnowflakePushdownException(message: String)
 class SnowflakeConnectorFeatureNotSupportException(message: String)
   extends Exception(message)
 
-private[snowflake] object SnowflakeFailMessage {
+object SnowflakeFailMessage {
   // Note: don't change the message context except necessary
-  private[snowflake] val FAIL_PUSHDOWN_STATEMENT = "pushdown failed"
-  private[snowflake] val FAIL_PUSHDOWN_GENERATE_QUERY = "pushdown failed in generateQueries"
-  private[snowflake] val FAIL_PUSHDOWN_SET_TO_EXPR = "pushdown failed in setToExpr"
-  private[snowflake] val FAIL_PUSHDOWN_AGGREGATE_EXPRESSION = "pushdown failed for aggregate expression"
+  final val FAIL_PUSHDOWN_STATEMENT = "pushdown failed"
+  final val FAIL_PUSHDOWN_GENERATE_QUERY = "pushdown failed in generateQueries"
+  final val FAIL_PUSHDOWN_SET_TO_EXPR = "pushdown failed in setToExpr"
+  final val FAIL_PUSHDOWN_AGGREGATE_EXPRESSION = "pushdown failed for aggregate expression"
 }
 
 class SnowflakePushdownUnsupportedException(message: String,

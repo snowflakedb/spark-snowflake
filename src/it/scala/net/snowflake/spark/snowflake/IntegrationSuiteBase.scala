@@ -135,15 +135,6 @@ trait IntegrationSuiteBase
     resultOptions
   }
 
-  protected def getRowCount(tableName: String,
-                            sfOptions: Map[String, String] = connectorOptionsNoTable
-                           ): Long = {
-    val rs = Utils.runQuery(sfOptions,
-      s"select count(*) from $tableName")
-    rs.next()
-    rs.getLong(1)
-  }
-
   protected var connectorOptions: Map[String, String] = _
   protected var connectorOptionsNoTable: Map[String, String] = _
 
@@ -228,10 +219,6 @@ trait IntegrationSuiteBase
       .master("local")
       .appName("SnowflakeSourceSuite")
       .config("spark.sql.shuffle.partitions", "6")
-      // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-      // spark 3.0 to support legacy conversion for unix_timestamp().
-      // It may not be necessary for spark 2.X.
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
       .getOrCreate()
   }
 
