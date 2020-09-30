@@ -11,6 +11,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Lower,
   StringLPad,
   StringRPad,
+  StringReverse,
   StringTranslate,
   StringTrim,
   StringTrimLeft,
@@ -21,9 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.{
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringStatement {
-  // ESCAPE CHARACTER for LIKE is supported from Spark 3.0
-  // The default escape character comes from the constructor of Like class.
-  private val DEFAULT_LIKE_ESCAPE_CHAR: Char = '\\'
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -44,7 +42,7 @@ private[querygeneration] object StringStatement {
     Option(expr match {
       case _: Ascii | _: Lower | _: Substring | _: StringLPad | _: StringRPad |
           _: StringTranslate | _: StringTrim | _: StringTrimLeft |
-          _: StringTrimRight | _: Substring | _: Upper | _: Length =>
+          _: StringReverse | _: StringTrimRight | _: Substring | _: Upper | _: Length =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
@@ -57,17 +55,11 @@ private[querygeneration] object StringStatement {
         )
 
       // ESCAPE Char is supported from Spark 3.0
-      case Like(left, right, escapeChar) =>
-        val escapeClause =
-          if (escapeChar == DEFAULT_LIKE_ESCAPE_CHAR) {
-            ""
-          } else {
-            s"ESCAPE '${escapeChar}'"
-          }
+      case Like(left, right) =>
         convertStatement(left, fields) + "LIKE" + convertStatement(
           right,
           fields
-        ) + escapeClause
+        )
 
       case _ => null
     })

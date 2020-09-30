@@ -69,7 +69,7 @@ private[querygeneration] object MiscStatement {
       case InSet(child, hset) =>
         convertStatement(In(child, setToExpr(hset)), fields)
 
-      case MakeDecimal(child, precision, scale, _) =>
+      case MakeDecimal(child, precision, scale) =>
         ConstantString("TO_DECIMAL") + blockStatement(
           blockStatement(
             convertStatement(child, fields) + "/ POW(10," +
