@@ -152,6 +152,10 @@ trait IntegrationSuiteBase
   // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString: String = _
 
+  // Connector options when using a temp schema for testing dataframes. Temp schema is dropped at
+  // the end of tests.
+  protected var connectorOptionsTestTempSchema: Map[String, String] = _
+
   protected var params: MergedParameters = _
 
   protected def getConfigValue(name: String,
@@ -216,6 +220,13 @@ trait IntegrationSuiteBase
         case (key, value) => s"""$key "$value""""
       }
       .mkString(" , ")
+
+    if (getConfigValue("tempTestSchema") != null) {
+      val optionsWithoutSchema = collection.mutable.Map() ++
+        connectorOptionsNoTable.filterKeys(_ != Parameters.PARAM_SF_SCHEMA)
+      optionsWithoutSchema.put(Parameters.PARAM_SF_SCHEMA, getConfigValue("tempTestSchema"))
+      connectorOptionsTestTempSchema = optionsWithoutSchema.toMap
+    }
 
     conn = DefaultJDBCWrapper.getConnector(params)
 
