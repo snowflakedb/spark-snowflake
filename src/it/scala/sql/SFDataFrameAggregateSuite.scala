@@ -1,13 +1,20 @@
 package org.apache.spark.sql
 
+import java.sql.ResultSet
+
+import net.snowflake.client.jdbc.SnowflakeSQLException
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.thundersnow._
+import org.scalatest.Matchers.the
 
 class SFDataFrameAggregateSuite
     extends DataFrameAggregateSuite
-    with SnowflakeTestSessionBase
-    with TSTestData {
+    with SFTestSessionBase
+    with SFQueryTest
+    with SFTestData {
 
-  override def beforeAll(): Unit = super.beforeAll()
+  import testImplicits._
 
   override def spark: SparkSession = getSnowflakeSession()
 

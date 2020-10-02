@@ -1,18 +1,18 @@
 package org.apache.spark.sql.thundersnow
 
-import net.snowflake.spark.snowflake.IntegrationSuiteBase
+import net.snowflake.spark.snowflake.{IntegrationEnv, IntegrationSuiteBase}
 import org.apache.spark.sql.{SQLContext, SQLImplicits, SparkSession}
 
-trait SnowflakeTestSessionBase extends IntegrationSuiteBase {
-  private var _spark: SfTestWrapperSparkSession = null
+trait SFTestSessionBase extends IntegrationEnv {
+  private var _spark: SFTestWrapperSparkSession = null
 
   protected object testSQLImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = _spark.sqlContext
   }
 
-  def createSession(): SfTestWrapperSparkSession = {
+  def createSession(): SFTestWrapperSparkSession = {
     System.setProperty("hadoop.home.dir", "/tmp/hadoop")
-    SfTestWrapperSparkSession(sc, connectorOptionsTestTempSchema)
+    SFTestWrapperSparkSession(sc, connectorOptionsTestTempSchema)
   }
 
   private def initializeSession(): Unit = {
@@ -23,7 +23,7 @@ trait SnowflakeTestSessionBase extends IntegrationSuiteBase {
     }
   }
 
-  def getSnowflakeSession(): SfTestWrapperSparkSession = {
+  def getSnowflakeSession(): SFTestWrapperSparkSession = {
     initializeSession()
     _spark
   }

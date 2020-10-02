@@ -8,7 +8,7 @@ import org.apache.spark.sql.test.SQLTestData._
  * Most test data in SQLTestData invokes RDD API, which is not supported by TS yet.
  * Please override all test data used by TS test suites in this class
  */
-trait TSTestData extends SQLTestData {
+trait SFTestData extends SQLTestData {
 
   import org.apache.spark.sql.test.SQLTestData.CourseSales
 

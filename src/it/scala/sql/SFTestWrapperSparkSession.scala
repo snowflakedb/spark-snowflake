@@ -5,9 +5,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
-import org.apache.spark.sql.thundersnow.WrapperUtils.sparkContext
 
-class SfTestWrapperSparkSession(sc: SparkContext,
+class SFTestWrapperSparkSession(sc: SparkContext,
                                 sfConfigs: Map[String, String]) extends SparkSession(sc) {
 
   val formatName = net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME;
@@ -25,8 +24,8 @@ class SfTestWrapperSparkSession(sc: SparkContext,
   }
 }
 
-object SfTestWrapperSparkSession {
+object SFTestWrapperSparkSession {
 
-  def apply(context: SparkContext, configs: Map[String, String]): SfTestWrapperSparkSession =
-    new SfTestWrapperSparkSession(context, configs)
+  def apply(context: SparkContext, configs: Map[String, String]): SFTestWrapperSparkSession =
+    new SFTestWrapperSparkSession(context, configs)
 }
