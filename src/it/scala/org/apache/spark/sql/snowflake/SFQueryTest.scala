@@ -1,20 +1,16 @@
-package org.apache.spark.sql.thundersnow
+package org.apache.spark.sql.snowflake
 
 import java.sql.Date
 import java.util.TimeZone
 
 import org.apache.spark.sql.QueryTest.{fail, prepareAnswer}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.util.{sideBySide, stackTraceToString}
-import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
 trait SFQueryTest extends QueryTest {
-
-  // override blackList to block unsupported test functions
-  protected def blackList: Seq[String]
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)(
       implicit
@@ -26,25 +22,11 @@ trait SFQueryTest extends QueryTest {
 
   // disable CheckToRDD
   override def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    val analyzedDF =
-      try df
-      catch {
-        case ae: AnalysisException =>
-          if (ae.plan.isDefined) {
-            fail(s"""
-               |Failed to analyze query: $ae
-               |${ae.plan.get}
-               |
-               |${stackTraceToString(ae)}
-               |""".stripMargin)
-          } else {
-            throw ae
-          }
-      }
-
-    // disable check RDD
-    SFQueryTest.checkAnswer(analyzedDF, expectedAnswer, checkToRDD = false)
+    SFQueryTest.checkAnswer(df, expectedAnswer)
   }
+
+  // override blackList to block unsupported test functions
+  protected def blackList: Seq[String]
 }
 
 object SFQueryTest {
@@ -57,7 +39,9 @@ object SFQueryTest {
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r) }
     case (a: Map[_, _], b: Map[_, _]) =>
       a.size == b.size && a.keys.forall { aKey =>
-        b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
+        b.keys
+          .find(bKey => compare(aKey, bKey))
+          .exists(bKey => compare(a(aKey), b(bKey)))
       }
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r) }
@@ -68,32 +52,28 @@ object SFQueryTest {
     // Note this returns 0.0 and -0.0 as same
     case (a: Double, b: Double) => (a - b).abs < 0.0001
     case (a: Float, b: Float) => (a - b).abs < 0.0001
-    case (a: Double, b: java.math.BigDecimal) => (a - b.toString.toDouble).abs < 0.0001
-    case (a: Float, b: java.math.BigDecimal) => (a - b.toString.toFloat).abs < 0.0001
-    case (a: java.math.BigDecimal, b: Double) => (a.toString.toDouble - b).abs < 0.0001
-    case (a: java.math.BigDecimal, b: Float) => (a.toString.toFloat - b).abs < 0.0001
+    case (a: Double, b: java.math.BigDecimal) =>
+      (a - b.toString.toDouble).abs < 0.0001
+    case (a: Float, b: java.math.BigDecimal) =>
+      (a - b.toString.toFloat).abs < 0.0001
+    case (a: java.math.BigDecimal, b: Double) =>
+      (a.toString.toDouble - b).abs < 0.0001
+    case (a: java.math.BigDecimal, b: Float) =>
+      (a.toString.toFloat - b).abs < 0.0001
     case (a: java.math.BigDecimal, b: java.math.BigDecimal) => a.equals(b)
     case (a: Date, b: Date) => a.toString == b.toString
     case (a, b) => a == b
   }
 
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }
 
-  def getErrorMessageInCheckAnswer(
-      df: DataFrame,
-      expectedAnswer: Seq[Row],
-      checkToRDD: Boolean = true): Option[String] = {
+  def getErrorMessageInCheckAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-    if (checkToRDD) {
-      SQLExecution.withSQLConfPropagated(df.sparkSession) {
-        df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
-      }
-    }
 
     val sparkAnswer = try df.collect().toSeq
     catch {

@@ -23,18 +23,14 @@ import java.util.TimeZone
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.io.Source
-import scala.util.Random
-import scala.util.matching.Regex
 
 /**
   * Base class for writing integration tests which run against a real Snowflake cluster.
@@ -147,10 +143,6 @@ trait IntegrationEnv
   // Options encoded as a Spark-sql string - no dbtable
   protected var connectorOptionsString: String = _
 
-  // Connector options when using a temp schema for testing dataframes. Temp schema is dropped at
-  // the end of tests.
-  protected var connectorOptionsTestTempSchema: Map[String, String] = _
-
   protected var params: MergedParameters = _
 
   protected def getConfigValue(name: String,
@@ -169,7 +161,7 @@ trait IntegrationEnv
     * Random suffix appended appended to table and directory names in order to avoid collisions
     * between separate Travis builds.
     */
-  protected val randomSuffix: String = Math.abs(Random.nextLong()).toString
+  protected val randomSuffix: String = Utils.randomSuffix
 
   /**
     * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
@@ -216,18 +208,10 @@ trait IntegrationEnv
       }
       .mkString(" , ")
 
-    if (getConfigValue("tempTestSchema") != null) {
-      val optionsWithoutSchema = collection.mutable.Map() ++
-        connectorOptionsNoTable.filterKeys(_ != Parameters.PARAM_SF_SCHEMA)
-      optionsWithoutSchema.put(Parameters.PARAM_SF_SCHEMA, getConfigValue("tempTestSchema"))
-      connectorOptionsTestTempSchema = optionsWithoutSchema.toMap
-    }
-
     conn = DefaultJDBCWrapper.getConnector(params)
 
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")
-
 
     // Use fewer partitions to make tests faster
     sparkSession = SparkSession.builder

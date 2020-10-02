@@ -1,22 +1,12 @@
 package org.apache.spark.sql
 
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.thundersnow.{SFQueryTest, SFTestSessionBase, SFTestData}
-import org.scalatest.Matchers.the
-
-import scala.reflect.ClassTag
+import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestData, SFTestSessionBase}
 
 class SFDataFrameWindowFunctionsSuite
     extends DataFrameWindowFunctionsSuite
     with SFTestSessionBase
     with SFQueryTest
     with SFTestData {
-
-  import testImplicits._
 
   override def spark: SparkSession = getSnowflakeSession()
 

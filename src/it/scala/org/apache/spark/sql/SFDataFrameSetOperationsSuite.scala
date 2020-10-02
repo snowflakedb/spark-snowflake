@@ -1,17 +1,12 @@
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
-
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import org.apache.spark.sql.functions.{lit, min, rand, sum}
-import org.apache.spark.sql.thundersnow.{SFQueryTest, SFTestSessionBase, SFTestData}
+import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestData, SFTestSessionBase}
 
 class SFDataFrameSetOperationsSuite
     extends DataFrameSetOperationsSuite
     with SFTestSessionBase
     with SFQueryTest
     with SFTestData {
-  import testImplicits._
 
   override def spark: SparkSession = getSnowflakeSession()
 

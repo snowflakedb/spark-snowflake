@@ -1,20 +1,12 @@
 package org.apache.spark.sql
 
-import java.sql.ResultSet
-
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.thundersnow._
-import org.scalatest.Matchers.the
+import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestData, SFTestSessionBase}
 
 class SFDataFrameAggregateSuite
     extends DataFrameAggregateSuite
     with SFTestSessionBase
     with SFQueryTest
     with SFTestData {
-
-  import testImplicits._
 
   override def spark: SparkSession = getSnowflakeSession()
 
@@ -31,6 +23,8 @@ class SFDataFrameAggregateSuite
       // replaced by TS - grouping and grouping_id, replaced AnalysisException by
       // SnowflakeSQLException
       "grouping and grouping_id",
+      // possible failure due to pushdown bug. investigation tracked in SNOW-201486
+      "agg without groups and functions",
       // replaced by TS - count, SF does not support DataFrame.rdd
       "count",
       // replace by TS - stddev, floating point issue

@@ -1,4 +1,4 @@
-package org.apache.spark.sql.thundersnow
+package org.apache.spark.sql.snowflake
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.test.SQLTestData

@@ -17,27 +17,11 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, Timestamp}
-import java.time.{LocalDateTime, ZonedDateTime}
-import java.util.TimeZone
-
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
-  JsonNode,
-  ObjectMapper
-}
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-
-import scala.util.Random
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.slf4j.LoggerFactory
 
-import scala.collection.mutable
-import scala.io.Source
-import scala.collection.JavaConversions._
 import scala.util.matching.Regex
 
 /**

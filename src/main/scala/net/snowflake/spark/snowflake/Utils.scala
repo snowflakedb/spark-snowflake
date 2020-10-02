@@ -39,6 +39,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.LoggerFactory
 
+import scala.util.Random
+
 /**
   * Various arbitrary helper functions
   */
@@ -643,4 +645,10 @@ object Utils {
         println(s"Fail to print result set: ${e.getMessage}")
     }
   }
+
+  /**
+   * Generate random suffixes; useful for use
+   * in generating collision-safe identifiers in tests.
+   */
+  def randomSuffix: String = Math.abs(Random.nextLong()).toString
 }

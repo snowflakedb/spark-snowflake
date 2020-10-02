@@ -1,17 +1,12 @@
 package org.apache.spark.sql
 
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{avg, count, min}
-import org.apache.spark.sql.thundersnow.{SFQueryTest, SFTestSessionBase, SFTestData}
+import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestData, SFTestSessionBase}
 
 class SFDataFrameWindowFramesSuite
     extends DataFrameWindowFramesSuite
     with SFTestSessionBase
     with SFQueryTest
     with SFTestData {
-
-  import testImplicits._
 
   override def spark: SparkSession = getSnowflakeSession()
 

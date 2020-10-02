@@ -1,11 +1,8 @@
 package org.apache.spark.sql
 
-import org.apache.spark.sql.thundersnow.{SFQueryTest, SFTestSessionBase}
+import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestSessionBase}
 
-class SFDataFrameRangeSuite
-    extends DataFrameRangeSuite
-    with SFTestSessionBase
-    with SFQueryTest {
+class SFDataFrameRangeSuite extends DataFrameRangeSuite with SFTestSessionBase with SFQueryTest {
   // replace Spark Utils
   override def spark: SparkSession = getSnowflakeSession()
 
