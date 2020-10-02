@@ -20,26 +20,14 @@
 package net.snowflake.spark.snowflake
 
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.{DataFrame, Row}
-import org.scalactic.source.Position
-import org.scalatest.{FunSuite, Tag}
+import org.apache.spark.sql.{Row, DataFrame}
+import org.scalatest.FunSuite
 
 /**
   * Copy of Spark SQL's `QueryTest` trait.
   */
 trait QueryTest extends FunSuite {
 
-  // override blackList to block unsupported test functions
-  protected def blackList: Seq[String] = {
-    Seq.empty
-  }
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)(
-    implicit
-    pos: Position): Unit = {
-    if (blackList.contains(testName)) {
-    } else super.test(testName, testTags: _*)(testFun)
-  }
   /**
     * Runs the plan and makes sure the answer matches the expected result.
     * @param df the [[DataFrame]] to be executed
