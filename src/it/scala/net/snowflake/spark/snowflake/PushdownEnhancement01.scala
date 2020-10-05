@@ -41,8 +41,6 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_in: String = s"test_table_in_$randomSuffix"
   private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
   private val test_table_cast: String = s"test_table_cast_$randomSuffix"
-  private val test_table_coalesce = s"test_table_coalesce_$randomSuffix"
-  private val test_table_sha2 = s"test_table_sha2_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -61,8 +59,6 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_in")
       jdbcUpdate(s"drop table if exists $test_table_in_set")
       jdbcUpdate(s"drop table if exists $test_table_cast")
-      jdbcUpdate(s"drop table if exists $test_table_coalesce")
-      jdbcUpdate(s"drop table if exists $test_table_sha2")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -659,126 +655,6 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  '2014-01-0116:00:00.000','2014-01-0116:00:10.000','2014-01-0116:00:09.000','2014-01-0116:00:03.000',
          |  '2014-01-0116:00:06.000','2014-01-0116:00:01.000','2014-01-0116:00:02.000','2014-01-0116:00:11.000')
          |)
-         |""".stripMargin,
-      result,
-      expectedResult
-    )
-  }
-
-  ignore("test pushdown COALESCE()") {
-    jdbcUpdate(s"create or replace table $test_table_coalesce(c1 int, c2 int, c3 int)")
-    jdbcUpdate(s"""insert into $test_table_coalesce values
-               | (1,    2,    3   ),
-               | (null, 2,    3   ),
-               | (null, null, 3   ),
-               | (null, null, null),
-               | (1,    null, 3   ),
-               | (1,    null, null),
-               | (1,    2,    null)
-               |""".stripMargin)
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_coalesce)
-      .load()
-
-    tmpDF.createOrReplaceTempView("test_table_coalesce")
-
-    val result = sparkSession.sql(
-      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
-
-    result.show(truncate=false)
-
-    val expectedResult = Seq(
-      Row(1, 2, 3, 1, 1, -6),
-      Row(null, 2, 3, 2, 6, -6),
-      Row(null, null, 3, 3, 6, -6),
-      Row(null, null, null, null, 6, -6),
-      Row(1, null, 3, 1, 1, -6),
-      Row(1, null, null, 1, 1, -6),
-      Row(1, 2, null, 1, 1, -6)
-    )
-
-    testPushdown(
-      s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
-         |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
-         |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
-         |( COALESCE( "SUBQUERY_0"."C1" ,
-         |            "SUBQUERY_0"."C2" ,
-         |            "SUBQUERY_0"."C3" ) ) AS "SUBQUERY_1_COL_3" ,
-         | ( COALESCE ( "SUBQUERY_0"."C1" , 6 ) ) AS "SUBQUERY_1_COL_4" ,
-         | ( COALESCE ( -6 , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_5"
-         | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
-         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-         |""".stripMargin,
-      result,
-      expectedResult
-    )
-  }
-
-  ignore("test pushdown SHA2()") {
-    // Test Sha2() on String/Binary because it only supports these two types.
-    // We have confirmed Spark doesn't support sha2 on
-    // Decimal/Double/date/Timestamp/Boolean
-    jdbcUpdate(s"create or replace table $test_table_sha2 " +
-      s"(c1 string,  c2 binary)")
-    jdbcUpdate(s"""insert into $test_table_sha2
-                  | ( select 'snowflake', hex_encode('snowflake')
-                  |   union
-                  |   select 'spark', hex_encode('spark')
-                  | )
-                  |""".stripMargin)
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_sha2)
-      .load()
-
-    tmpDF.createOrReplaceTempView("test_table_sha2")
-
-    val result = sparkSession.sql(
-      s"""SELECT c1, SHA2(c1, 256), SHA2(c1, 512),
-        | SHA2(c2, 256), SHA2(c2, 512),
-        | SHA2("spark+snowflake", 256) from test_table_sha2
-        """.stripMargin)
-
-//    result.printSchema()
-//    result.show(truncate=false)
-
-    // The expected result is generated when pushdown is disabled.
-    val expectedResult = Seq(
-      Row("snowflake",
-        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73", // pragma: allowlist secret
-        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f", // pragma: allowlist secret
-        "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73", // pragma: allowlist secret
-        "889dc400e68a3a0cae7b544ef23c734b45514bcc403b5a4433eebcefd387084320b9209845f76c93a120e380a6aba146c4e03c1ae8bcb3acbfa00d709e3bde4f", // pragma: allowlist secret
-        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def"), // pragma: allowlist secret
-      Row("spark",
-        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73", // pragma: allowlist secret
-        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff", // pragma: allowlist secret
-        "92f473809e5979a7da2b7f52771b3a9e3d7105dcb0f24ae333c5bf279b863d73", // pragma: allowlist secret
-        "ba6f19274b9b168078f7898e3b29af732e9d165312f1c4a55a550d906002572d913b64139bd89b4b01e59b0ece016bbb8a580ece282dfafb73b5ea54266b08ff", // pragma: allowlist secret
-        "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def") // pragma: allowlist secret
-    )
-
-    val const_sha_value = "4ae6ea560ab9fb79b8b2ab39986f581608d6e1e9606eb02309dbc320e0c71def" // pragma: allowlist secret
-    testPushdown(
-      s"""SELECT
-         |  ("SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
-         |  (SHA2 ( CAST ( "SUBQUERY_0"."C1"  AS STRING ) , 256 ) )
-         |      AS "SUBQUERY_1_COL_1" ,
-         |  (SHA2 ( CAST ( "SUBQUERY_0"."C1"  AS STRING ) , 512 ) )
-         |      AS "SUBQUERY_1_COL_2" ,
-         |  (SHA2 ( HEX_DECODE_STRING (CAST("SUBQUERY_0"."C2" AS STRING)),256))
-         |      AS "SUBQUERY_1_COL_3" ,
-         |  (SHA2 ( HEX_DECODE_STRING (CAST("SUBQUERY_0"."C2" AS STRING)),512))
-         |      AS "SUBQUERY_1_COL_4" ,
-         |  ( '$const_sha_value' )
-         |      AS "SUBQUERY_1_COL_5"
-         |FROM ( SELECT * FROM ( $test_table_sha2 )
-         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       result,
       expectedResult

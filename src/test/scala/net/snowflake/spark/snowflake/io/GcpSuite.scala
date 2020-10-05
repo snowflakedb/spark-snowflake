@@ -43,29 +43,4 @@ class GcpSuite extends FunSuite {
     }
   }
 
-  // By default, IT uses S3UploadOutputStream.write(b, off, len) only.
-  // This test is used to test S3UploadOutputStream.write(int)
-  test(" S3UploadOutputStream.write") {
-    val storageInfo = Map(
-      StorageInfo.BUCKET_NAME -> "test_bucket",
-      StorageInfo.PREFIX -> "test_prefix"
-    )
-    val s3UploadStream = new S3UploadOutputStream(
-      null, null, storageInfo, 128, "file_name")
-
-    // write some bytes
-    for (i <- 1 to 128) {
-      s3UploadStream.write(i)
-    }
-    val dataInBuffer = s3UploadStream.getDataInBufferForTest()
-    // Verify value to be correct
-    for (i <- 1 to 128) {
-      assert(dataInBuffer(i - 1) == i.toByte)
-    }
-    // write one more byte will cause exception because 's3Client' is not set
-    assertThrows[Exception]({
-      s3UploadStream.write(100)
-    })
-  }
-
 }

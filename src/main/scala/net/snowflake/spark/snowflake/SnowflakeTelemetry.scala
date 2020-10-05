@@ -4,6 +4,7 @@ import java.io.{PrintWriter, StringWriter}
 import java.sql.Connection
 
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
@@ -17,15 +18,6 @@ object SnowflakeTelemetry {
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
-  // Setter and Getter are introduced for testing purpose
-  private[snowflake] def set_logs(newLogs: List[(ObjectNode, Long)]): Unit = {
-    this.synchronized {
-      logs = newLogs
-    }
-  }
-  private[snowflake] def get_logs(): List[(ObjectNode, Long)] = {
-    logs
-  }
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 
@@ -39,16 +31,6 @@ object SnowflakeTelemetry {
     val service: TelemetryService = TelemetryService.getInstance
     service.setDeployment(TelemetryService.TELEMETRY_SERVER_DEPLOYMENT.PROD)
     service
-  }
-
-  // Add common fields for the telemetry message.
-  private[snowflake] def addCommonFields(metric: ObjectNode): Unit = {
-    metric.put(TelemetryCommonFields.SPARK_CONNECTOR_VERSION,
-      Utils.esc(Utils.VERSION))
-    metric.put(TelemetryCommonFields.RUNTIME_SPARK_VERSION,
-      Utils.esc(Utils.RUNTIME_SPARK_VERSION))
-    metric.put(TelemetryCommonFields.COMPILE_SPARK_VERSION,
-      Utils.esc(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION))
   }
 
   // The client info telemetry message is only sent one time.
@@ -97,7 +79,7 @@ object SnowflakeTelemetry {
                        exception: Option[Exception]): Unit =
   {
     val metric: ObjectNode = mapper.createObjectNode()
-    addCommonFields(metric)
+    metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
     metric.put(TelemetryOOBFields.SFURL, sfurl)
     metric.put(TelemetryOOBFields.SENDER_CLASS, senderClass)
     metric.put(TelemetryOOBFields.OPERATION, operation)
@@ -133,12 +115,7 @@ object SnowflakeTelemetry {
       .withTag(TelemetryOOBTags.CTX_PROTOCAL, "https")
       .withTag(TelemetryOOBTags.CTX_USER, "fake_spark_user")
       // Below are spark connector specific tags
-      .withTag(TelemetryOOBTags.SPARK_CONNECTOR_VERSION,
-        Utils.esc(Utils.VERSION))
-      .withTag(TelemetryOOBTags.RUNTIME_SPARK_VERSION,
-        Utils.esc(Utils.RUNTIME_SPARK_VERSION))
-      .withTag(TelemetryOOBTags.COMPILE_SPARK_VERSION,
-        Utils.esc(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION))
+      .withTag(TelemetryOOBTags.SPARK_CONNECTOR_VERSION, Utils.VERSION)
       .withTag(TelemetryOOBTags.SENDER_CLASS_NAME, senderClass)
       .withTag(TelemetryOOBTags.OPERATION, operation)
       .build
@@ -171,9 +148,11 @@ object SnowflakeTelemetry {
     * Put the pushdown failure telemetry message to internal cache.
     * The message will be sent later in batch.
     *
+    * @param plan The logical plan to include the unsupported operations
     * @param exception The pushdown unsupported exception
     */
-  def addPushdownFailMessage(exception: SnowflakePushdownUnsupportedException)
+  def addPushdownFailMessage(plan: LogicalPlan,
+                             exception: SnowflakePushdownUnsupportedException)
   : Unit = {
     logger.info(
       s"""Pushdown fails because of operation: ${exception.unsupportedOperation}
@@ -187,7 +166,7 @@ object SnowflakeTelemetry {
     }
 
     val metric: ObjectNode = mapper.createObjectNode()
-    SnowflakeTelemetry.addCommonFields(metric)
+    metric.put(TelemetryPushdownFailFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
     metric.put(TelemetryPushdownFailFields.UNSUPPORTED_OPERATION, exception.unsupportedOperation)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_MESSAGE, exception.getMessage)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_DETAILS, exception.details)
@@ -202,7 +181,6 @@ object SnowflakeTelemetry {
 
 object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
-  // SPARK_PLAN is sent from 2.4.1 to 2.8.0
   val SPARK_PLAN: Value = Value("spark_plan")
   val SPARK_STREAMING: Value = Value("spark_streaming")
   val SPARK_STREAMING_START: Value = Value("spark_streaming_start")
@@ -212,17 +190,11 @@ object TelemetryTypes extends Enumeration {
   val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
 }
 
-// All spark connector telemetry messages have these fields.
-object TelemetryCommonFields {
+object TelemetryClientInfoFields {
   // Spark connector version
   val SPARK_CONNECTOR_VERSION: String = "spark_connector_version"
-  // Runtime Spark Version
-  val RUNTIME_SPARK_VERSION: String = "spark_version"
-  // Compile Spark Version
-  val COMPILE_SPARK_VERSION: String = "compile_spark_version"
-}
-
-object TelemetryClientInfoFields {
+  // Spark Version
+  val SPARK_VERSION: String = "spark_version"
   // Application name
   val APPLICATION_NAME: String = "application_name"
   // Scala version
@@ -238,6 +210,8 @@ object TelemetryClientInfoFields {
 }
 
 object TelemetryPushdownFailFields {
+  // Spark connector version
+  val SPARK_CONNECTOR_VERSION: String = "spark_connector_version"
   // The unsupported operation for pushdown
   val UNSUPPORTED_OPERATION: String = "operation"
   // The error message for the exception
@@ -247,6 +221,8 @@ object TelemetryPushdownFailFields {
 }
 
 object TelemetryOOBFields {
+  // Spark connector version
+  val SPARK_CONNECTOR_VERSION: String = "spark_connector_version"
   // The URL to include snowflake account name
   val SFURL: String = "sfurl"
   // The class to send the message
@@ -266,11 +242,7 @@ object TelemetryOOBFields {
 
 object TelemetryOOBTags {
   // Spark connector version
-  val SPARK_CONNECTOR_VERSION = TelemetryCommonFields.SPARK_CONNECTOR_VERSION
-  // Runtime Spark Version
-  val RUNTIME_SPARK_VERSION = TelemetryCommonFields.RUNTIME_SPARK_VERSION
-  // Compile Spark Version
-  val COMPILE_SPARK_VERSION = TelemetryCommonFields.COMPILE_SPARK_VERSION
+  val SPARK_CONNECTOR_VERSION: String = "spark_connector_version"
   // The class to send the message
   val SENDER_CLASS_NAME: String = "spark_connector_sender"
   // The operation such as read, write

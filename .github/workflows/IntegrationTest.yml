@@ -16,10 +16,9 @@ jobs:
        spark_version: [ '3.0.0' ]
        use_copy_unload: [ 'true', 'false' ]
        # The test on gcp hangs because of the timeout when downloading data
-       # chunks from GCP. It is not a Spark Connector issue because the test
-       # runs well on Travis and local. SNOW-177689 is filed to investigate it
-       # Before that, the test on GCP is disabled to avoid blocking others.
-       # cloud_provider: [ 'aws', 'azure', 'gcp' ]
+       # chunks from GCP. It is not a Spark Connector issue because the test	
+       # runs well on Travis and local. SNOW-177689 is filed to investigate it	
+       # Before that, the test on GCP is disabled to avoid blocking others.	
        cloud_provider: [ 'aws', 'azure' ]
 
     steps:

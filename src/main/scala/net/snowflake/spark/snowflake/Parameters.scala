@@ -114,16 +114,6 @@ object Parameters {
   val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam(
     "jdbc_query_result_format"
   )
-  // When uploading large partition to AWS, AWS multipart upload API is used
-  // to save peak memory. This parameter is used to configure the chunk size.
-  val PARAM_UPLOAD_CHUNK_SIZE_IN_MB: String = knownParam(
-    "upload_chunk_size_in_mb"
-  )
-  val MIN_UPLOAD_CHUNK_SIZE_IN_BYTE = 5 * 1024 * 1024
-  // Internal option to disable to use AWS multipart upload API.
-  val PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD: String = knownParam(
-    "use_aws_multiple_parts_upload"
-  )
 
   // Proxy related info
   val PARAM_USE_PROXY: String = knownParam("use_proxy")
@@ -186,9 +176,7 @@ object Parameters {
     PARAM_USE_PROXY -> "false",
     PARAM_EXPECTED_PARTITION_COUNT -> "1000",
     PARAM_MAX_RETRY_COUNT -> "10",
-    PARAM_USE_EXPONENTIAL_BACKOFF -> "off",
-    PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "8",
-    PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD -> "true"
+    PARAM_USE_EXPONENTIAL_BACKOFF -> "off"
   )
 
   /**
@@ -702,6 +690,31 @@ object Parameters {
     def postActions: Array[String] = parameters(PARAM_POSTACTIONS).split(";")
 
     /**
+      * Temporary AWS credentials which are passed to Snowflake. These only need to be supplied by
+      * the user when Hadoop is configured to authenticate to S3 via IAM roles assigned to EC2
+      * instances.
+      */
+    def temporaryAWSCredentials: Option[AWSCredentials] = {
+      for (accessKey <- parameters.get(PARAM_TEMP_KEY_ID);
+           secretAccessKey <- parameters.get(PARAM_TEMP_KEY_SECRET);
+           sessionToken <- parameters.get(PARAM_TEMP_SESSION_TOKEN))
+        yield
+          new BasicSessionCredentials(accessKey, secretAccessKey, sessionToken)
+    }
+
+    /**
+      * SAS Token to be passed to Snowflake to access data in Azure storage.
+      * We currently don't support full storage account key so this has to be
+      * provided if customer would like to load data through their storage
+      * account directly.
+      */
+    def temporaryAzureStorageCredentials
+      : Option[StorageCredentialsSharedAccessSignature] = {
+      for (sas <- parameters.get(PARAM_TEMP_SAS_TOKEN))
+        yield new StorageCredentialsSharedAccessSignature(sas)
+    }
+
+    /**
       * Truncate table when overwriting.
       * Keep the table schema
       */
@@ -734,29 +747,10 @@ object Parameters {
       } catch {
         case _: Exception =>
           throw new IllegalArgumentException(
-            s"Input value for $PARAM_EXPECTED_PARTITION_SIZE_IN_MB is invalid"
+            "Input expected partition size is invalid"
           )
       }
     }
-
-    def uploadChunkSize: Int = {
-      try {
-        val chunkSize =
-          parameters(PARAM_UPLOAD_CHUNK_SIZE_IN_MB).toInt * 1024 * 1024
-        if (chunkSize < MIN_UPLOAD_CHUNK_SIZE_IN_BYTE) {
-          throw new Exception(s"valid part size must be from 5M to 5G")
-        }
-        chunkSize
-      } catch {
-        case _: Exception =>
-          throw new IllegalArgumentException(
-            s"Input value for $PARAM_UPLOAD_CHUNK_SIZE_IN_MB is invalid. " +
-            "It must be an integer value to be greater than or equal to 5."
-          )
-      }
-    }
-    def useAwsMultiplePartsUpload: Boolean =
-      isTrue(parameters(PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD))
 
     /**
       * Snowflake time output format

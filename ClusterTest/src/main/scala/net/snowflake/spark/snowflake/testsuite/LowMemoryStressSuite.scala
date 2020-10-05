@@ -76,17 +76,6 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
     // Convert RDD to DataFrame
     val df = sparkSession.createDataFrame(testRDD, schema)
 
-    // Write to snowflake
-    df.write
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(TestUtils.sfOptionsNoTable)
-      .option("dbtable", test_big_partition)
-      .mode(SaveMode.Overwrite)
-      .save()
-
-    log.info(
-      s"""Finished the first multi-part upload test ======================""".stripMargin)
-
     var noOOMError = true
     try {
       // Write to snowflake with multi-part feature off
@@ -94,7 +83,6 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
         .format(TestUtils.SNOWFLAKE_NAME)
         .options(TestUtils.sfOptionsNoTable)
         .option("dbtable", test_big_partition)
-        .option(Parameters.PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD, "off")
         .mode(SaveMode.Overwrite)
         .save()
     }
@@ -117,7 +105,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
       connection
         .createStatement()
-        .execute(s"drop table $test_big_partition")
+        .execute(s"drop table if exists $test_big_partition")
       connection.close()
     }
   }
