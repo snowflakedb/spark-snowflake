@@ -161,7 +161,7 @@ trait IntegrationEnv
     * Random suffix appended appended to table and directory names in order to avoid collisions
     * between separate Travis builds.
     */
-  protected val randomSuffix: String = Utils.randomSuffix
+  protected val randomSuffix: String = TestUtils.randomSuffix
 
   /**
     * Spark Context with Hadoop file overridden to point at our local test data file for this suite,

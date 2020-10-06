@@ -23,6 +23,8 @@ import java.util.Calendar
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
+import scala.util.Random
+
 /**
   * Helpers for Snowflake tests that require common mocking
   */
@@ -193,4 +195,10 @@ object TestUtils {
 
     str.toString()
   }
+
+  /**
+   * Generate random suffixes; useful for use
+   * in generating collision-safe identifiers in tests.
+   */
+  def randomSuffix: String = Math.abs(Random.nextLong()).toString
 }
