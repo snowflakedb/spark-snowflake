@@ -25,12 +25,15 @@ object SnowflakeTelemetry {
 
   private[snowflake] var output: ObjectNode = _
 
-  // This is used to send OOB telemetry without connection
-  private lazy val oobTelemetryService: TelemetryService = {
-    TelemetryService.enable()
-    val service: TelemetryService = TelemetryService.getInstance
-    service.setDeployment(TelemetryService.TELEMETRY_SERVER_DEPLOYMENT.PROD)
-    service
+  // This is used to send OOB telemetry without connection.
+  // TelemetryService.getInstance returns a thread local instance
+  // and TelemetryService internally may use TelemetryService.getInstance
+  // to get instance and use it directly. So it doesn't work to cache
+  // a TelemetryService object as a singleton in SnowflakeTelemetry.
+  private def getOobTelemetryService(): TelemetryService = {
+      val service = TelemetryService.getInstance
+      service.setDeployment(TelemetryService.TELEMETRY_SERVER_DEPLOYMENT.PROD)
+      service
   }
 
   // The client info telemetry message is only sent one time.
@@ -100,7 +103,13 @@ object SnowflakeTelemetry {
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, "NA")
     }
 
-    oobTelemetryService
+    // The constructor of TelemetryEvent.LogBuilder uses
+    // TelemetryService.getInstance to retrieve the thread safe instance
+    // and use it. So getOobTelemetryService() needs to be called before
+    // creating the LogBuilder object to make sure TelemetryService has
+    // been setup.
+    TelemetryService.enable()
+    val oobTelemetryService = getOobTelemetryService()
     val logBuilder: TelemetryEvent.LogBuilder = new TelemetryEvent.LogBuilder
     val log: TelemetryEvent = logBuilder
       .withName(s"${TELEMETRY_OOB_NAME_PREFIX}_${operation}_$senderClass")
