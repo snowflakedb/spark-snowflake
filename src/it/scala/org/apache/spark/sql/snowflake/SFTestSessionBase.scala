@@ -1,12 +1,22 @@
 package org.apache.spark.sql.snowflake
 
 import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters, Utils}
-import org.apache.spark.sql.{SQLContext, SQLImplicits, SparkSession}
+import org.apache.spark.sql.{DatasetHolder, Encoder, SQLContext, SQLImplicits, SparkSession}
+
+import scala.language.implicitConversions
 
 trait SFTestSessionBase extends IntegrationEnv {
   private var _spark: SFTestWrapperSparkSession = null
   private var tempSchema: String = _
   private var optionsTestTempSchema: Map[String, String] = _
+
+  protected object SFTestImplicits extends SQLImplicits {
+    override def _sqlContext: SQLContext = null
+
+    override implicit def localSeqToDatasetHolder[T: Encoder](data: Seq[T]): DatasetHolder[T] = {
+      SFDatasetHolder(data, getSnowflakeSession())
+    }
+  }
 
   def getSnowflakeSession(): SFTestWrapperSparkSession = {
     initializeSession()

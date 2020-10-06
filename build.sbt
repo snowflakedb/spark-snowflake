@@ -63,7 +63,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "tests",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "tests",
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 
