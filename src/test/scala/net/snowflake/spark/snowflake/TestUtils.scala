@@ -23,8 +23,6 @@ import java.util.Calendar
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
-import scala.util.Random
-
 /**
   * Helpers for Snowflake tests that require common mocking
   */
