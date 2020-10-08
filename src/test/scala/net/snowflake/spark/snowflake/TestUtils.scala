@@ -195,10 +195,4 @@ object TestUtils {
 
     str.toString()
   }
-
-  /**
-   * Generate random suffixes; useful for use
-   * in generating collision-safe identifiers in tests.
-   */
-  def randomSuffix: String = Math.abs(Random.nextLong()).toString
 }

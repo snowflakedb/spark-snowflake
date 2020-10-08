@@ -5,6 +5,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Random
 
 class SFTestWrapperSparkSession(sc: SparkContext, sfConfigs: Map[String, String])
     extends SparkSession(sc) {
@@ -16,7 +17,7 @@ class SFTestWrapperSparkSession(sc: SparkContext, sfConfigs: Map[String, String]
     // Write this DataFrame to Snowflake, in effect testing the connector's write-out
     // code path, and then read it back as a Snowflake DataFrame. This uses
     // the temporary schema defined in the run properties, tempTestSchema
-    val tableName = s"tempTestTable_${TestUtils.randomSuffix}"
+    val tableName = s"tempTestTable_${Math.abs(Random.nextLong()).toString}"
 
     origDF.write
       .format(Utils.SNOWFLAKE_SOURCE_SHORT_NAME)

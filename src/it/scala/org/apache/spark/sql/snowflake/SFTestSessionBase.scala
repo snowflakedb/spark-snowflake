@@ -3,6 +3,8 @@ package org.apache.spark.sql.snowflake
 import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters, TestUtils}
 import org.apache.spark.sql.{SQLContext, SQLImplicits, SparkSession}
 
+import scala.util.Random
+
 trait SFTestSessionBase extends IntegrationEnv {
   private var _spark: SFTestWrapperSparkSession = null
   private var tempSchema: String = _
@@ -30,7 +32,7 @@ trait SFTestSessionBase extends IntegrationEnv {
     super.beforeAll()
     // connectorOptionsTestTempSchema should have the temp schema replacing
     // sfSchema
-    tempSchema = s"testTempSchema_${TestUtils.randomSuffix}"
+    tempSchema = s"testTempSchema_${Math.abs(Random.nextLong()).toString}"
     val optionsWithoutSchema = collection.mutable.Map() ++
       connectorOptionsNoTable.filterKeys(_ != Parameters.PARAM_SF_SCHEMA)
 
