@@ -25,6 +25,9 @@ object SnowflakeTelemetry {
 
   private[snowflake] var output: ObjectNode = _
 
+  // Enable OOB (out-of-band) telemetry message service
+  TelemetryService.enable()
+
   // This is used to send OOB telemetry without connection.
   // TelemetryService.getInstance returns a thread local instance
   // and TelemetryService internally may use TelemetryService.getInstance
@@ -108,7 +111,6 @@ object SnowflakeTelemetry {
     // and use it. So getOobTelemetryService() needs to be called before
     // creating the LogBuilder object to make sure TelemetryService has
     // been setup.
-    TelemetryService.enable()
     val oobTelemetryService = getOobTelemetryService()
     val logBuilder: TelemetryEvent.LogBuilder = new TelemetryEvent.LogBuilder
     val log: TelemetryEvent = logBuilder
