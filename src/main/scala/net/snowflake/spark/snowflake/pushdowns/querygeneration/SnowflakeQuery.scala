@@ -212,7 +212,9 @@ case class AggregateQuery(columns: Seq[NamedExpression],
       ConstantString("GROUP BY") +
         mkStatement(groups.map(expressionToStatement), ",")
     } else {
-      EmptySnowflakeSQLStatement()
+      // SNOW-201486: Insert a limit 1 to ensure that only one row returns if there
+      // are no grouping expressions
+      ConstantString("LIMIT 1").toStatement
     }
 }
 
