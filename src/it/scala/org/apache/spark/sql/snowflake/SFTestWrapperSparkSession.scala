@@ -1,6 +1,6 @@
 package org.apache.spark.sql.snowflake
 
-import net.snowflake.spark.snowflake.{TestUtils, Utils}
+import net.snowflake.spark.snowflake.Utils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Encoder, SparkSession}
 
@@ -9,6 +9,14 @@ import scala.util.Random
 
 class SFTestWrapperSparkSession(sc: SparkContext, sfConfigs: Map[String, String])
     extends SparkSession(sc) {
+
+  def seqToDF[T: Encoder](data: Seq[T]): DataFrame = {
+    createSnowflakeDFFromSparkDF(super.createDataset(data).toDF())
+  }
+
+  def seqToDF[T: Encoder](data: Seq[T], colNames: String*): DataFrame = {
+    createSnowflakeDFFromSparkDF(super.createDataset(data).toDF(colNames: _*))
+  }
 
   private def createSnowflakeDFFromSparkDF(df: DataFrame): DataFrame = {
     // Write this DataFrame to Snowflake, in effect testing the connector's write-out
@@ -25,14 +33,6 @@ class SFTestWrapperSparkSession(sc: SparkContext, sfConfigs: Map[String, String]
       .options(sfConfigs)
       .option("dbtable", tableName)
       .load()
-  }
-
-  def seqToDF[T: Encoder](data: Seq[T]): DataFrame = {
-    createSnowflakeDFFromSparkDF(super.createDataset(data).toDF())
-  }
-
-  def seqToDF[T: Encoder](data: Seq[T], colNames: String*): DataFrame = {
-    createSnowflakeDFFromSparkDF(super.createDataset(data).toDF(colNames: _*))
   }
 
   override def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {

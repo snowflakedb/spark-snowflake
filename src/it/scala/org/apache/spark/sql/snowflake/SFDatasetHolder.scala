@@ -18,12 +18,12 @@
 package org.apache.spark.sql.snowflake
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{DataFrame, DatasetHolder, Encoder}
+import org.apache.spark.sql.{DataFrame, Encoder}
 
 @Stable
-case class SFDatasetHolder[T: Encoder]  (
+case class SFDatasetHolder[T: Encoder](
     private val data: Seq[T],
-    private val sfSession: SFTestWrapperSparkSession) extends DatasetHolder[T](null) {
-  override def toDF(): DataFrame = sfSession.seqToDF(data)
-  override def toDF(colNames: String*): DataFrame = sfSession.seqToDF(data)
+    private val sfSession: SFTestWrapperSparkSession) {
+  def toDF(): DataFrame = sfSession.seqToDF(data)
+  def toDF(colNames: String*): DataFrame = sfSession.seqToDF(data, colNames: _*)
 }
