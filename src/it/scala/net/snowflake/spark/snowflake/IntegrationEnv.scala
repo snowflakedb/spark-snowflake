@@ -1,6 +1,6 @@
 /*
- * Copyright 2015-2016 Snowflake Computing
- * Copyright 2015 Databricks
+ * Copyright 2020 Snowflake Computing
+ * Copyright 2020 Databricks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.io.Source
+import scala.util.Random
 
 /**
   * Base class for writing integration tests which run against a real Snowflake cluster.
@@ -161,7 +162,7 @@ trait IntegrationEnv
     * Random suffix appended appended to table and directory names in order to avoid collisions
     * between separate Travis builds.
     */
-  protected val randomSuffix: String = Utils.randomSuffix
+  protected val randomSuffix: String = Math.abs(Random.nextLong()).toString
 
   /**
     * Spark Context with Hadoop file overridden to point at our local test data file for this suite,

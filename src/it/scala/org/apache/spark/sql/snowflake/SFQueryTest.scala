@@ -3,7 +3,8 @@ package org.apache.spark.sql.snowflake
 import java.sql.Date
 import java.util.TimeZone
 
-import org.apache.spark.sql.QueryTest.{fail, prepareAnswer}
+import org.apache.spark.sql.QueryTest.prepareAnswer
+import org.scalatest.Assertions.fail
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
