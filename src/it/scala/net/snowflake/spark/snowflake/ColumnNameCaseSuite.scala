@@ -138,7 +138,7 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
       s"""
          |SELECT ( COUNT ( 1 ) ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
          |( SELECT * FROM ( $table3 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-         | "SUBQUERY_0" GROUP BY "SUBQUERY_0"."col" ) AS "SUBQUERY_1"
+         | "SUBQUERY_0" GROUP BY "SUBQUERY_0"."col" ) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.replaceAll("\\s", "")
 
     assert(Utils.getLastSelect.replaceAll("\\s", "").equals(result))

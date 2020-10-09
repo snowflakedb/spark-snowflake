@@ -235,7 +235,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |(to_decimal((sum((cast("subquery_0"."c2"asdecimal(5,0))
          |*pow(10,0)))/pow(10,0)),15,0))as"subquery_1_col_1"
          |FROM ( SELECT * FROM ( $test_table_decimal ) AS
-         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" """.stripMargin,
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" limit 1""".stripMargin,
       result,
       expectedResult
     )
