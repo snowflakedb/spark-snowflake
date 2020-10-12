@@ -23,8 +23,6 @@ class SFDataFrameAggregateSuite
       // replaced by TS - grouping and grouping_id, replaced AnalysisException by
       // SnowflakeSQLException
       "grouping and grouping_id",
-      // possible failure due to pushdown bug. investigation tracked in SNOW-201486
-      "agg without groups and functions",
       // replaced by TS - count, SF does not support DataFrame.rdd
       "count",
       // replace by TS - stddev, floating point issue
