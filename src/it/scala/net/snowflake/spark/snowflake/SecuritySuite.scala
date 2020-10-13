@@ -14,7 +14,6 @@ class SecuritySuite extends IntegrationSuiteBase {
   // The TEST_LOG_FILE_NAME needs to be configured in TEST_LOG4J_PROPERTY
   private val TEST_LOG_FILE_NAME = "spark_connector.log"
   private val TEST_LOG4J_PROPERTY = "src/it/resources/log4j_file.properties"
-  private val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
   private val log = LoggerFactory.getLogger(getClass)
 
   // Add some options for default for testing.
@@ -111,12 +110,6 @@ class SecuritySuite extends IntegrationSuiteBase {
       super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
-  }
-
-  private def reconfigureLogFile(propertyFileName: String): Unit = {
-    // Load the log properties for the security test to output more info
-    val log4jfile = new File(propertyFileName)
-    PropertyConfigurator.configure(log4jfile.getAbsolutePath)
   }
 
   private def searchInLogFile(regex: String): Boolean = {
