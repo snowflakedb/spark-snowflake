@@ -10,6 +10,7 @@ trait SFTestSessionBase extends IntegrationEnv {
   private var _spark: SFTestWrapperSparkSession = null
   private var tempSchema: String = _
   private var optionsTestTempSchema: Map[String, String] = _
+  private val PORTED_TEST_LOG4J_PROPERTY = "src/it/resources/ported_test_log4j.properties"
 
   def getSnowflakeSession(): SFTestWrapperSparkSession = {
     initializeSession()
@@ -31,6 +32,8 @@ trait SFTestSessionBase extends IntegrationEnv {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    // Run ported test in WARN level to avoid large log volume
+    reconfigureLogFile(PORTED_TEST_LOG4J_PROPERTY)
     // connectorOptionsTestTempSchema should have the temp schema replacing
     // sfSchema
     tempSchema = s"testTempSchema_${Math.abs(Random.nextLong()).toString}"
@@ -46,6 +49,8 @@ trait SFTestSessionBase extends IntegrationEnv {
 
   override def afterAll(): Unit = {
     try {
+      // Reset test log level to default.
+      reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
       if (_spark != null) {
         try {
           _spark.sessionState.catalog.reset()

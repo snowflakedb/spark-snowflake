@@ -17,12 +17,14 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.File
 import java.sql.{Connection, Timestamp}
 import java.time.{LocalDateTime, ZonedDateTime}
 import java.util.TimeZone
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
@@ -49,6 +51,14 @@ trait IntegrationEnv
   private final val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   protected final val MISSING_PARAM_ERROR =
     "Missing required configuration value: "
+
+  protected val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
+
+  protected def reconfigureLogFile(propertyFileName: String): Unit = {
+    // Load the log properties for the security test to output more info
+    val log4jfile = new File(propertyFileName)
+    PropertyConfigurator.configure(log4jfile.getAbsolutePath)
+  }
 
   // Some integration tests are for large Data, it needs long time to run.
   // But when the test suite is run on travis, there are job time limitation.
