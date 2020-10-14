@@ -1,8 +1,9 @@
 package org.apache.spark.sql.snowflake
 
-import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters, TestUtils}
-import org.apache.spark.sql.{SQLContext, SQLImplicits, SparkSession}
+import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters}
+import org.apache.spark.sql.SparkSession
 
+import scala.language.implicitConversions
 import scala.util.Random
 
 trait SFTestSessionBase extends IntegrationEnv {
@@ -65,7 +66,5 @@ trait SFTestSessionBase extends IntegrationEnv {
     }
   }
 
-  protected object testSQLImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = _spark.sqlContext
-  }
+  protected object SFTestImplicits extends SnowflakeSQLImplicits(getSnowflakeSession()) {}
 }
