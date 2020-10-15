@@ -19,31 +19,24 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{
-  Connection,
-  DriverManager,
-  PreparedStatement,
-  ResultSet,
-  ResultSetMetaData,
-  SQLException,
-  Statement
-}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
-
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration.Duration
-import scala.util.Try
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
+import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
-import DefaultJDBCWrapper.DataBaseOperations
-import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
+
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 /**
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
@@ -715,9 +708,9 @@ private[snowflake] class SnowflakeSQLStatement(
     bindVariableEnabled: Boolean
   )(implicit conn: Connection): ResultSet =
     if (bindVariableEnabled) executeWithBindVariable(conn)
-    else executeWithoutBindVaribale(conn)
+    else executeWithoutBindVariable(conn)
 
-  private def executeWithoutBindVaribale(conn: Connection): ResultSet = {
+  private def executeWithoutBindVariable(conn: Connection): ResultSet = {
     val sql = list.reverse
     val query = sql
       .foldLeft(new StringBuilder) {
@@ -767,23 +760,47 @@ private[snowflake] class SnowflakeSQLStatement(
       case (element, index) =>
         element match {
           case ele: StringVariable =>
-            statement.setString(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setString(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.VARCHAR)
           case ele: Identifier =>
-            statement.setString(index + 1, ele.variable)
+              statement.setString(index + 1, ele.variable.get)
           case ele: IntVariable =>
-            statement.setInt(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setInt(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.INTEGER)
           case ele: LongVariable =>
-            statement.setLong(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setLong(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.BIGINT)
           case ele: ShortVariable =>
-            statement.setShort(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setShort(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.SMALLINT)
           case ele: FloatVariable =>
-            statement.setFloat(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setFloat(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.FLOAT)
           case ele: DoubleVariable =>
-            statement.setDouble(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setDouble(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.DOUBLE)
           case ele: BooleanVariable =>
-            statement.setBoolean(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setBoolean(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.BOOLEAN)
           case ele: ByteVariable =>
-            statement.setByte(index + 1, ele.variable)
+            if (ele.variable.isDefined)
+              statement.setByte(index + 1, ele.variable.get)
+            else
+              statement.setNull(index + 1, java.sql.Types.TINYINT)
           case _ =>
             throw new IllegalArgumentException(
               "Unexpected Element Type: " + element.getClass.getName
@@ -852,6 +869,16 @@ private[snowflake] object EmptySnowflakeSQLStatement {
   def apply(): SnowflakeSQLStatement = new SnowflakeSQLStatement()
 }
 
+private[snowflake] object ConstantStringVal {
+  def apply(l: Any): StatementElement = {
+    if (l == null || l.toString == "null") {
+      ConstantString("NULL")
+    } else {
+      ConstantString(l.toString)
+    }
+  }
+}
+
 private[snowflake] sealed trait StatementElement {
 
   val value: String
@@ -890,39 +917,40 @@ private[snowflake] sealed trait VariableElement[T] extends StatementElement {
 
   override val isVariable: Int = 1
 
-  val variable: T
+  val variable: Option[T]
 
-  override def sql: String = variable.toString
+  override def sql: String = if (variable.isDefined) variable.get.toString else "NULL"
 
 }
 
-private[snowflake] case class Identifier(override val variable: String)
-    extends VariableElement[String] {
+private[snowflake] case class Identifier(name: String)
+  extends VariableElement[String] {
+  override val variable = Some(name)
   override val value: String = "identifier(?)"
 }
 
-private[snowflake] case class StringVariable(override val variable: String)
-    extends VariableElement[String] {
+private[snowflake] case class StringVariable(override val variable: Option[String])
+  extends VariableElement[String] {
   override def sql: String = s"""'$variable'"""
 }
 
-private[snowflake] case class IntVariable(override val variable: Int)
-    extends VariableElement[Int]
+private[snowflake] case class IntVariable(override val variable: Option[Int])
+  extends VariableElement[Int]
 
-private[snowflake] case class LongVariable(override val variable: Long)
-    extends VariableElement[Long]
+private[snowflake] case class LongVariable(override val variable: Option[Long])
+  extends VariableElement[Long]
 
-private[snowflake] case class ShortVariable(override val variable: Short)
-    extends VariableElement[Short]
+private[snowflake] case class ShortVariable(override val variable: Option[Short])
+  extends VariableElement[Short]
 
-private[snowflake] case class FloatVariable(override val variable: Float)
-    extends VariableElement[Float]
+private[snowflake] case class FloatVariable(override val variable: Option[Float])
+  extends VariableElement[Float]
 
-private[snowflake] case class DoubleVariable(override val variable: Double)
-    extends VariableElement[Double]
+private[snowflake] case class DoubleVariable(override val variable: Option[Double])
+  extends VariableElement[Double]
 
-private[snowflake] case class BooleanVariable(override val variable: Boolean)
-    extends VariableElement[Boolean]
+private[snowflake] case class BooleanVariable(override val variable: Option[Boolean])
+  extends VariableElement[Boolean]
 
-private[snowflake] case class ByteVariable(override val variable: Byte)
-    extends VariableElement[Byte]
+private[snowflake] case class ByteVariable(override val variable: Option[Byte])
+  extends VariableElement[Byte]
