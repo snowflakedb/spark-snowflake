@@ -184,73 +184,73 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
   }
 
   // SNOW-205533: disabled temporarily because test fails. Investigate pushdown bug
-//  test("function date_add") {
-//    val st1 = "2015-06-01 12:34:56"
-//    val st2 = "2015-06-02 12:34:56"
-//    val t1 = Timestamp.valueOf(st1)
-//    val t2 = Timestamp.valueOf(st2)
-//    val s1 = "2015-06-01"
-//    val s2 = "2015-06-02"
-//    val d1 = Date.valueOf(s1)
-//    val d2 = Date.valueOf(s2)
-//    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
-//    checkAnswer(
-//      df.select(date_add(col("d"), 1)),
-//      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
-//    checkAnswer(
-//      df.select(date_add(col("t"), 3)),
-//      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
-//    checkAnswer(
-//      df.select(date_add(col("s"), 5)),
-//      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
-//    checkAnswer(
-//      df.select(date_add(col("ss"), 7)),
-//      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
-//
-//    checkAnswer(
-//      df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
-//      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
-//
-//    checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
-//    checkAnswer(
-//      df.selectExpr("""DATE_ADD(d, 1)"""),
-//      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
-//  }
+  test("function date_add") {
+    val st1 = "2015-06-01 12:34:56"
+    val st2 = "2015-06-02 12:34:56"
+    val t1 = Timestamp.valueOf(st1)
+    val t2 = Timestamp.valueOf(st2)
+    val s1 = "2015-06-01"
+    val s2 = "2015-06-02"
+    val d1 = Date.valueOf(s1)
+    val d2 = Date.valueOf(s2)
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
+    checkAnswer(
+      df.select(date_add(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.select(date_add(col("t"), 3)),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df.select(date_add(col("s"), 5)),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
+    checkAnswer(
+      df.select(date_add(col("ss"), 7)),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
+
+    checkAnswer(
+      df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+
+    checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_ADD(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+  }
 
   // SNOW-205533: disabled temporarily because test fails. Investigate pushdown bug
-//  test("function date_sub") {
-//    val st1 = "2015-06-01 12:34:56"
-//    val st2 = "2015-06-02 12:34:56"
-//    val t1 = Timestamp.valueOf(st1)
-//    val t2 = Timestamp.valueOf(st2)
-//    val s1 = "2015-06-01"
-//    val s2 = "2015-06-02"
-//    val d1 = Date.valueOf(s1)
-//    val d2 = Date.valueOf(s2)
-//    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
-//    checkAnswer(
-//      df.select(date_sub(col("d"), 1)),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//    checkAnswer(
-//      df.select(date_sub(col("t"), 1)),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//    checkAnswer(
-//      df.select(date_sub(col("s"), 1)),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//    checkAnswer(
-//      df.select(date_sub(col("ss"), 1)),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//    checkAnswer(df.select(date_sub(lit(null), 1)).limit(1), Row(null))
-//
-//    checkAnswer(
-//      df.withColumn("x", lit(1)).select(date_sub(col("d"), col("x"))),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//
-//    checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
-//    checkAnswer(
-//      df.selectExpr("""DATE_SUB(d, 1)"""),
-//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
-//  }
+  test("function date_sub") {
+    val st1 = "2015-06-01 12:34:56"
+    val st2 = "2015-06-02 12:34:56"
+    val t1 = Timestamp.valueOf(st1)
+    val t2 = Timestamp.valueOf(st2)
+    val s1 = "2015-06-01"
+    val s2 = "2015-06-02"
+    val d1 = Date.valueOf(s1)
+    val d2 = Date.valueOf(s2)
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
+    checkAnswer(
+      df.select(date_sub(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("t"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("s"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("ss"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(df.select(date_sub(lit(null), 1)).limit(1), Row(null))
+
+    checkAnswer(
+      df.withColumn("x", lit(1)).select(date_sub(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+
+    checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_SUB(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+  }
 
   test("time_add") {
     val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
