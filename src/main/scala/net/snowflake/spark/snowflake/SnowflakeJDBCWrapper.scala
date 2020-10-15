@@ -931,7 +931,7 @@ private[snowflake] case class Identifier(name: String)
 
 private[snowflake] case class StringVariable(override val variable: Option[String])
   extends VariableElement[String] {
-  override def sql: String = s"""'$variable'"""
+  override def sql: String = if (variable.isDefined) s"""'${variable.get}'""" else "NULL"
 }
 
 private[snowflake] case class IntVariable(override val variable: Option[Int])
