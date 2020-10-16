@@ -370,7 +370,7 @@ case class UnionQuery(children: Seq[LogicalPlan],
   override val helper: QueryHelper =
     QueryHelper(
       children = queries,
-      outputAttributes = Some(queries.head.helper.output),
+      outputAttributes = None,
       alias = alias
     )
 
