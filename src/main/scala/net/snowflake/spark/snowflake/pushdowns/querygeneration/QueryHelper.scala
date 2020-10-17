@@ -31,13 +31,26 @@ private[querygeneration] case class QueryHelper(
   outputAttributes: Option[Seq[Attribute]],
   alias: String,
   conjunctionStatement: SnowflakeSQLStatement = EmptySnowflakeSQLStatement(),
-  fields: Option[Seq[Attribute]] = None
+  fields: Option[Seq[Attribute]] = None,
+  // For some query clauses we may override the outputAttributes, but will
+  // need a different set of resolvable attributes to be visible to the parent
+  // query clause, e.g., in UnionQuery
+  visibleAttributeOverride: Option[Seq[Attribute]] = None
 ) {
 
   val colSet: Seq[Attribute] =
     if (fields.isEmpty) {
       children.foldLeft(Seq.empty[Attribute])(
-        (x, y) => x ++ y.helper.outputWithQualifier
+        (x, y) => {
+          val attrs =
+            if (y.helper.visibleAttributeOverride.isEmpty) {
+              y.helper.outputWithQualifier
+            } else {
+              y.helper.visibleAttributeOverride.get
+            }
+
+          x ++ attrs
+        }
       )
     } else {
       fields.get

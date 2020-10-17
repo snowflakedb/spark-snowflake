@@ -1,13 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Cast,
-  Expression,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -370,8 +364,15 @@ case class UnionQuery(children: Seq[LogicalPlan],
   override val helper: QueryHelper =
     QueryHelper(
       children = queries,
-      outputAttributes = None,
-      alias = alias
+      outputAttributes = Some(queries.head.helper.output),
+      alias = alias,
+      visibleAttributeOverride =
+        Some(queries.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output).map(
+          a =>
+            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+              a.exprId,
+              Seq[String](alias)
+            )))
     )
 
   override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {
