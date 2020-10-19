@@ -17,7 +17,7 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, ResultSet, Timestamp}
 import java.util.Calendar
 
 import org.apache.spark.sql.Row
@@ -143,6 +143,27 @@ object TestUtils {
     */
   def toDate(year: Int, zeroBasedMonth: Int, date: Int): Date = {
     new Date(toTimestamp(year, zeroBasedMonth, date, 0, 0, 0, 0).getTime)
+  }
+
+  /** Compare two JDBC ResultSets for equivalence */
+  def compareResultSets(rs1: ResultSet, rs2: ResultSet): Boolean = {
+    val colCount = rs1.getMetaData.getColumnCount
+    assert(colCount == rs2.getMetaData.getColumnCount)
+    var col = 1
+
+    while (rs1.next && rs2.next) {
+      while (col <= colCount) {
+        val res1 = rs1.getObject(col)
+        val res2 = rs2.getObject(col)
+        // Check values
+        if (!(res1 == res2)) return false
+        // rs1 and rs2 must reach last row in the same iteration
+        if (rs1.isLast != rs2.isLast) return false
+        col += 1
+      }
+    }
+
+    true
   }
 
   /** This takes a query in the shape produced by QueryBuilder and

@@ -871,7 +871,7 @@ private[snowflake] object EmptySnowflakeSQLStatement {
 
 private[snowflake] object ConstantStringVal {
   def apply(l: Any): StatementElement = {
-    if (l == null || l.toString == "null") {
+    if (l == null || l.toString.toLowerCase == "null") {
       ConstantString("NULL")
     } else {
       ConstantString(l.toString)

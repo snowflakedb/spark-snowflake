@@ -83,7 +83,6 @@ private[snowflake] object FilterPushdown {
             case _ => ConstantStringVal(value) !
           }
       }
-
     }
 
     // Builds an escaped value, based on the value itself

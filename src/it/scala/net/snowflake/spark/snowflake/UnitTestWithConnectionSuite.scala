@@ -131,5 +131,64 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("test SnowflakeSQLStatement: simple count") {
+    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    try {
+
+      val stmt =
+        ConstantString("SELECT") + ConstantString("count(*)") + "FROM" +
+          ConstantString(test_table_large_result)
+
+      val rs1 = stmt.execute(true)(connection)
+
+      assert(rs1.next())
+      assert(rs1.getInt(1).equals(LARGE_TABLE_ROW_COUNT))
+    } finally {
+      connection.close()
+    }
+  }
+
+  test("test SnowflakeSQLStatement: filter clause with prepared statement") {
+    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    try {
+      val stmt =
+        ConstantString("SELECT") + ConstantString("int_c") + "FROM" +
+          ConstantString(test_table_large_result) + "WHERE" + "int_c <" +
+          IntVariable(Some(5))
+
+      val rs1 = stmt.execute(true)(connection)
+
+      val jdbcWrapper = new JDBCWrapper
+      val rs2 = jdbcWrapper.executePreparedQueryInterruptibly(connection,
+        s"select int_c from $test_table_large_result where int_c < 5")
+
+      assert(rs1.next())
+      assert(rs2.next())
+      assert(rs1.getInt(1).equals(rs2.getInt(1)))
+
+    } finally {
+      connection.close()
+    }
+  }
+
+  test("test SnowflakeSQLStatement: null variables") {
+    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    try {
+      val stmt =
+        ConstantString("SELECT") + StringVariable(None) + "FROM" +
+          ConstantString(test_table_large_result)
+
+      val rs1 = stmt.execute(true)(connection)
+
+      val jdbcWrapper = new JDBCWrapper
+      val rs2 = jdbcWrapper.executePreparedQueryInterruptibly(connection,
+        s"select null from $test_table_large_result")
+
+      assert(TestUtils.compareResultSets(rs1, rs2))
+
+    } finally {
+      connection.close()
+    }
+  }
+  // scalastyle:on println
 }
-// scalastyle:on println
