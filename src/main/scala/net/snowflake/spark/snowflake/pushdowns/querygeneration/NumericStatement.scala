@@ -89,7 +89,7 @@ private[querygeneration] object NumericStatement {
 
       case Rand(seed) =>
         ConstantString("RANDOM") + blockStatement(
-          LongVariable(seed.asInstanceOf[Long]) !
+          LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
         )
       case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
