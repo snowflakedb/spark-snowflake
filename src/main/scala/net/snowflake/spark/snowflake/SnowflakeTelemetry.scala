@@ -82,7 +82,7 @@ object SnowflakeTelemetry {
                        success: Boolean,
                        useProxy: Boolean,
                        queryID: Option[String],
-                       errorThrow: Option[Throwable]): Unit =
+                       throwable: Option[Throwable]): Unit =
   {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
@@ -94,11 +94,11 @@ object SnowflakeTelemetry {
     metric.put(TelemetryOOBFields.SUCCESS, success)
     metric.put(TelemetryOOBFields.USE_PROXY, useProxy)
     metric.put(TelemetryOOBFields.QUERY_ID, queryID.getOrElse("NA"))
-    if (errorThrow.isDefined) {
-      metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, errorThrow.get.getClass.toString)
-      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, errorThrow.get.getMessage)
+    if (throwable.isDefined) {
+      metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, throwable.get.getClass.toString)
+      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
       val stringWriter = new StringWriter
-      errorThrow.get.printStackTrace(new PrintWriter(stringWriter))
+      throwable.get.printStackTrace(new PrintWriter(stringWriter))
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
     } else {
       metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, "NA")
@@ -194,7 +194,7 @@ object SnowflakeTelemetry {
                                          queryId: String,
                                          queryStatus: String,
                                          elapse: Long,
-                                         errorThrow: Option[Throwable],
+                                         throwable: Option[Throwable],
                                          details: String
                                          ): Unit = {
     val metric: ObjectNode = mapper.createObjectNode()
@@ -204,12 +204,12 @@ object SnowflakeTelemetry {
     metric.put(TelemetryQueryStatusFields.QUERY_ID, queryId)
     metric.put(TelemetryQueryStatusFields.QUERY_STATUS, queryStatus)
     metric.put(TelemetryQueryStatusFields.ELAPSED_TIME, elapse)
-    if (errorThrow.isDefined) {
+    if (throwable.isDefined) {
       metric.put(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME,
-        errorThrow.get.getClass.toString)
-      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, errorThrow.get.getMessage)
+        throwable.get.getClass.toString)
+      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
       val stringWriter = new StringWriter
-      errorThrow.get.printStackTrace(new PrintWriter(stringWriter))
+      throwable.get.printStackTrace(new PrintWriter(stringWriter))
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
     }
     metric.put(TelemetryQueryStatusFields.DETAILS, details)
@@ -249,7 +249,7 @@ object TelemetryQueryStatusFields {
   // Query statement
   val QUERY: String = "query"
   // query ID if available
-  val QUERY_ID: String = "queryid"
+  val QUERY_ID: String = "query_id"
   // Query status: fail vs success
   val QUERY_STATUS: String = "status"
   // query execution time

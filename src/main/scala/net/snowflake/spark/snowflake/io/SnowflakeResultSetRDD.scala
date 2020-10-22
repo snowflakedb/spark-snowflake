@@ -174,7 +174,7 @@ case class ResultIterator[T: ClassTag](
           success = false,
           useProxy = proxyInfo.isDefined,
           queryID = Some(queryID),
-          errorThrow = Some(th))
+          throwable = Some(th))
         // Re-throw the exception
         throw th
       }

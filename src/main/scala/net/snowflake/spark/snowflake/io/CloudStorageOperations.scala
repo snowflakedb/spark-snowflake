@@ -778,7 +778,7 @@ sealed trait CloudStorage {
                                     maxRetryCount: Int): InputStream = {
     // download the file with retry and backoff and then consume.
     var retryCount = 0
-    var error: Option[Throwable] = None
+    var throwable: Option[Throwable] = None
     var downloadDone = false
     var inputStream: InputStream = null
 
@@ -822,7 +822,7 @@ sealed trait CloudStorage {
       } catch {
         // Find problem to download the file, sleep some time and retry.
         case th: Throwable => {
-          error = Some(th)
+          throwable = Some(th)
           retryCount = retryCount + 1
           val sleepTime = retrySleepTimeInMS(retryCount)
           val stringWriter = new StringWriter
@@ -853,20 +853,20 @@ sealed trait CloudStorage {
         downloadDone,
         proxyInfo.isDefined,
         None,
-        error)
+        throwable)
     }
 
     if (downloadDone) {
       inputStream
     } else {
       // Fail to download data after retry
-      val errorMessage = error.get.getMessage
+      val errorMessage = throwable.get.getMessage
       CloudStorageOperations.log.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
            | after retry $retryCount times is [ $errorMessage ]
            |""".stripMargin.filter(_ >= ' ')
       )
-      throw error.get
+      throw throwable.get
     }
   }
 
