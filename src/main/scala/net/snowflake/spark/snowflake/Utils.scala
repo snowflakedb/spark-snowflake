@@ -703,8 +703,8 @@ object Utils {
         println(sb.toString())
       }
     } catch {
-      case e: Exception =>
-        println(s"Fail to print result set: ${e.getMessage}")
+      case th: Throwable =>
+        println(s"Fail to print result set: ${th.getMessage}")
     }
   }
 }

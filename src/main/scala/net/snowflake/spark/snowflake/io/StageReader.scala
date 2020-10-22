@@ -36,13 +36,33 @@ private[snowflake] object StageReader {
 
     val prefix = Random.alphanumeric take 10 mkString ""
 
-    val res = buildUnloadStatement(
+    val copyStatement = buildUnloadStatement(
       params,
       statement,
       s"@$stage/$prefix/",
       compressFormat,
       format
-    ).execute(params.bindVariableEnabled)(conn)
+    )
+
+    val startTime = System.currentTimeMillis()
+    val res = try {
+      copyStatement.execute(params.bindVariableEnabled)(conn)
+    } catch {
+      case th: Throwable => {
+        // send telemetry message
+        SnowflakeTelemetry.sendQueryStatus(
+          conn,
+          TelemetryConstValues.OPERATION_READ,
+          copyStatement.toString,
+          copyStatement.getLastQueryID(),
+          TelemetryConstValues.STATUS_FAIL,
+          System.currentTimeMillis() - startTime,
+          Some(th),
+          "Hit exception when reading with COPY INTO LOCATION")
+        // Re-throw the exception
+        throw th
+      }
+    }
 
     // Verify it's the expected format
     val sch = res.getMetaData

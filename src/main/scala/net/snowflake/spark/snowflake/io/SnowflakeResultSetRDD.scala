@@ -10,7 +10,8 @@ import net.snowflake.spark.snowflake.{
   Conversions,
   ProxyInfo,
   SnowflakeConnectorException,
-  SnowflakeTelemetry
+  SnowflakeTelemetry,
+  TelemetryConstValues
 }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -100,20 +101,20 @@ case class ResultIterator[T: ClassTag](
           .build()
       )
     } catch {
-      case e: Exception => {
+      case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
           this.getClass.getSimpleName,
-          operation = "read",
+          operation = TelemetryConstValues.OPERATION_READ,
           retryCount = 0,
           maxRetryCount = 0,
           success = false,
           proxyInfo.isDefined,
           Some(queryID),
-          Some(e))
+          Some(th))
         // Re-throw the exception
-        throw e
+        throw th
       }
     }
   }
@@ -162,20 +163,20 @@ case class ResultIterator[T: ClassTag](
         false
       }
     } catch {
-      case e: Exception => {
+      case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
           this.getClass.getSimpleName,
-          operation = "read",
+          operation = TelemetryConstValues.OPERATION_READ,
           retryCount = 0,
           maxRetryCount = 0,
           success = false,
           useProxy = proxyInfo.isDefined,
           queryID = Some(queryID),
-          exception = Some(e))
+          errorThrow = Some(th))
         // Re-throw the exception
-        throw e
+        throw th
       }
     }
   }

@@ -187,7 +187,24 @@ private[snowflake] case class SnowflakeRelation(
     Utils.setLastSelect(statement.toString)
 
     val startTime = System.currentTimeMillis()
-    val resultSet = statement.execute(bindVariableEnabled = false)(conn)
+    val resultSet = try {
+      statement.execute(bindVariableEnabled = false)(conn)
+    } catch {
+      case th: Throwable => {
+        // send telemetry message
+        SnowflakeTelemetry.sendQueryStatus(
+          conn,
+          TelemetryConstValues.OPERATION_READ,
+          statement.toString,
+          statement.getLastQueryID(),
+          TelemetryConstValues.STATUS_FAIL,
+          System.currentTimeMillis() - startTime,
+          Some(th),
+          "Hit exception when reading with arrow format")
+        // Re-throw the exception
+        throw th
+      }
+    }
     val queryID = resultSet.asInstanceOf[SnowflakeResultSet].getQueryID
     val endTime = System.currentTimeMillis()
 
@@ -214,14 +231,14 @@ private[snowflake] case class SnowflakeRelation(
         "Negative test to raise error when driver closes a result set"
       )
     } catch {
-      case e: Exception => {
+      case th: Throwable => {
         val stringWriter = new StringWriter
-        e.printStackTrace(new PrintWriter(stringWriter))
+        th.printStackTrace(new PrintWriter(stringWriter))
         log.warn(
           s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
              | Fail to close the original ResultSet, but it
              | is not necessary anymore, so regard it as warning.
-             | ${e.getClass().getCanonicalName}; ${e.getMessage}
+             | ${th.getClass().getCanonicalName}; ${th.getMessage}
              | ${stringWriter.toString}
              |""".stripMargin.filter(_ >= ' ')
         )
