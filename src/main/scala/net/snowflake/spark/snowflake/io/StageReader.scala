@@ -18,7 +18,7 @@ private[snowflake] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
-  private val OUTPUT_BYTES: String = "output_bytes"
+  private val OUTPUT_BYTES = TelemetryFieldNames.OUTPUT_BYTES
 
   def readFromStage(sqlContext: SQLContext,
                     params: MergedParameters,
