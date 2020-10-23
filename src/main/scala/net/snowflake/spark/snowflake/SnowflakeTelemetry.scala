@@ -106,6 +106,10 @@ object SnowflakeTelemetry {
       val stringWriter = new StringWriter
       throwable.get.printStackTrace(new PrintWriter(stringWriter))
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
+    } else {
+      metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, "NA")
+      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, "NA")
+      metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, "NA")
     }
 
     // The constructor of TelemetryEvent.LogBuilder uses
