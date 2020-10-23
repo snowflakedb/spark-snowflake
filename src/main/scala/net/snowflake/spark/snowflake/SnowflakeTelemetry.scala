@@ -5,6 +5,7 @@ import java.sql.Connection
 
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
@@ -23,9 +24,8 @@ object SnowflakeTelemetry {
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
-  private val logger = LoggerWrapperFactory.getLoggerWrapper(getClass)
-  // disable sending log entries when sending telemetry message.
-  logger.disableInstanceSendLogTelemetry()
+  // Note: Use regular logger instead of LoggerWrapper to avoid potential recursive call.
+  private val logger = LoggerFactory.getLogger(getClass)
 
   private val mapper = new ObjectMapper()
 

@@ -168,11 +168,11 @@ class MiscSuite01 extends FunSuite with Matchers {
   }
 
   test("test LoggerWrapper for enable/disable and trace()/debug()/info()") {
-    // Enable logger
-    LoggerWrapper.enableSendLogTelemetry()
+    // Enable test telemetry
+    TelemetryReporter.enableSendLogTelemetry()
     val logger = LoggerWrapperFactory.getLoggerWrapper("TestLogger")
     val targetOutputStream = new ByteArrayOutputStream()
-    logger.enableTest(targetOutputStream)
+    logger.getTelemetryReporter.enableTest(targetOutputStream)
 
     // log one message with TRACE
     val message = "Hello Logger!"
@@ -180,41 +180,36 @@ class MiscSuite01 extends FunSuite with Matchers {
     var loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
 
-    // Disable instance logging, no message is written.
-    logger.disableInstanceSendLogTelemetry()
+    // Disable telemetry, no message is written.
+    TelemetryReporter.disableSendLogTelemetry()
     targetOutputStream.reset()
     logger.trace(message)
     loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.isEmpty)
 
-    // Re-enable logger and log one message with DEBUG
-    logger.enableInstanceSendLogTelemetry()
+    // Re-enable telemetry and log one message with DEBUG
+    TelemetryReporter.enableSendLogTelemetry()
     targetOutputStream.reset()
     logger.debug(message)
     loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("DEBUG") && loggedMessage.endsWith(message))
 
-    // Disable global logging, no message is written
-    LoggerWrapper.disableSendLogTelemetry()
-    targetOutputStream.reset()
-    logger.trace(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.isEmpty)
-
-    // Re-enable global logging, and log one message with INFO
-    LoggerWrapper.enableSendLogTelemetry()
+    // log one message with INFO
     targetOutputStream.reset()
     logger.info(message)
     loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("INFO") && loggedMessage.endsWith(message))
+
+    // disable test
+    logger.getTelemetryReporter.disableTest()
   }
 
   test("test LoggerWrapper for warn()/error()") {
     // Enable logger
-    LoggerWrapper.enableSendLogTelemetry()
+    TelemetryReporter.enableSendLogTelemetry()
     val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
     val targetOutputStream = new ByteArrayOutputStream()
-    logger.enableTest(targetOutputStream)
+    logger.getTelemetryReporter.enableTest(targetOutputStream)
 
     // log one message with warn(msg: String)
     val message = "Hello Logger!"
@@ -255,26 +250,29 @@ class MiscSuite01 extends FunSuite with Matchers {
       loggedMessage.contains("test format:"))
 
     // disable test
-    logger.disableTest()
+    logger.getTelemetryReporter.disableTest()
   }
 
   test("negative test LoggerWrapper") {
     // Enable logger
-    LoggerWrapper.enableSendLogTelemetry()
+    TelemetryReporter.enableSendLogTelemetry()
     val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
     // Enable test logger need a valid OutputStream
     assertThrows[Exception]({
-      logger.enableTest(null)
+      logger.getTelemetryReporter.enableTest(null)
     })
 
     // set an invalid OutputStream, but no exception is raised.
     val invalidOutputStream = new OutputStream {
       override def write(b: Int): Unit = {
-        throw new Throwable("native test invalid OutputStream")
+        throw new Throwable("negative test invalid OutputStream")
       }
     }
-    logger.enableTest(invalidOutputStream)
+    logger.getTelemetryReporter.enableTest(invalidOutputStream)
     logger.warn("no exception is raised")
+
+    // disable test
+    logger.getTelemetryReporter.disableTest()
   }
 
 }

@@ -32,57 +32,26 @@ import org.slf4j.{Logger, LoggerFactory}
   *       Connector. If other functions in <code>org.slf4j.Logger</code> need
   *       to be used, they need to be implemented in this class.
   */
-private[snowflake] class LoggerWrapper(logger: Logger) {
+private[snowflake] class LoggerWrapper(logger: Logger, telemetryReporter: TelemetryReporter) {
+  // Log levels
+  val TRACE_LEVEL = "TRACE"
+  val DEBUG_LEVEL = "DEBUG"
+  val INFO_LEVEL = "INFO"
+  val WARN_LEVEL = "WARN"
+  val ERROR_LEVEL = "ERROR"
 
-  private var isInstanceSendLogTelemetryEnabled: Boolean = true
-
-  private[snowflake] def enableInstanceSendLogTelemetry(): Unit = {
-    isInstanceSendLogTelemetryEnabled = true
-  }
-
-  private[snowflake] def disableInstanceSendLogTelemetry(): Unit = {
-    isInstanceSendLogTelemetryEnabled = false
-  }
-
-  // Below variables and functions are for test purpose
-  private var enableTest = false
-  private var testOutputStream: OutputStream = _
-  private[snowflake] def enableTest(outputStream: OutputStream): Unit = {
-    if (outputStream == null) {
-      throw new Exception("The caller needs create an OutputStream for unit test")
-    }
-    enableTest = true
-    testOutputStream = outputStream
-  }
-  private[snowflake] def disableTest(): Unit = {
-    enableTest = false
-    testOutputStream = null
-  }
+  private[snowflake] def getTelemetryReporter(): TelemetryReporter = telemetryReporter
 
   // Do NOT throw exception when sending log entry
   private def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
     try {
-      if (isInstanceSendLogTelemetryEnabled &&
-        LoggerWrapper.isSendLogTelemetryEnabled) {
-        if (enableTest) {
-          // Test for LoggerWrapper
-          val data = s"$level: $msg"
-          testOutputStream.write(data.getBytes())
-          testOutputStream.flush()
-        } else {
-          // Send the message as telemetry
-          doSendLogAsTelemetryMessage(level, msg)
-        }
-      }
+      // Send the message as telemetry
+      telemetryReporter.sendLogTelemetryIfEnabled(level, msg)
     } catch {
       case th: Throwable => {
         logger.warn(s"Fail to send log entry as telemetry message: ${th.getMessage}")
       }
     }
-  }
-
-  private def doSendLogAsTelemetryMessage(level: String, msg: String): Unit = {
-    // Implement this function in next step.
   }
 
   /**
@@ -91,7 +60,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param msg the message string to be logged
     */
   def trace(msg: String): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.TRACE_LEVEL, msg)
+    sendLogTelemetryIfEnabled(TRACE_LEVEL, msg)
     logger.trace(msg)
   }
 
@@ -101,7 +70,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param msg the message string to be logged
     */
   def debug(msg: String): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.DEBUG_LEVEL, msg)
+    sendLogTelemetryIfEnabled(DEBUG_LEVEL, msg)
     logger.debug(msg)
   }
 
@@ -111,7 +80,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param msg the message string to be logged
     */
   def info(msg: String): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.INFO_LEVEL, msg)
+    sendLogTelemetryIfEnabled(INFO_LEVEL, msg)
     logger.info(msg)
   }
 
@@ -121,7 +90,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param msg the message string to be logged
     */
   def warn(msg: String): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.WARN_LEVEL, msg)
+    sendLogTelemetryIfEnabled(WARN_LEVEL, msg)
     logger.warn(msg)
   }
 
@@ -132,7 +101,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param t   the exception (throwable) to log
     */
   def warn(msg: String, t: Throwable): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.WARN_LEVEL, s"$msg: ${t.getMessage}")
+    sendLogTelemetryIfEnabled(WARN_LEVEL, s"$msg: ${t.getMessage}")
     logger.warn(msg, t)
   }
 
@@ -142,7 +111,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param msg the message string to be logged
     */
   def error(msg: String): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, msg)
+    sendLogTelemetryIfEnabled(ERROR_LEVEL, msg)
     logger.error(msg)
   }
 
@@ -154,7 +123,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param t   the exception (throwable) to log
     */
   def error(msg: String, t: Throwable): Unit = {
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, s"$msg: ${t.getMessage}")
+    sendLogTelemetryIfEnabled(ERROR_LEVEL, s"$msg: ${t.getMessage}")
     logger.error(msg, t)
   }
 
@@ -178,13 +147,43 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
         s"$format, ${arg1.toString}, ${arg2.toString}"
       }
     }
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, logEntry)
+    sendLogTelemetryIfEnabled(ERROR_LEVEL, logEntry)
     logger.error(format, arg1, arg2)
   }
 }
 
-// Enable the capability to turn on/off sending telemetry message.
-private[snowflake] object LoggerWrapper {
+private[snowflake] class TelemetryReporter() {
+  // Below variables and functions are for test purpose
+  private var enableTest = false
+  private var testOutputStream: OutputStream = _
+
+  private[snowflake] def enableTest(outputStream: OutputStream): Unit = {
+    if (outputStream == null) {
+      throw new Exception("The caller needs create an OutputStream for unit test")
+    }
+    enableTest = true
+    testOutputStream = outputStream
+  }
+
+  private[snowflake] def disableTest(): Unit = {
+    enableTest = false
+    testOutputStream = null
+  }
+
+  private[snowflake] def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
+    if (TelemetryReporter.isSendLogTelemetryEnabled) {
+      if (enableTest) {
+        // Test for LoggerWrapper
+        val data = s"$level: $msg"
+        testOutputStream.write(data.getBytes())
+        testOutputStream.flush()
+      }
+      // Implement this functionality in next step.
+    }
+  }
+}
+
+private[snowflake] object TelemetryReporter {
 
   private var isSendLogTelemetryEnabled = false
 
@@ -195,13 +194,6 @@ private[snowflake] object LoggerWrapper {
   def disableSendLogTelemetry(): Unit = {
     isSendLogTelemetryEnabled = false
   }
-
-  // Log levels
-  val TRACE_LEVEL = "TRACE"
-  val DEBUG_LEVEL = "DEBUG"
-  val INFO_LEVEL = "INFO"
-  val WARN_LEVEL = "WARN"
-  val ERROR_LEVEL = "ERROR"
 }
 
 /**
@@ -210,10 +202,10 @@ private[snowflake] object LoggerWrapper {
   */
 private[snowflake] object LoggerWrapperFactory {
   private[snowflake] def getLoggerWrapper(clazz: Class[_]): LoggerWrapper = {
-    new LoggerWrapper(LoggerFactory.getLogger(clazz))
+    new LoggerWrapper(LoggerFactory.getLogger(clazz), new TelemetryReporter)
   }
 
   def getLoggerWrapper(name: String): LoggerWrapper = {
-    new LoggerWrapper(LoggerFactory.getLogger(name))
+    new LoggerWrapper(LoggerFactory.getLogger(name), new TelemetryReporter)
   }
 }
