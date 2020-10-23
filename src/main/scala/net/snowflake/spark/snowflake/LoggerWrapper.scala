@@ -153,31 +153,8 @@ private[snowflake] class LoggerWrapper(logger: Logger, telemetryReporter: Teleme
 }
 
 private[snowflake] class TelemetryReporter() {
-  // Below variables and functions are for test purpose
-  private var enableTest = false
-  private var testOutputStream: OutputStream = _
-
-  private[snowflake] def enableTest(outputStream: OutputStream): Unit = {
-    if (outputStream == null) {
-      throw new Exception("The caller needs create an OutputStream for unit test")
-    }
-    enableTest = true
-    testOutputStream = outputStream
-  }
-
-  private[snowflake] def disableTest(): Unit = {
-    enableTest = false
-    testOutputStream = null
-  }
-
   private[snowflake] def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
     if (TelemetryReporter.isSendLogTelemetryEnabled) {
-      if (enableTest) {
-        // Test for LoggerWrapper
-        val data = s"$level: $msg"
-        testOutputStream.write(data.getBytes())
-        testOutputStream.flush()
-      }
       // Implement this functionality in next step.
     }
   }
@@ -185,14 +162,16 @@ private[snowflake] class TelemetryReporter() {
 
 private[snowflake] object TelemetryReporter {
 
-  private var isSendLogTelemetryEnabled = false
+  private var enableSendLogging = false
 
-  def enableSendLogTelemetry(): Unit = {
-    isSendLogTelemetryEnabled = true
+  private[snowflake] def isSendLogTelemetryEnabled() = enableSendLogging
+
+  private[snowflake] def enableSendLogTelemetry(): Unit = {
+    enableSendLogging = true
   }
 
-  def disableSendLogTelemetry(): Unit = {
-    isSendLogTelemetryEnabled = false
+  private[snowflake] def disableSendLogTelemetry(): Unit = {
+    enableSendLogging = false
   }
 }
 

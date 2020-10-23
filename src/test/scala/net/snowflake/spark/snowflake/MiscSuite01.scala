@@ -26,6 +26,20 @@ import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
 import org.scalatest.{FunSuite, Matchers}
+import org.slf4j.LoggerFactory
+
+// Below is mock class to tesst LoggerWrapper
+private[snowflake] class MockTelemetryReporter(outputStream: OutputStream)
+  extends TelemetryReporter() {
+  private[snowflake] override def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
+    if (TelemetryReporter.isSendLogTelemetryEnabled) {
+      // Write data to OutputStream
+      val data = s"$level: $msg"
+      outputStream.write(data.getBytes())
+      outputStream.flush()
+    }
+  }
+}
 
 /**
   * Unit tests for all kinds of some classes
@@ -167,12 +181,12 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
 
-  test("test LoggerWrapper for enable/disable and trace()/debug()/info()") {
-    // Enable test telemetry
+  test("test LoggerWrapper") {
+    // Test LoggerWrapper with MockTelemetryReporter
     TelemetryReporter.enableSendLogTelemetry()
-    val logger = LoggerWrapperFactory.getLoggerWrapper("TestLogger")
     val targetOutputStream = new ByteArrayOutputStream()
-    logger.getTelemetryReporter.enableTest(targetOutputStream)
+    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"),
+      new MockTelemetryReporter(targetOutputStream))
 
     // log one message with TRACE
     val message = "Hello Logger!"
@@ -200,21 +214,10 @@ class MiscSuite01 extends FunSuite with Matchers {
     loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("INFO") && loggedMessage.endsWith(message))
 
-    // disable test
-    logger.getTelemetryReporter.disableTest()
-  }
-
-  test("test LoggerWrapper for warn()/error()") {
-    // Enable logger
-    TelemetryReporter.enableSendLogTelemetry()
-    val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
-    val targetOutputStream = new ByteArrayOutputStream()
-    logger.getTelemetryReporter.enableTest(targetOutputStream)
-
     // log one message with warn(msg: String)
-    val message = "Hello Logger!"
+    targetOutputStream.reset()
     logger.warn(message)
-    var loggedMessage = new String(targetOutputStream.toByteArray)
+    loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("WARN") && loggedMessage.endsWith(message))
 
     // log one message with warn(msg: String, t: Throwable)
@@ -248,31 +251,20 @@ class MiscSuite01 extends FunSuite with Matchers {
       loggedMessage.contains("TEST_STRING_1") &&
       loggedMessage.contains("TEST_STRING_2") &&
       loggedMessage.contains("test format:"))
-
-    // disable test
-    logger.getTelemetryReporter.disableTest()
   }
 
   test("negative test LoggerWrapper") {
-    // Enable logger
     TelemetryReporter.enableSendLogTelemetry()
-    val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
-    // Enable test logger need a valid OutputStream
-    assertThrows[Exception]({
-      logger.getTelemetryReporter.enableTest(null)
-    })
-
     // set an invalid OutputStream, but no exception is raised.
     val invalidOutputStream = new OutputStream {
       override def write(b: Int): Unit = {
         throw new Throwable("negative test invalid OutputStream")
       }
     }
-    logger.getTelemetryReporter.enableTest(invalidOutputStream)
+    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"),
+      new MockTelemetryReporter(invalidOutputStream))
+    // MockTelemetryReporter raise exception, but warn() doesn't
     logger.warn("no exception is raised")
-
-    // disable test
-    logger.getTelemetryReporter.disableTest()
   }
 
 }
