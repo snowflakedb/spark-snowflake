@@ -82,7 +82,7 @@ object SnowflakeTelemetry {
                        success: Boolean,
                        useProxy: Boolean,
                        queryID: Option[String],
-                       exception: Option[Exception]): Unit =
+                       throwable: Option[Throwable]): Unit =
   {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
@@ -94,11 +94,11 @@ object SnowflakeTelemetry {
     metric.put(TelemetryOOBFields.SUCCESS, success)
     metric.put(TelemetryOOBFields.USE_PROXY, useProxy)
     metric.put(TelemetryOOBFields.QUERY_ID, queryID.getOrElse("NA"))
-    if (exception.isDefined) {
-      metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, exception.get.getClass.toString)
-      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, exception.get.getMessage)
+    if (throwable.isDefined) {
+      metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, throwable.get.getClass.toString)
+      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
       val stringWriter = new StringWriter
-      exception.get.printStackTrace(new PrintWriter(stringWriter))
+      throwable.get.printStackTrace(new PrintWriter(stringWriter))
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
     } else {
       metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, "NA")
@@ -188,6 +188,38 @@ object SnowflakeTelemetry {
     )
   }
 
+  private[snowflake] def sendQueryStatus(conn: Connection,
+                                         operation: String,
+                                         query: String,
+                                         queryId: String,
+                                         queryStatus: String,
+                                         elapse: Long,
+                                         throwable: Option[Throwable],
+                                         details: String
+                                         ): Unit = {
+    val metric: ObjectNode = mapper.createObjectNode()
+    metric.put(TelemetryQueryStatusFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
+    metric.put(TelemetryQueryStatusFields.OPERATION, operation)
+    metric.put(TelemetryQueryStatusFields.QUERY, query)
+    metric.put(TelemetryQueryStatusFields.QUERY_ID, queryId)
+    metric.put(TelemetryQueryStatusFields.QUERY_STATUS, queryStatus)
+    metric.put(TelemetryQueryStatusFields.ELAPSED_TIME, elapse)
+    if (throwable.isDefined) {
+      metric.put(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME,
+        throwable.get.getClass.toString)
+      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
+      val stringWriter = new StringWriter
+      throwable.get.printStackTrace(new PrintWriter(stringWriter))
+      metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
+    }
+    metric.put(TelemetryQueryStatusFields.DETAILS, details)
+
+    SnowflakeTelemetry.addLog(
+      (TelemetryTypes.SPARK_QUERY_STATUS, metric),
+      System.currentTimeMillis()
+    )
+    SnowflakeTelemetry.send(conn.getTelemetry)
+  }
 }
 
 object TelemetryTypes extends Enumeration {
@@ -198,7 +230,38 @@ object TelemetryTypes extends Enumeration {
   val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
   val SPARK_EGRESS: Value = Value("spark_egress")
   val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
+  val SPARK_QUERY_STATUS: Value = Value("spark_query_status")
   val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
+}
+
+object TelemetryConstValues {
+  val OPERATION_READ = "read"
+  val OPERATION_WRITE = "write"
+  val STATUS_SUCCESS = "success"
+  val STATUS_FAIL = "fail"
+}
+
+object TelemetryQueryStatusFields {
+  // Spark connector version
+  val SPARK_CONNECTOR_VERSION: String = "spark_connector_version"
+  // The query operation: read vs write
+  val OPERATION: String = "operation"
+  // Query statement
+  val QUERY: String = "query"
+  // query ID if available
+  val QUERY_ID: String = "query_id"
+  // Query status: fail vs success
+  val QUERY_STATUS: String = "status"
+  // query execution time
+  val ELAPSED_TIME: String = "elapsed_time"
+  // The error message for the exception
+  val EXCEPTION_MESSAGE: String = "message"
+  // Exception class name
+  val EXCEPTION_CLASS_NAME: String = "exception"
+  // Exception stacktrace
+  val EXCEPTION_STACKTRACE: String = "stacktrace"
+  // The details information about the exception
+  val DETAILS: String = "details"
 }
 
 object TelemetryClientInfoFields {

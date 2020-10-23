@@ -607,6 +607,70 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  // Negative test for read fail.
+  // The query tries to convert a String to number, but the value is not number
+  // So the reading data frame hits runtime error.
+  test("testFailToRead") {
+    setupStringBinaryTable
+
+    assertThrows[Exception]({
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", s"select to_number(v) from $test_table_string_binary")
+        .load()
+        .collect()
+    })
+  }
+
+  test("test Write table with AUTOINCREMENT column") {
+    // Create a table with AUTOINCREMENT column
+    jdbcUpdate(
+      s"""create or replace table $test_table_write (
+         | int_c int, c_string string(1024), id_c int AUTOINCREMENT (100, 10))
+         | """.stripMargin)
+
+    // Write 5 rows without data for AUTOINCREMENT column
+    val df1 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", "select seq4() as INT_C, 'test123' as C_STRING from table(generator(rowcount => 5))")
+      .load()
+    df1.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .option("columnmap", "Map(INT_C -> INT_C, C_STRING -> C_STRING)")
+      .mode(SaveMode.Append)
+      .save()
+
+    // Write 5 rows with data for AUTOINCREMENT column
+    val df2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", "select seq4(), 'test456', 1234 from table(generator(rowcount => 5))")
+      .load()
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
+
+    // Verify result for AUTOINCREMENT column
+    val expectedAnswer = Array(
+      Row(100), Row(110), Row(120), Row(130), Row(140),
+      Row(1234), Row(1234), Row(1234), Row(1234), Row(1234)
+    )
+    val result = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select ID_C from $test_table_write order by ID_C")
+      .load()
+
+    checkAnswer(result, expectedAnswer)
+  }
+
   test("test read write StringBinary") {
     setupStringBinaryTable
     // COPY UNLOAD can't be run because it doesn't support binary

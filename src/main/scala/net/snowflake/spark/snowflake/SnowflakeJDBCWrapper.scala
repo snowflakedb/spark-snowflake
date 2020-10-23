@@ -28,8 +28,8 @@ import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
+import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
@@ -691,6 +691,10 @@ private[snowflake] class SnowflakeSQLStatement(
 
   private val log = LoggerFactory.getLogger(getClass)
 
+  private var lastQueryID: String = _
+
+  private[snowflake] def getLastQueryID(): String = lastQueryID
+
   def +(element: StatementElement): SnowflakeSQLStatement =
     new SnowflakeSQLStatement(numOfVar + element.isVariable, element :: list)
 
@@ -729,7 +733,16 @@ private[snowflake] class SnowflakeSQLStatement(
     log.info(s"$logPrefix $query")
 
     val statement = conn.prepareStatement(query)
-    DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+    try {
+      val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+      rs
+    } catch {
+      case th: Throwable => {
+        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
+        throw th
+      }
+    }
   }
 
   private def executeWithBindVariable(conn: Connection): ResultSet = {
@@ -808,8 +821,16 @@ private[snowflake] class SnowflakeSQLStatement(
         }
     }
 
-    DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
-
+    try {
+      val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+      rs
+    } catch {
+      case th: Throwable => {
+        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
+        throw th
+      }
+    }
   }
 
   override def equals(obj: scala.Any): Boolean =
