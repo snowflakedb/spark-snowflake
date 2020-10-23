@@ -253,6 +253,9 @@ class MiscSuite01 extends FunSuite with Matchers {
       loggedMessage.contains("TEST_STRING_1") &&
       loggedMessage.contains("TEST_STRING_2") &&
       loggedMessage.contains("test format:"))
+
+    // disable test
+    logger.disableTest()
   }
 
   test("negative test LoggerWrapper") {
@@ -260,7 +263,9 @@ class MiscSuite01 extends FunSuite with Matchers {
     LoggerWrapper.enableSendLogTelemetry()
     val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
     // Enable test logger need a valid OutputStream
-    assertThrows[Exception]({logger.enableTest(null)})
+    assertThrows[Exception]({
+      logger.enableTest(null)
+    })
 
     // set an invalid OutputStream, but no exception is raised.
     val invalidOutputStream = new OutputStream {

@@ -64,19 +64,25 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     try {
       if (isInstanceSendLogTelemetryEnabled &&
         LoggerWrapper.isSendLogTelemetryEnabled) {
-        // Test for LoggerWrapper
         if (enableTest) {
+          // Test for LoggerWrapper
           val data = s"$level: $msg"
           testOutputStream.write(data.getBytes())
           testOutputStream.flush()
+        } else {
+          // Send the message as telemetry
+          doSendLogAsTelemetryMessage(level, msg)
         }
-        // Send the message as telemetry
       }
     } catch {
       case th: Throwable => {
         logger.warn(s"Fail to send log entry as telemetry message: ${th.getMessage}")
       }
     }
+  }
+
+  private def doSendLogAsTelemetryMessage(level: String, msg: String): Unit = {
+    // Implement this function in next step.
   }
 
   /**
@@ -164,8 +170,8 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     * @param arg2   the second argument
     */
   def error(format: String, arg1: Any, arg2: Any): Unit = {
-    // Never throw exception
     val logEntry = try {
+      // Never throw exception
       MessageFormatter.format(format, arg1, arg2).getMessage
     } catch {
       case _: Throwable => {
