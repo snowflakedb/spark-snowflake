@@ -24,7 +24,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
-import org.slf4j.{Logger, LoggerFactory}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{SnowflakeResultSetRDD, StageReader, SupportedFormat}
@@ -52,7 +51,7 @@ private[snowflake] case class SnowflakeRelation(
     "SnowflakeRelation"
   }
 
-  val log: Logger = LoggerFactory.getLogger(getClass) // Create a temporary stage
+  val log = LoggerWrapperFactory.getLoggerWrapper(getClass) // Create a temporary stage
 
   override lazy val schema: StructType = {
     userSchema.getOrElse {

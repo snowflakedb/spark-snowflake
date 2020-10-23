@@ -29,7 +29,6 @@ import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredent
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.StructType
-import org.slf4j.{Logger, LoggerFactory}
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
@@ -37,7 +36,7 @@ import org.slf4j.{Logger, LoggerFactory}
   */
 object Parameters {
 
-  val log: Logger = LoggerFactory.getLogger(getClass)
+  val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
 
   private[snowflake] val KNOWN_PARAMETERS =
     new scala.collection.mutable.HashSet[String]()

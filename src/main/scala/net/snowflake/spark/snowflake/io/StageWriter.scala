@@ -27,7 +27,6 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.SaveMode
-import org.slf4j.LoggerFactory
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
@@ -186,7 +185,7 @@ class WriteTableState(conn: Connection) {
 
 private[io] object StageWriter {
 
-  private[io] val log = LoggerFactory.getLogger(getClass)
+  private[io] val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
 
   def writeToStage(rdd: RDD[String],
                    schema: StructType,

@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake.test
 
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeSQLException}
 import net.snowflake.spark.snowflake.test.TestHookFlag.TestHookFlag
-import org.slf4j.{Logger, LoggerFactory}
+import net.snowflake.spark.snowflake.LoggerWrapperFactory
 
 object TestHookFlag extends Enumeration {
   type TestHookFlag = Value
@@ -23,7 +23,7 @@ object TestHookFlag extends Enumeration {
 }
 
 object TestHook {
-  val log: Logger = LoggerFactory.getLogger(getClass)
+  val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
 
   private val ENABLED_TEST_FLAGS =
     new scala.collection.mutable.HashSet[TestHookFlag]()

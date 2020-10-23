@@ -24,7 +24,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
-import org.slf4j.LoggerFactory
 
 /**
   * Snowflake Source implementation for Spark SQL
@@ -43,7 +42,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
 
-  private val log = LoggerFactory.getLogger(getClass)
+  private val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
 
   /**
     * Default constructor required by Data Source API

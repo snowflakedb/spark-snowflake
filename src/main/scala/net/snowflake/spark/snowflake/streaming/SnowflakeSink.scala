@@ -18,7 +18,6 @@ import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStre
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryListener}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.slf4j.LoggerFactory
 
 class SnowflakeSink(sqlContext: SQLContext,
                     parameters: Map[String, String],
@@ -28,7 +27,7 @@ class SnowflakeSink(sqlContext: SQLContext,
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
 
-  private val log = LoggerFactory.getLogger(getClass)
+  private val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
 
   private val param = Parameters.mergeParameters(
     parameters + ("keep_column_case" -> "on")

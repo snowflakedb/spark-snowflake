@@ -8,6 +8,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMappe
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake.{
   Conversions,
+  LoggerWrapperFactory,
   ProxyInfo,
   SnowflakeConnectorException,
   SnowflakeTelemetry,
@@ -20,12 +21,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 
 object SnowflakeResultSetRDD {
-  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
+  private[snowflake] val logger = LoggerWrapperFactory.getLoggerWrapper(getClass)
   private[snowflake] val MASTER_LOG_PREFIX = "Spark Connector Master"
   private[snowflake] val WORKER_LOG_PREFIX = "Spark Connector Worker"
 }

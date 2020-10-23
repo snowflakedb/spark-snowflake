@@ -16,6 +16,7 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.{ByteArrayOutputStream, OutputStream}
 import java.net.Proxy.Type
 import java.net.{InetSocketAddress, Proxy}
 import java.security.InvalidKeyException
@@ -165,4 +166,111 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
+
+  test("test LoggerWrapper for enable/disable and trace()/debug()/info()") {
+    // Enable logger
+    LoggerWrapper.enableSendLogTelemetry()
+    val logger = LoggerWrapperFactory.getLoggerWrapper("TestLogger")
+    val targetOutputStream = new ByteArrayOutputStream()
+    logger.enableTest(targetOutputStream)
+
+    // log one message with TRACE
+    val message = "Hello Logger!"
+    logger.trace(message)
+    var loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
+
+    // Disable instance logging, no message is written.
+    logger.disableInstanceSendLogTelemetry()
+    targetOutputStream.reset()
+    logger.trace(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.isEmpty)
+
+    // Re-enable logger and log one message with DEBUG
+    logger.enableInstanceSendLogTelemetry()
+    targetOutputStream.reset()
+    logger.debug(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("DEBUG") && loggedMessage.endsWith(message))
+
+    // Disable global logging, no message is written
+    LoggerWrapper.disableSendLogTelemetry()
+    targetOutputStream.reset()
+    logger.trace(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.isEmpty)
+
+    // Re-enable global logging, and log one message with INFO
+    LoggerWrapper.enableSendLogTelemetry()
+    targetOutputStream.reset()
+    logger.info(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("INFO") && loggedMessage.endsWith(message))
+  }
+
+  test("test LoggerWrapper for warn()/error()") {
+    // Enable logger
+    LoggerWrapper.enableSendLogTelemetry()
+    val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
+    val targetOutputStream = new ByteArrayOutputStream()
+    logger.enableTest(targetOutputStream)
+
+    // log one message with warn(msg: String)
+    val message = "Hello Logger!"
+    logger.warn(message)
+    var loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("WARN") && loggedMessage.endsWith(message))
+
+    // log one message with warn(msg: String, t: Throwable)
+    targetOutputStream.reset()
+    logger.warn(message, new Exception("Test Exception String"))
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("WARN") &&
+      loggedMessage.contains("Test Exception String") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(msg: String)
+    targetOutputStream.reset()
+    logger.error(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(msg: String, t: Throwable)
+    targetOutputStream.reset()
+    logger.error(message, new Exception("Test Exception String"))
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains("Test Exception String") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(format: String, arg1: Any, arg2: Any)
+    targetOutputStream.reset()
+    logger.error("test format: {}. {}", "TEST_STRING_1", "TEST_STRING_2")
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains("TEST_STRING_1") &&
+      loggedMessage.contains("TEST_STRING_2") &&
+      loggedMessage.contains("test format:"))
+  }
+
+  test("negative test LoggerWrapper") {
+    // Enable logger
+    LoggerWrapper.enableSendLogTelemetry()
+    val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
+    // Enable test logger need a valid OutputStream
+    assertThrows[Exception]({logger.enableTest(null)})
+
+    // set an invalid OutputStream, but no exception is raised.
+    val invalidOutputStream = new OutputStream {
+      override def write(b: Int): Unit = {
+        throw new Throwable("native test invalid OutputStream")
+      }
+    }
+    logger.enableTest(invalidOutputStream)
+    logger.warn("no exception is raised")
+  }
+
 }
+
