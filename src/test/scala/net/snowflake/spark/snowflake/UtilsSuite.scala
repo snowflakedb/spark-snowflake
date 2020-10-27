@@ -108,7 +108,7 @@ class UtilsSuite extends FunSuite with Matchers {
     val mapContentString = "#key0 = value0\nkey1=value1\nkey2=value2"
     val (file, fullName, name) = writeTempFile(mapContentString)
     try {
-      val resultMap = Utils.readMapFromFile(sc, fullName)
+      val resultMap = Utils.readMapFromFile(sc, fullName).get
       assert(resultMap.size == 2)
       assert(resultMap("key1").equals("value1"))
       assert(resultMap("key2").equals("value2"))

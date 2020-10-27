@@ -17,6 +17,7 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.FileNotFoundException
 import java.net.URI
 import java.sql.{Connection, ResultSet}
 import java.util.{Properties, UUID}
@@ -227,13 +228,16 @@ object Utils {
   // Reads a Map from a file using the format
   //     key = value
   // Snowflake-todo Use some standard config library
-  def readMapFromFile(sc: SparkContext, file: String): Map[String, String] = {
-    val fs = FileSystem.get(URI.create(file), sc.hadoopConfiguration)
-    val is = fs.open(Path.getPathWithoutSchemeAndAuthority(new Path(file)))
-    val src = scala.io.Source.fromInputStream(is)
-
-    mapFromSource(src)
-
+  def readMapFromFile(sc: SparkContext, file: String): Option[Map[String, String]] = {
+    try {
+      val fs = FileSystem.get(URI.create(file), sc.hadoopConfiguration)
+      val is = fs.open(Path.getPathWithoutSchemeAndAuthority(new Path(file)))
+      val src = scala.io.Source.fromInputStream(is)
+      Some(mapFromSource(src))
+    }
+    catch {
+      case e: FileNotFoundException => None
+    }
   }
 
   /**

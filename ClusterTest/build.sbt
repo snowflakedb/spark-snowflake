@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015-2019 Snowflake Computing
  *
@@ -20,7 +21,9 @@ val sparkVersionMajor = "3.0"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
-unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
+unmanagedJars in Compile += file(s"../target/scala-2.12/spark-snowflake-assembly-2.8.2-spark_3.0.jar")
+unmanagedJars in Compile += file(s"../target/scala-2.12/spark-snowflake_2.12-2.8.2-spark_3.0-it.jar")
+//unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
 
 lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
@@ -39,11 +42,16 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "net.snowflake" % "snowflake-jdbc" % "3.12.12",
       // "net.snowflake" %% "spark-snowflake" % "2.8.0-spark_3.0",
       // "com.google.guava" % "guava" % "14.0.1" % Test,
-      // "org.scalatest" %% "scalatest" % "3.0.5" % Test,
+      "org.scalatest" %% "scalatest" % "3.0.5",
       // "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided, runtime",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, runtime"
     ),
+
+    assemblyMergeStrategy in assembly := {
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case x => MergeStrategy.first
+    },
   )

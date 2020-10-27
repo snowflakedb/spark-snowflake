@@ -133,6 +133,11 @@ object Parameters {
     "use_exponential_backoff"
   )
 
+  // For PerformanceSuite
+  val PARAM_PERFSUITE_RUN_OPTION = knownParam("run_option")
+  val PARAM_PERFSUITE_OUTPUT_FORMAT = knownParam("output_format")
+  val PARAM_TPCDSSUITE_ = knownParam("tpcds_suite")
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 

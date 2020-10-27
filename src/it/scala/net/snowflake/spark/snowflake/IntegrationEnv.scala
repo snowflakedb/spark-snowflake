@@ -22,6 +22,7 @@ import java.sql.{Connection, Timestamp}
 import java.time.{LocalDateTime, ZonedDateTime}
 import java.util.TimeZone
 
+import com.bettercloud.vault.{Vault, VaultConfig}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.log4j.PropertyConfigurator
@@ -53,6 +54,10 @@ trait IntegrationEnv
     "Missing required configuration value: "
 
   protected val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
+
+  protected val CONFIG_VAULT_URL_ENV_VAR = "VAULT_URL"
+  protected val CONFIG_VAULT_TOKEN_ENV_VAR = "VAULT_TOKEN"
+  protected val VAULT_STORE = "secret/sf_connector_config"
 
   protected def reconfigureLogFile(propertyFileName: String): Unit = {
     // Load the log properties for the security test to output more info
@@ -89,20 +94,47 @@ trait IntegrationEnv
     settingsMap.toMap
   }
 
-  protected lazy val configsFromFile: Map[String, String] = {
+  protected lazy val configsFromFile: Option[Map[String, String]] = {
     val fname = System.getenv(CONFIG_FILE_VARIABLE)
     if (fname != null) {
       Utils.readMapFromFile(sc, fname)
-    } else scala.collection.Map.empty[String, String]
+    } else None
+  }
+
+  // Retrieve config settings from Hashicorp Vault
+  protected lazy val configsFromVault: Option[Map[String, String]] = {
+    val configUrl = readConfigValueFromEnv(CONFIG_VAULT_URL_ENV_VAR)
+    if (configUrl.isDefined) {
+      val vault = new Vault(new VaultConfig().address(configUrl.get).build())
+      var settingsMap = new mutable.HashMap[String, String]
+      Parameters.KNOWN_PARAMETERS foreach { param =>
+        val opt = readConfigValueFromVault(vault, param)
+        if (opt.isDefined) {
+          settingsMap += (param -> opt.get)
+        }
+      }
+      Some(settingsMap.toMap)
+    }
+    else {
+      None
+    }
   }
 
   // Merges maps, preferring file values over env ones
   protected def loadConfig(): Map[String, String] =
-    loadJsonConfig().getOrElse(configsFromFile) ++ configsFromEnv
+
+    loadJsonConfig().getOrElse(
+      configsFromFile.getOrElse(
+        configsFromVault.getOrElse(Map.empty[String, String]))) ++ configsFromEnv
 
   // Used for internal integration testing in SF env.
   protected def readConfigValueFromEnv(name: String): Option[String] = {
     scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
+  }
+
+  protected def readConfigValueFromVault(vault: Vault, key: String): Option[String] = {
+    val value = vault.logical().read(VAULT_STORE).getData.get(key)
+    Option(value)
   }
 
   protected def dropOldStages(stagePrefix: String, hoursAgo: Long): Unit = {
