@@ -32,7 +32,6 @@ import scala.io.Source
 object TestUtils {
   val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   val SNOWFLAKE_TEST_CONFIG = "SNOWFLAKE_TEST_CONFIG"
-  val STRESS_TEST_SOURCES = "STRESS_TEST_SOURCES"
   val CLUSTER_TEST_RESULT_TABLE = "CLUSTER_TEST_RESULT_TABLE"
   val GITHUB_SHA = "GITHUB_SHA"
   val GITHUB_RUN_ID = "GITHUB_RUN_ID"
@@ -45,6 +44,14 @@ object TestUtils {
   val TEST_RESULT_STATUS_SUCCESS = "Success"
   val TEST_RESULT_STATUS_FAIL = "Fail"
   val TEST_RESULT_STATUS_EXCEPTION = "Exception"
+
+  // For Performance and Stress Testing
+  val STRESS_TEST_SOURCES = "STRESS_TEST_SOURCES"
+  val STRESS_TEST_CONFIG = "STRESS_TEST_CONFIG"
+
+  // Vault configuration variables
+  protected val CONFIG_VAULT_URL_ENV_VAR = "VAULT_URL"
+  protected val VAULT_STORE = "secret/sf_connector_config"
 
   lazy val githubRunId: String = {
     val jobTime = System.getenv(TestUtils.GITHUB_RUN_ID)
@@ -132,6 +139,15 @@ object TestUtils {
     } else {
       None
     }
+  }
+
+  // Load options for the stress-test config
+  lazy val sfStressOptions: Map[String, String] = {
+    var configFile = System.getenv(STRESS_TEST_CONFIG)
+    if (configFile == null) {
+      configFile = "stress_config.json"
+    }
+    loadJsonConfig(configFile).get
   }
 
   // Load sfOptions from config file and env.
