@@ -31,13 +31,11 @@ import org.slf4j.LoggerFactory
 // Below is mock class to tesst LoggerWrapper
 private[snowflake] class MockTelemetryReporter(outputStream: OutputStream)
   extends TelemetryReporter() {
-  private[snowflake] override def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
-    if (TelemetryReporter.isSendLogTelemetryEnabled) {
-      // Write data to OutputStream
-      val data = s"$level: $msg"
-      outputStream.write(data.getBytes())
-      outputStream.flush()
-    }
+  private[snowflake] override def sendLogTelemetry(level: String, msg: String): Unit = {
+    // Write data to OutputStream
+    val data = s"$level: $msg"
+    outputStream.write(data.getBytes())
+    outputStream.flush()
   }
 }
 
@@ -183,26 +181,18 @@ class MiscSuite01 extends FunSuite with Matchers {
 
   test("test LoggerWrapper") {
     // Test LoggerWrapper with MockTelemetryReporter
-    TelemetryReporter.enableSendLogTelemetry()
     val targetOutputStream = new ByteArrayOutputStream()
-    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"),
-      new MockTelemetryReporter(targetOutputStream))
+    var logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger 1"))
+    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(targetOutputStream))
 
-    // log one message with TRACE
+    // log one message with TRACE; logger is created before setting Driver telemetry
     val message = "Hello Logger!"
     logger.trace(message)
     var loggedMessage = new String(targetOutputStream.toByteArray)
     assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
 
-    // Disable telemetry, no message is written.
-    TelemetryReporter.disableSendLogTelemetry()
-    targetOutputStream.reset()
-    logger.trace(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.isEmpty)
-
-    // Re-enable telemetry and log one message with DEBUG
-    TelemetryReporter.enableSendLogTelemetry()
+    // log one message with DEBUG; logger is created after setting Driver telemetry
+    logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger 2"))
     targetOutputStream.reset()
     logger.debug(message)
     loggedMessage = new String(targetOutputStream.toByteArray)
@@ -251,20 +241,43 @@ class MiscSuite01 extends FunSuite with Matchers {
       loggedMessage.contains("TEST_STRING_1") &&
       loggedMessage.contains("TEST_STRING_2") &&
       loggedMessage.contains("test format:"))
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
   }
 
   test("negative test LoggerWrapper") {
-    TelemetryReporter.enableSendLogTelemetry()
     // set an invalid OutputStream, but no exception is raised.
     val invalidOutputStream = new OutputStream {
       override def write(b: Int): Unit = {
         throw new Throwable("negative test invalid OutputStream")
       }
     }
-    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"),
-      new MockTelemetryReporter(invalidOutputStream))
+    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(invalidOutputStream))
+    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"))
     // MockTelemetryReporter raise exception, but warn() doesn't
     logger.warn("no exception is raised")
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
+  }
+
+  test("driver/executor logger set/get") {
+    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"))
+    // It's NoopTelemetry by default
+    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[NoopTelemetryReporter])
+
+    // Set driver telemetry report
+    TelemetryReporter.setDriverTelemetryReporter(new DriverTelemetryReporter)
+    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[DriverTelemetryReporter])
+
+    // Set executor telemetry report
+    TelemetryReporter.setExecutorTelemetryReporter(new ExecutorTelemetryReporter)
+    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[ExecutorTelemetryReporter])
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
+    TelemetryReporter.resetExecutorTelemetryReporter()
   }
 
 }
