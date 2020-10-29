@@ -563,6 +563,9 @@ sealed trait CloudStorage {
                                 fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
                                )
   : SingleElementIterator = {
+    // Log system configuration if not yet.
+    SnowflakeResultSetRDD.executorLogSystemConfigIfNotYet()
+
     val fileName = getFileName(partitionID, format, compress)
 
     // Either StorageInfo or fileTransferMetadata must be set.
@@ -574,15 +577,16 @@ sealed trait CloudStorage {
                         storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
-      case e: Throwable => {
+      case th: Throwable => {
         val stringWriter = new StringWriter
-        e.printStackTrace(new PrintWriter(stringWriter))
+        th.printStackTrace(new PrintWriter(stringWriter))
         val errmsg =
-          s"""${e.getClass.toString}, ${e.getMessage},
+          s"""${th.getClass.toString}, ${th.getMessage},
              | stacktrace: ${stringWriter.toString}""".stripMargin
 
         // Send OOB telemetry message if uploading failure happens
         val attemptNumber = TaskContext.get().attemptNumber()
+        val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
         SnowflakeTelemetry.sendTelemetryOOB(
           sfURL,
           this.getClass.getSimpleName,
@@ -592,7 +596,8 @@ sealed trait CloudStorage {
           false,
           proxyInfo.isDefined,
           None,
-          Some(e))
+          Some(th),
+          Some(config))
 
         // Sleep exponential time based on the attempt number.
         if (useExponentialBackoff) {
@@ -619,7 +624,7 @@ sealed trait CloudStorage {
           )
         }
         // re-throw the exception
-        throw e
+        throw th
       }
     }
   }
@@ -639,6 +644,7 @@ sealed trait CloudStorage {
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Start writing partition ID:$partitionID as $fileName
+         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
          |""".stripMargin.filter(_ >= ' '))
 
     // Read data and upload to cloud storage
@@ -844,6 +850,7 @@ sealed trait CloudStorage {
 
     // Send OOB telemetry message if downloading failure happens
     if (retryCount > 0) {
+      val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
       SnowflakeTelemetry.sendTelemetryOOB(
         sfURL,
         this.getClass.getSimpleName,
@@ -853,7 +860,8 @@ sealed trait CloudStorage {
         downloadDone,
         proxyInfo.isDefined,
         None,
-        throwable)
+        throwable,
+        Some(config))
     }
 
     if (downloadDone) {

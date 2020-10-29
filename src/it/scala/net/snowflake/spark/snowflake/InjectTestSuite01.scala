@@ -73,12 +73,29 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
   }
 
   test("inject exceptions for Arrow read") {
+    // Configure some spark options
+    // manually check these options are sent correctly.
+    val separateSpark = SparkSession.builder
+      .master("local")
+      .appName("test config info sent")
+      .config("spark.sql.shuffle.partitions", "6")
+      .config("spark.driver.cores", "3")
+      .config("spark.driver.memory", "2G")
+      .config("spark.driver.memoryOverhead", "456M")
+      .config("spark.executor.memory", "888M")
+      .config("spark.executor.pyspark.memory", "123M")
+      .config("spark.executor.memoryOverhead", "444M")
+      .config("spark.driver.extraJavaOptions", s"-Duser.timezone=GMT")
+      .config("spark.executor.extraJavaOptions", s"-Duser.timezone=UTC")
+      .config("spark.sql.session.timeZone", "America/Los_Angeles")
+      .getOrCreate()
+
     try {
       if (!params.useCopyUnload) {
         // Enable test hook to simulate error when closing a result set on driver.
         // This exception doesn't affect the final result
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET)
-        sparkSession.read
+        separateSpark.read
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(connectorOptionsNoTable)
           .option("dbtable", s"$test_table_basic")
@@ -88,7 +105,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
         // Enable test hook to simulate error when opening a result set.
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_FAIL_OPEN_RESULT_SET)
         assertThrows[Exception]({
-          sparkSession.read
+          separateSpark.read
             .format(SNOWFLAKE_SOURCE_NAME)
             .options(connectorOptionsNoTable)
             .option("dbtable", s"$test_table_basic")
@@ -99,7 +116,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
         // Enable test hook to simulate error when reading a result set.
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_FAIL_READ_RESULT_SET)
         assertThrows[Exception]({
-          sparkSession.read
+          separateSpark.read
             .format(SNOWFLAKE_SOURCE_NAME)
             .options(connectorOptionsNoTable)
             .option("dbtable", s"$test_table_basic")

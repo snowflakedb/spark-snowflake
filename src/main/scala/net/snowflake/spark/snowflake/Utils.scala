@@ -671,10 +671,12 @@ object Utils {
 
   def getClientInfoJson(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
+    addClientInfoJson(metric)
+  }
 
+  private[snowflake] def addClientInfoJson(metric: ObjectNode): ObjectNode = {
     metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
     metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
-    metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
     metric.put(TelemetryClientInfoFields.SCALA_VERSION, esc(scalaVersion))
     metric.put(TelemetryClientInfoFields.JAVA_VERSION, esc(javaVersion))
     metric.put(TelemetryClientInfoFields.JDBC_VERSION, esc(jdbcVersion))

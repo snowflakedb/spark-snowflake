@@ -201,6 +201,9 @@ private[io] object StageWriter {
     val prologueSql = Utils.genPrologueSql(params)
     log.debug(prologueSql.toString)
 
+    log.info(s"${SnowflakeResultSetRDD.MASTER_LOG_PREFIX} System config with " +
+      s"write: ${SnowflakeTelemetry.getSystemConfigWithoutTaskInfo().toPrettyString}")
+
     val conn = DefaultJDBCWrapper.getConnector(params)
 
     try {
@@ -581,7 +584,8 @@ private[io] object StageWriter {
           TelemetryConstValues.STATUS_FAIL,
           end - start,
           Some(th),
-          progress.mkString("\n"))
+          progress.mkString("\n"),
+          Some(SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()))
         // Re-throw the exception
         throw th
       }
