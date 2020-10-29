@@ -17,9 +17,8 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.spark.snowflake.ClusterTest.log
 import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, TestUtils}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.SparkSession
 
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.io.Source
@@ -80,117 +79,9 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
   lazy val targetSchema: String = TestUtils.sfStressOptions("sfschema")
 
   // These values will be replaced by those in StressTestSourceTable
-  lazy val baseStressTestOptions: Map[String, String] = TestUtils.sfStressOptions.filterKeys(param =>
-    !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
-
-  protected def readWriteSnowflakeTableWithDatabase(
-      sparkSession: SparkSession,
-      resultBuilder: ClusterTestResultBuilder,
-      sfOptionsNoTable: Map[String, String],
-      sourceDatabase: String,
-      sourceSchema: String,
-      sourceTableName: String,
-      targetDatabase: String,
-      targetSchema: String,
-      targetTableName: String): Unit = {
-
-    val sqlContext = sparkSession.sqlContext
-    val tableNameInfo =
-      s"Source:$sourceSchema.$sourceTableName Target=$targetSchema.$targetTableName"
-
-    // Read DataFrame.
-    val df = sqlContext.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", sourceTableName)
-      .option("sfschema", sourceSchema)
-      .option("sfdatabase", sourceDatabase)
-      .load()
-
-    // Write DataFrame
-    df.write
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", targetTableName)
-      .option("sfschema", targetSchema)
-      .option("sfdatabase", targetDatabase)
-      .mode(SaveMode.Overwrite)
-      .save()
-
-    // Source rowCount
-    val sourceRowCount = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", sourceTableName)
-      .option("sfschema", sourceSchema)
-      .option("sfdatabase", sourceDatabase)
-      .load()
-      .count()
-
-    // Target rowCount
-    val targetRowCount = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", targetTableName)
-      .option("sfschema", targetSchema)
-      .option("sfdatabase", targetDatabase)
-      .load()
-      .count()
-
-    // verify row count to be equal
-    val rowCountInfo =
-      s"sourceRowCount=$sourceRowCount, targetRowCount=$targetRowCount"
-    log.info(rowCountInfo)
-    if (sourceRowCount != targetRowCount) {
-      resultBuilder
-        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(
-          s"Read Write row count is incorrect: $tableNameInfo $rowCountInfo"
-        )
-      return
-    }
-
-    // Source HASH_AGG result
-    val sourceHashAgg = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option(
-        "query",
-        s"select HASH_AGG(*) from $sourceSchema.$sourceTableName"
-      )
-      .option("sfdatabase", sourceDatabase)
-      .load()
-      .collect()(0)(0)
-
-    // Target HASH_AGG result
-    val targetHashAgg = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option(
-        "query",
-        s"select HASH_AGG(*) from $targetSchema.$targetTableName"
-      )
-      .option("sfdatabase", targetDatabase)
-      .load()
-      .collect()(0)(0)
-
-    val hashAggInfo =
-      s"sourceHashAgg=$sourceHashAgg targetHashAgg=$targetHashAgg"
-    // Verify hash agg to be equal
-    if (sourceHashAgg != targetHashAgg) {
-      resultBuilder
-        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(
-          s"hash agg result is incorrect: $tableNameInfo $hashAggInfo"
-        )
-      return
-    }
-
-    // Test succeed.
-    resultBuilder
-      .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
-      .withReason("Success")
-  }
+  lazy val baseStressTestOptions: Map[String, String] =
+    TestUtils.sfStressOptions.filterKeys(param =>
+      !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
 
   override def runImpl(
       sparkSession: SparkSession,
@@ -200,7 +91,7 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
       val targetTableName = s"test_write_table_${source.table}_$randomSuffix"
 
       // Read write a basic table:
-      readWriteSnowflakeTableWithDatabase(
+      super.readWriteSnowflakeTableWithDatabase(
         sparkSession,
         resultBuilder,
         TestUtils.sfOptionsNoTable,

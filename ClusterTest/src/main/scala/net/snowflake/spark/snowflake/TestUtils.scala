@@ -74,7 +74,7 @@ object TestUtils {
       val itr = node.fields()
       while (itr.hasNext) {
         val entry = itr.next()
-        result = result + (entry.getKey -> entry.getValue.asText())
+        result = result + (entry.getKey.toLowerCase -> entry.getValue.asText())
       }
     }
 

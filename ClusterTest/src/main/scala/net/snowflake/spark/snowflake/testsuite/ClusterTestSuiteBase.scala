@@ -18,13 +18,12 @@ package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
 import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, TestUtils}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import scala.util.Random
 
 trait ClusterTestSuiteBase {
-  def run(sparkSession: SparkSession,
-          resultBuilder: ClusterTestResultBuilder): Unit = {
+  def run(sparkSession: SparkSession, resultBuilder: ClusterTestResultBuilder): Unit = {
     // Start to run the test.
     resultBuilder.withTestStatus(TestUtils.TEST_RESULT_STATUS_START)
 
@@ -36,58 +35,66 @@ trait ClusterTestSuiteBase {
   }
 
   // Each test case MUST implement this function.
-  def runImpl(sparkSession: SparkSession,
-              resultBuilder: ClusterTestResultBuilder): Unit
+  def runImpl(sparkSession: SparkSession, resultBuilder: ClusterTestResultBuilder): Unit
 
   protected def randomSuffix: String = Math.abs(Random.nextLong()).toString
 
   // Utility function to read one table and write to another.
-  protected def readWriteSnowflakeTable(sparkSession: SparkSession,
-                                        resultBuilder: ClusterTestResultBuilder,
-                                        sfOptionsNoTable: Map[String, String],
-                                        sourceSchema: String,
-                                        sourceTableName: String,
-                                        targetSchema: String,
-                                        targetTableName: String): Unit = {
-    val sqlContext = sparkSession.sqlContext
+  protected def readWriteSnowflakeTable(
+      sparkSession: SparkSession,
+      resultBuilder: ClusterTestResultBuilder,
+      sfOptionsNoTable: Map[String, String],
+      sourceSchema: String,
+      sourceTableName: String,
+      targetSchema: String,
+      targetTableName: String): Unit = {
+    readWriteSnowflakeTableWithDatabase(
+      sparkSession,
+      resultBuilder,
+      sfOptionsNoTable,
+      sfOptionsNoTable("sfdatabase"),
+      sourceSchema,
+      sourceTableName,
+      sfOptionsNoTable("sfdatabase"),
+      targetSchema,
+      targetTableName)
+  }
+
+  protected def readWriteSnowflakeTableWithDatabase(
+      sparkSession: SparkSession,
+      resultBuilder: ClusterTestResultBuilder,
+      sfOptions: Map[String, String],
+      sourceDatabase: String,
+      sourceSchema: String,
+      sourceTableName: String,
+      targetDatabase: String,
+      targetSchema: String,
+      targetTableName: String): Unit = {
+
+    val options = sfOptions.filterKeys(param =>
+      !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
+
     val tableNameInfo =
       s"Source:$sourceSchema.$sourceTableName Target=$targetSchema.$targetTableName"
 
-    // Read DataFrame.
-    val df = sqlContext.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      // .option("query", s"select * from $sourceSchema.$sourceTableName limit 100000")
-      .option("dbtable", sourceTableName)
-      .option("sfSchema", sourceSchema)
-      .load()
+    val sourceOptions = options ++ Map(
+      "dbtable" -> sourceTableName,
+      "sfschema" -> sourceSchema,
+      "sfdatabase" -> sourceDatabase)
+    val targetOptions = options ++ Map(
+      "dbtable" -> targetTableName,
+      "sfschema" -> targetSchema,
+      "sfdatabase" -> targetDatabase)
 
+    // Read DataFrame.
+    val sourceDF = readDataFrameFromSnowflake(sparkSession, sourceOptions)
     // Write DataFrame
-    df.write
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", targetTableName)
-      .option("sfSchema", targetSchema)
-      .mode(SaveMode.Overwrite)
-      .save()
+    val targetDF = writeDataFrameToSnowflake(sourceDF, targetOptions)
 
     // Source rowCount
-    val sourceRowCount = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", sourceTableName)
-      .option("sfSchema", sourceSchema)
-      .load()
-      .count()
-
+    val sourceRowCount = sourceDF.count
     // Target rowCount
-    val targetRowCount = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option("dbtable", targetTableName)
-      .option("sfSchema", targetSchema)
-      .load()
-      .count()
+    val targetRowCount = targetDF.count
 
     // verify row count to be equal
     val rowCountInfo =
@@ -96,32 +103,21 @@ trait ClusterTestSuiteBase {
     if (sourceRowCount != targetRowCount) {
       resultBuilder
         .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(
-          s"Read Write row count is incorrect: $tableNameInfo $rowCountInfo"
-        )
+        .withReason(s"Read Write row count is incorrect: $tableNameInfo $rowCountInfo")
       return
     }
 
+    val sourceTableHashAgg = options ++ Map(
+      "query" -> s"select HASH_AGG(*) from $sourceSchema.$sourceTableName")
+    val targetTableHashAgg = options ++ Map(
+      "query" -> s"select HASH_AGG(*) from $targetSchema.$targetTableName")
+
     // Source HASH_AGG result
-    val sourceHashAgg = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option(
-        "query",
-        s"select HASH_AGG(*) from $sourceSchema.$sourceTableName"
-      )
-      .load()
+    val sourceHashAgg = readDataFrameFromSnowflake(sparkSession, sourceTableHashAgg)
       .collect()(0)(0)
 
     // Target HASH_AGG result
-    val targetHashAgg = sparkSession.read
-      .format(TestUtils.SNOWFLAKE_NAME)
-      .options(sfOptionsNoTable)
-      .option(
-        "query",
-        s"select HASH_AGG(*) from $targetSchema.$targetTableName"
-      )
-      .load()
+    val targetHashAgg = readDataFrameFromSnowflake(sparkSession, targetTableHashAgg)
       .collect()(0)(0)
 
     val hashAggInfo =
@@ -130,9 +126,7 @@ trait ClusterTestSuiteBase {
     if (sourceHashAgg != targetHashAgg) {
       resultBuilder
         .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(
-          s"hash agg result is incorrect: $tableNameInfo $hashAggInfo"
-        )
+        .withReason(s"hash agg result is incorrect: $tableNameInfo $hashAggInfo")
       return
     }
 
@@ -140,5 +134,29 @@ trait ClusterTestSuiteBase {
     resultBuilder
       .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
       .withReason("Success")
+  }
+
+  protected def writeDataFrameToSnowflake(
+      df: DataFrame,
+      options: Map[String, String]): DataFrame = {
+    df.write
+      .format(TestUtils.SNOWFLAKE_NAME)
+      .options(options)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Return the written DataFrame
+    readDataFrameFromSnowflake(df.sparkSession, options)
+  }
+
+  protected def readDataFrameFromSnowflake(
+      sparkSession: SparkSession,
+      options: Map[String, String]): DataFrame = {
+    val sqlContext = sparkSession.sqlContext
+
+    sqlContext.read
+      .format(TestUtils.SNOWFLAKE_NAME)
+      .options(options)
+      .load()
   }
 }
