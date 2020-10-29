@@ -226,10 +226,7 @@ private[snowflake] class JDBCWrapper {
     }
 
     // Send client info telemetry message.
-    val extraValues = Map(
-      TelemetryClientInfoFields.SFURL -> sfURL,
-      TelemetryClientInfoFields.APPLICATION_NAME -> Utils.sparkAppName
-    )
+    val extraValues = Map(TelemetryClientInfoFields.SFURL -> sfURL)
     SnowflakeTelemetry.sendClientInfoTelemetryIfNotYet(extraValues, conn)
 
     conn

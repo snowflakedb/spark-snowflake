@@ -23,7 +23,7 @@ import java.util.{Properties, UUID}
 
 import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import org.apache.spark.{SPARK_VERSION, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkContext, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -71,8 +71,11 @@ object Utils {
   /**
     * Client info related variables
     */
-  private[snowflake] lazy val sparkAppName =
-    SparkContext.getOrCreate().getConf.get("spark.app.name", "")
+  private[snowflake] lazy val sparkAppName = if (SparkEnv.get != null) {
+    SparkEnv.get.conf.get("spark.app.name", "")
+  } else {
+    ""
+  }
   private[snowflake] lazy val scalaVersion =
     util.Properties.versionNumberString
   private[snowflake] lazy val javaVersion =
@@ -677,6 +680,7 @@ object Utils {
   private[snowflake] def addClientInfoJson(metric: ObjectNode): ObjectNode = {
     metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
     metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
+    metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
     metric.put(TelemetryClientInfoFields.SCALA_VERSION, esc(scalaVersion))
     metric.put(TelemetryClientInfoFields.JAVA_VERSION, esc(javaVersion))
     metric.put(TelemetryClientInfoFields.JDBC_VERSION, esc(jdbcVersion))
