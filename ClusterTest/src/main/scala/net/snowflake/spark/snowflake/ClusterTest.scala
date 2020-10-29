@@ -17,8 +17,8 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.testsuite.ClusterTestSuiteBase
-import org.slf4j.{Logger, LoggerFactory}
 import org.apache.spark.sql.SparkSession
+import org.slf4j.{Logger, LoggerFactory}
 
 object ClusterTest {
   val log: Logger = LoggerFactory.getLogger(getClass)
@@ -63,7 +63,7 @@ object ClusterTest {
           .envOrElse(TestUtils.GITHUB_SHA, "commit id not set")
 
         // val testSuiteName = "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite"
-        val resultBuilder = new ClusterTestResultBuilder()
+        val resultBuilder = new GithubActionsClusterTestResultBuilder()
           .withTestType("Scala")
           .withTestCaseName(testSuiteName)
           .withCommitID(commitID)

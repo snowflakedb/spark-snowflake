@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, TestUtils}
 import org.apache.spark.sql.SparkSession
 
 import scala.collection.JavaConverters.asScalaBufferConverter
@@ -85,7 +85,7 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
 
   override def runImpl(
       sparkSession: SparkSession,
-      resultBuilder: ClusterTestResultBuilder): Unit = {
+      resultBuilder: BaseClusterTestResultBuilder): Unit = {
 
     tablesToRead.foreach(source => {
       val targetTableName = s"test_write_table_${source.table}_$randomSuffix"

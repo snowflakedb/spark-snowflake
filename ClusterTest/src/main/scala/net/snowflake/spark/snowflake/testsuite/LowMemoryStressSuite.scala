@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
@@ -30,7 +30,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
   private val log = LoggerFactory.getLogger(getClass)
 
   override def runImpl(sparkSession: SparkSession,
-                       resultBuilder: ClusterTestResultBuilder): Unit = {
+                       resultBuilder: BaseClusterTestResultBuilder): Unit = {
 
     def getRandomString(len: Int): String = {
       Random.alphanumeric take len mkString ""

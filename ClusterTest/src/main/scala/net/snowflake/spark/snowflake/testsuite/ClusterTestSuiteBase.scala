@@ -17,13 +17,13 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
-import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, TestUtils}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import scala.util.Random
 
 trait ClusterTestSuiteBase {
-  def run(sparkSession: SparkSession, resultBuilder: ClusterTestResultBuilder): Unit = {
+  def run(sparkSession: SparkSession, resultBuilder: BaseClusterTestResultBuilder): Unit = {
     // Start to run the test.
     resultBuilder.withTestStatus(TestUtils.TEST_RESULT_STATUS_START)
 
@@ -35,14 +35,14 @@ trait ClusterTestSuiteBase {
   }
 
   // Each test case MUST implement this function.
-  def runImpl(sparkSession: SparkSession, resultBuilder: ClusterTestResultBuilder): Unit
+  def runImpl(sparkSession: SparkSession, resultBuilder: BaseClusterTestResultBuilder): Unit
 
   protected def randomSuffix: String = Math.abs(Random.nextLong()).toString
 
   // Utility function to read one table and write to another.
   protected def readWriteSnowflakeTable(
       sparkSession: SparkSession,
-      resultBuilder: ClusterTestResultBuilder,
+      resultBuilder: BaseClusterTestResultBuilder,
       sfOptionsNoTable: Map[String, String],
       sourceSchema: String,
       sourceTableName: String,
@@ -62,7 +62,7 @@ trait ClusterTestSuiteBase {
 
   protected def readWriteSnowflakeTableWithDatabase(
       sparkSession: SparkSession,
-      resultBuilder: ClusterTestResultBuilder,
+      resultBuilder: BaseClusterTestResultBuilder,
       sfOptions: Map[String, String],
       sourceDatabase: String,
       sourceSchema: String,
@@ -108,9 +108,13 @@ trait ClusterTestSuiteBase {
     }
 
     val sourceTableHashAgg = options ++ Map(
-      "query" -> s"select HASH_AGG(*) from $sourceSchema.$sourceTableName")
+      "query" -> s"select HASH_AGG(*) from $sourceSchema.$sourceTableName",
+      "sfdatabase" -> sourceDatabase,
+      "sfschema" -> sourceSchema)
     val targetTableHashAgg = options ++ Map(
-      "query" -> s"select HASH_AGG(*) from $targetSchema.$targetTableName")
+      "query" -> s"select HASH_AGG(*) from $targetSchema.$targetTableName",
+      "sfdatabase" -> targetDatabase,
+      "sfschema" -> targetSchema)
 
     // Source HASH_AGG result
     val sourceHashAgg = readDataFrameFromSnowflake(sparkSession, sourceTableHashAgg)

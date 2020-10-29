@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.{
-  ClusterTestResultBuilder,
+  BaseClusterTestResultBuilder,
   DefaultJDBCWrapper,
   TestUtils
 }
@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 
 class BasicReadWriteSuite extends ClusterTestSuiteBase {
   override def runImpl(sparkSession: SparkSession,
-                       resultBuilder: ClusterTestResultBuilder): Unit = {
+                       resultBuilder: BaseClusterTestResultBuilder): Unit = {
     // its row count is 6.0M, compressed data size in SF is 157.7 MB.
     val sourceSchema = "TPCH_SF1"
     val sourceTableName = "LINEITEM"
