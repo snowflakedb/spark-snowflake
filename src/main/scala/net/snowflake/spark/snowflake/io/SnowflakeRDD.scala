@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake.io
 
 import java.io.InputStream
 
+import net.snowflake.spark.snowflake.SparkConnectorContext
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
@@ -18,6 +19,9 @@ class SnowflakeRDD(sc: SparkContext,
 
   override def compute(split: Partition,
                        context: TaskContext): Iterator[String] = {
+    // Log system configuration on executor
+    SparkConnectorContext.executorLogConfigIfNotYet()
+
     val snowflakePartition = split.asInstanceOf[SnowflakePartition]
 
     val stringIterator = new SFRecordReader(format, snowflakePartition.index)

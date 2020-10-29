@@ -563,9 +563,6 @@ sealed trait CloudStorage {
                                 fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
                                )
   : SingleElementIterator = {
-    // Log system configuration if not yet.
-    SnowflakeResultSetRDD.executorLogSystemConfigIfNotYet()
-
     val fileName = getFileName(partitionID, format, compress)
 
     // Either StorageInfo or fileTransferMetadata must be set.
@@ -765,6 +762,9 @@ sealed trait CloudStorage {
         ///////////////////////////////////////////////////////////////////////
         // Begin code snippet to be executed on worker
         ///////////////////////////////////////////////////////////////////////
+
+        // Log system configuration if not yet.
+        SparkConnectorContext.executorLogConfigIfNotYet()
 
         // Convert and upload the partition with the StorageInfo
         uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
@@ -1724,6 +1724,9 @@ case class InternalGcsStorage(param: MergedParameters,
         ///////////////////////////////////////////////////////////////////////
         // Begin code snippet to executed on worker
         ///////////////////////////////////////////////////////////////////////
+
+        // Log system configuration if not yet.
+        SparkConnectorContext.executorLogConfigIfNotYet()
 
         // Get file transfer metadata object
         val metadata = if (oneMetadataPerFile) {

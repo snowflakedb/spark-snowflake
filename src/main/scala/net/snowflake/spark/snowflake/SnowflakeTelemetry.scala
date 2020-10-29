@@ -247,12 +247,7 @@ object SnowflakeTelemetry {
 
     // System config retrieving is for diagnostic purpose, it raises exception.
     try {
-      // Add versions info
-      Utils.addClientInfoJson(metric)
-      // Add JVM system config
-      addJVMConfig(metric)
-      // Add Spark option
-      addSparkConfig(metric)
+      addSystemConfigInternal(metric)
     } catch {
       case _: Throwable => {
         metric
@@ -260,12 +255,23 @@ object SnowflakeTelemetry {
     }
   }
 
+  private def addSystemConfigInternal(metric: ObjectNode): ObjectNode = {
+    // Add versions info
+    Utils.addClientInfoJson(metric)
+    // Add JVM system config
+    addJVMConfig(metric)
+    // Add Spark option
+    addSparkConfig(metric)
+  }
+
   // Configuration retrieving is optional for for diagnostic purpose,
   // so it never raises exception.
   private[snowflake] def getSystemConfigWithTaskInfo(): ObjectNode = {
     val metric = getSystemConfigWithoutTaskInfo()
-    // Add task and executor info
+
     try {
+      addSystemConfigInternal(metric)
+      // Add task and executor info
       addTaskInfo(metric)
     } catch {
       case _: Throwable => {

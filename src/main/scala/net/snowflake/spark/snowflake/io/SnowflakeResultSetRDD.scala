@@ -6,7 +6,7 @@ import java.util.Properties
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake.{Conversions, LoggerWithTelemetry, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, TelemetryConstValues, TelemetryReporter}
+import net.snowflake.spark.snowflake.{Conversions, LoggerWithTelemetry, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues, TelemetryReporter}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -22,21 +22,6 @@ object SnowflakeResultSetRDD {
   private[snowflake] val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
   private[snowflake] val MASTER_LOG_PREFIX = "Spark Connector Master"
   private[snowflake] val WORKER_LOG_PREFIX = "Spark Connector Worker"
-  private var doesExecutorSystemConfigLogged = false
-
-  // One executor may execute multiple tasks, it is enough to log once.
-  private[snowflake] def executorLogSystemConfigIfNotYet(): Unit = {
-    if (!doesExecutorSystemConfigLogged) {
-      // Need to synchronize only if no executors have logged.
-      doesExecutorSystemConfigLogged.synchronized {
-        if (!doesExecutorSystemConfigLogged) {
-          doesExecutorSystemConfigLogged = true
-          logger.info(s"$WORKER_LOG_PREFIX: system config: " +
-            s"${SnowflakeTelemetry.getSystemConfigWithTaskInfo().toPrettyString}")
-        }
-      }
-    }
-  }
 }
 
 class SnowflakeResultSetRDD[T: ClassTag](
@@ -48,7 +33,10 @@ class SnowflakeResultSetRDD[T: ClassTag](
   sfFullURL: String
 ) extends RDD[T](sc, Nil) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[T] =
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    // Log system configuration on executor
+    SparkConnectorContext.executorLogConfigIfNotYet()
+
     ResultIterator[T](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
@@ -57,6 +45,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
       queryID,
       sfFullURL
     )
+  }
 
   override protected def getPartitions: Array[Partition] =
     resultSets.zipWithIndex.map {
@@ -73,9 +62,6 @@ case class ResultIterator[T: ClassTag](
   queryID: String,
   sfFullURL: String
 ) extends Iterator[T] {
-  // Log system configuration once per executor
-  SnowflakeResultSetRDD.executorLogSystemConfigIfNotYet()
-
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
     // Set up proxy info if it is configured.
