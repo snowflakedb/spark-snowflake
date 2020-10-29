@@ -82,7 +82,7 @@ object ClusterTest {
             log.error(e.getMessage)
             resultBuilder
               .withTestStatus(TestUtils.TEST_RESULT_STATUS_EXCEPTION)
-              .withReason(e.getMessage)
+              .withReason(Some(e.getMessage))
         } finally {
           // Set test end time.
           resultBuilder

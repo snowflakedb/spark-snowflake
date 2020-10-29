@@ -16,36 +16,41 @@
 
 package net.snowflake.spark.snowflake.testsuite
 
-import net.snowflake.spark.snowflake.{
-  BaseClusterTestResultBuilder,
-  DefaultJDBCWrapper,
-  TestUtils
-}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, TaskContext, TestUtils}
 import org.apache.spark.sql.SparkSession
 
 class BasicReadWriteSuite extends ClusterTestSuiteBase {
-  override def runImpl(sparkSession: SparkSession,
-                       resultBuilder: BaseClusterTestResultBuilder): Unit = {
+  override def runImpl(
+      sparkSession: SparkSession,
+      resultBuilder: BaseClusterTestResultBuilder): Unit = {
     // its row count is 6.0M, compressed data size in SF is 157.7 MB.
     val sourceSchema = "TPCH_SF1"
     val sourceTableName = "LINEITEM"
     val targetSchema = "spark_test"
     val targetTableName = s"test_write_table_$randomSuffix"
 
+    val taskContext = TaskContext("BasicReadWriteSuite: TPCH_SF1")
+    taskContext.taskStartTime = System.currentTimeMillis
+
     // Read write a basic table:
     super.readWriteSnowflakeTable(
+      taskContext,
       sparkSession,
-      resultBuilder,
       TestUtils.sfOptionsNoTable,
       sourceSchema,
       sourceTableName,
       targetSchema,
-      targetTableName
-    )
+      targetTableName)
+
+    taskContext.taskEndTime = System.currentTimeMillis
+    resultBuilder.withNewSubTaskResult(taskContext)
+
+    // This is a simple test suite. The overall result of the suite is the same as that of the single subtask.
+    resultBuilder.withTestStatus(taskContext.testStatus).withReason(taskContext.reason)
 
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
-    if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+    if (taskContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
       val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
       connection
         .createStatement()

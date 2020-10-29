@@ -39,11 +39,15 @@ object TestUtils {
   val JDBC_DRIVER = "net.snowflake.client.jdbc.SnowflakeDriver"
 
   // Test case result status
+  val TEST_RESULT_STATUS_NOT_STARTED = "NotStarted"
   val TEST_RESULT_STATUS_INIT = "Initialized"
   val TEST_RESULT_STATUS_START = "Started"
   val TEST_RESULT_STATUS_SUCCESS = "Success"
   val TEST_RESULT_STATUS_FAIL = "Fail"
   val TEST_RESULT_STATUS_EXCEPTION = "Exception"
+
+  // Reason strings
+  val TEST_RESULT_REASON_NO_REASON = "no reason"
 
   // For Performance and Stress Testing
   val STRESS_TEST_SOURCES = "STRESS_TEST_SOURCES"

@@ -21,16 +21,16 @@ import java.time.Instant
 class GithubActionsClusterTestResult(builder: GithubActionsClusterTestResultBuilder)
     extends ClusterTestResult {
   val testType: String = builder.testType
-  val testCaseName: String = builder.testCaseName
-  val testStatus: String = builder.testStatus
+  val testCaseName: String = builder.overallTestContext.testName
+  val testStatus: String = builder.overallTestContext.testStatus
   val commitID: String = builder.commitID
   val githubRunId: String = builder.githubRunId
   val startTime: String =
-    Instant.ofEpochMilli(builder.startTimeInMillis).toString
+    Instant.ofEpochMilli(builder.overallTestContext.taskStartTime).toString
   val testRunTime: String = {
-    val usedTime = builder.endTimeInMillis - builder.startTimeInMillis
+    val usedTime = builder.overallTestContext.taskEndTime - builder.overallTestContext.taskStartTime
     if (usedTime < 0) {
-      s"Wrong time: Start ${builder.endTimeInMillis} end: ${builder.startTimeInMillis}"
+      s"Wrong time: Start ${builder.overallTestContext.taskStartTime} end: ${builder.overallTestContext.taskEndTime}"
     } else if (usedTime < 1000) {
       s"$usedTime ms"
     } else if (usedTime < 1000 * 60) {
@@ -39,7 +39,7 @@ class GithubActionsClusterTestResult(builder: GithubActionsClusterTestResultBuil
       "%.2f minutes".format(usedTime.toDouble / 1000 / 60)
     }
   }
-  val reason: String = builder.reason
+  val reason: String = builder.overallTestContext.reason.getOrElse(TestUtils.TEST_RESULT_REASON_NO_REASON)
 
   def writeToSnowflake(): Unit = {
     val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)

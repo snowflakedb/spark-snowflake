@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
@@ -31,6 +31,8 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
 
   override def runImpl(sparkSession: SparkSession,
                        resultBuilder: BaseClusterTestResultBuilder): Unit = {
+
+    val taskContext = TaskContext("LowMemoryStressSuite")
 
     def getRandomString(len: Int): String = {
       Random.alphanumeric take len mkString ""
@@ -52,9 +54,9 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       .mapPartitions { _ => {
         (1 to rowCountPerPartition).map { i => {
           Row(randomString1, randomString2,
-              randomString3, randomString4,
-              randomString5, randomString6,
-              randomString7, randomString8)
+            randomString3, randomString4,
+            randomString5, randomString6,
+            randomString7, randomString8)
         }
         }.iterator
       }
@@ -73,6 +75,8 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
     )
     val test_big_partition = s"test_big_partition_$randomSuffix"
 
+    taskContext.taskStartTime = System.currentTimeMillis
+
     // Convert RDD to DataFrame
     val df = sparkSession.createDataFrame(testRDD, schema)
 
@@ -90,23 +94,30 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       case e: Throwable => {
         // Test succeed
         noOOMError = false
-        resultBuilder
-          .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
-          .withReason("Success")
+        taskContext.testStatus = TestUtils.TEST_RESULT_STATUS_SUCCESS
+        taskContext.reason = Some("Success")
       }
     }
-    if (noOOMError) {
-      throw new Exception("Expecting OOM error but didn't catch that.")
-    }
+    finally {
+      taskContext.taskEndTime = System.currentTimeMillis()
+      resultBuilder.withNewSubTaskResult(taskContext)
 
-    // If test is successful, drop the target table,
-    // otherwise, keep it for further investigation.
-    if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
-      val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
-      connection
-        .createStatement()
-        .execute(s"drop table if exists $test_big_partition")
-      connection.close()
+      // This is a simple test suite. The overall result of the suite is the same as that of the single subtask.
+      resultBuilder.withTestStatus(taskContext.testStatus).withReason(taskContext.reason)
+
+      if (noOOMError) {
+        throw new Exception("Expecting OOM error but didn't catch that.")
+      }
+
+      // If test is successful, drop the target table,
+      // otherwise, keep it for further investigation.
+      if (taskContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+        val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
+        connection
+          .createStatement()
+          .execute(s"drop table if exists $test_big_partition")
+        connection.close()
+      }
     }
   }
 }

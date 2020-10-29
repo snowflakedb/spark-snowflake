@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
-import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, TaskContext, TestUtils}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import scala.util.Random
@@ -31,7 +31,7 @@ trait ClusterTestSuiteBase {
     runImpl(sparkSession, resultBuilder)
 
     // The test implementation should set up the test status
-    assert(resultBuilder.testStatus != TestUtils.TEST_RESULT_STATUS_START)
+    assert(resultBuilder.overallTestContext.testStatus != TestUtils.TEST_RESULT_STATUS_START)
   }
 
   // Each test case MUST implement this function.
@@ -41,16 +41,16 @@ trait ClusterTestSuiteBase {
 
   // Utility function to read one table and write to another.
   protected def readWriteSnowflakeTable(
+      taskContext: TaskContext,
       sparkSession: SparkSession,
-      resultBuilder: BaseClusterTestResultBuilder,
       sfOptionsNoTable: Map[String, String],
       sourceSchema: String,
       sourceTableName: String,
       targetSchema: String,
       targetTableName: String): Unit = {
     readWriteSnowflakeTableWithDatabase(
+      taskContext,
       sparkSession,
-      resultBuilder,
       sfOptionsNoTable,
       sfOptionsNoTable("sfdatabase"),
       sourceSchema,
@@ -61,8 +61,8 @@ trait ClusterTestSuiteBase {
   }
 
   protected def readWriteSnowflakeTableWithDatabase(
+      taskContext: TaskContext,
       sparkSession: SparkSession,
-      resultBuilder: BaseClusterTestResultBuilder,
       sfOptions: Map[String, String],
       sourceDatabase: String,
       sourceSchema: String,
@@ -101,9 +101,9 @@ trait ClusterTestSuiteBase {
       s"sourceRowCount=$sourceRowCount, targetRowCount=$targetRowCount"
     log.info(rowCountInfo)
     if (sourceRowCount != targetRowCount) {
-      resultBuilder
-        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(s"Read Write row count is incorrect: $tableNameInfo $rowCountInfo")
+      taskContext.testStatus = TestUtils.TEST_RESULT_STATUS_FAIL
+      taskContext.reason = Some(
+        s"Read Write row count is incorrect: $tableNameInfo $rowCountInfo")
       return
     }
 
@@ -128,16 +128,14 @@ trait ClusterTestSuiteBase {
       s"sourceHashAgg=$sourceHashAgg targetHashAgg=$targetHashAgg"
     // Verify hash agg to be equal
     if (sourceHashAgg != targetHashAgg) {
-      resultBuilder
-        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
-        .withReason(s"hash agg result is incorrect: $tableNameInfo $hashAggInfo")
+      taskContext.testStatus = TestUtils.TEST_RESULT_STATUS_FAIL
+      taskContext.reason = Some(s"hash agg result is incorrect: $tableNameInfo $hashAggInfo")
       return
     }
 
-    // Test succeed.
-    resultBuilder
-      .withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
-      .withReason("Success")
+    // Test succeeded.
+    taskContext.testStatus = TestUtils.TEST_RESULT_STATUS_SUCCESS
+    taskContext.reason = Some("Success")
   }
 
   protected def writeDataFrameToSnowflake(

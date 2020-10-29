@@ -28,24 +28,24 @@ class GithubActionsClusterTestResultBuilder() extends BaseClusterTestResultBuild
 
   override def withStartTimeInMill(
       startTimeInMillis: Long): GithubActionsClusterTestResultBuilder = {
-    this.startTimeInMillis = startTimeInMillis
+    this.overallTestContext.taskStartTime = startTimeInMillis
     this
   }
 
   override def withEndTimeInMill(endTimeInMillis: Long): GithubActionsClusterTestResultBuilder = {
-    this.endTimeInMillis = endTimeInMillis
+    this.overallTestContext.taskEndTime = endTimeInMillis
     this
   }
   override def withTestCaseName(testCaseName: String): GithubActionsClusterTestResultBuilder = {
-    this.testCaseName = testCaseName
+    this.overallTestContext.testName = testCaseName
     this
   }
   override def withTestStatus(testStatus: String): GithubActionsClusterTestResultBuilder = {
-    this.testStatus = testStatus
+    this.overallTestContext.testStatus = testStatus
     this
   }
-  override def withReason(reason: String): GithubActionsClusterTestResultBuilder = {
-    this.reason = reason
+  override def withReason(reason: Option[String]): GithubActionsClusterTestResultBuilder = {
+    this.overallTestContext.reason = reason
     this
   }
 
@@ -62,9 +62,6 @@ class GithubActionsClusterTestResultBuilder() extends BaseClusterTestResultBuild
     this
   }
   // This does nothing for now when running on Github.
-  override def withNewSubTestResult(
-      startTime: Long,
-      endTime: Long,
-      status: String,
-      reason: String): GithubActionsClusterTestResultBuilder = this
+  override def withNewSubTaskResult(
+      subTaskContext: TaskContext): GithubActionsClusterTestResultBuilder = this
 }

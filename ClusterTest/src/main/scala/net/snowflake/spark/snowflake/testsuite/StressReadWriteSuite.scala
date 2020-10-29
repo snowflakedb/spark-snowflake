@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, TestUtils}
+import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, TaskContext, TestUtils}
 import org.apache.spark.sql.SparkSession
 
 import scala.collection.JavaConverters.asScalaBufferConverter
@@ -29,8 +29,68 @@ import scala.io.Source
  */
 class StressReadWriteSuite extends ClusterTestSuiteBase {
 
-  // A source table to read from for a stress test is defined by its database, schema, and table name
-  case class StressTestSourceTable(database: String, schema: String, table: String)
+  lazy val tablesToRead: List[StressTestSourceTable] =
+    getTablesToReadFromSourcesFile(System.getenv(TestUtils.STRESS_TEST_SOURCES))
+  lazy val targetDatabase: String = TestUtils.sfStressOptions("sfdatabase")
+  lazy val targetSchema: String = TestUtils.sfStressOptions("sfschema")
+  // These values will be replaced by those in StressTestSourceTable
+  lazy val baseStressTestOptions: Map[String, String] =
+    TestUtils.sfStressOptions.filterKeys(param =>
+      !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
+
+  override def runImpl(
+      sparkSession: SparkSession,
+      resultBuilder: BaseClusterTestResultBuilder): Unit = {
+
+    var numSuccessfulTableReads: Int = 0
+
+    tablesToRead.foreach(source => {
+      val sourceTableContext = TaskContext(source.toString)
+      sourceTableContext.taskStartTime = System.currentTimeMillis
+
+      val targetTableName = s"test_write_table_${source.table}_$randomSuffix"
+
+      // Read write a basic table:
+      super.readWriteSnowflakeTableWithDatabase(
+        sourceTableContext,
+        sparkSession,
+        TestUtils.sfOptionsNoTable,
+        source.database,
+        source.schema,
+        source.table,
+        targetDatabase,
+        targetSchema,
+        targetTableName)
+
+      sourceTableContext.taskEndTime = System.currentTimeMillis
+      resultBuilder.withNewSubTaskResult(sourceTableContext)
+
+      // If test is successful, drop the target table,
+      // otherwise, keep it for further investigation.
+      if (sourceTableContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+        numSuccessfulTableReads += 1
+        val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
+        connection
+          .createStatement()
+          .execute(s"drop table $targetSchema.$targetTableName")
+        connection.close()
+      }
+    })
+
+    if (numSuccessfulTableReads == 0) {
+      resultBuilder
+        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
+        .withReason(Some("No successful reads of any table."))
+    } else if (numSuccessfulTableReads < tablesToRead.size) {
+      resultBuilder
+        .withTestStatus(TestUtils.TEST_RESULT_STATUS_FAIL)
+        .withReason(Some(
+          s"Partial failure:$numSuccessfulTableReads were successfully read, " +
+            s"but the source file had ${tablesToRead.size} source tables defined."))
+    } else
+      resultBuilder.withTestStatus(TestUtils.TEST_RESULT_STATUS_SUCCESS)
+
+  }
 
   /**
    * Reads the json file as configured by the system env variable defined in TestUtils.STRESS_TEST_SOURCES
@@ -72,45 +132,8 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
       .toList
   }
 
-  lazy val tablesToRead: List[StressTestSourceTable] =
-    getTablesToReadFromSourcesFile(System.getenv(TestUtils.STRESS_TEST_SOURCES))
-
-  lazy val targetDatabase: String = TestUtils.sfStressOptions("sfdatabase")
-  lazy val targetSchema: String = TestUtils.sfStressOptions("sfschema")
-
-  // These values will be replaced by those in StressTestSourceTable
-  lazy val baseStressTestOptions: Map[String, String] =
-    TestUtils.sfStressOptions.filterKeys(param =>
-      !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
-
-  override def runImpl(
-      sparkSession: SparkSession,
-      resultBuilder: BaseClusterTestResultBuilder): Unit = {
-
-    tablesToRead.foreach(source => {
-      val targetTableName = s"test_write_table_${source.table}_$randomSuffix"
-
-      // Read write a basic table:
-      super.readWriteSnowflakeTableWithDatabase(
-        sparkSession,
-        resultBuilder,
-        TestUtils.sfOptionsNoTable,
-        source.database,
-        source.schema,
-        source.table,
-        targetDatabase,
-        targetSchema,
-        targetTableName)
-
-      // If test is successful, drop the target table,
-      // otherwise, keep it for further investigation.
-      if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
-        val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
-        connection
-          .createStatement()
-          .execute(s"drop table $targetSchema.$targetTableName")
-        connection.close()
-      }
-    })
+  // A source table to read from for a stress test is defined by its database, schema, and table name
+  case class StressTestSourceTable(database: String, schema: String, table: String) {
+    override def toString: String = s"stress_test_suite_$database.$schema.$table"
   }
 }
