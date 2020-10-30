@@ -32,6 +32,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
+import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConversions
 
@@ -51,7 +52,7 @@ private[snowflake] case class SnowflakeRelation(
     "SnowflakeRelation"
   }
 
-  val log = LoggerWrapperFactory.getLoggerWrapper(getClass) // Create a temporary stage
+  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass)) // Create a temporary stage
 
   override lazy val schema: StructType = {
     userSchema.getOrElse {

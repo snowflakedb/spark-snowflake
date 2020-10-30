@@ -6,14 +6,7 @@ import java.util.Properties
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake.{
-  Conversions,
-  LoggerWrapperFactory,
-  ProxyInfo,
-  SnowflakeConnectorException,
-  SnowflakeTelemetry,
-  TelemetryConstValues
-}
+import net.snowflake.spark.snowflake.{Conversions, LoggerWithTelemetry, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, TelemetryConstValues, TelemetryReporter}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -21,11 +14,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 
 object SnowflakeResultSetRDD {
-  private[snowflake] val logger = LoggerWrapperFactory.getLoggerWrapper(getClass)
+  private[snowflake] val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
   private[snowflake] val MASTER_LOG_PREFIX = "Spark Connector Master"
   private[snowflake] val WORKER_LOG_PREFIX = "Spark Connector Worker"
 }

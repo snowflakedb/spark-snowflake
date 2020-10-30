@@ -20,17 +20,13 @@ import org.slf4j.helpers.MessageFormatter
 import org.slf4j.{Logger, LoggerFactory}
 
 /**
-  * Logger Wrapper class.
+  * Logger Wrapper class with the ability to send telemetry message if necessary.
   *
-  * The logger wrapper may do some special handling for the log message,
-  * for example, sending telemetry messages. And then pass through the logging
-  * request to internal logger object.
-  *
-  * NOTE: LoggerWrapper only implements the functions which are used by Spark
-  *       Connector. If other functions in <code>org.slf4j.Logger</code> need
-  *       to be used, they need to be implemented in this class.
+  * NOTE: LoggerWithTelemetry only implements the functions which are used by
+  *       Spark Connector. If other functions in <code>org.slf4j.Logger</code>
+  *       need to be used, they need to be implemented in this class.
   */
-private[snowflake] class LoggerWrapper(logger: Logger) {
+private[snowflake] class LoggerWithTelemetry(logger: Logger) {
 
   // Do NOT throw exception when sending log entry
   private def sendLogTelemetryIfEnabled(level: String, msg: String): Unit = {
@@ -51,7 +47,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def trace(msg: String): Unit = {
     logger.trace(msg)
-    sendLogTelemetryIfEnabled(LoggerWrapper.TRACE_LEVEL, msg)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.TRACE_LEVEL, msg)
   }
 
   /**
@@ -61,7 +57,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def debug(msg: String): Unit = {
     logger.debug(msg)
-    sendLogTelemetryIfEnabled(LoggerWrapper.DEBUG_LEVEL, msg)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.DEBUG_LEVEL, msg)
   }
 
   /**
@@ -71,7 +67,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def info(msg: String): Unit = {
     logger.info(msg)
-    sendLogTelemetryIfEnabled(LoggerWrapper.INFO_LEVEL, msg)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.INFO_LEVEL, msg)
   }
 
   /**
@@ -81,7 +77,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def warn(msg: String): Unit = {
     logger.warn(msg)
-    sendLogTelemetryIfEnabled(LoggerWrapper.WARN_LEVEL, msg)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.WARN_LEVEL, msg)
   }
 
   /**
@@ -92,7 +88,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def warn(msg: String, t: Throwable): Unit = {
     logger.warn(msg, t)
-    sendLogTelemetryIfEnabled(LoggerWrapper.WARN_LEVEL, s"$msg: ${t.getMessage}")
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.WARN_LEVEL, s"$msg: ${t.getMessage}")
   }
 
   /**
@@ -102,7 +98,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def error(msg: String): Unit = {
     logger.error(msg)
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, msg)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.ERROR_LEVEL, msg)
   }
 
   /**
@@ -114,7 +110,7 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
     */
   def error(msg: String, t: Throwable): Unit = {
     logger.error(msg, t)
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, s"$msg: ${t.getMessage}")
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.ERROR_LEVEL, s"$msg: ${t.getMessage}")
   }
 
   /**
@@ -138,11 +134,11 @@ private[snowflake] class LoggerWrapper(logger: Logger) {
         s"$format, ${arg1.toString}, ${arg2.toString}"
       }
     }
-    sendLogTelemetryIfEnabled(LoggerWrapper.ERROR_LEVEL, logEntry)
+    sendLogTelemetryIfEnabled(LoggerWithTelemetry.ERROR_LEVEL, logEntry)
   }
 }
 
-private[snowflake] object LoggerWrapper {
+private[snowflake] object LoggerWithTelemetry {
   // Log levels
   val TRACE_LEVEL = "TRACE"
   val DEBUG_LEVEL = "DEBUG"
@@ -151,16 +147,3 @@ private[snowflake] object LoggerWrapper {
   val ERROR_LEVEL = "ERROR"
 }
 
-/**
-  * The <code>LoggerWrapperFactory</code> is a utility class producing a
-  * <code>LoggerWrapper</code> object.
-  */
-private[snowflake] object LoggerWrapperFactory {
-  private[snowflake] def getLoggerWrapper(clazz: Class[_]): LoggerWrapper = {
-    new LoggerWrapper(LoggerFactory.getLogger(clazz))
-  }
-
-  def getLoggerWrapper(name: String): LoggerWrapper = {
-    new LoggerWrapper(LoggerFactory.getLogger(name))
-  }
-}

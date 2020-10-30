@@ -20,13 +20,14 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SQLContext, SaveMode}
+import org.slf4j.LoggerFactory
 
 /**
   * Interface to IO component
   */
 package object io {
 
-  private[io] val logger = LoggerWrapperFactory.getLoggerWrapper(this.getClass)
+  private[io] val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(this.getClass))
 
   /**
     * Read a String RDD from Snowflake through given source

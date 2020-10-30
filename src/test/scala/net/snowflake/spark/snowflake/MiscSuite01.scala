@@ -182,7 +182,7 @@ class MiscSuite01 extends FunSuite with Matchers {
   test("test LoggerWrapper") {
     // Test LoggerWrapper with MockTelemetryReporter
     val targetOutputStream = new ByteArrayOutputStream()
-    var logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger 1"))
+    var logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 1"))
     TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(targetOutputStream))
 
     // log one message with TRACE; logger is created before setting Driver telemetry
@@ -192,7 +192,7 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
 
     // log one message with DEBUG; logger is created after setting Driver telemetry
-    logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger 2"))
+    logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 2"))
     targetOutputStream.reset()
     logger.debug(message)
     loggedMessage = new String(targetOutputStream.toByteArray)
@@ -254,7 +254,7 @@ class MiscSuite01 extends FunSuite with Matchers {
       }
     }
     TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(invalidOutputStream))
-    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"))
+    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
     // MockTelemetryReporter raise exception, but warn() doesn't
     logger.warn("no exception is raised")
 
@@ -263,7 +263,7 @@ class MiscSuite01 extends FunSuite with Matchers {
   }
 
   test("driver/executor logger set/get") {
-    val logger = new LoggerWrapper(LoggerFactory.getLogger("TestLogger"))
+    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
     // It's NoopTelemetry by default
     assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[NoopTelemetryReporter])
 

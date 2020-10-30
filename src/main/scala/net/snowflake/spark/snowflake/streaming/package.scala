@@ -7,6 +7,7 @@ import net.snowflake.spark.snowflake.io.{CloudStorage, SupportedFormat}
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.sql.types.StructType
+import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
@@ -15,7 +16,7 @@ import scala.concurrent.duration._
 
 package object streaming {
 
-  private val LOGGER = LoggerWrapperFactory.getLoggerWrapper(this.getClass.getName)
+  private val LOGGER = new LoggerWithTelemetry(LoggerFactory.getLogger(this.getClass.getName))
   private val SLEEP_TIME = 5000 // 5 seconds
   private val TIME_OUT = 5 // 5 minutes
 

@@ -37,6 +37,7 @@ import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.slf4j.LoggerFactory
 
 /**
   * Various arbitrary helper functions
@@ -83,7 +84,7 @@ object Utils {
   private[snowflake] val JDBC_DRIVER =
     "net.snowflake.client.jdbc.SnowflakeDriver"
 
-  private val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
+  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
 
   def classForName(className: String): Class[_] = {
     val classLoader =

@@ -7,17 +7,14 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.{
-  CloudStorage,
-  CloudStorageOperations,
-  SupportedFormat
-}
+import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryListener}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.slf4j.LoggerFactory
 
 class SnowflakeSink(sqlContext: SQLContext,
                     parameters: Map[String, String],
@@ -27,7 +24,7 @@ class SnowflakeSink(sqlContext: SQLContext,
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
 
-  private val log = LoggerWrapperFactory.getLoggerWrapper(getClass)
+  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
 
   private val param = Parameters.mergeParameters(
     parameters + ("keep_column_case" -> "on")

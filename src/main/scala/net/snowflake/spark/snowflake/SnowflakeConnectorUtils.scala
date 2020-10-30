@@ -23,11 +23,12 @@ import java.security.InvalidKeyException
 
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql.SparkSession
+import org.slf4j.LoggerFactory
 
 /** Connector utils, including what needs to be invoked to enable pushdowns. */
 object SnowflakeConnectorUtils {
 
-  @transient lazy val log = LoggerWrapperFactory.getLoggerWrapper(getClass.getName)
+  @transient lazy val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass.getName))
 
   /**
     * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
