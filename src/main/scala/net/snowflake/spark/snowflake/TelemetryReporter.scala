@@ -16,6 +16,8 @@
 
 package net.snowflake.spark.snowflake
 
+import org.apache.spark.TaskContext
+
 private[snowflake] object TelemetryReporter {
 
   private var driverTelemetryReporter: TelemetryReporter = new NoopTelemetryReporter()
@@ -28,27 +30,21 @@ private[snowflake] object TelemetryReporter {
     driverTelemetryReporter = new NoopTelemetryReporter()
   }
 
-  private val executorTelemetryReporters = new ThreadLocal[TelemetryReporter]() {
-    override protected def initialValue = new NoopTelemetryReporter()
-  }
-
-  private val isExecutorThread = new ThreadLocal[Boolean]() {
-    override protected def initialValue = false
-  }
+  private var executorTelemetryReporter: TelemetryReporter = new NoopTelemetryReporter()
 
   private[snowflake] def setExecutorTelemetryReporter(tr: TelemetryReporter): Unit = {
-    executorTelemetryReporters.set(tr)
-    isExecutorThread.set(true)
+    executorTelemetryReporter = tr
   }
 
   private[snowflake] def resetExecutorTelemetryReporter(): Unit = {
-    executorTelemetryReporters.set(new NoopTelemetryReporter())
-    isExecutorThread.set(false)
+    executorTelemetryReporter = new NoopTelemetryReporter()
   }
 
+  private[snowflake] def isExecutor(): Boolean = TaskContext.get() != null
+
   private[snowflake] def getTelemetryReporter(): TelemetryReporter = {
-    if (isExecutorThread.get()) {
-      executorTelemetryReporters.get()
+    if (isExecutor) {
+      executorTelemetryReporter
     } else {
       driverTelemetryReporter
     }

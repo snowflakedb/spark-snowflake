@@ -262,7 +262,7 @@ class MiscSuite01 extends FunSuite with Matchers {
     TelemetryReporter.resetDriverTelemetryReporter()
   }
 
-  test("driver/executor logger set/get") {
+  test("driver logger set/get") {
     val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
     // It's NoopTelemetry by default
     assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[NoopTelemetryReporter])
@@ -271,13 +271,8 @@ class MiscSuite01 extends FunSuite with Matchers {
     TelemetryReporter.setDriverTelemetryReporter(new DriverTelemetryReporter)
     assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[DriverTelemetryReporter])
 
-    // Set executor telemetry report
-    TelemetryReporter.setExecutorTelemetryReporter(new ExecutorTelemetryReporter)
-    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[ExecutorTelemetryReporter])
-
     // reset TelemetryReporter
     TelemetryReporter.resetDriverTelemetryReporter()
-    TelemetryReporter.resetExecutorTelemetryReporter()
   }
 
 }
