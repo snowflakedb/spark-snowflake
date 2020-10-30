@@ -16,52 +16,52 @@
 
 package net.snowflake.spark.snowflake
 
-class GithubActionsClusterTestResultBuilder() extends BaseClusterTestResultBuilder {
+class GithubActionsTestResultBuilder() extends BaseTestResultBuilder {
 
   protected[snowflake] var testType = "Scala" // There are Scala test and Python test.
   protected[snowflake] var commitID: String = _
   protected[snowflake] var githubRunId: String = _
 
   override def build(): ClusterTestResult = {
-    new GithubActionsClusterTestResult(this)
+    new GithubActionsTestResult(this)
   }
 
   override def withStartTimeInMill(
-      startTimeInMillis: Long): GithubActionsClusterTestResultBuilder = {
+      startTimeInMillis: Long): GithubActionsTestResultBuilder = {
     this.overallTestContext.taskStartTime = startTimeInMillis
     this
   }
 
-  override def withEndTimeInMill(endTimeInMillis: Long): GithubActionsClusterTestResultBuilder = {
+  override def withEndTimeInMill(endTimeInMillis: Long): GithubActionsTestResultBuilder = {
     this.overallTestContext.taskEndTime = endTimeInMillis
     this
   }
-  override def withTestCaseName(testCaseName: String): GithubActionsClusterTestResultBuilder = {
+  override def withTestCaseName(testCaseName: String): GithubActionsTestResultBuilder = {
     this.overallTestContext.testName = testCaseName
     this
   }
-  override def withTestStatus(testStatus: String): GithubActionsClusterTestResultBuilder = {
+  override def withTestStatus(testStatus: String): GithubActionsTestResultBuilder = {
     this.overallTestContext.testStatus = testStatus
     this
   }
-  override def withReason(reason: Option[String]): GithubActionsClusterTestResultBuilder = {
+  override def withReason(reason: Option[String]): GithubActionsTestResultBuilder = {
     this.overallTestContext.reason = reason
     this
   }
 
-  def withTestType(testType: String): GithubActionsClusterTestResultBuilder = {
+  def withTestType(testType: String): GithubActionsTestResultBuilder = {
     this.testType = testType
     this
   }
-  def withGithubRunId(jobStartTime: String): GithubActionsClusterTestResultBuilder = {
+  def withGithubRunId(jobStartTime: String): GithubActionsTestResultBuilder = {
     this.githubRunId = jobStartTime
     this
   }
-  def withCommitID(commitID: String): GithubActionsClusterTestResultBuilder = {
+  def withCommitID(commitID: String): GithubActionsTestResultBuilder = {
     this.commitID = commitID
     this
   }
   // This does nothing for now when running on Github.
   override def withNewSubTaskResult(
-      subTaskContext: TaskContext): GithubActionsClusterTestResultBuilder = this
+      subTaskContext: TaskContext): GithubActionsTestResultBuilder = this
 }

@@ -18,37 +18,25 @@ package net.snowflake.spark.snowflake
 
 import java.time.Instant
 
-class GithubActionsClusterTestResult(builder: GithubActionsClusterTestResultBuilder)
+class GithubActionsTestResult(builder: GithubActionsTestResultBuilder)
     extends ClusterTestResult {
   val testType: String = builder.testType
   val testCaseName: String = builder.overallTestContext.testName
   val testStatus: String = builder.overallTestContext.testStatus
   val commitID: String = builder.commitID
   val githubRunId: String = builder.githubRunId
-  val startTime: String =
-    Instant.ofEpochMilli(builder.overallTestContext.taskStartTime).toString
-  val testRunTime: String = {
-    val usedTime = builder.overallTestContext.taskEndTime - builder.overallTestContext.taskStartTime
-    if (usedTime < 0) {
-      s"Wrong time: Start ${builder.overallTestContext.taskStartTime} end: ${builder.overallTestContext.taskEndTime}"
-    } else if (usedTime < 1000) {
-      s"$usedTime ms"
-    } else if (usedTime < 1000 * 60) {
-      "%.2f seconds".format(usedTime.toDouble / 1000)
-    } else {
-      "%.2f minutes".format(usedTime.toDouble / 1000 / 60)
-    }
-  }
+  val startTime: String = TestUtils.formatTimestamp(builder.overallTestContext.taskStartTime)
+  val testRunTime: String = TestUtils.formatTimeElapsed(builder.overallTestContext)
   val reason: String = builder.overallTestContext.reason.getOrElse(TestUtils.TEST_RESULT_REASON_NO_REASON)
 
   def writeToSnowflake(): Unit = {
     val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
 
     // Create test result table if it doesn't exist.
-    if (!DefaultJDBCWrapper.tableExists(connection, TestUtils.CLUSTER_TEST_RESULT_TABLE)) {
+    if (!DefaultJDBCWrapper.tableExists(connection, TestUtils.GITHUB_TEST_RESULT_TABLE)) {
       DefaultJDBCWrapper.executeInterruptibly(
         connection,
-        s"""create table ${TestUtils.CLUSTER_TEST_RESULT_TABLE} (
+        s"""create table ${TestUtils.GITHUB_TEST_RESULT_TABLE} (
            | testCaseName String,
            | testStatus String,
            | githubRunId String,
@@ -63,7 +51,7 @@ class GithubActionsClusterTestResult(builder: GithubActionsClusterTestResultBuil
     // Write test result into table
     DefaultJDBCWrapper.executeInterruptibly(
       connection,
-      s"""insert into ${TestUtils.CLUSTER_TEST_RESULT_TABLE} values (
+      s"""insert into ${TestUtils.GITHUB_TEST_RESULT_TABLE} values (
          | '$testCaseName' ,
          | '$testStatus' ,
          | '$githubRunId' ,

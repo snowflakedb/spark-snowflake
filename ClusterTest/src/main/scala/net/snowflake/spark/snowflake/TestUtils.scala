@@ -17,12 +17,10 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Connection, DriverManager}
+import java.time.Instant
 import java.util.Properties
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
-  JsonNode,
-  ObjectMapper
-}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.ClusterTest.log
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
@@ -32,9 +30,15 @@ import scala.io.Source
 object TestUtils {
   val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   val SNOWFLAKE_TEST_CONFIG = "SNOWFLAKE_TEST_CONFIG"
-  val CLUSTER_TEST_RESULT_TABLE = "CLUSTER_TEST_RESULT_TABLE"
+  val GITHUB_TEST_RESULT_TABLE = "CLUSTER_TEST_RESULT_TABLE"
   val GITHUB_SHA = "GITHUB_SHA"
   val GITHUB_RUN_ID = "GITHUB_RUN_ID"
+  val STRESS_TEST_RESULT_TABLE = "STRESS_TEST_RESULT_TABLE"
+  val STRESS_TEST_RUN_TABLE_PREFIX = "STRESS_TEST_RUN_"
+  // Unlike in the Github environment, where we have unique commit ids,
+  // stress test runs need to have a unique id in a schema, for which
+  // we will use a Sequence object
+  val STRESS_TEST_SEQ_NAME = "STRESS_TEST_SEQ"
   val SNOWFLAKE_NAME = "net.snowflake.spark.snowflake"
   val JDBC_DRIVER = "net.snowflake.client.jdbc.SnowflakeDriver"
 
@@ -65,6 +69,29 @@ object TestUtils {
       )
     }
     jobTime
+  }
+
+  /**
+    * Used to format a string for writing into a test table the time elapsed for a test
+    */
+  def formatTimeElapsed(context: TaskContext): String = {
+    val usedTime = context.taskEndTime - context.taskStartTime
+    if (usedTime < 0) {
+      s"Wrong time: Start ${context.taskStartTime} end: ${context.taskEndTime}"
+    } else if (usedTime < 1000) {
+      s"$usedTime ms"
+    } else if (usedTime < 1000 * 60) {
+      "%.2f seconds".format(usedTime.toDouble / 1000)
+    } else {
+      "%.2f minutes".format(usedTime.toDouble / 1000 / 60)
+    }
+  }
+
+  /**
+    * Generate a timestamp string formatted, from a millis timestamp
+    */
+  def formatTimestamp(timestampMillis: Long): String = {
+      Instant.ofEpochMilli(timestampMillis).toString
   }
 
   /**
@@ -143,15 +170,6 @@ object TestUtils {
     } else {
       None
     }
-  }
-
-  // Load options for the stress-test config
-  lazy val sfStressOptions: Map[String, String] = {
-    var configFile = System.getenv(STRESS_TEST_CONFIG)
-    if (configFile == null) {
-      configFile = "stress_config.json"
-    }
-    loadJsonConfig(configFile).get
   }
 
   // Load sfOptions from config file and env.

@@ -16,11 +16,18 @@
 
 package net.snowflake.spark.snowflake
 
+import net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.testsuite.ClusterTestSuiteBase
 import org.apache.spark.sql.SparkSession
 import org.slf4j.{Logger, LoggerFactory}
 
-object ClusterTest {
+object ClusterTest extends Enumeration {
+  type ClusterTest = Value
+
+  // Different environments for running the ClusterTest
+  val githubTest: snowflake.ClusterTest.Value = Value("Github")
+  val stressTest: snowflake.ClusterTest.Value = Value("StressTest")
+
   val log: Logger = LoggerFactory.getLogger(getClass)
 
   val RemoteMode = "remote"
@@ -30,6 +37,10 @@ object ClusterTest {
 
   // Driver function to run the test.
   def main(args: Array[String]): Unit = {
+    // If there are more than 2 arguments, we're running in the stress test environment
+    val envType: ClusterTest =
+      if (args.length < 3) ClusterTest.githubTest else ClusterTest.stressTest
+
     log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
 
     val usage = s"""Two parameters are need: [local | remote] and
@@ -58,18 +69,30 @@ object ClusterTest {
     val testSuiteNames = args(1).split(TestSuiteSeparator)
     for (testSuiteName <- testSuiteNames) {
       if (!testSuiteName.trim.isEmpty) {
-        // Retrieve commit ID from env.
-        val commitID = scala.util.Properties
-          .envOrElse(TestUtils.GITHUB_SHA, "commit id not set")
+        var resultBuilder: BaseTestResultBuilder = null
+        if (envType == ClusterTest.githubTest) {
+          // Retrieve commit ID from env.
+          val commitID = scala.util.Properties
+            .envOrElse(TestUtils.GITHUB_SHA, "commit id not set")
 
-        // val testSuiteName = "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite"
-        val resultBuilder = new GithubActionsClusterTestResultBuilder()
-          .withTestType("Scala")
+          resultBuilder = new GithubActionsTestResultBuilder()
+            .withTestType("Scala")
+            .withCommitID(commitID)
+            .withGithubRunId(TestUtils.githubRunId)
+        } else if (envType == ClusterTest.stressTest) {
+          // We keep a version number for the revision/version of the input test data and config
+          val testInputRevisionNumber = Integer.valueOf(args(2))
+
+          resultBuilder = new StressTestResultBuilder()
+            .withTestRevision(testInputRevisionNumber)
+        } else {
+          throw new RuntimeException(s"Bad ClusterTest env type:$envType")
+        }
+
+        resultBuilder
           .withTestCaseName(testSuiteName)
-          .withCommitID(commitID)
           .withTestStatus(TestUtils.TEST_RESULT_STATUS_INIT)
-          .withStartTimeInMill(System.currentTimeMillis())
-          .withGithubRunId(TestUtils.githubRunId)
+          .withStartTimeInMill(System.currentTimeMillis)
 
         try {
           Class

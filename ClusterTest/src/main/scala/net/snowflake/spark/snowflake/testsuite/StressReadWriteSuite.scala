@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, DefaultJDBCWrapper, TaskContext, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TaskContext, TestUtils}
 import org.apache.spark.sql.SparkSession
 
 import scala.collection.JavaConverters.asScalaBufferConverter
@@ -31,16 +31,12 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
 
   lazy val tablesToRead: List[StressTestSourceTable] =
     getTablesToReadFromSourcesFile(System.getenv(TestUtils.STRESS_TEST_SOURCES))
-  lazy val targetDatabase: String = TestUtils.sfStressOptions("sfdatabase")
-  lazy val targetSchema: String = TestUtils.sfStressOptions("sfschema")
-  // These values will be replaced by those in StressTestSourceTable
-  lazy val baseStressTestOptions: Map[String, String] =
-    TestUtils.sfStressOptions.filterKeys(param =>
-      !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))
+  lazy val targetDatabase: String = TestUtils.sfOptions("sfdatabase")
+  lazy val targetSchema: String = TestUtils.sfOptions("sfschema")
 
   override def runImpl(
       sparkSession: SparkSession,
-      resultBuilder: BaseClusterTestResultBuilder): Unit = {
+      resultBuilder: BaseTestResultBuilder): Unit = {
 
     var numSuccessfulTableReads: Int = 0
 

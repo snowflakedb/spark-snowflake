@@ -53,7 +53,7 @@ object ClusterTestCheckResult {
       val resultSet = connection
         .createStatement()
         .executeQuery(
-          s"""select count(*) from ${TestUtils.CLUSTER_TEST_RESULT_TABLE}
+          s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
          | where githubRunId = '${TestUtils.githubRunId}'
          |""".stripMargin
         )
@@ -73,7 +73,7 @@ object ClusterTestCheckResult {
     val resultSet = connection
       .createStatement()
       .executeQuery(
-        s"""select count(*) from ${TestUtils.CLUSTER_TEST_RESULT_TABLE}
+        s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
        | where githubRunId = '${TestUtils.githubRunId}'
        |       and testStatus = '${TestUtils.TEST_RESULT_STATUS_SUCCESS}'
        |""".stripMargin
@@ -84,7 +84,7 @@ object ClusterTestCheckResult {
     // Print out all test cases results
     val rs = connection
       .createStatement()
-      .executeQuery(s"""select * from ${TestUtils.CLUSTER_TEST_RESULT_TABLE}
+      .executeQuery(s"""select * from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
          | where githubRunId = '${TestUtils.githubRunId}'
          |""".stripMargin)
     val rsmd = rs.getMetaData

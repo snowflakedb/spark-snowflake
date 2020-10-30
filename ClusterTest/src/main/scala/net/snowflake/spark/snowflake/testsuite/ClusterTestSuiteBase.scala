@@ -17,13 +17,13 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
-import net.snowflake.spark.snowflake.{BaseClusterTestResultBuilder, TaskContext, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, TaskContext, TestUtils}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import scala.util.Random
 
 trait ClusterTestSuiteBase {
-  def run(sparkSession: SparkSession, resultBuilder: BaseClusterTestResultBuilder): Unit = {
+  def run(sparkSession: SparkSession, resultBuilder: BaseTestResultBuilder): Unit = {
     // Start to run the test.
     resultBuilder.withTestStatus(TestUtils.TEST_RESULT_STATUS_START)
 
@@ -35,7 +35,7 @@ trait ClusterTestSuiteBase {
   }
 
   // Each test case MUST implement this function.
-  def runImpl(sparkSession: SparkSession, resultBuilder: BaseClusterTestResultBuilder): Unit
+  def runImpl(sparkSession: SparkSession, resultBuilder: BaseTestResultBuilder): Unit
 
   protected def randomSuffix: String = Math.abs(Random.nextLong()).toString
 

@@ -16,19 +16,19 @@
 
 package net.snowflake.spark.snowflake
 
-abstract class BaseClusterTestResultBuilder() {
+abstract class BaseTestResultBuilder() {
 
   // Context for the test overall test suite
   protected[snowflake] var overallTestContext: TaskContext = TaskContext("Test name not set")
 
   def build(): ClusterTestResult;
 
-  def withStartTimeInMill(startTimeInMillis: Long): BaseClusterTestResultBuilder
-  def withEndTimeInMill(endTimeInMillis: Long): BaseClusterTestResultBuilder
-  def withTestCaseName(testCaseName: String): BaseClusterTestResultBuilder
-  def withTestStatus(testStatus: String): BaseClusterTestResultBuilder
-  def withReason(reason: Option[String]): BaseClusterTestResultBuilder
+  def withStartTimeInMill(startTimeInMillis: Long): BaseTestResultBuilder
+  def withEndTimeInMill(endTimeInMillis: Long): BaseTestResultBuilder
+  def withTestCaseName(testCaseName: String): BaseTestResultBuilder
+  def withTestStatus(testStatus: String): BaseTestResultBuilder
+  def withReason(reason: Option[String]): BaseTestResultBuilder
 
   // Results for individual sub-tasks within a suite
-  def withNewSubTaskResult(subTaskContext: TaskContext): BaseClusterTestResultBuilder
+  def withNewSubTaskResult(subTaskContext: TaskContext): BaseTestResultBuilder
 }
