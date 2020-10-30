@@ -80,7 +80,6 @@ object TestUtils {
   val TEST_RESULT_REASON_NO_REASON = "no reason"
   // For Performance and Stress Testing
   val STRESS_TEST_SOURCES = "STRESS_TEST_SOURCES"
-  val STRESS_TEST_CONFIG = "STRESS_TEST_CONFIG"
   // Vault configuration variables
   protected val CONFIG_VAULT_URL_ENV_VAR = "VAULT_URL"
   protected val VAULT_KEY_ENV_VAR = "VAULT_KEY"

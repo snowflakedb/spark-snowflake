@@ -68,6 +68,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 
+    assemblyMergeStrategy in assembly := {
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case x => MergeStrategy.first
+    },
+
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
     Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
