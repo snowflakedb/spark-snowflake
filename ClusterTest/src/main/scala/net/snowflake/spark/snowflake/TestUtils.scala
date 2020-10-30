@@ -20,6 +20,7 @@ import java.sql.{Connection, DriverManager}
 import java.time.Instant
 import java.util.Properties
 
+import com.bettercloud.vault.{Vault, VaultConfig}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.ClusterTest.log
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
@@ -28,6 +29,33 @@ import scala.collection.mutable
 import scala.io.Source
 
 object TestUtils {
+  lazy val githubRunId: String = {
+    val jobTime = System.getenv(TestUtils.GITHUB_RUN_ID)
+    if (jobTime == null) {
+      throw new Exception(s"env variable ${TestUtils.GITHUB_RUN_ID} needs to be set")
+    }
+    jobTime
+  }
+  // Load sfOptions from config file and env.
+  lazy val sfOptions: Map[String, String] = {
+    var configFile = System.getenv(SNOWFLAKE_TEST_CONFIG)
+    if (configFile == null) {
+      configFile = "snowflake.travis.json"
+    }
+    overWriteLoginOptionsWithVault(overWriteOptionsWithEnv(loadJsonConfig(configFile))).get
+  }
+  // Load sfOptions from config file and env, but exclude "table"
+  lazy val sfOptionsNoTable: Map[String, String] = {
+    var resultOptions = new mutable.HashMap[String, String]
+    for ((key, value) <- sfOptions) {
+      if (key != "dbtable") {
+        resultOptions += (key -> value)
+      }
+    }
+    resultOptions.toMap
+  }
+  // parameters for connection
+  lazy val param: MergedParameters = Parameters.mergeParameters(sfOptions)
   val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   val SNOWFLAKE_TEST_CONFIG = "SNOWFLAKE_TEST_CONFIG"
   val GITHUB_TEST_RESULT_TABLE = "CLUSTER_TEST_RESULT_TABLE"
@@ -41,7 +69,6 @@ object TestUtils {
   val STRESS_TEST_SEQ_NAME = "STRESS_TEST_SEQ"
   val SNOWFLAKE_NAME = "net.snowflake.spark.snowflake"
   val JDBC_DRIVER = "net.snowflake.client.jdbc.SnowflakeDriver"
-
   // Test case result status
   val TEST_RESULT_STATUS_NOT_STARTED = "NotStarted"
   val TEST_RESULT_STATUS_INIT = "Initialized"
@@ -49,31 +76,19 @@ object TestUtils {
   val TEST_RESULT_STATUS_SUCCESS = "Success"
   val TEST_RESULT_STATUS_FAIL = "Fail"
   val TEST_RESULT_STATUS_EXCEPTION = "Exception"
-
   // Reason strings
   val TEST_RESULT_REASON_NO_REASON = "no reason"
-
   // For Performance and Stress Testing
   val STRESS_TEST_SOURCES = "STRESS_TEST_SOURCES"
   val STRESS_TEST_CONFIG = "STRESS_TEST_CONFIG"
-
   // Vault configuration variables
   protected val CONFIG_VAULT_URL_ENV_VAR = "VAULT_URL"
-  protected val VAULT_STORE = "secret/sf_connector_config"
-
-  lazy val githubRunId: String = {
-    val jobTime = System.getenv(TestUtils.GITHUB_RUN_ID)
-    if (jobTime == null) {
-      throw new Exception(
-        s"env variable ${TestUtils.GITHUB_RUN_ID} needs to be set"
-      )
-    }
-    jobTime
-  }
+  protected val VAULT_KEY_ENV_VAR = "VAULT_KEY"
+  //protected val VAULT_STORE_ENV_VAR = "secret/sf_connector_config"
 
   /**
-    * Used to format a string for writing into a test table the time elapsed for a test
-    */
+   * Used to format a string for writing into a test table the time elapsed for a test
+   */
   def formatTimeElapsed(context: TaskContext): String = {
     val usedTime = context.taskEndTime - context.taskStartTime
     if (usedTime < 0) {
@@ -88,15 +103,15 @@ object TestUtils {
   }
 
   /**
-    * Generate a timestamp string formatted, from a millis timestamp
-    */
+   * Generate a timestamp string formatted, from a millis timestamp
+   */
   def formatTimestamp(timestampMillis: Long): String = {
-      Instant.ofEpochMilli(timestampMillis).toString
+    Instant.ofEpochMilli(timestampMillis).toString
   }
 
   /**
-    * read sfOptions from json config e.g. snowflake.travis.json
-    */
+   * read sfOptions from json config e.g. snowflake.travis.json
+   */
   def loadJsonConfig(configFile: String): Option[Map[String, String]] = {
 
     var result: Map[String, String] = Map()
@@ -128,8 +143,7 @@ object TestUtils {
           for (i <- 0 until accountConfig.size()
                if accountConfig.get(i).get("name").asText() == accountName)
             yield accountConfig.get(i).get("config")
-        ).head
-      )
+        ).head)
 
       log.info(s"load config from $configFile")
       jsonConfigFile.close()
@@ -141,15 +155,48 @@ object TestUtils {
     }
   }
 
-  // Used for internal integration testing in SF env.
-  def readConfigValueFromEnv(name: String): Option[String] = {
-    scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
+  // If use of Hashicorp Vault is enabled, use it to retrieve login credentials
+  def overWriteLoginOptionsWithVault(
+      sfOptions: Option[Map[String, String]]): Option[Map[String, String]] = {
+    if (sfOptions.isDefined) {
+      val vaultURL = System.getenv(CONFIG_VAULT_URL_ENV_VAR)
+      val vaultKey = System.getenv(VAULT_KEY_ENV_VAR)
+
+      // Don't touch this if either of the two necessary env variables are not set
+      if (vaultURL == null || vaultKey == null) {
+        sfOptions
+      } else {
+        var resultOptions = new mutable.HashMap[String, String]
+        val loginValues = Set(
+          Parameters.PARAM_SF_URL,
+          Parameters.PARAM_SF_ACCOUNT,
+          Parameters.PARAM_SF_USER,
+          Parameters.PARAM_SF_PASSWORD,
+          Parameters.PARAM_PEM_PRIVATE_KEY)
+
+        // Remove login info
+        resultOptions = resultOptions ++ sfOptions.get.filterKeys(param =>
+          !loginValues.contains(param.toLowerCase))
+
+        val vault = new Vault(new VaultConfig().address(vaultURL).build())
+
+        for (key <- loginValues) {
+          val value = vault.logical().read(vaultKey).getData.get(key)
+
+          if (value != null) {
+            resultOptions += (key -> value)
+          }
+        }
+        Some(resultOptions.toMap)
+      }
+    } else {
+      None
+    }
   }
 
   // Overwite options with environment variable settings.
   def overWriteOptionsWithEnv(
-    sfOptions: Option[Map[String, String]]
-  ): Option[Map[String, String]] = {
+      sfOptions: Option[Map[String, String]]): Option[Map[String, String]] = {
     if (sfOptions.isDefined) {
       var resultOptions = new mutable.HashMap[String, String]
       // Retrieve all options from Environment variables
@@ -172,32 +219,14 @@ object TestUtils {
     }
   }
 
-  // Load sfOptions from config file and env.
-  lazy val sfOptions: Map[String, String] = {
-    var configFile = System.getenv(SNOWFLAKE_TEST_CONFIG)
-    if (configFile == null) {
-      configFile = "snowflake.travis.json"
-    }
-    overWriteOptionsWithEnv(loadJsonConfig(configFile)).get
+  // Used for internal integration testing in SF env.
+  def readConfigValueFromEnv(name: String): Option[String] = {
+    scala.util.Properties.envOrNone(s"SPARK_CONN_ENV_${name.toUpperCase}")
   }
-
-  // Load sfOptions from config file and env, but exclude "table"
-  lazy val sfOptionsNoTable: Map[String, String] = {
-    var resultOptions = new mutable.HashMap[String, String]
-    for ((key, value) <- sfOptions) {
-      if (key != "dbtable") {
-        resultOptions += (key -> value)
-      }
-    }
-    resultOptions.toMap
-  }
-
-  // parameters for connection
-  lazy val param: MergedParameters = Parameters.mergeParameters(sfOptions)
 
   /**
-    * Get a connection based on the provided parameters
-    */
+   * Get a connection based on the provided parameters
+   */
   def getJDBCConnection(params: MergedParameters): Connection = {
     // Derive class name
     try Class.forName("com.snowflake.client.jdbc.SnowflakeDriver")
