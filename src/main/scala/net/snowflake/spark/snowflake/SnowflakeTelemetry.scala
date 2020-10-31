@@ -24,7 +24,9 @@ object SnowflakeTelemetry {
   private val TELEMETRY_OOB_NAME_PREFIX = "spark"
 
   private var logs: List[(ObjectNode, Long)] = Nil // data and timestamp
+  // Note: Use regular logger instead of LoggerWrapper to avoid potential recursive call.
   private val logger = LoggerFactory.getLogger(getClass)
+
   private val mapper = new ObjectMapper()
 
   private var hasClientInfoSent = false

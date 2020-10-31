@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 
 package object streaming {
 
-  private val LOGGER = LoggerFactory.getLogger(this.getClass.getName)
+  private val LOGGER = new LoggerWithTelemetry(LoggerFactory.getLogger(this.getClass.getName))
   private val SLEEP_TIME = 5000 // 5 seconds
   private val TIME_OUT = 5 // 5 minutes
 
