@@ -63,5 +63,5 @@ class GithubActionsTestResultBuilder() extends BaseTestResultBuilder {
   }
   // This does nothing for now when running on Github.
   override def withNewSubTaskResult(
-      subTaskContext: TaskContext): GithubActionsTestResultBuilder = this
+      subTaskContext: TestStatus): GithubActionsTestResultBuilder = this
 }

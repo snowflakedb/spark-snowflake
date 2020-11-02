@@ -16,7 +16,7 @@
 
 package net.snowflake.spark.snowflake.testsuite
 
-import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TaskContext, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TestStatus, TestUtils}
 import org.apache.spark.sql.SparkSession
 
 class BasicReadWriteSuite extends ClusterTestSuiteBase {
@@ -29,7 +29,7 @@ class BasicReadWriteSuite extends ClusterTestSuiteBase {
     val targetSchema = "spark_test"
     val targetTableName = s"test_write_table_$randomSuffix"
 
-    val taskContext = TaskContext("BasicReadWriteSuite: TPCH_SF1")
+    val taskContext = TestStatus("BasicReadWriteSuite: TPCH_SF1")
     taskContext.taskStartTime = System.currentTimeMillis
 
     // Read write a basic table:

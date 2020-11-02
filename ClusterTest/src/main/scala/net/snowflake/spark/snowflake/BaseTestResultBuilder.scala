@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 abstract class BaseTestResultBuilder() {
 
   // Context for the test overall test suite
-  protected[snowflake] var overallTestContext: TaskContext = TaskContext("Test name not set")
+  protected[snowflake] var overallTestContext: TestStatus = TestStatus("Test name not set")
 
   def build(): ClusterTestResult;
 
@@ -30,5 +30,5 @@ abstract class BaseTestResultBuilder() {
   def withReason(reason: Option[String]): BaseTestResultBuilder
 
   // Results for individual sub-tasks within a suite
-  def withNewSubTaskResult(subTaskContext: TaskContext): BaseTestResultBuilder
+  def withNewSubTaskResult(subTaskContext: TestStatus): BaseTestResultBuilder
 }

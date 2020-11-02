@@ -42,7 +42,7 @@ $SPARK_HOME/bin/spark-submit \
       --conf "spark.driver.extraJavaOptions=-Djava.io.tmpdir=$SPARK_WORKDIR -Dnet.snowflake.jdbc.loggerImpl=net.snowflake.client.log.SLF4JLogger -Dlog4j.configuration=file://${SPARK_HOME}/conf/log4j_driver.properties" \
       --master spark://master:7077 --deploy-mode client \
       --class net.snowflake.spark.snowflake.ClusterTest \
-      $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;"
+      $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;" github
 
 # Low memory partition upload test. Setting executor memory to 900MB. The actual usable heap size can be calculated as (900 - 300) * 0.6 = 360MB.
 # Heap size is shared by RDD storage and execution memory together. The partition is 309 MB un compressed and 220 MB compressed.
@@ -55,4 +55,4 @@ $SPARK_HOME/bin/spark-submit \
       --class net.snowflake.spark.snowflake.ClusterTest \
       --driver-memory 600m \
       --executor-memory 600m \
-      $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.LowMemoryStressSuite;"
+      $SPARK_WORKDIR/clustertest_${TEST_SCALA_VERSION}-1.0.jar remote "net.snowflake.spark.snowflake.testsuite.LowMemoryStressSuite;" github

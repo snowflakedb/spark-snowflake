@@ -25,8 +25,8 @@ object ClusterTest extends Enumeration {
   type ClusterTest = Value
 
   // Different environments for running the ClusterTest
-  val githubTest: snowflake.ClusterTest.Value = Value("Github")
-  val stressTest: snowflake.ClusterTest.Value = Value("StressTest")
+  val githubTest: snowflake.ClusterTest.Value = Value("github")
+  val stressTest: snowflake.ClusterTest.Value = Value("stress")
 
   val log: Logger = LoggerFactory.getLogger(getClass)
 
@@ -37,19 +37,26 @@ object ClusterTest extends Enumeration {
 
   // Driver function to run the test.
   def main(args: Array[String]): Unit = {
-    // If there are more than 2 arguments, we're running in the stress test environment
-    val envType: ClusterTest =
-      if (args.length < 3) ClusterTest.githubTest else ClusterTest.stressTest
 
     log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
 
-    val usage = s"""Two parameters are need: [local | remote] and
-                    | testClassNames (using ';' to separate multiple classes)
+    val usage = s"""Three parameters are needed: [local | remote],
+                    | testClassNames (using ';' to separate multiple classes), and
+                    | [github | stress] to indicate the test environment
                     |""".stripMargin
     log.info(usage)
 
-    if (args.length < 2) {
-      throw new Exception(s"At least two parameters are need. Usage: $usage")
+    if (args.length < 3) {
+      throw new Exception(s"At least three parameters are needed. Usage: $usage")
+    }
+
+    var envType: ClusterTest = null
+    try {
+      envType = ClusterTest.withName(args(2).toLowerCase())
+    } catch {
+      case e: NoSuchElementException =>
+        throw new IllegalArgumentException(
+          s"Run type ${args(2)} not found. Allowed values are: {${ClusterTest.values.mkString(", ")}}.")
     }
 
     // Setup Spark session.
@@ -80,8 +87,15 @@ object ClusterTest extends Enumeration {
             .withCommitID(commitID)
             .withGithubRunId(TestUtils.githubRunId)
         } else if (envType == ClusterTest.stressTest) {
+
+          if (args.length < 4) {
+            throw new Exception(
+              s"At least four parameters are needed in stress-test mode. " +
+                s"The test-revision number is missing.")
+          }
+
           // We keep a version number for the revision/version of the input test data and config
-          val testInputRevisionNumber = Integer.valueOf(args(2))
+          val testInputRevisionNumber = Integer.valueOf(args(3))
 
           resultBuilder = new StressTestResultBuilder()
             .withTestRevision(testInputRevisionNumber)

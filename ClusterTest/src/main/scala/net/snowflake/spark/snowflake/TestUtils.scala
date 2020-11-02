@@ -89,7 +89,7 @@ object TestUtils {
   /**
    * Used to format a string for writing into a test table the time elapsed for a test
    */
-  def formatTimeElapsed(context: TaskContext): String = {
+  def formatTimeElapsed(context: TestStatus): String = {
     val usedTime = context.taskEndTime - context.taskStartTime
     if (usedTime < 0) {
       s"Wrong time: Start ${context.taskStartTime} end: ${context.taskEndTime}"
