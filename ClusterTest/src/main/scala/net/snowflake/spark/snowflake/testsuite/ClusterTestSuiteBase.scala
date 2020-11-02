@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.ClusterTest.log
-import net.snowflake.spark.snowflake.{BaseTestResultBuilder, TaskContext, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, TestStatus, TestUtils}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import scala.util.Random
@@ -41,13 +41,13 @@ trait ClusterTestSuiteBase {
 
   // Utility function to read one table and write to another.
   protected def readWriteSnowflakeTable(
-      taskContext: TaskContext,
-      sparkSession: SparkSession,
-      sfOptionsNoTable: Map[String, String],
-      sourceSchema: String,
-      sourceTableName: String,
-      targetSchema: String,
-      targetTableName: String): Unit = {
+                                         taskContext: TestStatus,
+                                         sparkSession: SparkSession,
+                                         sfOptionsNoTable: Map[String, String],
+                                         sourceSchema: String,
+                                         sourceTableName: String,
+                                         targetSchema: String,
+                                         targetTableName: String): Unit = {
     readWriteSnowflakeTableWithDatabase(
       taskContext,
       sparkSession,
@@ -61,15 +61,15 @@ trait ClusterTestSuiteBase {
   }
 
   protected def readWriteSnowflakeTableWithDatabase(
-      taskContext: TaskContext,
-      sparkSession: SparkSession,
-      sfOptions: Map[String, String],
-      sourceDatabase: String,
-      sourceSchema: String,
-      sourceTableName: String,
-      targetDatabase: String,
-      targetSchema: String,
-      targetTableName: String): Unit = {
+                                                     taskContext: TestStatus,
+                                                     sparkSession: SparkSession,
+                                                     sfOptions: Map[String, String],
+                                                     sourceDatabase: String,
+                                                     sourceSchema: String,
+                                                     sourceTableName: String,
+                                                     targetDatabase: String,
+                                                     targetSchema: String,
+                                                     targetTableName: String): Unit = {
 
     val options = sfOptions.filterKeys(param =>
       !Set("sfdatabase", "sfschema", "dbtable").contains(param.toLowerCase))

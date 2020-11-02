@@ -21,7 +21,7 @@ import scala.collection.mutable.ListBuffer
 class StressTestResultBuilder() extends BaseTestResultBuilder {
 
   protected[snowflake] var testRevisionNumber: Int = _
-  protected[snowflake] var subTaskResults: ListBuffer[TaskContext] = ListBuffer()
+  protected[snowflake] var subTaskResults: ListBuffer[TestStatus] = ListBuffer()
 
   override def build(): ClusterTestResult = {
     new StressTestResult(this)
@@ -53,7 +53,7 @@ class StressTestResultBuilder() extends BaseTestResultBuilder {
     this.testRevisionNumber = revision
     this
   }
-  override def withNewSubTaskResult(subTaskContext: TaskContext): StressTestResultBuilder = {
+  override def withNewSubTaskResult(subTaskContext: TestStatus): StressTestResultBuilder = {
     subTaskResults.append(subTaskContext)
     this
   }
