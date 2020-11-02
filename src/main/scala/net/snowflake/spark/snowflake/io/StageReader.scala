@@ -10,15 +10,15 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.LoggerFactory
 
 import scala.util.Random
 
 private[snowflake] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
-  private val logger: Logger = LoggerFactory.getLogger(this.getClass)
-  private val OUTPUT_BYTES: String = "output_bytes"
+  private val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(this.getClass))
+  private val OUTPUT_BYTES = TelemetryFieldNames.OUTPUT_BYTES
 
   def readFromStage(sqlContext: SQLContext,
                     params: MergedParameters,

@@ -16,6 +16,7 @@
 
 package net.snowflake.spark.snowflake
 
+import java.io.{ByteArrayOutputStream, OutputStream}
 import java.net.Proxy.Type
 import java.net.{InetSocketAddress, Proxy}
 import java.security.InvalidKeyException
@@ -25,6 +26,18 @@ import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
 import org.scalatest.{FunSuite, Matchers}
+import org.slf4j.LoggerFactory
+
+// Below is mock class to tesst LoggerWrapper
+private[snowflake] class MockTelemetryReporter(outputStream: OutputStream)
+  extends TelemetryReporter() {
+  private[snowflake] override def sendLogTelemetry(level: String, msg: String): Unit = {
+    // Write data to OutputStream
+    val data = s"$level: $msg"
+    outputStream.write(data.getBytes())
+    outputStream.flush()
+  }
+}
 
 /**
   * Unit tests for all kinds of some classes
@@ -165,4 +178,102 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
+
+  test("test LoggerWrapper") {
+    // Test LoggerWrapper with MockTelemetryReporter
+    val targetOutputStream = new ByteArrayOutputStream()
+    var logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 1"))
+    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(targetOutputStream))
+
+    // log one message with TRACE; logger is created before setting Driver telemetry
+    val message = "Hello Logger!"
+    logger.trace(message)
+    var loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
+
+    // log one message with DEBUG; logger is created after setting Driver telemetry
+    logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 2"))
+    targetOutputStream.reset()
+    logger.debug(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("DEBUG") && loggedMessage.endsWith(message))
+
+    // log one message with INFO
+    targetOutputStream.reset()
+    logger.info(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("INFO") && loggedMessage.endsWith(message))
+
+    // log one message with warn(msg: String)
+    targetOutputStream.reset()
+    logger.warn(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("WARN") && loggedMessage.endsWith(message))
+
+    // log one message with warn(msg: String, t: Throwable)
+    targetOutputStream.reset()
+    logger.warn(message, new Exception("Test Exception String"))
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("WARN") &&
+      loggedMessage.contains("Test Exception String") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(msg: String)
+    targetOutputStream.reset()
+    logger.error(message)
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(msg: String, t: Throwable)
+    targetOutputStream.reset()
+    logger.error(message, new Exception("Test Exception String"))
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains("Test Exception String") &&
+      loggedMessage.contains(message))
+
+    // log one message with error(format: String, arg1: Any, arg2: Any)
+    targetOutputStream.reset()
+    logger.error("test format: {}. {}", "TEST_STRING_1", "TEST_STRING_2")
+    loggedMessage = new String(targetOutputStream.toByteArray)
+    assert(loggedMessage.startsWith("ERROR") &&
+      loggedMessage.contains("TEST_STRING_1") &&
+      loggedMessage.contains("TEST_STRING_2") &&
+      loggedMessage.contains("test format:"))
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
+  }
+
+  test("negative test LoggerWrapper") {
+    // set an invalid OutputStream, but no exception is raised.
+    val invalidOutputStream = new OutputStream {
+      override def write(b: Int): Unit = {
+        throw new Throwable("negative test invalid OutputStream")
+      }
+    }
+    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(invalidOutputStream))
+    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
+    // MockTelemetryReporter raise exception, but warn() doesn't
+    logger.warn("no exception is raised")
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
+  }
+
+  test("driver logger set/get") {
+    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
+    // It's NoopTelemetry by default
+    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[NoopTelemetryReporter])
+
+    // Set driver telemetry report
+    TelemetryReporter.setDriverTelemetryReporter(new DriverTelemetryReporter)
+    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[DriverTelemetryReporter])
+
+    // reset TelemetryReporter
+    TelemetryReporter.resetDriverTelemetryReporter()
+  }
+
 }
+
