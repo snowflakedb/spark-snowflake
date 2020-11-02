@@ -20,7 +20,7 @@ class SnowflakeRDD(sc: SparkContext,
   override def compute(split: Partition,
                        context: TaskContext): Iterator[String] = {
     // Log system configuration on executor
-    SparkConnectorContext.executorLogConfigIfNotYet()
+    SparkConnectorContext.recordConfigOnExecutor()
 
     val snowflakePartition = split.asInstanceOf[SnowflakePartition]
 

@@ -12,7 +12,6 @@ import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.codehaus.jackson.JsonNode
 
 object SnowflakeTelemetry {
 
@@ -223,10 +222,10 @@ object SnowflakeTelemetry {
     if (throwable.isDefined) {
       metric.put(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME,
         throwable.get.getClass.toString)
-      metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
+      metric.put(TelemetryQueryStatusFields.EXCEPTION_MESSAGE, throwable.get.getMessage)
       val stringWriter = new StringWriter
       throwable.get.printStackTrace(new PrintWriter(stringWriter))
-      metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, stringWriter.toString)
+      metric.put(TelemetryQueryStatusFields.EXCEPTION_STACKTRACE, stringWriter.toString)
     }
     metric.put(TelemetryQueryStatusFields.DETAILS, details)
     if (config.isDefined) {

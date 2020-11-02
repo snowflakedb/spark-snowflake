@@ -75,7 +75,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
   test("inject exceptions for Arrow read") {
     // Configure some spark options
     // manually check these options are sent correctly.
-    val separateSpark = SparkSession.builder
+    val sparkSessionWithMoreOptions = SparkSession.builder
       .master("local")
       .appName("test config info sent")
       .config("spark.sql.shuffle.partitions", "6")
@@ -95,7 +95,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
         // Enable test hook to simulate error when closing a result set on driver.
         // This exception doesn't affect the final result
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET)
-        separateSpark.read
+        sparkSessionWithMoreOptions.read
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(connectorOptionsNoTable)
           .option("dbtable", s"$test_table_basic")
@@ -105,7 +105,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
         // Enable test hook to simulate error when opening a result set.
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_FAIL_OPEN_RESULT_SET)
         assertThrows[Exception]({
-          separateSpark.read
+          sparkSessionWithMoreOptions.read
             .format(SNOWFLAKE_SOURCE_NAME)
             .options(connectorOptionsNoTable)
             .option("dbtable", s"$test_table_basic")
@@ -116,7 +116,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
         // Enable test hook to simulate error when reading a result set.
         TestHook.enableTestFlagOnly(TestHookFlag.TH_ARROW_FAIL_READ_RESULT_SET)
         assertThrows[Exception]({
-          separateSpark.read
+          sparkSessionWithMoreOptions.read
             .format(SNOWFLAKE_SOURCE_NAME)
             .options(connectorOptionsNoTable)
             .option("dbtable", s"$test_table_basic")

@@ -20,16 +20,15 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD.WORKER_LOG_PREFIX
+import org.slf4j.LoggerFactory
 
 object SparkConnectorContext {
-  // TODO: need to merge with another PR to use LoggerWrapper.
-  import org.slf4j.LoggerFactory
-  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
+  private[snowflake] val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
 
   private var isExecutorConfigLogged = false
 
   // One executor may execute multiple tasks, it is enough to log once.
-  private[snowflake] def executorLogConfigIfNotYet(): Unit = {
+  private[snowflake] def recordConfigOnExecutor(): Unit = {
     if (!isExecutorConfigLogged) {
       isExecutorConfigLogged.synchronized {
         if (!isExecutorConfigLogged) {
