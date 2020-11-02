@@ -7,11 +7,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import net.snowflake.spark.snowflake.io.{
-  CloudStorage,
-  CloudStorageOperations,
-  SupportedFormat
-}
+import net.snowflake.spark.snowflake.io.{CloudStorage, CloudStorageOperations, SupportedFormat}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.snowflake.SparkStreamingFunctions.streamingToNonStreaming
@@ -28,7 +24,7 @@ class SnowflakeSink(sqlContext: SQLContext,
   private val STREAMING_OBJECT_PREFIX = "TMP_SPARK"
   private val PIPE_TOKEN = "PIPE"
 
-  private val log = LoggerFactory.getLogger(getClass)
+  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
 
   private val param = Parameters.mergeParameters(
     parameters + ("keep_column_case" -> "on")
@@ -99,11 +95,11 @@ class SnowflakeSink(sqlContext: SQLContext,
   private val mapper = new ObjectMapper()
   private val metric: ObjectNode = mapper.createObjectNode()
 
-  private val APP_NAME = "application_name"
-  private val START_TIME = "start_time"
-  private val END_TIME = "end_time"
-  private val LOAD_RATE = "load_rate"
-  private val DATA_BATCH = "data_batch"
+  private val APP_NAME = TelemetryFieldNames.APPLICATION_NAME
+  private val START_TIME = TelemetryFieldNames.START_TIME
+  private val END_TIME = TelemetryFieldNames.END_TIME
+  private val LOAD_RATE = TelemetryFieldNames.LOAD_RATE
+  private val DATA_BATCH = TelemetryFieldNames.DATA_BATCH
 
   private val telemetrySendTime: Long = 10 * 60 * 1000 // 10 min
 
