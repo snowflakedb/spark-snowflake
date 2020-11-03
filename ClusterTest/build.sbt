@@ -47,4 +47,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, runtime"
     ),
+
+    assemblyMergeStrategy in assembly := {
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case x => MergeStrategy.first
+    },
   )
