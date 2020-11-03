@@ -41,14 +41,15 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
     var numSuccessfulTableReads: Int = 0
 
     tablesToRead.foreach(source => {
-      val sourceTableContext = TestStatus(source.toString)
-      sourceTableContext.taskStartTime = System.currentTimeMillis
+      // Create a sub-task/test status for each source table.
+      val tableTestStatus = TestStatus(source.toString)
+      tableTestStatus.taskStartTime = System.currentTimeMillis
 
       val targetTableName = s"test_write_table_${source.table}_$randomSuffix"
 
       // Read write a basic table:
       super.readWriteSnowflakeTableWithDatabase(
-        sourceTableContext,
+        tableTestStatus,
         sparkSession,
         TestUtils.sfOptionsNoTable,
         source.database,
@@ -58,12 +59,12 @@ class StressReadWriteSuite extends ClusterTestSuiteBase {
         targetSchema,
         targetTableName)
 
-      sourceTableContext.taskEndTime = System.currentTimeMillis
-      resultBuilder.withNewSubTaskResult(sourceTableContext)
+      tableTestStatus.taskEndTime = System.currentTimeMillis
+      resultBuilder.withNewSubTaskResult(tableTestStatus)
 
       // If test is successful, drop the target table,
       // otherwise, keep it for further investigation.
-      if (sourceTableContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+      if (tableTestStatus.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
         numSuccessfulTableReads += 1
         val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
         connection

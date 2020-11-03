@@ -29,12 +29,12 @@ class BasicReadWriteSuite extends ClusterTestSuiteBase {
     val targetSchema = "spark_test"
     val targetTableName = s"test_write_table_$randomSuffix"
 
-    val taskContext = TestStatus("BasicReadWriteSuite: TPCH_SF1")
-    taskContext.taskStartTime = System.currentTimeMillis
+    val taskStatus = TestStatus("BasicReadWriteSuite: TPCH_SF1")
+    taskStatus.taskStartTime = System.currentTimeMillis
 
     // Read write a basic table:
     super.readWriteSnowflakeTable(
-      taskContext,
+      taskStatus,
       sparkSession,
       TestUtils.sfOptionsNoTable,
       sourceSchema,
@@ -42,15 +42,15 @@ class BasicReadWriteSuite extends ClusterTestSuiteBase {
       targetSchema,
       targetTableName)
 
-    taskContext.taskEndTime = System.currentTimeMillis
-    resultBuilder.withNewSubTaskResult(taskContext)
+    taskStatus.taskEndTime = System.currentTimeMillis
+    resultBuilder.withNewSubTaskResult(taskStatus)
 
     // This is a simple test suite. The overall result of the suite is the same as that of the single subtask.
-    resultBuilder.withTestStatus(taskContext.testStatus).withReason(taskContext.reason)
+    resultBuilder.withTestStatus(taskStatus.testStatus).withReason(taskStatus.reason)
 
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
-    if (taskContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+    if (taskStatus.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
       val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
       connection
         .createStatement()

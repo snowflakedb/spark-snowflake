@@ -18,7 +18,7 @@ package net.snowflake.spark.snowflake
 
 import scala.collection.mutable.ListBuffer
 
-class StressTestResultBuilder() extends BaseTestResultBuilder {
+private[snowflake] class StressTestResultBuilder() extends BaseTestResultBuilder {
 
   protected[snowflake] var testRevisionNumber: Int = _
   protected[snowflake] var subTaskResults: ListBuffer[TestStatus] = ListBuffer()
@@ -28,24 +28,24 @@ class StressTestResultBuilder() extends BaseTestResultBuilder {
   }
 
   override def withStartTimeInMill(startTimeInMillis: Long): StressTestResultBuilder = {
-    this.overallTestContext.taskStartTime = startTimeInMillis
+    this.overallTestStatus.taskStartTime = startTimeInMillis
     this
   }
 
   override def withEndTimeInMill(endTimeInMillis: Long): StressTestResultBuilder = {
-    this.overallTestContext.taskEndTime = endTimeInMillis
+    this.overallTestStatus.taskEndTime = endTimeInMillis
     this
   }
   override def withTestCaseName(testCaseName: String): StressTestResultBuilder = {
-    this.overallTestContext.testName = testCaseName
+    this.overallTestStatus.testName = testCaseName
     this
   }
   override def withTestStatus(testStatus: String): StressTestResultBuilder = {
-    this.overallTestContext.testStatus = testStatus
+    this.overallTestStatus.testStatus = testStatus
     this
   }
   override def withReason(reason: Option[String]): StressTestResultBuilder = {
-    this.overallTestContext.reason = reason
+    this.overallTestStatus.reason = reason
     this
   }
 

@@ -16,12 +16,10 @@
 
 package net.snowflake.spark.snowflake.testsuite
 
-import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, Parameters, TestStatus, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TestStatus, TestUtils}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.SizeEstimator
 import org.slf4j.LoggerFactory
 
 import scala.util.Random
@@ -32,7 +30,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
   override def runImpl(sparkSession: SparkSession,
                        resultBuilder: BaseTestResultBuilder): Unit = {
 
-    val taskContext = TestStatus("LowMemoryStressSuite")
+    val taskStatus = TestStatus("LowMemoryStressSuite")
 
     def getRandomString(len: Int): String = {
       Random.alphanumeric take len mkString ""
@@ -75,7 +73,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
     )
     val test_big_partition = s"test_big_partition_$randomSuffix"
 
-    taskContext.taskStartTime = System.currentTimeMillis
+    taskStatus.taskStartTime = System.currentTimeMillis
 
     // Convert RDD to DataFrame
     val df = sparkSession.createDataFrame(testRDD, schema)
@@ -94,16 +92,16 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
       case e: Throwable => {
         // Test succeed
         noOOMError = false
-        taskContext.testStatus = TestUtils.TEST_RESULT_STATUS_SUCCESS
-        taskContext.reason = Some("Success")
+        taskStatus.testStatus = TestUtils.TEST_RESULT_STATUS_SUCCESS
+        taskStatus.reason = Some("Success")
       }
     }
     finally {
-      taskContext.taskEndTime = System.currentTimeMillis()
-      resultBuilder.withNewSubTaskResult(taskContext)
+      taskStatus.taskEndTime = System.currentTimeMillis()
+      resultBuilder.withNewSubTaskResult(taskStatus)
 
       // This is a simple test suite. The overall result of the suite is the same as that of the single subtask.
-      resultBuilder.withTestStatus(taskContext.testStatus).withReason(taskContext.reason)
+      resultBuilder.withTestStatus(taskStatus.testStatus).withReason(taskStatus.reason)
 
       if (noOOMError) {
         throw new Exception("Expecting OOM error but didn't catch that.")
@@ -111,7 +109,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
 
       // If test is successful, drop the target table,
       // otherwise, keep it for further investigation.
-      if (taskContext.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+      if (taskStatus.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
         val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
         connection
           .createStatement()

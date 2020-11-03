@@ -16,15 +16,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.time.Instant
-
-class StressTestResult(builder: StressTestResultBuilder) extends ClusterTestResult {
-  val testName: String = builder.overallTestContext.testName
-  val testStatus: String = builder.overallTestContext.testStatus
-  val startTime: String = TestUtils.formatTimestamp(builder.overallTestContext.taskStartTime)
-  val testRunTime: String = TestUtils.formatTimeElapsed(builder.overallTestContext)
+private[snowflake] class StressTestResult(builder: StressTestResultBuilder) extends ClusterTestResult {
+  val testSuiteName: String = builder.overallTestStatus.testName
+  val testStatus: String = builder.overallTestStatus.testStatus
+  val startTime: String = TestUtils.formatTimestamp(builder.overallTestStatus.taskStartTime)
+  val testRunTime: String = TestUtils.formatTimeElapsed(builder.overallTestStatus)
   val reason: String =
-    builder.overallTestContext.reason.getOrElse(TestUtils.TEST_RESULT_REASON_NO_REASON)
+    builder.overallTestStatus.reason.getOrElse(TestUtils.TEST_RESULT_REASON_NO_REASON)
 
   def writeToSnowflake(): Unit = {
     val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
@@ -34,11 +32,11 @@ class StressTestResult(builder: StressTestResultBuilder) extends ClusterTestResu
       connection,
       s"create sequence if not exists ${TestUtils.STRESS_TEST_SEQ_NAME}")
 
-    // Create test result table if it doesn't exist.
-    if (!DefaultJDBCWrapper.tableExists(connection, TestUtils.STRESS_TEST_RESULT_TABLE)) {
+    // Create the overall test-result table if it doesn't exist.
+    if (!DefaultJDBCWrapper.tableExists(connection, TestUtils.STRESS_TEST_RESULTS_TABLE)) {
       DefaultJDBCWrapper.executeInterruptibly(
         connection,
-        s"""create table ${TestUtils.STRESS_TEST_RESULT_TABLE} (
+        s"""create table ${TestUtils.STRESS_TEST_RESULTS_TABLE} (
            | testRevision Integer,
            | runId Integer,
            | testName String,
@@ -54,47 +52,47 @@ class StressTestResult(builder: StressTestResultBuilder) extends ClusterTestResu
       .executeQueryInterruptibly(connection, s"select ${TestUtils.STRESS_TEST_SEQ_NAME}.nextVal")
     res.next()
 
-    val runId = res.getInt(1)
-    val runTableName = TestUtils.STRESS_TEST_RUN_TABLE_PREFIX + runId
+    val runId = res.getLong(1)
 
-    // A table with this name should not exist; if it does, something is wrong.
-    // We need to terminate this early
-    if (DefaultJDBCWrapper.tableExists(connection, runTableName)) {
-      throw new RuntimeException(
-        s"Error: Subtask-result table for stress test run id $runId already exists.")
+    // Create the detailed test-result table if it doesn't exist.
+    if (!DefaultJDBCWrapper.tableExists(connection, TestUtils.STRESS_TEST_DETAILED_RESULTS_TABLE)) {
+      // Create the subtask-result table for this run
+      DefaultJDBCWrapper.executeInterruptibly(
+        connection,
+        s"""create table ${TestUtils.STRESS_TEST_DETAILED_RESULTS_TABLE} (
+           | revisionNumber Integer,
+           | runId Integer,
+           | testSuiteName String,
+           | testName String,
+           | testStatus String,
+           | startTime String,
+           | testRunTime String,
+           | reason String )
+           |""".stripMargin)
     }
 
     // Write test result into the main result table
     DefaultJDBCWrapper.executeInterruptibly(
       connection,
-      s"""insert into ${TestUtils.STRESS_TEST_RESULT_TABLE} values (
+      s"""insert into ${TestUtils.STRESS_TEST_RESULTS_TABLE} values (
          |  ${builder.testRevisionNumber},
          |  $runId,
-         | '$testName' ,
+         | '$testSuiteName' ,
          | '$testStatus' ,
          | '$startTime' ,
          | '$testRunTime' ,
          | '$reason'
          | ) """.stripMargin)
 
-    // Create the subtask-result table for this run
-    DefaultJDBCWrapper.executeInterruptibly(
-      connection,
-      s"""create table $runTableName (
-         | revisionNumber Integer,
-         | testName String,
-         | testStatus String,
-         | startTime String,
-         | testRunTime String,
-         | reason String )
-         |""".stripMargin)
 
     // Now write the results of the individual subtasks.
     builder.subTaskResults.foreach(subTask => {
       DefaultJDBCWrapper.executeInterruptibly(
         connection,
-        s"""insert into $runTableName values (
+        s"""insert into ${TestUtils.STRESS_TEST_DETAILED_RESULTS_TABLE} values (
            | ${builder.testRevisionNumber},
+           | $runId,
+           | '$testSuiteName',
            | '${subTask.testName}' ,
            | '${subTask.testStatus}' ,
            | '${TestUtils.formatTimestamp(subTask.taskStartTime)}' ,

@@ -58,11 +58,11 @@ object TestUtils {
   lazy val param: MergedParameters = Parameters.mergeParameters(sfOptions)
   val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   val SNOWFLAKE_TEST_CONFIG = "SNOWFLAKE_TEST_CONFIG"
-  val GITHUB_TEST_RESULT_TABLE = "CLUSTER_TEST_RESULT_TABLE"
+  val GITHUB_TEST_RESULTS_TABLE = "CLUSTER_TEST_RESULT_TABLE"
   val GITHUB_SHA = "GITHUB_SHA"
   val GITHUB_RUN_ID = "GITHUB_RUN_ID"
-  val STRESS_TEST_RESULT_TABLE = "STRESS_TEST_RESULT_TABLE"
-  val STRESS_TEST_RUN_TABLE_PREFIX = "STRESS_TEST_RUN_"
+  val STRESS_TEST_RESULTS_TABLE = "STRESS_TEST_RESULT_TABLE"
+  val STRESS_TEST_DETAILED_RESULTS_TABLE = "STRESS_TEST_DETAILED_RESULTS_TABLE"
   // Unlike in the Github environment, where we have unique commit ids,
   // stress test runs need to have a unique id in a schema, for which
   // we will use a Sequence object
@@ -83,7 +83,6 @@ object TestUtils {
   // Vault configuration variables
   protected val CONFIG_VAULT_URL_ENV_VAR = "VAULT_URL"
   protected val VAULT_KEY_ENV_VAR = "VAULT_KEY"
-  //protected val VAULT_STORE_ENV_VAR = "secret/sf_connector_config"
 
   /**
    * Used to format a string for writing into a test table the time elapsed for a test

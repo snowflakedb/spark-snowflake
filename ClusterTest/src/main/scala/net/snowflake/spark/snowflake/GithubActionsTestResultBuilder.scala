@@ -16,7 +16,7 @@
 
 package net.snowflake.spark.snowflake
 
-class GithubActionsTestResultBuilder() extends BaseTestResultBuilder {
+private[snowflake] class GithubActionsTestResultBuilder() extends BaseTestResultBuilder {
 
   protected[snowflake] var testType = "Scala" // There are Scala test and Python test.
   protected[snowflake] var commitID: String = _
@@ -28,24 +28,24 @@ class GithubActionsTestResultBuilder() extends BaseTestResultBuilder {
 
   override def withStartTimeInMill(
       startTimeInMillis: Long): GithubActionsTestResultBuilder = {
-    this.overallTestContext.taskStartTime = startTimeInMillis
+    this.overallTestStatus.taskStartTime = startTimeInMillis
     this
   }
 
   override def withEndTimeInMill(endTimeInMillis: Long): GithubActionsTestResultBuilder = {
-    this.overallTestContext.taskEndTime = endTimeInMillis
+    this.overallTestStatus.taskEndTime = endTimeInMillis
     this
   }
   override def withTestCaseName(testCaseName: String): GithubActionsTestResultBuilder = {
-    this.overallTestContext.testName = testCaseName
+    this.overallTestStatus.testName = testCaseName
     this
   }
   override def withTestStatus(testStatus: String): GithubActionsTestResultBuilder = {
-    this.overallTestContext.testStatus = testStatus
+    this.overallTestStatus.testStatus = testStatus
     this
   }
   override def withReason(reason: Option[String]): GithubActionsTestResultBuilder = {
-    this.overallTestContext.reason = reason
+    this.overallTestStatus.reason = reason
     this
   }
 

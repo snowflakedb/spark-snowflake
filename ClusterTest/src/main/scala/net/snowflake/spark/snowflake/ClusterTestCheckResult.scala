@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 // This class is used separately with others in .github/docker/check_result.sh
 // If more libraries are used, the script needs to download the libraries and
 // update classpath.
-object ClusterTestCheckResult {
+private[snowflake] object ClusterTestCheckResult {
 
 // Driver function to run the test.
   def main(args: Array[String]): Unit = {
@@ -53,7 +53,7 @@ object ClusterTestCheckResult {
       val resultSet = connection
         .createStatement()
         .executeQuery(
-          s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
+          s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULTS_TABLE}
          | where githubRunId = '${TestUtils.githubRunId}'
          |""".stripMargin
         )
@@ -73,7 +73,7 @@ object ClusterTestCheckResult {
     val resultSet = connection
       .createStatement()
       .executeQuery(
-        s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
+        s"""select count(*) from ${TestUtils.GITHUB_TEST_RESULTS_TABLE}
        | where githubRunId = '${TestUtils.githubRunId}'
        |       and testStatus = '${TestUtils.TEST_RESULT_STATUS_SUCCESS}'
        |""".stripMargin
@@ -84,7 +84,7 @@ object ClusterTestCheckResult {
     // Print out all test cases results
     val rs = connection
       .createStatement()
-      .executeQuery(s"""select * from ${TestUtils.GITHUB_TEST_RESULT_TABLE}
+      .executeQuery(s"""select * from ${TestUtils.GITHUB_TEST_RESULTS_TABLE}
          | where githubRunId = '${TestUtils.githubRunId}'
          |""".stripMargin)
     val rsmd = rs.getMetaData

@@ -31,7 +31,7 @@ trait ClusterTestSuiteBase {
     runImpl(sparkSession, resultBuilder)
 
     // The test implementation should set up the test status
-    assert(resultBuilder.overallTestContext.testStatus != TestUtils.TEST_RESULT_STATUS_START)
+    assert(resultBuilder.overallTestStatus.testStatus != TestUtils.TEST_RESULT_STATUS_START)
   }
 
   // Each test case MUST implement this function.

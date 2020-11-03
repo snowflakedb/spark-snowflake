@@ -16,10 +16,10 @@
 
 package net.snowflake.spark.snowflake
 
-abstract class BaseTestResultBuilder() {
+private[snowflake] abstract class BaseTestResultBuilder() {
 
   // Context for the test overall test suite
-  protected[snowflake] var overallTestContext: TestStatus = TestStatus("Test name not set")
+  protected[snowflake] var overallTestStatus: TestStatus = TestStatus("Test name not set")
 
   def build(): ClusterTestResult;
 
