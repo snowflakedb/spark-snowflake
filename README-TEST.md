@@ -116,7 +116,7 @@ Example command to run the scala test
       --jars $SPARK_WORKDIR/spark-snowflake_2.11-2.7.0-spark_2.4.jar,$SPARK_WORKDIR/snowflake-jdbc-3.12.2.jar \
       --class net.snowflake.spark.snowflake.ClusterTest \
       ClusterTest/target/scala-2.11/clustertest_2.11-1.0.jar \
-      local "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;"
+      local "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;" github
 
     # run the job in remote cluster
     $SPARK_HOME/bin/spark-submit \
@@ -124,7 +124,7 @@ Example command to run the scala test
       --master spark://master:7077 --deploy-mode client \
       --class net.snowflake.spark.snowflake.ClusterTest \
       ClusterTest/target/scala-2.11/clustertest_2.11-1.0.jar \
-      remote "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;"
+      remote "net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;" github
 
 ### How to add a new test case
 net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite can be a good template to add a new test case. Below are suggested operations.
@@ -197,3 +197,38 @@ To better understand why this 227 MB file requires around at least 600MB memory 
 A test hook was added to partition uploading function. When the test hook flag is enabled, the hook will fail twice and pass the thrid time. 
 
 Two intergration tests were added and Spark retry counts are set to 2 and 3 respectively. The test that only retries twice will throw exception, while the test that retries three times will pass without exception.
+
+### Stress Test
+
+Under ClusterTest/, there is also `run_stress_test.sh`. This script can be used in any environment that wishes to activate behavior for writing test results that emphasizes recording the performance of multiple subtasks, i.e., we write the results to a table that includes the measurements for each subtask using a different ResultBuilder.
+
+To run a ClusterTest in `stress` mode, invoke the `ClusterTest` main class (Scala-only, Python isn't supported) using the `stress` flag instead of `github`, and append an integer as the last argument to denote the test-revision number for this set of tests i.e.,
+
+   # run a stress-test job in a remote cluster
+    $SPARK_HOME/bin/spark-submit \
+      --jars $SPARK_WORKDIR/spark-snowflake_2.11-2.7.0-spark_2.4.jar,$SPARK_WORKDIR/snowflake-jdbc-3.12.2.jar \
+      --master spark://master:7077 --deploy-mode client \
+      --class net.snowflake.spark.snowflake.ClusterTest \
+      ClusterTest/target/scala-2.11/clustertest_2.11-1.0.jar \
+      remote "net.snowflake.spark.snowflake.testsuite.StressReadWriteSuite;net.snowflake.spark.snowflake.testsuite.BasicReadWriteSuite;" stress 5
+      
+The test-revision id is used to separate different iterations/versions of test data being used for the stress test. If the test data ever evolve, or if the test configuration changes, it is recommended to increment this value, such that result data may be queried and grouped using this value.
+
+`ClusterTest/test_sources.json` is a JSON file with the following format:
+
+```
+[
+  {
+    "database": "testdb_spark",
+    "schema": "tpch_sf1",
+    "table": "orders"
+  },
+  {
+    "database": "testdb_spark",
+    "schema": "tpch_sf1",
+    "table": "lineitem"
+  }
+]
+```
+
+Each item in the array denotes a table that `StressReadWriteSuite` will read from; each table will be formulated as a subtask in `StressReadWriteSuite`. When this JSON is read, each item in the array will run as a subtask in the overall `StressReadWriteSuite`.
