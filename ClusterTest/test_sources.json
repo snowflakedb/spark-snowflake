@@ -1,0 +1,12 @@
+[
+  {
+    "database": "testdb_spark",
+    "schema": "tpch_sf1",
+    "table": "orders"
+  },
+  {
+    "database": "testdb_spark",
+    "schema": "tpch_sf1",
+    "table": "lineitem"
+  }
+]
