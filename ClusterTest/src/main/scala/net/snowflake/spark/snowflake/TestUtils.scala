@@ -61,7 +61,7 @@ object TestUtils {
   val GITHUB_TEST_RESULTS_TABLE = "CLUSTER_TEST_RESULT_TABLE"
   val GITHUB_SHA = "GITHUB_SHA"
   val GITHUB_RUN_ID = "GITHUB_RUN_ID"
-  val STRESS_TEST_RESULTS_TABLE = "STRESS_TEST_RESULT_TABLE"
+  val STRESS_TEST_RESULTS_TABLE = "STRESS_TEST_RESULTS_TABLE"
   val STRESS_TEST_DETAILED_RESULTS_TABLE = "STRESS_TEST_DETAILED_RESULTS_TABLE"
   // Unlike in the Github environment, where we have unique commit ids,
   // stress test runs need to have a unique id in a schema, for which
