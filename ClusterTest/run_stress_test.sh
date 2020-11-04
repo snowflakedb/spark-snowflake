@@ -5,7 +5,9 @@ export TEST_SPARK_CONNECTOR_VERSION=2.8.2
 export TEST_SPARK_VERSION=3.0
 export TEST_CLUSTERTEST_VERSION=1.0
 
-# Test Revision ID
+# Test Revision ID; bump up this value whenever the test data in 
+# ClusterTest/test_sources.json is updated, or when significant changes
+# are made to StressReadWriteSuite.
 export TEST_REVISION_ID=1
 
 export SPARK_CONNECTOR_JAR_PATH=${SF_CONNECTOR_DIR}/target/scala-${TEST_COMPILE_SCALA_VERSION}/spark-snowflake-assembly-${TEST_SPARK_CONNECTOR_VERSION}-spark_${TEST_SPARK_VERSION}.jar
