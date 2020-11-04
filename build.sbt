@@ -68,6 +68,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 
+    // Resolve merge conflicts during build with locally cached artifacts
     assemblyMergeStrategy in assembly := {
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case x => MergeStrategy.first
