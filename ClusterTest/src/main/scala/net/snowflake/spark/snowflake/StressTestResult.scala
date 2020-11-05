@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 import javax.mail.{Message, Session, Transport}
 import javax.mail.internet.{InternetAddress, MimeMessage}
 import org.slf4j.{Logger, LoggerFactory}
-import net.snowflake.spark.snowflake.StressTestResult.{ErrorCaseReport, fromEmailAddress, tryToSendEmail}
+import net.snowflake.spark.snowflake.StressTestResult.{ErrorCaseReport, tryToSendEmail}
 
 import scala.collection.mutable.ListBuffer
 

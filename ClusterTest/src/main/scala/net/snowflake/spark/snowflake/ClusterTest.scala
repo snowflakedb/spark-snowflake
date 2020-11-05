@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake
-import net.snowflake.spark.snowflake.StressTestResult.{fromEmailAddress, tryToSendEmail}
+import net.snowflake.spark.snowflake.StressTestResult.tryToSendEmail
 import net.snowflake.spark.snowflake.testsuite.ClusterTestSuiteBase
 import org.apache.spark.sql.SparkSession
 import org.slf4j.{Logger, LoggerFactory}
@@ -41,7 +41,7 @@ object ClusterTest extends Enumeration {
 
     // Test it!
     tryToSendEmail("connector-regress-watchers-dl@snowflake.com",
-      fromEmailAddress, "testing stress-test email, please ignore", "test email body")
+      "testing stress-test email, please ignore", "test email body")
 
     log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
 
