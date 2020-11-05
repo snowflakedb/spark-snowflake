@@ -56,7 +56,8 @@ private[snowflake] object StressTestResult {
     } catch {
       // Log, but don't crash if the email failed to send.
       case mex: Exception => {
-        log.info(s"Failed to send failure notice email to $emailTo.")
+        log.info(s"Failed to send failure notice email to $emailTo. stack trace: ${mex.getMessage}")
+        mex.printStackTrace()
       }
     }
   }
