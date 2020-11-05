@@ -16,7 +16,53 @@
 
 package net.snowflake.spark.snowflake
 
-private[snowflake] class StressTestResult(builder: StressTestResultBuilder) extends ClusterTestResult {
+import javax.mail.{Message, Session, Transport}
+import javax.mail.internet.{InternetAddress, MimeMessage}
+import org.slf4j.{Logger, LoggerFactory}
+import net.snowflake.spark.snowflake.StressTestResult.{ErrorCaseReport, fromEmailAddress, tryToSendEmail}
+
+import scala.collection.mutable.ListBuffer
+
+private[snowflake] object StressTestResult {
+
+  /**
+    * Class representing an error for either a suite or a subtask.
+    */
+  case class ErrorCaseReport(testName: String, status: String, message: String)
+
+  val log: Logger = LoggerFactory.getLogger(getClass)
+
+  def tryToSendEmail(emailTo: String, emailSubject: String, msg: String): Unit = {
+    val host = System.getenv(TestUtils.STRESS_TEST_EMAIL_HOST)
+    val emailFrom = System.getenv(TestUtils.STRESS_TEST_EMAIL_FROM)
+
+    if (host == null || emailFrom == null) {
+      return
+    }
+
+    val properties = System.getProperties
+    properties.setProperty("mail.smtp.host", host)
+
+    val session = Session.getDefaultInstance(properties)
+
+    try {
+      val message = new MimeMessage(session)
+      message.setFrom(new InternetAddress(emailFrom))
+      message.addRecipient(Message.RecipientType.TO, new InternetAddress(emailTo))
+      message.setSubject(emailSubject)
+      message.setText(msg)
+
+      Transport.send(message)
+    } catch {
+      // Log, but don't crash if the email failed to send.
+      case mex: Exception => {
+        log.info(s"Failed to send failure notice email to $emailTo.")
+      }
+    }
+  }
+}
+
+private[snowflake] class StressTestResult(builder: StressTestResultBuilder, email: Option[String]) extends ClusterTestResult {
   val testSuiteName: String = builder.overallTestStatus.testName
   val testStatus: String = builder.overallTestStatus.testStatus
   val startTime: String = TestUtils.formatTimestamp(builder.overallTestStatus.taskStartTime)
@@ -84,9 +130,22 @@ private[snowflake] class StressTestResult(builder: StressTestResultBuilder) exte
          | '$reason'
          | ) """.stripMargin)
 
+    var errorsEncountered: ListBuffer[ErrorCaseReport] = ListBuffer()
+
+    if (testStatus != TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+      val err = ErrorCaseReport(testSuiteName, testStatus,
+        s"Test suite was not successful, reason: $reason")
+      errorsEncountered.append(err)
+    }
 
     // Now write the results of the individual subtasks.
     builder.subTaskResults.foreach(subTask => {
+      if (subTask.testStatus != TestUtils.TEST_RESULT_STATUS_SUCCESS) {
+        val err = ErrorCaseReport(subTask.testName, subTask.testStatus,
+          s"Subtask ${subTask.testName} in $testSuiteName was not successful, reason: $reason")
+        errorsEncountered.append(err)
+      }
+
       DefaultJDBCWrapper.executeInterruptibly(
         connection,
         s"""insert into ${TestUtils.STRESS_TEST_DETAILED_RESULTS_TABLE} values (
@@ -102,5 +161,11 @@ private[snowflake] class StressTestResult(builder: StressTestResultBuilder) exte
     })
 
     connection.close()
+
+    // If a notification email on failure was defined, email that address
+    if (email.isDefined && errorsEncountered.nonEmpty) {
+      val emailContent = errorsEncountered.mkString("\n")
+      tryToSendEmail(email.get, "Spark Connector Stress-Test Failure Notice", emailContent)
+    }
   }
 }

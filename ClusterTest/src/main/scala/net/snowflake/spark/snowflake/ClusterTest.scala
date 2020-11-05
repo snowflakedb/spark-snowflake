@@ -17,6 +17,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake
+import net.snowflake.spark.snowflake.StressTestResult.{fromEmailAddress, tryToSendEmail}
 import net.snowflake.spark.snowflake.testsuite.ClusterTestSuiteBase
 import org.apache.spark.sql.SparkSession
 import org.slf4j.{Logger, LoggerFactory}
@@ -37,6 +38,10 @@ object ClusterTest extends Enumeration {
 
   // Driver function to run the test.
   def main(args: Array[String]): Unit = {
+
+    // Test it!
+    tryToSendEmail("connector-regress-watchers-dl@snowflake.com",
+      fromEmailAddress, "testing stress-test email, please ignore", "test email body")
 
     log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
 
@@ -97,7 +102,10 @@ object ClusterTest extends Enumeration {
           // We keep a version number for the revision/version of the input test data and config
           val testInputRevisionNumber = Integer.valueOf(args(3))
 
-          resultBuilder = new StressTestResultBuilder()
+          // Email address for sending failed stress test alerts
+          val emailAddress = if (args.length > 4) Some(args(4)) else None
+
+          resultBuilder = new StressTestResultBuilder(emailAddress)
             .withTestRevision(testInputRevisionNumber)
         } else {
           throw new RuntimeException(s"Bad ClusterTest env type:$envType")

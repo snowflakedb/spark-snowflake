@@ -45,7 +45,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "com.bettercloud"% "vault-java-driver" % "5.1.0",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",
-      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, runtime"
+      "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, runtime",
+      "javax.mail" % "mail" % "1.5.0-b01"
     ),
 
     assemblyMergeStrategy in assembly := {

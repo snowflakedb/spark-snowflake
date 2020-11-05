@@ -63,6 +63,12 @@ object TestUtils {
   val GITHUB_RUN_ID = "GITHUB_RUN_ID"
   val STRESS_TEST_RESULTS_TABLE = "STRESS_TEST_RESULTS_TABLE"
   val STRESS_TEST_DETAILED_RESULTS_TABLE = "STRESS_TEST_DETAILED_RESULTS_TABLE"
+
+  // email env parameters
+  val STRESS_TEST_EMAIL_HOST = "STRESS_TEST_EMAIL_HOST"
+  // the email address (i.e., user@domain.com) from which to send the email alerts
+  val STRESS_TEST_EMAIL_FROM = "STRESS_TEST_EMAIL_FROM"
+
   // Unlike in the Github environment, where we have unique commit ids,
   // stress test runs need to have a unique id in a schema, for which
   // we will use a Sequence object

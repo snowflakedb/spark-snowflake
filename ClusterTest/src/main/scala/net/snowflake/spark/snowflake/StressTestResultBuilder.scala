@@ -18,13 +18,13 @@ package net.snowflake.spark.snowflake
 
 import scala.collection.mutable.ListBuffer
 
-private[snowflake] class StressTestResultBuilder() extends BaseTestResultBuilder {
+private[snowflake] class StressTestResultBuilder(email: Option[String] = None) extends BaseTestResultBuilder {
 
   protected[snowflake] var testRevisionNumber: Int = _
   protected[snowflake] var subTaskResults: ListBuffer[TestStatus] = ListBuffer()
 
   override def build(): ClusterTestResult = {
-    new StressTestResult(this)
+    new StressTestResult(this, email)
   }
 
   override def withStartTimeInMill(startTimeInMillis: Long): StressTestResultBuilder = {
@@ -53,8 +53,8 @@ private[snowflake] class StressTestResultBuilder() extends BaseTestResultBuilder
     this.testRevisionNumber = revision
     this
   }
-  override def withNewSubTaskResult(subTaskContext: TestStatus): StressTestResultBuilder = {
-    subTaskResults.append(subTaskContext)
+  override def withNewSubTaskResult(subTaskResult: TestStatus): StressTestResultBuilder = {
+    subTaskResults.append(subTaskResult)
     this
   }
 }

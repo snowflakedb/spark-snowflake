@@ -24,4 +24,4 @@ spark-submit \
       --jars $SPARK_CONNECTOR_JAR_PATH \
       --master yarn \
       --class net.snowflake.spark.snowflake.ClusterTest \
-      $CLUSTERTEST_JAR_PATH remote "net.snowflake.spark.snowflake.testsuite.StressReadWriteSuite;" stress $TEST_REVISION_ID
+      $CLUSTERTEST_JAR_PATH remote "net.snowflake.spark.snowflake.testsuite.StressReadWriteSuite;" stress $TEST_REVISION_ID $STRESS_EMAIL_ALERT_ADDRESS
