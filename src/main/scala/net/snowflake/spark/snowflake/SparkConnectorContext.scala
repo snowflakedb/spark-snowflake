@@ -19,6 +19,7 @@
 
 package net.snowflake.spark.snowflake
 
+import net.snowflake.spark.snowflake.SparkConnectorContext.isExecutorConfigLogged
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD.WORKER_LOG_PREFIX
 import org.slf4j.LoggerFactory
 
@@ -27,15 +28,15 @@ object SparkConnectorContext {
 
   private var isExecutorConfigLogged = false
 
+  private val locker = new Object
+
   // One executor may execute multiple tasks, it is enough to log once.
   private[snowflake] def recordConfigOnExecutor(): Unit = {
-    if (!isExecutorConfigLogged) {
-      isExecutorConfigLogged.synchronized {
-        if (!isExecutorConfigLogged) {
-          isExecutorConfigLogged = true
-          logger.info(s"$WORKER_LOG_PREFIX: system config: " +
-            s"${SnowflakeTelemetry.getSystemConfigWithTaskInfo().toPrettyString}")
-        }
+    locker.synchronized {
+      if (!isExecutorConfigLogged) {
+        isExecutorConfigLogged = true
+        logger.info(s"$WORKER_LOG_PREFIX: system config: " +
+          s"${SnowflakeTelemetry.getSystemConfigWithTaskInfo().toPrettyString}")
       }
     }
   }
