@@ -20,8 +20,10 @@ build/sbt package -DskipTests
 cd $SF_CONNECTOR_DIR/ClusterTest
 ../build/sbt 'set test in assembly := {}' clean assembly
 
+# The email jar env variables are to specify the paths to javax.mail and javax.activation JARs, needed
+# for sending the mail alerts
 spark-submit \
-      --jars $SPARK_CONNECTOR_JAR_PATH \
+      --jars $SPARK_CONNECTOR_JAR_PATH,$STRESS_EMAIL_MAIL_JAR,$STRESS_EMAIL_ACTIVATION_JAR \
       --master yarn \
       --class net.snowflake.spark.snowflake.ClusterTest \
       $CLUSTERTEST_JAR_PATH remote "net.snowflake.spark.snowflake.testsuite.StressReadWriteSuite;" stress $TEST_REVISION_ID $STRESS_EMAIL_ALERT_ADDRESS
