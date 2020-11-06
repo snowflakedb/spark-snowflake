@@ -8,5 +8,15 @@
     "database": "testdb_spark",
     "schema": "tpch_sf100",
     "table": "lineitem"
+  },
+  {
+    "database": "testdb_spark",
+    "schema": "tpcds_sf100",
+    "table": "catalog_sales"
+  },
+  {
+    "database": "testdb_spark",
+    "schema": "tpcds_sf100",
+    "table": "customer"
   }
 ]
