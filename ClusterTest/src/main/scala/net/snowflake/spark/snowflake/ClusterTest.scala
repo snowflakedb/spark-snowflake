@@ -39,10 +39,6 @@ object ClusterTest extends Enumeration {
   // Driver function to run the test.
   def main(args: Array[String]): Unit = {
 
-    // Test it!
-    tryToSendEmail("connector-regress-watchers-dl@snowflake.com",
-      "testing stress-test email, please ignore", "test email body")
-
     log.info(s"Test Spark Connector: ${net.snowflake.spark.snowflake.Utils.VERSION}")
 
     val usage = s"""Three parameters are needed: [local | remote],
