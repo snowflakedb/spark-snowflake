@@ -19,7 +19,6 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.spark.snowflake.SparkConnectorContext.isExecutorConfigLogged
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD.WORKER_LOG_PREFIX
 import org.slf4j.LoggerFactory
 
