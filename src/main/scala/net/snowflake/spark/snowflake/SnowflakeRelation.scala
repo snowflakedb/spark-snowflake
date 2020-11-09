@@ -203,8 +203,7 @@ private[snowflake] case class SnowflakeRelation(
           TelemetryConstValues.STATUS_FAIL,
           System.currentTimeMillis() - startTime,
           Some(th),
-          "Hit exception when reading with arrow format",
-          Some(SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()))
+          "Hit exception when reading with arrow format")
         // Re-throw the exception
         throw th
       }

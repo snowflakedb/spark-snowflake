@@ -58,8 +58,7 @@ private[snowflake] object StageReader {
           TelemetryConstValues.STATUS_FAIL,
           System.currentTimeMillis() - startTime,
           Some(th),
-          "Hit exception when reading with COPY INTO LOCATION",
-          Some(SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()))
+          "Hit exception when reading with COPY INTO LOCATION")
         // Re-throw the exception
         throw th
       }

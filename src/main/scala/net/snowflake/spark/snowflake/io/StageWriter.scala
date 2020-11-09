@@ -584,8 +584,7 @@ private[io] object StageWriter {
           TelemetryConstValues.STATUS_FAIL,
           end - start,
           Some(th),
-          progress.mkString("\n"),
-          Some(SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()))
+          progress.mkString("\n"))
         // Re-throw the exception
         throw th
       }

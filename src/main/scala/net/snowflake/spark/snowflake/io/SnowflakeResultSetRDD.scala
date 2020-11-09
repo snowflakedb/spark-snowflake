@@ -101,7 +101,6 @@ case class ResultIterator[T: ClassTag](
       )
     } catch {
       case th: Throwable => {
-        val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
@@ -112,8 +111,7 @@ case class ResultIterator[T: ClassTag](
           success = false,
           proxyInfo.isDefined,
           Some(queryID),
-          Some(th),
-          Some(config))
+          Some(th))
         // Re-throw the exception
         throw th
       }
@@ -165,7 +163,6 @@ case class ResultIterator[T: ClassTag](
       }
     } catch {
       case th: Throwable => {
-        val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
@@ -176,8 +173,7 @@ case class ResultIterator[T: ClassTag](
           success = false,
           useProxy = proxyInfo.isDefined,
           queryID = Some(queryID),
-          throwable = Some(th),
-          Some(config))
+          throwable = Some(th))
         // Re-throw the exception
         throw th
       }

@@ -92,8 +92,7 @@ object SnowflakeTelemetry {
                        success: Boolean,
                        useProxy: Boolean,
                        queryID: Option[String],
-                       throwable: Option[Throwable],
-                       config: Option[ObjectNode]): Unit =
+                       throwable: Option[Throwable]): Unit =
   {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
@@ -115,9 +114,6 @@ object SnowflakeTelemetry {
       metric.put(TelemetryOOBFields.EXCEPTION_CLASS_NAME, "NA")
       metric.put(TelemetryOOBFields.EXCEPTION_MESSAGE, "NA")
       metric.put(TelemetryOOBFields.EXCEPTION_STACKTRACE, "NA")
-    }
-    if (config.isDefined) {
-      metric.set(TelemetryOOBFields.SYSTEM_CONFIG, config.get)
     }
 
     // The constructor of TelemetryEvent.LogBuilder uses
@@ -209,8 +205,7 @@ object SnowflakeTelemetry {
                                          queryStatus: String,
                                          elapse: Long,
                                          throwable: Option[Throwable],
-                                         details: String,
-                                         config: Option[ObjectNode]
+                                         details: String
                                          ): Unit = {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryQueryStatusFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
@@ -228,9 +223,6 @@ object SnowflakeTelemetry {
       metric.put(TelemetryQueryStatusFields.EXCEPTION_STACKTRACE, stringWriter.toString)
     }
     metric.put(TelemetryQueryStatusFields.DETAILS, details)
-    if (config.isDefined) {
-      metric.set(TelemetryQueryStatusFields.SYSTEM_CONFIG, config.get)
-    }
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_QUERY_STATUS, metric),
@@ -256,7 +248,7 @@ object SnowflakeTelemetry {
 
   private def addSystemConfigInternal(metric: ObjectNode): ObjectNode = {
     // Add versions info
-    Utils.addClientInfoJson(metric)
+    Utils.addVersionInfo(metric)
     // Add JVM system config
     addJVMConfig(metric)
     // Add Spark option
@@ -281,13 +273,13 @@ object SnowflakeTelemetry {
 
   private def addJVMConfig(metric: ObjectNode): ObjectNode = {
     // System basic information
-    metric.put(TelemetryConfigFields.OS_NAME,
+    metric.put(TelemetryClientInfoFields.OS_NAME,
       System.getProperty(TelemetryConstValues.JVM_PROPERTY_NAME_OS_NAME))
     val rt = Runtime.getRuntime
-    metric.put(TelemetryConfigFields.MAX_MEMORY_IN_MB, rt.maxMemory() / MB)
-    metric.put(TelemetryConfigFields.TOTAL_MEMORY_IN_MB, rt.totalMemory() / MB)
-    metric.put(TelemetryConfigFields.FREE_MEMORY_IN_MB, rt.freeMemory() / MB)
-    metric.put(TelemetryConfigFields.CPU_CORES, rt.availableProcessors())
+    metric.put(TelemetryClientInfoFields.MAX_MEMORY_IN_MB, rt.maxMemory() / MB)
+    metric.put(TelemetryClientInfoFields.TOTAL_MEMORY_IN_MB, rt.totalMemory() / MB)
+    metric.put(TelemetryClientInfoFields.FREE_MEMORY_IN_MB, rt.freeMemory() / MB)
+    metric.put(TelemetryClientInfoFields.CPU_CORES, rt.availableProcessors())
     metric
   }
 
@@ -346,7 +338,7 @@ object SnowflakeTelemetry {
       }
     )
     if (!sparkMetric.isEmpty) {
-      metric.set(TelemetryConfigFields.SPARK_CONFIG, sparkMetric)
+      metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
     }
     metric
   }
@@ -367,13 +359,13 @@ object SnowflakeTelemetry {
   private def addTaskInfo(metric: ObjectNode): ObjectNode = {
     val task = TaskContext.get()
     if (task != null) {
-      metric.put(TelemetryConfigFields.TASK_PARTITION_ID, task.partitionId())
-      metric.put(TelemetryConfigFields.TASK_ATTEMPT_ID, task.taskAttemptId())
-      metric.put(TelemetryConfigFields.TASK_ATTEMPT_NUMBER, task.attemptNumber())
-      metric.put(TelemetryConfigFields.TASK_STAGE_ATTEMPT_NUMBER, task.stageAttemptNumber())
-      metric.put(TelemetryConfigFields.TASK_STAGE_ID, task.stageId())
+      metric.put(TelemetryTaskInfoFields.TASK_PARTITION_ID, task.partitionId())
+      metric.put(TelemetryTaskInfoFields.TASK_ATTEMPT_ID, task.taskAttemptId())
+      metric.put(TelemetryTaskInfoFields.TASK_ATTEMPT_NUMBER, task.attemptNumber())
+      metric.put(TelemetryTaskInfoFields.TASK_STAGE_ATTEMPT_NUMBER, task.stageAttemptNumber())
+      metric.put(TelemetryTaskInfoFields.TASK_STAGE_ID, task.stageId())
     }
-    metric.put(TelemetryConfigFields.THREAD_ID, Thread.currentThread().getId)
+    metric.put(TelemetryTaskInfoFields.THREAD_ID, Thread.currentThread().getId)
     metric
   }
 }
@@ -489,9 +481,7 @@ object TelemetryClientInfoFields {
   val CERTIFIED_JDBC_VERSION = TelemetryFieldNames.CERTIFIED_JDBC_VERSION
   // Snowflake URL with account name
   val SFURL = TelemetryFieldNames.SFURL
-}
 
-object TelemetryConfigFields {
   // System basic information
   val OS_NAME = TelemetryFieldNames.OS_NAME
   val MAX_MEMORY_IN_MB = TelemetryFieldNames.MAX_MEMORY_IN_MB
@@ -499,6 +489,11 @@ object TelemetryConfigFields {
   val FREE_MEMORY_IN_MB = TelemetryFieldNames.FREE_MEMORY_IN_MB
   val CPU_CORES = TelemetryFieldNames.CPU_CORES
 
+  // Spark configuration
+  val SPARK_CONFIG = TelemetryFieldNames.SPARK_CONFIG
+}
+
+object TelemetryTaskInfoFields {
   // task information which may be are available on executor.
   val TASK_PARTITION_ID = TelemetryFieldNames.TASK_PARTITION_ID
   val TASK_STAGE_ID = TelemetryFieldNames.TASK_STAGE_ID
@@ -506,7 +501,6 @@ object TelemetryConfigFields {
   val TASK_ATTEMPT_NUMBER = TelemetryFieldNames.TASK_ATTEMPT_NUMBER
   val TASK_STAGE_ATTEMPT_NUMBER = TelemetryFieldNames.TASK_STAGE_ATTEMPT_NUMBER
   val THREAD_ID = TelemetryFieldNames.THREAD_ID
-  val SPARK_CONFIG = TelemetryFieldNames.SPARK_CONFIG
 }
 
 object TelemetryPushdownFailFields {

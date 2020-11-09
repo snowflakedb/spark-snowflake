@@ -673,11 +673,10 @@ object Utils {
   }
 
   def getClientInfoJson(): ObjectNode = {
-    val metric: ObjectNode = mapper.createObjectNode()
-    addClientInfoJson(metric)
+    SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()
   }
 
-  private[snowflake] def addClientInfoJson(metric: ObjectNode): ObjectNode = {
+  private[snowflake] def addVersionInfo(metric: ObjectNode): ObjectNode = {
     metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
     metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
     metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))

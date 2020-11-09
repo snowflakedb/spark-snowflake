@@ -583,7 +583,6 @@ sealed trait CloudStorage {
 
         // Send OOB telemetry message if uploading failure happens
         val attemptNumber = TaskContext.get().attemptNumber()
-        val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
         SnowflakeTelemetry.sendTelemetryOOB(
           sfURL,
           this.getClass.getSimpleName,
@@ -593,8 +592,7 @@ sealed trait CloudStorage {
           false,
           proxyInfo.isDefined,
           None,
-          Some(th),
-          Some(config))
+          Some(th))
 
         // Sleep exponential time based on the attempt number.
         if (useExponentialBackoff) {
@@ -850,7 +848,6 @@ sealed trait CloudStorage {
 
     // Send OOB telemetry message if downloading failure happens
     if (retryCount > 0) {
-      val config = SnowflakeTelemetry.getSystemConfigWithTaskInfo()
       SnowflakeTelemetry.sendTelemetryOOB(
         sfURL,
         this.getClass.getSimpleName,
@@ -860,8 +857,7 @@ sealed trait CloudStorage {
         downloadDone,
         proxyInfo.isDefined,
         None,
-        throwable,
-        Some(config))
+        throwable)
     }
 
     if (downloadDone) {
