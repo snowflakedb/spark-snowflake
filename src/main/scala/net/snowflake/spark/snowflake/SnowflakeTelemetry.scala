@@ -236,7 +236,6 @@ object SnowflakeTelemetry {
   private[snowflake] def getSystemConfigWithoutTaskInfo(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
 
-    // System config retrieving is for diagnostic purpose, it raises exception.
     try {
       addSystemConfigInternal(metric)
     } catch {
@@ -416,7 +415,6 @@ private[snowflake] object TelemetryFieldNames {
   val LOAD_RATE = "load_rate"
   val DATA_BATCH = "data_batch"
   val OUTPUT_BYTES = "output_bytes"
-  val SYSTEM_CONFIG = "system_config"
   val OS_NAME = "os_name"
   val MAX_MEMORY_IN_MB = "max_memory_in_mb"
   val TOTAL_MEMORY_IN_MB = "total_memory_in_mb"
@@ -460,8 +458,6 @@ object TelemetryQueryStatusFields {
   val EXCEPTION_STACKTRACE = TelemetryFieldNames.STACKTRACE
   // The details information about the exception
   val DETAILS = TelemetryFieldNames.DETAILS
-  // System config
-  val SYSTEM_CONFIG = TelemetryFieldNames.SYSTEM_CONFIG
 }
 
 object TelemetryClientInfoFields {
@@ -528,7 +524,6 @@ object TelemetryOOBFields {
   val SUCCESS = TelemetryFieldNames.SUCCESS
   val USE_PROXY = TelemetryFieldNames.USE_PROXY
   val QUERY_ID = TelemetryFieldNames.QUERY_ID
-  val SYSTEM_CONFIG = TelemetryFieldNames.SYSTEM_CONFIG
   // Below 3 fields are the Exception details.
   val EXCEPTION_CLASS_NAME = TelemetryFieldNames.EXCEPTION_CLASS_NAME
   val EXCEPTION_MESSAGE = TelemetryFieldNames.EXCEPTION_MESSAGE
