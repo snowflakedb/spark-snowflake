@@ -53,7 +53,6 @@ private[snowflake] object StageReader {
         SnowflakeTelemetry.sendQueryStatus(
           conn,
           TelemetryConstValues.OPERATION_READ,
-          copyStatement.toString,
           copyStatement.getLastQueryID(),
           TelemetryConstValues.STATUS_FAIL,
           System.currentTimeMillis() - startTime,

@@ -195,7 +195,6 @@ private[snowflake] case class SnowflakeRelation(
         SnowflakeTelemetry.sendQueryStatus(
           conn,
           TelemetryConstValues.OPERATION_READ,
-          statement.toString,
           statement.getLastQueryID(),
           TelemetryConstValues.STATUS_FAIL,
           System.currentTimeMillis() - startTime,
