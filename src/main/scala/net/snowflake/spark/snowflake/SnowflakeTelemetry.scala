@@ -236,23 +236,30 @@ object SnowflakeTelemetry {
                                          throwable: Option[Throwable],
                                          details: String
                                          ): Unit = {
-    val metric: ObjectNode = mapper.createObjectNode()
-    metric.put(TelemetryQueryStatusFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
-    metric.put(TelemetryQueryStatusFields.OPERATION, operation)
-    metric.put(TelemetryQueryStatusFields.QUERY_ID, queryId)
-    metric.put(TelemetryQueryStatusFields.QUERY_STATUS, queryStatus)
-    metric.put(TelemetryQueryStatusFields.ELAPSED_TIME, elapse)
-    if (throwable.isDefined) {
-      addThrowable(metric, throwable.get)
-    }
-    metric.put(TelemetryQueryStatusFields.DETAILS, details)
+    try {
+      val metric: ObjectNode = mapper.createObjectNode()
+      metric.put(TelemetryQueryStatusFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
+      metric.put(TelemetryQueryStatusFields.OPERATION, operation)
+      metric.put(TelemetryQueryStatusFields.QUERY_ID, queryId)
+      metric.put(TelemetryQueryStatusFields.QUERY_STATUS, queryStatus)
+      metric.put(TelemetryQueryStatusFields.ELAPSED_TIME, elapse)
+      if (throwable.isDefined) {
+        addThrowable(metric, throwable.get)
+      }
+      metric.put(TelemetryQueryStatusFields.DETAILS, details)
 
-    SnowflakeTelemetry.addLog(
-      (TelemetryTypes.SPARK_QUERY_STATUS, metric),
-      System.currentTimeMillis()
-    )
-    SnowflakeTelemetry.send(conn.getTelemetry)
+      SnowflakeTelemetry.addLog(
+        (TelemetryTypes.SPARK_QUERY_STATUS, metric),
+        System.currentTimeMillis()
+      )
+      SnowflakeTelemetry.send(conn.getTelemetry)
+    } catch {
+      case th: Throwable => {
+        logger.warn(s"Fail to send spark_query_status. reason: ${th.getMessage}")
+      }
+    }
   }
+<<<<<<< HEAD
 
   // Configuration retrieving is optional for for diagnostic purpose,
   // so it never raises exception.
@@ -364,6 +371,8 @@ object SnowflakeTelemetry {
     metric
   }
 }
+=======
+>>>>>>> Send query status should throw any exception.
 
 object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
