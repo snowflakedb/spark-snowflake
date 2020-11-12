@@ -235,7 +235,7 @@ object SnowflakeTelemetry {
                                          elapse: Long,
                                          throwable: Option[Throwable],
                                          details: String
-                                         ): Unit = {
+                                        ): Unit = {
     try {
       val metric: ObjectNode = mapper.createObjectNode()
       metric.put(TelemetryQueryStatusFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
@@ -259,7 +259,6 @@ object SnowflakeTelemetry {
       }
     }
   }
-<<<<<<< HEAD
 
   // Configuration retrieving is optional for for diagnostic purpose,
   // so it never raises exception.
@@ -371,8 +370,6 @@ object SnowflakeTelemetry {
     metric
   }
 }
-=======
->>>>>>> Send query status should throw any exception.
 
 object TelemetryTypes extends Enumeration {
   type TelemetryTypes = Value
