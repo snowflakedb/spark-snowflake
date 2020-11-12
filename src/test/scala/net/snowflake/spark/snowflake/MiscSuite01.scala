@@ -25,6 +25,7 @@ import java.util.Properties
 import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
 import org.slf4j.LoggerFactory
 
@@ -275,5 +276,32 @@ class MiscSuite01 extends FunSuite with Matchers {
     TelemetryReporter.resetDriverTelemetryReporter()
   }
 
+  test("unit test for SnowflakeTelemetry.getSystemConfigWithoutTaskInfo") {
+    // Configure some spark options for the spark session
+    SparkSession.builder
+      .master("local")
+      .appName("test config info sent")
+      .config("spark.driver.memory", "2G")
+      .config("spark.executor.memory", "888M")
+      .config("spark.driver.extraJavaOptions", s"-Duser.timezone=GMT")
+      .config("spark.executor.extraJavaOptions", s"-Duser.timezone=UTC")
+      .config("spark.sql.session.timeZone", "America/Los_Angeles")
+      .getOrCreate()
+
+    val metric = SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()
+    // Check one version
+    assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
+    // check one JVM option
+    assert(metric.get(TelemetryClientInfoFields.MAX_MEMORY_IN_MB).asLong() > 0)
+    // check Spark options
+    val sparkConfNode = metric.get(TelemetryClientInfoFields.SPARK_CONFIG)
+    assert(sparkConfNode.get("spark.master").asText().equals("local"))
+    assert(sparkConfNode.get("spark.app.name").asText().equals("test config info sent"))
+    assert(sparkConfNode.get("spark.driver.memory").asText().equals("2G"))
+    assert(sparkConfNode.get("spark.executor.memory").asText().equals("888M"))
+    assert(sparkConfNode.get("spark.driver.extraJavaOptions").asText().equals("-Duser.timezone=GMT"))
+    assert(sparkConfNode.get("spark.executor.extraJavaOptions").asText().equals("-Duser.timezone=UTC"))
+    assert(sparkConfNode.get("spark.sql.session.timeZone").asText().equals("America/Los_Angeles"))
+  }
 }
 
