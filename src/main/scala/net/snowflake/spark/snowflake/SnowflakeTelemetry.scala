@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake
 
 import java.io.{PrintWriter, StringWriter}
 import java.sql.Connection
+import java.util.regex.Pattern
 
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
@@ -217,7 +218,7 @@ object SnowflakeTelemetry {
       val stringWriter = new StringWriter
       e.printStackTrace(new PrintWriter(stringWriter))
       val stacktraceString = stringWriter.toString.replaceAll(
-        e.getMessage, proposedMessage)
+        Pattern.quote(e.getMessage), proposedMessage)
       metric.put(TelemetryFieldNames.STACKTRACE, stacktraceString)
     } else {
       metric.put(TelemetryFieldNames.EXCEPTION_MESSAGE, th.getMessage)
