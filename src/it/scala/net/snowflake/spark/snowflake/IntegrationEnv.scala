@@ -48,7 +48,7 @@ trait IntegrationEnv
   /** We read config from this file */
   private final val CONFIG_FILE_VARIABLE = "IT_SNOWFLAKE_CONF"
   private final val CONFIG_JSON_FILE = "snowflake.travis.json"
-  private final val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
+  private[snowflake] final val SNOWFLAKE_TEST_ACCOUNT = "SNOWFLAKE_TEST_ACCOUNT"
   protected final val MISSING_PARAM_ERROR =
     "Missing required configuration value: "
 

@@ -359,6 +359,56 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     st.equals(st1)
   }
 
+  // This test case is used to reproduce/test SNOW-222104
+  // Teh reproduce conditions are:
+  // 1. Write data frame to a table with OVERWRITE and (usestagingtable=on truncate_table=off (they are default)).
+  // 2. table name includes database name and schema name.
+  // 3. sfSchema is configured to a different schema
+  // 4. The user has privilege to create stage but doesn't have privilege to create table on sfSchema
+  //
+  // Below is how to create the env to reproduce it and test
+  // 1. create a new role TESTROLE_SPARK_2 with ADMIN.
+  // 2. ADMIN grants USAGE and CREATE SCHEMA privilege for testdb_spark to TESTROLE_SPARK_2
+  // 3. ADMIN GRANT ROLE TESTROLE_SPARK_2 to USER TEST_SPARK;
+  // 4. TEST_SPARK logins, switchs to TESTROLE_SPARK_2.
+  // 5. create a managed schema: create schema TEST_SCHEMA_NO_CREATE_TABLE with managed access;
+  // 6. grant USAGE and CREATE STAGE on TEST_SCHEMA_NO_CREATE_TABLE to TESTROLE_SPARK.
+  //
+  // TESTROLE_SPARK is the default role for TEST_SPARK.
+  // 1. set sfSchema as TEST_SCHEMA_NO_CREATE_TABLE
+  // 2. write with OverWrite to table: testdb_spark.spark_test.table_name
+  //
+  // NOTE:
+  // 1. The test env is only setup for sfctest0 on AWS. So this test only run on AWS.
+  // 2. Configure truncate_table = on and usestagingtable=off can workaround this issue.
+  test("write table with different schema") {
+    val accountName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
+    if (accountName == null || accountName.equals("aws")) {
+      tableNames.foreach(table => {
+        println(s"""Test table: "$table"""")
+        jdbcUpdate(s"drop table if exists $table")
+
+        // Use a different schema, current user has no permission to CREATE TABLE
+        // but has permission to CREATE STAGE.
+        val sfOptions = replaceOption(connectorOptionsNoTable, "sfschema", "TEST_SCHEMA_NO_CREATE_TABLE")
+
+        val tableFullName = s"testdb_spark.spark_test.$table"
+        // create one table
+        df2.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(sfOptions)
+          .option("dbtable", tableFullName)
+          .option("truncate_table", "off")
+          .option("usestagingtable", "on")
+          .mode(SaveMode.Overwrite)
+          .save()
+
+        // check schema
+        assert(checkSchema2(tableFullName))
+      })
+    }
+  }
+
   def checkSchema1(tableName: String): Boolean = {
     val st = DefaultJDBCWrapper.resolveTable(conn, tableName, params)
     val st1 = new StructType(

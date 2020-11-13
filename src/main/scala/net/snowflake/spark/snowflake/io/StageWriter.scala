@@ -319,6 +319,34 @@ private[io] object StageWriter {
     }
   }
 
+  private[snowflake] def getStageTableName(tableName: String): String = {
+    def genTableName():String =
+      s"spark_stage_table_${System.currentTimeMillis()}_${Math.abs(Random.nextInt)}"
+
+    if (tableName.contains(".")) {
+      // Table name may include DATABASE or SCHEMA.
+      // It is necessary to determine to replace TABLE_NAME only.
+      if (tableName.endsWith("\"")) {
+        // The table name is quoted.
+        // Split table with last '.' can get the table name
+        val lastDotQuoteIndex = tableName.lastIndexOf(".\"")
+        if (lastDotQuoteIndex > 0) {
+          s"${tableName.substring(0, lastDotQuoteIndex)}.${genTableName()}"
+        } else {
+          genTableName()
+        }
+      } else {
+        // The table name is not quoted.
+        // Split table with last '.' can get the table name
+        val lastDotIndex = tableName.lastIndexOf('.')
+        s"${tableName.substring(0, lastDotIndex)}.${genTableName()}"
+      }
+    } else {
+      // The table name doesn't have database name or schema name in it.
+      genTableName()
+    }
+  }
+
   /**
     * load data from stage to table with staging table
     * This function is deprecated.
@@ -333,10 +361,7 @@ private[io] object StageWriter {
                                            fileUploadResults: List[FileUploadResult])
   : Unit = {
     val table = params.table.get
-    val tempTable =
-      TableName(
-        s"${table.name.replaceAll("\\W", "X")}_staging_${Math.abs(Random.nextInt()).toString}"
-      )
+    val tempTable = TableName(getStageTableName(table.name))
     val targetTable =
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         tempTable
