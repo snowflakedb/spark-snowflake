@@ -274,7 +274,7 @@ object SnowflakeTelemetry {
   }
 
   // The spark options may help diagnosis spark connector issue.
-  val sparkOptions = Set(
+  private val sparkOptions = Set(
     "spark.app.name",
     "spark.app.id",
     "spark.submit.deployMode",
@@ -337,8 +337,8 @@ object SnowflakeTelemetry {
       metric.put(TelemetryTaskInfoFields.TASK_ATTEMPT_NUMBER, task.attemptNumber())
       metric.put(TelemetryTaskInfoFields.TASK_STAGE_ATTEMPT_NUMBER, task.stageAttemptNumber())
       metric.put(TelemetryTaskInfoFields.TASK_STAGE_ID, task.stageId())
+      metric.put(TelemetryTaskInfoFields.THREAD_ID, Thread.currentThread().getId)
     }
-    metric.put(TelemetryTaskInfoFields.THREAD_ID, Thread.currentThread().getId)
     metric
   }
 }
