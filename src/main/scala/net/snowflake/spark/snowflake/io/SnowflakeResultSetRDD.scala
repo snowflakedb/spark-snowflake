@@ -35,7 +35,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     // Log system configuration on executor
-    SparkConnectorContext.recordConfigOnExecutor()
+    SparkConnectorContext.recordConfig()
 
     ResultIterator[T](
       schema,

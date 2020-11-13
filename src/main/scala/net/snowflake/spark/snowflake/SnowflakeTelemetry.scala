@@ -53,6 +53,7 @@ object SnowflakeTelemetry {
   def sendClientInfoTelemetryIfNotYet(extraValues: Map[String, String],
                                       conn: Connection): Unit = {
     if (!hasClientInfoSent) {
+      SparkConnectorContext.recordConfig()
       val metric = Utils.getClientInfoJson()
       for ((key, value) <- extraValues) {
         metric.put(key, value)
@@ -233,35 +234,37 @@ object SnowflakeTelemetry {
 
   // Configuration retrieving is optional for for diagnostic purpose,
   // so it never raises exception.
-  private[snowflake] def getSystemConfigWithoutTaskInfo(): ObjectNode = {
+  private[snowflake] def getClientConfig(): ObjectNode = {
     val metric: ObjectNode = mapper.createObjectNode()
 
     try {
-      addSystemConfigInternal(metric)
-    } catch {
-      case _: Throwable => {
-        metric
+      // Add versions info
+      Utils.addVersionInfo(metric)
+
+      // Add JVM and system basic configuration
+      metric.put(TelemetryClientInfoFields.OS_NAME,
+        System.getProperty(TelemetryConstValues.JVM_PROPERTY_NAME_OS_NAME))
+      val rt = Runtime.getRuntime
+      metric.put(TelemetryClientInfoFields.MAX_MEMORY_IN_MB, rt.maxMemory() / MB)
+      metric.put(TelemetryClientInfoFields.TOTAL_MEMORY_IN_MB, rt.totalMemory() / MB)
+      metric.put(TelemetryClientInfoFields.FREE_MEMORY_IN_MB, rt.freeMemory() / MB)
+      metric.put(TelemetryClientInfoFields.CPU_CORES, rt.availableProcessors())
+
+      // Add Spark configuration
+      val sparkConf = SparkEnv.get.conf
+      val sparkMetric: ObjectNode = mapper.createObjectNode()
+      sparkOptions.foreach(
+        optionName => {
+          if (sparkConf.contains(optionName)) {
+            sparkMetric.put(optionName, sparkConf.get(optionName))
+          }
+        }
+      )
+      if (!sparkMetric.isEmpty) {
+        metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
       }
-    }
-  }
 
-  private def addSystemConfigInternal(metric: ObjectNode): ObjectNode = {
-    // Add versions info
-    Utils.addVersionInfo(metric)
-    // Add JVM system config
-    addJVMConfig(metric)
-    // Add Spark option
-    addSparkConfig(metric)
-  }
-
-  // Configuration retrieving is optional for for diagnostic purpose,
-  // so it never raises exception.
-  private[snowflake] def getSystemConfigWithTaskInfo(): ObjectNode = {
-    val metric = getSystemConfigWithoutTaskInfo()
-
-    try {
-      addSystemConfigInternal(metric)
-      // Add task and executor info
+      // Add task info if available
       addTaskInfo(metric)
     } catch {
       case _: Throwable => {
@@ -270,20 +273,8 @@ object SnowflakeTelemetry {
     }
   }
 
-  private def addJVMConfig(metric: ObjectNode): ObjectNode = {
-    // System basic information
-    metric.put(TelemetryClientInfoFields.OS_NAME,
-      System.getProperty(TelemetryConstValues.JVM_PROPERTY_NAME_OS_NAME))
-    val rt = Runtime.getRuntime
-    metric.put(TelemetryClientInfoFields.MAX_MEMORY_IN_MB, rt.maxMemory() / MB)
-    metric.put(TelemetryClientInfoFields.TOTAL_MEMORY_IN_MB, rt.totalMemory() / MB)
-    metric.put(TelemetryClientInfoFields.FREE_MEMORY_IN_MB, rt.freeMemory() / MB)
-    metric.put(TelemetryClientInfoFields.CPU_CORES, rt.availableProcessors())
-    metric
-  }
-
-  // Below specifies the spark options may affects spark connector
-  val AFFECTED_SPARK_OPTIONS = Set(
+  // The spark options may help diagnosis spark connector issue.
+  val sparkOptions = Set(
     "spark.app.name",
     "spark.app.id",
     "spark.submit.deployMode",
@@ -324,23 +315,6 @@ object SnowflakeTelemetry {
     "spark.pyspark.python",
     "spark.sql.session.timeZone",
   )
-
-  private def addSparkConfig(metric: ObjectNode): ObjectNode = {
-    // Spark configuration may affect spark connector
-    val sparkConf = SparkEnv.get.conf
-    val sparkMetric: ObjectNode = mapper.createObjectNode()
-    AFFECTED_SPARK_OPTIONS.foreach(
-      optionName => {
-        if (sparkConf.contains(optionName)) {
-          sparkMetric.put(optionName, sparkConf.get(optionName))
-        }
-      }
-    )
-    if (!sparkMetric.isEmpty) {
-      metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
-    }
-    metric
-  }
 
   // Configuration retrieving is optional for for diagnostic purpose,
   // so it never raises exception.

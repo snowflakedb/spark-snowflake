@@ -152,9 +152,6 @@ private[snowflake] case class SnowflakeRelation(
   // without first executing it.
   private def getRDD[T: ClassTag](statement: SnowflakeSQLStatement,
                                   resultSchema: StructType): RDD[T] = {
-    log.info(s"${SnowflakeResultSetRDD.MASTER_LOG_PREFIX} System config with " +
-      s"read: ${SnowflakeTelemetry.getSystemConfigWithoutTaskInfo().toPrettyString}")
-
     if (params.useCopyUnload) {
       getSnowflakeRDD(statement, resultSchema)
     } else {

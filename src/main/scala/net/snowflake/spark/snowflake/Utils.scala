@@ -673,7 +673,7 @@ object Utils {
   }
 
   def getClientInfoJson(): ObjectNode = {
-    SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()
+    SnowflakeTelemetry.getClientConfig()
   }
 
   private[snowflake] def addVersionInfo(metric: ObjectNode): ObjectNode = {

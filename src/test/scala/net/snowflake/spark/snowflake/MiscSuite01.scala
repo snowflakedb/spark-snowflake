@@ -276,7 +276,7 @@ class MiscSuite01 extends FunSuite with Matchers {
     TelemetryReporter.resetDriverTelemetryReporter()
   }
 
-  test("unit test for SnowflakeTelemetry.getSystemConfigWithoutTaskInfo") {
+  test("unit test for SnowflakeTelemetry.getClientConfig") {
     // Configure some spark options for the spark session
     SparkSession.builder
       .master("local")
@@ -288,7 +288,7 @@ class MiscSuite01 extends FunSuite with Matchers {
       .config("spark.sql.session.timeZone", "America/Los_Angeles")
       .getOrCreate()
 
-    val metric = SnowflakeTelemetry.getSystemConfigWithoutTaskInfo()
+    val metric = SnowflakeTelemetry.getClientConfig()
     // Check one version
     assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
     // check one JVM option
