@@ -35,9 +35,10 @@ class IOSuite extends FunSuite with Matchers {
       ("\"My.Schema\".Table_1", Option("\"My.Schema\".")),
       ("\"My.DB\".\"My.Schema\".Table_1", Option("\"My.DB\".\"My.Schema\".")),
       // abnormal table name with abnormal schema or database name
-      ("\"test_table_.'!@#$%^&* 2611611920364743726\"", None),
+      ("\"test_table_.'!@#$%^&* 2611611920364743726\" ", None),
       ("\"Table.1\"", None),
       ("\"My.Schema\".\"Table.1\"", Option("\"My.Schema\".")),
+      ("\"My.Schema\".\"Table.1\" ", Option("\"My.Schema\".")), // Extra space in the name
       ("\"My.DB\".\"My.Schema\".\"Table.1\"", Option("\"My.DB\".\"My.Schema\".")),
       // mixed
       ("My_Schema.\"Table.1\"", Option("My_Schema.")),
