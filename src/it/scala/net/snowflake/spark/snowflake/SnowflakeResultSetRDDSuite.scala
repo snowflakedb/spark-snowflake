@@ -891,18 +891,20 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       jdbcUpdate(s"drop table if exists $test_table_write")
 
-      // Some files are missed, so the spark job fails.
-      assertThrows[SnowflakeConnectorException] {
-        tmpDF.write
-          .format(SNOWFLAKE_SOURCE_NAME)
-          .options(thisConnectorOptionsNoTable)
-          .option("dbtable", test_table_write)
-          .mode(SaveMode.Overwrite)
-          .save()
+      try {
+        // Some files are missed, so the spark job fails.
+        assertThrows[SnowflakeConnectorException] {
+          tmpDF.write
+            .format(SNOWFLAKE_SOURCE_NAME)
+            .options(thisConnectorOptionsNoTable)
+            .option("dbtable", test_table_write)
+            .mode(SaveMode.Overwrite)
+            .save()
+        }
+      } finally {
+        // Disable the test flags
+        TestHook.disableTestHook()
       }
-
-      // Disable the test flags
-      TestHook.disableTestHook()
     }
   }
 

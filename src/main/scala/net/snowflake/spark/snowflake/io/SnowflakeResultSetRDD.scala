@@ -6,7 +6,7 @@ import java.util.Properties
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake.{Conversions, LoggerWithTelemetry, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, TelemetryConstValues, TelemetryReporter}
+import net.snowflake.spark.snowflake.{Conversions, LoggerWithTelemetry, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues, TelemetryReporter}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +33,10 @@ class SnowflakeResultSetRDD[T: ClassTag](
   sfFullURL: String
 ) extends RDD[T](sc, Nil) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[T] =
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    // Log system configuration on executor
+    SparkConnectorContext.recordConfig()
+
     ResultIterator[T](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
@@ -42,6 +45,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
       queryID,
       sfFullURL
     )
+  }
 
   override protected def getPartitions: Array[Partition] =
     resultSets.zipWithIndex.map {
@@ -75,7 +79,8 @@ case class ResultIterator[T: ClassTag](
       SnowflakeResultSetRDD.logger.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
            | partition ID:$partitionIndex expectedRowCount=
-           | $expectedRowCount
+           | $expectedRowCount TaskInfo:
+           | ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
            |""".stripMargin.filter(_ >=
           ' '))
 
