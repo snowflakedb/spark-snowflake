@@ -206,14 +206,14 @@ object SnowflakeTelemetry {
     * @param metric The telemetry messsage to include the throwable instance
     * @param th The throwable instance
     */
-  private def addThrowable(metric: ObjectNode, th: Throwable): Unit = {
+  private[snowflake] def addThrowable(metric: ObjectNode, th: Throwable): Unit = {
     metric.put(TelemetryFieldNames.EXCEPTION_CLASS_NAME, th.getClass.toString)
 
     // If the throwable is SnowflakeSQLException, send ErrorCode/SQLState/QueryId
     if (th.isInstanceOf[SnowflakeSQLException]) {
       val e = th.asInstanceOf[SnowflakeSQLException]
       val proposedMessage = s"SnowflakeSQLException: ErrorCode=" +
-        s"${e.getErrorCode}  SQLState=${e.getSQLState} QueryId=${e.getQueryId}"
+        s"${e.getErrorCode} SQLState=${e.getSQLState} QueryId=${e.getQueryId}"
       metric.put(TelemetryFieldNames.EXCEPTION_MESSAGE, proposedMessage)
       val stringWriter = new StringWriter
       e.printStackTrace(new PrintWriter(stringWriter))
