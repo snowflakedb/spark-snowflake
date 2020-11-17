@@ -22,47 +22,52 @@ import org.scalatest.{FunSuite, Matchers}
 class IOSuite extends FunSuite with Matchers {
 
   test("test generate stage table name") {
-    // Original table name --> database_schema
+    // Original table name (String), is_table_name_quoted (boolean)
     // NOTE: in this context, NORMAL means that the name doesn't include '.'
     val tableNamePair = Seq (
       // normal table name
-      ("test_table", None),
-      ("test_table!@#$%^&^", None),
+      ("test_table", false),
+      ("test_table!@#$%^&^", false),
       // normal table name with normal schema or database
-      ("My_Schema.Table_1", Option("My_Schema.")),
-      ("My_DB.My_Schema.Table_1", Option("My_DB.My_Schema.")),
+      ("My_Schema.Table_1", false),
+      ("My_DB.My_Schema.Table_1", false),
       // normal table name with abnormal schema or database name
-      ("\"My.Schema\".Table_1", Option("\"My.Schema\".")),
-      ("\"My.DB\".\"My.Schema\".Table_1", Option("\"My.DB\".\"My.Schema\".")),
+      ("\"My.Schema\".Table_1", false),
+      ("\"My.DB\".\"My.Schema\".Table_1",false),
       // abnormal table name with abnormal schema or database name
-      ("\"test_table_.'!@#$%^&* 2611611920364743726\" ", None),
-      ("\"Table.1\"", None),
-      ("\"My.Schema\".\"Table.1\"", Option("\"My.Schema\".")),
-      ("\"My.Schema\".\"Table.1\" ", Option("\"My.Schema\".")), // Extra space in the name
-      ("\"My.DB\".\"My.Schema\".\"Table.1\"", Option("\"My.DB\".\"My.Schema\".")),
+      ("\"test_table_.'!@#$%^&* 2611611920364743726\" ", true),
+      ("\"Table.1\"", true),
+      ("\"My.Schema\".\"Table.1\"", true),
+      ("\"My.Schema\".\"Table.1\" ", true), // Extra space in the name
+      ("\"My.DB\".\"My.Schema\".\"Table.1\"", true),
       // mixed
-      ("My_Schema.\"Table.1\"", Option("My_Schema.")),
-      ("My_DB.\"My.Schema\".\"Table.1\"", Option("My_DB.\"My.Schema\".")),
-      ("\"My.DB\".My_Schema.\"Table.1\"", Option("\"My.DB\".My_Schema.")),
+      ("My_Schema.\"Table.1\"", true),
+      ("My_DB.\"My.Schema\".\"Table.1\"", true),
+      ("\"My.DB\".My_Schema.\"Table.1\"", true),
       // table name may include QUOTE
-      ("My_Schema.\"Table\"\"1\"", Option("My_Schema.")),
-      ("My\"\"Schema.\"Table\"\"\"\"2\"", Option("My\"\"Schema.")),
-      ("My_DB.\"My.Schema\".\"Table\"\"1\"", Option("My_DB.\"My.Schema\".")),
-      ("My_DB.\"My\"\"Schema\".\"Table\"\"\"\"2\"", Option("My_DB.\"My\"\"Schema\".")),
-      // Below table name is illegal, normal stage table name is returned.
-      ("My_Schema.Table_1\"", None),
-      ("My_Schema.\"Table_1", None)
+      ("My_Schema.\"Table\"\"1\"", true),
+      ("\"My\"\"Schema\".\"Table\"\"\"\"2\"", true),
+      ("My_DB.\"My.Schema\".\"Table\"\"1\"", true),
+      ("My_DB.\"My\"\"Schema\".\"Table\"\"\"\"2\"", true),
+      ("My_DB.\"My\"\"Schema\".\"Table\"\"2\"\"\"", true)
     )
 
     val debugPrint = true
     tableNamePair.foreach(
       pair => {
-        val autoGeneratePrefix = "spark_stage_table_"
-        val stageTableName = StageWriter.getStageTableName(pair._1)
-        assert(stageTableName.startsWith(s"${pair._2.getOrElse("")}$autoGeneratePrefix"))
+        val stagePostfix = "_staging_"
+        val tableName = pair._1
+        val stageTableName = StageWriter.getStageTableName(tableName)
+        if (pair._2) {
+          assert(stageTableName.startsWith(
+            s"${tableName.substring(0, tableName.lastIndexOf("\""))}$stagePostfix"))
+          assert(stageTableName.endsWith("\""))
+        } else {
+          assert(stageTableName.startsWith(s"${tableName.trim}$stagePostfix"))
+          assert(!stageTableName.endsWith("\""))
+        }
         if (debugPrint) {
           println(s"${pair._1}  --->  $stageTableName")
-          println("----------------------------------------------")
         }
       }
     )

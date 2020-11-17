@@ -320,19 +320,14 @@ private[io] object StageWriter {
   }
 
   private[snowflake] def getStageTableName(tableName: String): String = {
-    def genTableName():String =
-      s"spark_stage_table_${System.currentTimeMillis()}_${Math.abs(Random.nextInt)}"
-
-    val pattern = "(.*\\.)?((\".+\")|([^\"]+))(\\s*)".r
-    tableName match {
-      case pattern(dbAndSchema, _, _, _, _) => {
-        s"${if (dbAndSchema == null) "" else dbAndSchema}${genTableName()}"
-      }
-      case _ => {
-        // For example, 'table_1"' or '"table_1' is an illegal name.
-        log.warn(s"The table name is illegal: {{$tableName}}")
-        genTableName()
-      }
+    val trimmedName = tableName.trim
+    val postfix = s"_staging_${Math.abs(Random.nextInt()).toString}"
+    if (trimmedName.endsWith("\"")) {
+      // The table name is quoted, insert the postfix before last '"'
+      s"""${trimmedName.substring(0, trimmedName.length - 1)}$postfix""""
+    } else {
+      // Append the postfix
+      s"$trimmedName$postfix"
     }
   }
 
