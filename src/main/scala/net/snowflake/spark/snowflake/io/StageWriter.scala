@@ -323,16 +323,16 @@ private[io] object StageWriter {
     def genTableName():String =
       s"spark_stage_table_${System.currentTimeMillis()}_${Math.abs(Random.nextInt)}"
 
-    val tableNameQuoted = "(.*)\"([^\"]*)\"(\\s*)".r
-    val tableNameNotQuoted = "(.*)\\.([^.]*)".r
-
+    val pattern = "(.*\\.)?((\".+\")|([^\"]+))(\\s*)".r
     tableName match {
-      case tableNameQuoted(databaseSchemaPart, _, _) =>
-        s"$databaseSchemaPart${genTableName()}"
-      case tableNameNotQuoted(databaseSchemaPart, _) =>
-        s"$databaseSchemaPart.${genTableName()}"
-      case _ =>
-        s"${genTableName()}"
+      case pattern(dbAndSchema, _, _, _, _) => {
+        s"${if (dbAndSchema == null) "" else dbAndSchema}${genTableName()}"
+      }
+      case _ => {
+        // For example, 'table_1"' or '"table_1' is an illegal name.
+        log.warn(s"The table name is illegal: {{$tableName}}")
+        genTableName()
+      }
     }
   }
 

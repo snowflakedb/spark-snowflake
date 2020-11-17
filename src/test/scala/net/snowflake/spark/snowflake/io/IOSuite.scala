@@ -43,7 +43,15 @@ class IOSuite extends FunSuite with Matchers {
       // mixed
       ("My_Schema.\"Table.1\"", Option("My_Schema.")),
       ("My_DB.\"My.Schema\".\"Table.1\"", Option("My_DB.\"My.Schema\".")),
-      ("\"My.DB\".My_Schema.\"Table.1\"", Option("\"My.DB\".My_Schema."))
+      ("\"My.DB\".My_Schema.\"Table.1\"", Option("\"My.DB\".My_Schema.")),
+      // table name may include QUOTE
+      ("My_Schema.\"Table\"\"1\"", Option("My_Schema.")),
+      ("My\"\"Schema.\"Table\"\"\"\"2\"", Option("My\"\"Schema.")),
+      ("My_DB.\"My.Schema\".\"Table\"\"1\"", Option("My_DB.\"My.Schema\".")),
+      ("My_DB.\"My\"\"Schema\".\"Table\"\"\"\"2\"", Option("My_DB.\"My\"\"Schema\".")),
+      // Below table name is illegal, normal stage table name is returned.
+      ("My_Schema.Table_1\"", None),
+      ("My_Schema.\"Table_1", None)
     )
 
     val debugPrint = true
@@ -54,7 +62,7 @@ class IOSuite extends FunSuite with Matchers {
         assert(stageTableName.startsWith(s"${pair._2.getOrElse("")}$autoGeneratePrefix"))
         if (debugPrint) {
           println(s"${pair._1}  --->  $stageTableName")
-          println("======================================================")
+          println("----------------------------------------------")
         }
       }
     )

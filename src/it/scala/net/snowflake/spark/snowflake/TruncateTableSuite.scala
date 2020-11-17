@@ -18,8 +18,10 @@ import scala.util.Random
 class TruncateTableSuite extends IntegrationSuiteBase {
   val normalTable = s"test_table_$randomSuffix"
   val specialTable = s""""test_table_.'!@#$$%^&* $randomSuffix""""
+  val tableNameWithQuote = s""""test_table_\"\"$randomSuffix""""
+
   // This test will test normal table and table name including special characters
-  val tableNames = Array(normalTable, specialTable)
+  val tableNames = Array(normalTable, specialTable, tableNameWithQuote)
 
   lazy val st1 = new StructType(
     Array(
