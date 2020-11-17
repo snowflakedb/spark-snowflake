@@ -323,29 +323,16 @@ private[io] object StageWriter {
     def genTableName():String =
       s"spark_stage_table_${System.currentTimeMillis()}_${Math.abs(Random.nextInt)}"
 
-    if (tableName.contains(".")) {
-      // Table name may include DATABASE or SCHEMA.
-      // It is necessary to determine and replace TABLE_NAME only.
-      if (tableName.trim.endsWith("\"")) {
-        // The table name is quoted.
-        // Split table name with last ".\"" can get the table name
-        val lastDotQuoteIndex = tableName.lastIndexOf(".\"")
-        if (lastDotQuoteIndex > 0) {
-          // There is a database or schema in the table name.
-          s"${tableName.substring(0, lastDotQuoteIndex)}.${genTableName()}"
-        } else {
-          // The whole table name is quoted.
-          genTableName()
-        }
-      } else {
-        // The table name is not quoted.
-        // Split table name with last '.' can get the table name
-        val lastDotIndex = tableName.lastIndexOf('.')
-        s"${tableName.substring(0, lastDotIndex)}.${genTableName()}"
-      }
-    } else {
-      // The table name doesn't have database name or schema name in it.
-      genTableName()
+    val tableNameQuoted = "(.*)\"([^\"]*)\"(\\s*)".r
+    val tableNameNotQuoted = "(.*)\\.([^.]*)".r
+
+    tableName match {
+      case tableNameQuoted(databaseSchemaPart, _, _) =>
+        s"$databaseSchemaPart${genTableName()}"
+      case tableNameNotQuoted(databaseSchemaPart, _) =>
+        s"$databaseSchemaPart.${genTableName()}"
+      case _ =>
+        s"${genTableName()}"
     }
   }
 
