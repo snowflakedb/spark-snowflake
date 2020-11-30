@@ -57,32 +57,18 @@ class IOSuite extends FunSuite with Matchers {
       pair => {
         val stagePostfix = "_staging_"
         val tableName = pair._1
-        val removeQuotes = Set(true, false)
-        removeQuotes.foreach(
-          removeQuote => {
-            val stageTableName = StageWriter.getStageTableName(tableName, removeQuote)
-            if (pair._2) {
-              if (removeQuote) {
-                assert(stageTableName.startsWith(
-                  s"${tableName.substring(0, tableName.lastIndexOf("\""))}$stagePostfix".replaceAll("\"", "")))
-              } else {
-                assert(stageTableName.startsWith(
-                  s"${tableName.substring(0, tableName.lastIndexOf("\""))}$stagePostfix"))
-                assert(stageTableName.endsWith("\""))
-              }
-            } else {
-              if (removeQuote) {
-                assert(stageTableName.startsWith(s"${tableName.trim}$stagePostfix".replaceAll("\"", "")))
-              } else {
-                assert(stageTableName.startsWith(s"${tableName.trim}$stagePostfix"))
-              }
-              assert(!stageTableName.endsWith("\""))
-            }
-            if (debugPrint) {
-              println(s"${pair._1} ($removeQuote\t) --->  $stageTableName")
-            }
-          }
-        )
+        val stageTableName = StageWriter.getStageTableName(tableName)
+        if (pair._2) {
+          assert(stageTableName.startsWith(
+            s"${tableName.substring(0, tableName.lastIndexOf("\""))}$stagePostfix"))
+          assert(stageTableName.endsWith("\""))
+        } else {
+          assert(stageTableName.startsWith(s"${tableName.trim}$stagePostfix"))
+          assert(!stageTableName.endsWith("\""))
+        }
+        if (debugPrint) {
+          println(s"${pair._1}  --->  $stageTableName")
+        }
       }
     )
   }

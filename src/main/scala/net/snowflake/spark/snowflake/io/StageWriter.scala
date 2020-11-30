@@ -319,20 +319,15 @@ private[io] object StageWriter {
     }
   }
 
-  private[snowflake] def getStageTableName(tableName: String, removeQuote: Boolean): String = {
+  private[snowflake] def getStageTableName(tableName: String): String = {
     val trimmedName = tableName.trim
     val postfix = s"_staging_${Math.abs(Random.nextInt()).toString}"
-    val stageTableName = if (trimmedName.endsWith("\"")) {
+    if (trimmedName.endsWith("\"")) {
       // The table name is quoted, insert the postfix before last '"'
       s"""${trimmedName.substring(0, trimmedName.length - 1)}$postfix""""
     } else {
       // Append the postfix
       s"$trimmedName$postfix"
-    }
-    if (removeQuote) {
-      stageTableName.replaceAll("\"", "")
-    } else {
-      stageTableName
     }
   }
 
@@ -350,7 +345,15 @@ private[io] object StageWriter {
                                            fileUploadResults: List[FileUploadResult])
   : Unit = {
     val table = params.table.get
-    val tempTable = TableName(getStageTableName(table.name, params.removeQuoteForStageTableName))
+    val tempTable = TableName(
+      if (params.stagingTableNameRemoveQuotesOnly) {
+        // NOTE: This is the staging table name generation for SC 2.8.1 and earlier.
+        // It is kept for back-compatibility and it will be removed later without any notice.
+        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
+      } else {
+        getStageTableName(table.name)
+      }
+    )
     val targetTable =
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         tempTable

@@ -160,19 +160,19 @@ class MiscSuite01 extends FunSuite with Matchers {
 
   test("test Parameters.removeQuoteForStageTableName()") {
     // Explicitly set it as true
-    var sfOptions = Map(Parameters.PARAM_INTERNAL_REMOVE_QUOTE_FOR_STAGE_TABLE_NAME -> "true")
+    var sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "true")
     var param = Parameters.MergedParameters(sfOptions)
-    assert(param.removeQuoteForStageTableName)
+    assert(param.stagingTableNameRemoveQuotesOnly)
 
     // Explicitly set it as false
-    sfOptions = Map(Parameters.PARAM_INTERNAL_REMOVE_QUOTE_FOR_STAGE_TABLE_NAME -> "false")
+    sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "false")
     param = Parameters.MergedParameters(sfOptions)
-    assert(!param.removeQuoteForStageTableName)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
 
     // It is false by default.
     sfOptions = Map(Parameters.PARAM_USE_PROXY -> "false")
     param = Parameters.MergedParameters(sfOptions)
-    assert(!param.removeQuoteForStageTableName)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
   }
 
   test("test SnowflakeConnectorUtils.handleS3Exception") {
