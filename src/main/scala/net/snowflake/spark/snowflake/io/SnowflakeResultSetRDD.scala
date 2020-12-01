@@ -11,6 +11,7 @@ import net.snowflake.spark.snowflake.{
   ProxyInfo,
   SnowflakeConnectorException,
   SnowflakeTelemetry,
+  SparkConnectorContext,
   TelemetryConstValues
 }
 import org.apache.spark.rdd.RDD

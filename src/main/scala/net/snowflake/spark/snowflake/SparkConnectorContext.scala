@@ -22,7 +22,7 @@ package net.snowflake.spark.snowflake
 import org.slf4j.LoggerFactory
 
 object SparkConnectorContext {
-  private[snowflake] val logger = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
 
   private var isConfigLogged = false
 
