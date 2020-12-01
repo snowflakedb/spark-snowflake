@@ -341,7 +341,7 @@ object SnowflakeTelemetry {
     "spark.sql.ansi.enabled",
     "spark.pyspark.driver.python",
     "spark.pyspark.python",
-    "spark.sql.session.timeZone",
+    "spark.sql.session.timeZone"
   )
 
   // Configuration retrieving is optional for for diagnostic purpose,
