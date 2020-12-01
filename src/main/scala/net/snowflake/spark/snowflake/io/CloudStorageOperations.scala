@@ -73,7 +73,7 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.commons.io.IOUtils
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
 import scala.collection.immutable.HashMap
@@ -96,7 +96,7 @@ object CloudStorageOperations {
   private[io] val AZ_KEY = "EncryptedKey"
   private[io] val AZ_MATDESC = "matdesc"
 
-  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
   private[io] final def getDecryptedStream(
     stream: InputStream,

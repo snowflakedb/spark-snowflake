@@ -44,7 +44,7 @@ import scala.util.Try
   */
 private[snowflake] class JDBCWrapper {
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
@@ -453,7 +453,7 @@ private[snowflake] class JDBCWrapper {
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
-  private val LOGGER = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass.getName))
+  private val LOGGER = LoggerFactory.getLogger(getClass.getName)
 
   implicit class DataBaseOperations(connection: Connection) {
 
@@ -688,7 +688,7 @@ private[snowflake] class SnowflakeSQLStatement(
   val list: List[StatementElement] = Nil
 ) {
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   private var lastQueryID: String = _
 

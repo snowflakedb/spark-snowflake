@@ -21,12 +21,15 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 import java.util.Properties
 
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  AWSCredentials,
+  BasicSessionCredentials
+}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
@@ -34,7 +37,7 @@ import org.slf4j.LoggerFactory
   */
 object Parameters {
 
-  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
   private[snowflake] val KNOWN_PARAMETERS =
     new scala.collection.mutable.HashSet[String]()

@@ -87,7 +87,7 @@ object Utils {
   private[snowflake] val JDBC_DRIVER =
     "net.snowflake.client.jdbc.SnowflakeDriver"
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   def classForName(className: String): Class[_] = {
     val classLoader =

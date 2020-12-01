@@ -43,7 +43,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   /**
     * Default constructor required by Data Source API
