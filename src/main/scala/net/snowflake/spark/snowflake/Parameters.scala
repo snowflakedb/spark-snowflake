@@ -129,6 +129,11 @@ object Parameters {
   val PARAM_USE_EXPONENTIAL_BACKOFF: String = knownParam(
     "use_exponential_backoff"
   )
+  // Internal option to remove (") in stage table name.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY: String = knownParam(
+    "internal_staging_table_name_remove_quotes_only"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -576,6 +581,9 @@ object Parameters {
     }
     def useExponentialBackoff: Boolean = {
       isTrue(parameters.getOrElse(PARAM_USE_EXPONENTIAL_BACKOFF, "false"))
+    }
+    def stagingTableNameRemoveQuotesOnly: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))
     }
 
     /**
