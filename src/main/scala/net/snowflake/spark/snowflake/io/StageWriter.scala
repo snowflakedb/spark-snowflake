@@ -186,7 +186,7 @@ class WriteTableState(conn: Connection) {
 
 private[io] object StageWriter {
 
-  private[io] val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private[io] val log = LoggerFactory.getLogger(getClass)
 
   def writeToStage(rdd: RDD[String],
                    schema: StructType,
