@@ -67,7 +67,8 @@ private[querygeneration] case class QueryHelper(
             colSet.find(c => c.exprId == e.exprId) match {
               case Some(a) =>
                 AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
-                  a.exprId
+                  a.exprId,
+                  None
                 )
               case None => e
           }
@@ -99,7 +100,7 @@ private[querygeneration] case class QueryHelper(
     a =>
       AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
         a.exprId,
-        Seq[String](alias)
+        Some(alias)
     )
   )
 
@@ -108,7 +109,7 @@ private[querygeneration] case class QueryHelper(
     a =>
       AttributeReference(a.name, a.dataType, nullable = true, a.metadata)(
         a.exprId,
-        Seq[String](alias)
+        Some(alias)
       )
   )
 

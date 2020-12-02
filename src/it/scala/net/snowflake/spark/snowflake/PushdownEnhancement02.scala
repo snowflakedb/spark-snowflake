@@ -165,7 +165,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown number functions: PI() and Round()/Random") {
+  // Random() is new for spark 3.0
+  ignore("test pushdown number functions: PI() and Round()/Random") {
     // Don't run test with use_copy_unload because COPY UNLOAD converts
     // PI value 3.141592653589793 to 3.141592654
     if (!params.useCopyUnload) {
