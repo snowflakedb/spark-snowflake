@@ -44,7 +44,7 @@ class MiscSuite01 extends FunSuite with Matchers {
       Parameters.PARAM_PROXY_PORT -> "1234",
       Parameters.PARAM_PROXY_USER -> "proxyUser",
       Parameters.PARAM_PROXY_PASSWORD -> "proxyPassword",
-      Parameters.PARAM_NON_PROXY_HOSTS -> "nonProxyHosts",
+      Parameters.PARAM_NON_PROXY_HOSTS -> "nonProxyHosts"
     )
     val param = Parameters.MergedParameters(sfOptions)
     val proxyInfo = param.proxyInfo.get
