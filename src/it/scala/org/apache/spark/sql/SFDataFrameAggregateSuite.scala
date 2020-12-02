@@ -26,6 +26,6 @@ class SFDataFrameAggregateSuite
       "min_by",
       // Replace Spark exception by Snowflake exception, replaced by
       // TS - SPARK-21896: Window functions inside aggregate functions
-      "SPARK-21896: Window functions inside aggregate functions",
+      "SPARK-21896: Window functions inside aggregate functions"
        )
 }
