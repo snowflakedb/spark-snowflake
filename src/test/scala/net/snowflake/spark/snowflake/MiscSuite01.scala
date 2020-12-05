@@ -249,4 +249,19 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(errorMessage))
     assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
   }
+
+  test("test Parameters invalid option values") {
+    var sfOptions = Map(
+      Parameters.PARAM_EXPECTED_PARTITION_SIZE_IN_MB -> "wrong_number",
+      Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "1"
+    )
+    var param = Parameters.MergedParameters(sfOptions)
+    assertThrows[IllegalArgumentException]({
+      param.expectedPartitionSize
+    })
+    assertThrows[IllegalArgumentException]({
+      param.uploadChunkSize
+    })
+  }
+
 }
