@@ -16,7 +16,7 @@
 
 package net.snowflake.spark.snowflake.testsuite
 
-import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TestStatus, TestUtils}
+import net.snowflake.spark.snowflake.{BaseTestResultBuilder, DefaultJDBCWrapper, TestStatus, Parameters, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
