@@ -1,13 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Cast,
-  Expression,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -212,7 +206,9 @@ case class AggregateQuery(columns: Seq[NamedExpression],
       ConstantString("GROUP BY") +
         mkStatement(groups.map(expressionToStatement), ",")
     } else {
-      EmptySnowflakeSQLStatement()
+      // SNOW-201486: Insert a limit 1 to ensure that only one row returns if there
+      // are no grouping expressions
+      ConstantString("LIMIT 1").toStatement
     }
 }
 
@@ -369,7 +365,14 @@ case class UnionQuery(children: Seq[LogicalPlan],
     QueryHelper(
       children = queries,
       outputAttributes = Some(queries.head.helper.output),
-      alias = alias
+      alias = alias,
+      visibleAttributeOverride =
+        Some(queries.foldLeft(Seq.empty[Attribute])((x, y) => x ++ y.helper.output).map(
+          a =>
+            AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+              a.exprId,
+              Option[String](alias)
+            )))
     )
 
   override def getStatement(useAlias: Boolean): SnowflakeSQLStatement = {

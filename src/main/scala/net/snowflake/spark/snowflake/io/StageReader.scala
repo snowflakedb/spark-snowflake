@@ -18,7 +18,7 @@ private[snowflake] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
-  private val OUTPUT_BYTES: String = "output_bytes"
+  private val OUTPUT_BYTES = TelemetryFieldNames.OUTPUT_BYTES
 
   def readFromStage(sqlContext: SQLContext,
                     params: MergedParameters,
@@ -36,13 +36,32 @@ private[snowflake] object StageReader {
 
     val prefix = Random.alphanumeric take 10 mkString ""
 
-    val res = buildUnloadStatement(
+    val copyStatement = buildUnloadStatement(
       params,
       statement,
       s"@$stage/$prefix/",
       compressFormat,
       format
-    ).execute(params.bindVariableEnabled)(conn)
+    )
+
+    val startTime = System.currentTimeMillis()
+    val res = try {
+      copyStatement.execute(params.bindVariableEnabled)(conn)
+    } catch {
+      case th: Throwable => {
+        // send telemetry message
+        SnowflakeTelemetry.sendQueryStatus(
+          conn,
+          TelemetryConstValues.OPERATION_READ,
+          copyStatement.getLastQueryID(),
+          TelemetryConstValues.STATUS_FAIL,
+          System.currentTimeMillis() - startTime,
+          Some(th),
+          "Hit exception when reading with COPY INTO LOCATION")
+        // Re-throw the exception
+        throw th
+      }
+    }
 
     // Verify it's the expected format
     val sch = res.getMetaData

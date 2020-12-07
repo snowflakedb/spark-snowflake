@@ -10,7 +10,9 @@ import net.snowflake.spark.snowflake.{
   Conversions,
   ProxyInfo,
   SnowflakeConnectorException,
-  SnowflakeTelemetry
+  SnowflakeTelemetry,
+  SparkConnectorContext,
+  TelemetryConstValues
 }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -38,7 +40,10 @@ class SnowflakeResultSetRDD[T: ClassTag](
   sfFullURL: String
 ) extends RDD[T](sc, Nil) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[T] =
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    // Log system configuration on executor
+    SparkConnectorContext.recordConfig()
+
     ResultIterator[T](
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
@@ -47,6 +52,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
       queryID,
       sfFullURL
     )
+  }
 
   override protected def getPartitions: Array[Partition] =
     resultSets.zipWithIndex.map {
@@ -80,7 +86,8 @@ case class ResultIterator[T: ClassTag](
       SnowflakeResultSetRDD.logger.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
            | partition ID:$partitionIndex expectedRowCount=
-           | $expectedRowCount
+           | $expectedRowCount TaskInfo:
+           | ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
            |""".stripMargin.filter(_ >=
           ' '))
 
@@ -100,20 +107,20 @@ case class ResultIterator[T: ClassTag](
           .build()
       )
     } catch {
-      case e: Exception => {
+      case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
           this.getClass.getSimpleName,
-          operation = "read",
+          operation = TelemetryConstValues.OPERATION_READ,
           retryCount = 0,
           maxRetryCount = 0,
           success = false,
           proxyInfo.isDefined,
           Some(queryID),
-          Some(e))
+          Some(th))
         // Re-throw the exception
-        throw e
+        throw th
       }
     }
   }
@@ -162,20 +169,20 @@ case class ResultIterator[T: ClassTag](
         false
       }
     } catch {
-      case e: Exception => {
+      case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
         SnowflakeTelemetry.sendTelemetryOOB(
           sfFullURL,
           this.getClass.getSimpleName,
-          operation = "read",
+          operation = TelemetryConstValues.OPERATION_READ,
           retryCount = 0,
           maxRetryCount = 0,
           success = false,
           useProxy = proxyInfo.isDefined,
           queryID = Some(queryID),
-          exception = Some(e))
+          throwable = Some(th))
         // Re-throw the exception
-        throw e
+        throw th
       }
     }
   }

@@ -99,11 +99,11 @@ class SnowflakeSink(sqlContext: SQLContext,
   private val mapper = new ObjectMapper()
   private val metric: ObjectNode = mapper.createObjectNode()
 
-  private val APP_NAME = "application_name"
-  private val START_TIME = "start_time"
-  private val END_TIME = "end_time"
-  private val LOAD_RATE = "load_rate"
-  private val DATA_BATCH = "data_batch"
+  private val APP_NAME = TelemetryFieldNames.APPLICATION_NAME
+  private val START_TIME = TelemetryFieldNames.START_TIME
+  private val END_TIME = TelemetryFieldNames.END_TIME
+  private val LOAD_RATE = TelemetryFieldNames.LOAD_RATE
+  private val DATA_BATCH = TelemetryFieldNames.DATA_BATCH
 
   private val telemetrySendTime: Long = 10 * 60 * 1000 // 10 min
 

@@ -22,14 +22,20 @@ import java.security.InvalidKeyException
 import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
+import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
 
 /**
   * Unit tests for all kinds of some classes
   */
 class MiscSuite01 extends FunSuite with Matchers {
+
+  private val mapper = new ObjectMapper()
 
   test("test ProxyInfo with all fields") {
     val sfOptions = Map(
@@ -144,6 +150,23 @@ class MiscSuite01 extends FunSuite with Matchers {
     })
   }
 
+  test("test Parameters.removeQuoteForStageTableName()") {
+    // Explicitly set it as true
+    var sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "true")
+    var param = Parameters.MergedParameters(sfOptions)
+    assert(param.stagingTableNameRemoveQuotesOnly)
+
+    // Explicitly set it as false
+    sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "false")
+    param = Parameters.MergedParameters(sfOptions)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
+
+    // It is false by default.
+    sfOptions = Map(Parameters.PARAM_USE_PROXY -> "false")
+    param = Parameters.MergedParameters(sfOptions)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
+  }
+
   test("test SnowflakeConnectorUtils.handleS3Exception") {
     // positive test
     val ex1 = new Exception("test S3Exception",
@@ -165,4 +188,80 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
+
+  test("unit test for SnowflakeTelemetry.getClientConfig") {
+    // Configure some spark options for the spark session
+    SparkSession.builder
+      .master("local")
+      .appName("test config info sent")
+      .config("spark.driver.memory", "2G")
+      .config("spark.executor.memory", "888M")
+      .config("spark.driver.extraJavaOptions", s"-Duser.timezone=GMT")
+      .config("spark.executor.extraJavaOptions", s"-Duser.timezone=UTC")
+      .config("spark.sql.session.timeZone", "America/Los_Angeles")
+      .getOrCreate()
+
+    val metric = SnowflakeTelemetry.getClientConfig()
+    // Check one version
+    assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
+    // check one JVM option
+    assert(metric.get(TelemetryClientInfoFields.MAX_MEMORY_IN_MB).asLong() > 0)
+    // check Spark options
+    val sparkConfNode = metric.get(TelemetryClientInfoFields.SPARK_CONFIG)
+    assert(sparkConfNode.get("spark.master").asText().equals("local"))
+    assert(sparkConfNode.get("spark.app.name").asText().equals("test config info sent"))
+    assert(sparkConfNode.get("spark.driver.memory").asText().equals("2G"))
+    assert(sparkConfNode.get("spark.executor.memory").asText().equals("888M"))
+    assert(sparkConfNode.get("spark.driver.extraJavaOptions").asText().equals("-Duser.timezone=GMT"))
+    assert(sparkConfNode.get("spark.executor.extraJavaOptions").asText().equals("-Duser.timezone=UTC"))
+    assert(sparkConfNode.get("spark.sql.session.timeZone").asText().equals("America/Los_Angeles"))
+  }
+
+  test("unit test for SnowflakeTelemetry.addThrowable()") {
+    val errorMessage = "SnowflakeTelemetry.addThrowable() test exception message"
+    val queryId = "019840d2-04c3-90c5-0000-0ca911a381c6"
+    val sqlState = "22018"
+    val errorCode = 100038
+
+    // Test a SnowflakeSQLException Exception
+    var metric: ObjectNode = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new SnowflakeSQLException(queryId, errorMessage, sqlState, errorCode))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class net.snowflake.client.jdbc.SnowflakeSQLException"))
+    var expectedMessage = s"SnowflakeSQLException: ErrorCode=$errorCode SQLState=$sqlState QueryId=$queryId"
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(expectedMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(expectedMessage))
+    assert(!metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
+
+    // Test an OutOfMemoryError
+    metric = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new OutOfMemoryError(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class java.lang.OutOfMemoryError"))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
+
+    // Test an Exception
+    metric = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new Exception(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class java.lang.Exception"))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
+  }
+
+  test("test Parameters invalid option values") {
+    var sfOptions = Map(
+      Parameters.PARAM_EXPECTED_PARTITION_SIZE_IN_MB -> "wrong_number",
+      Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "1"
+    )
+    var param = Parameters.MergedParameters(sfOptions)
+    assertThrows[IllegalArgumentException]({
+      param.expectedPartitionSize
+    })
+    assertThrows[IllegalArgumentException]({
+      param.uploadChunkSize
+    })
+  }
+
 }

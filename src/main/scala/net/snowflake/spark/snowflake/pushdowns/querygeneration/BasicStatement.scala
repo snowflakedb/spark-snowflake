@@ -78,29 +78,28 @@ private[querygeneration] object BasicStatement {
       case l: Literal =>
         l.dataType match {
           case StringType =>
-            val str = l.toString()
-            if (str == "null") {
-              ConstantString(str.toUpperCase) !
+            if (l == null || l.toString() == "null") {
+              ConstantString("NULL") !
             } else {
-              StringVariable(str) ! // else "'" + str + "'"
+              StringVariable(Some(l.toString())) ! // else "'" + str + "'"
             }
           case DateType =>
             ConstantString("DATEADD(day,") + IntVariable(
-              l.value.asInstanceOf[Int]
+              Option(l.value).map(_.asInstanceOf[Int])
             ) +
               ", TO_DATE('1970-01-01'))" // s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
           case TimestampType =>
             ConstantString("to_timestamp_ntz(") + l.toString() + ", 6)"
           case _ =>
             l.value match {
-              case v: Int => IntVariable(v) !
-              case v: Long => LongVariable(v) !
-              case v: Short => ShortVariable(v) !
-              case v: Boolean => BooleanVariable(v) !
-              case v: Float => FloatVariable(v) !
-              case v: Double => DoubleVariable(v) !
-              case v: Byte => ByteVariable(v) !
-              case _ => ConstantString(l.value.toString) !
+              case v: Int => IntVariable(Some(v)) !
+              case v: Long => LongVariable(Some(v)) !
+              case v: Short => ShortVariable(Some(v)) !
+              case v: Boolean => BooleanVariable(Some(v)) !
+              case v: Float => FloatVariable(Some(v)) !
+              case v: Double => DoubleVariable(Some(v)) !
+              case v: Byte => ByteVariable(Some(v)) !
+              case _ => ConstantStringVal(l.value) !
             }
         }
 

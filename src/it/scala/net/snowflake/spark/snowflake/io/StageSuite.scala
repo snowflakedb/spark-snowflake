@@ -55,6 +55,8 @@ class StageSuite extends IntegrationSuiteBase {
   private val temp_file_name3 = temp_file3.getName
 
   private val test_table_write: String = s"test_table_write_$randomSuffix"
+  private val test_table_write_with_quote: String =
+    s""""test_table_write_$randomSuffix""""
   private val internal_stage_name = s"test_stage_$randomSuffix"
 
   private val largeStringValue = Random.alphanumeric take 1024 mkString ""
@@ -102,12 +104,13 @@ class StageSuite extends IntegrationSuiteBase {
   }
 
   test("test s3 internal stage functions") {
-    val sfOptionsNoTable: Map[String, String] =
+    var sfOptionsNoTable: Map[String, String] =
       replaceOption(
         connectorOptionsNoTable,
         "sfurl",
         "sfctest0.snowflakecomputing.com"
       )
+    sfOptionsNoTable += ("upload_chunk_size_in_mb" -> "5")
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
     val connection = DefaultJDBCWrapper.getConnector(param)
@@ -558,6 +561,51 @@ class StageSuite extends IntegrationSuiteBase {
       Utils.runQuery(
         sfOptionsNoTable,
         s"drop table if exists $test_table_large_result"
+      )
+      TestHook.disableTestHook()
+    }
+  }
+
+  // Test Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY
+  // This option is internal only, this test case can be removed when
+  // this option is removed.
+  test("test Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY") {
+    try {
+      setupLargeResultTable(connectorOptionsNoTable)
+
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", s"$test_table_large_result")
+        .load()
+
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table_write_with_quote)
+        .option(
+          Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY,
+          "true"
+        )
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      assert(
+        sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(connectorOptionsNoTable)
+          .option("dbtable", test_table_write_with_quote)
+          .load()
+          .count() == LARGE_TABLE_ROW_COUNT
+      )
+    } finally {
+      Utils.runQuery(
+        connectorOptionsNoTable,
+        s"drop table if exists $test_table_large_result"
+      )
+      Utils.runQuery(
+        connectorOptionsNoTable,
+        s"drop table if exists $test_table_write_with_quote"
       )
       TestHook.disableTestHook()
     }

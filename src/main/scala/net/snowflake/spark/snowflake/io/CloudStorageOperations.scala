@@ -574,11 +574,11 @@ sealed trait CloudStorage {
                         storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
-      case e: Throwable => {
+      case th: Throwable => {
         val stringWriter = new StringWriter
-        e.printStackTrace(new PrintWriter(stringWriter))
+        th.printStackTrace(new PrintWriter(stringWriter))
         val errmsg =
-          s"""${e.getClass.toString}, ${e.getMessage},
+          s"""${th.getClass.toString}, ${th.getMessage},
              | stacktrace: ${stringWriter.toString}""".stripMargin
 
         // Send OOB telemetry message if uploading failure happens
@@ -586,13 +586,13 @@ sealed trait CloudStorage {
         SnowflakeTelemetry.sendTelemetryOOB(
           sfURL,
           this.getClass.getSimpleName,
-          "write",
+          TelemetryConstValues.OPERATION_WRITE,
           attemptNumber,
           maxRetryCount,
           false,
           proxyInfo.isDefined,
           None,
-          Some(new Exception(e)))
+          Some(th))
 
         // Sleep exponential time based on the attempt number.
         if (useExponentialBackoff) {
@@ -619,7 +619,7 @@ sealed trait CloudStorage {
           )
         }
         // re-throw the exception
-        throw e
+        throw th
       }
     }
   }
@@ -639,6 +639,7 @@ sealed trait CloudStorage {
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Start writing partition ID:$partitionID as $fileName
+         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
          |""".stripMargin.filter(_ >= ' '))
 
     // Read data and upload to cloud storage
@@ -760,6 +761,9 @@ sealed trait CloudStorage {
         // Begin code snippet to be executed on worker
         ///////////////////////////////////////////////////////////////////////
 
+        // Log system configuration if not yet.
+        SparkConnectorContext.recordConfig()
+
         // Convert and upload the partition with the StorageInfo
         uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
 
@@ -778,7 +782,7 @@ sealed trait CloudStorage {
                                     maxRetryCount: Int): InputStream = {
     // download the file with retry and backoff and then consume.
     var retryCount = 0
-    var error: Option[Exception] = None
+    var throwable: Option[Throwable] = None
     var downloadDone = false
     var inputStream: InputStream = null
 
@@ -821,13 +825,13 @@ sealed trait CloudStorage {
         processedFileCount += 1
       } catch {
         // Find problem to download the file, sleep some time and retry.
-        case e: Exception => {
-          error = Some(e)
+        case th: Throwable => {
+          throwable = Some(th)
           retryCount = retryCount + 1
           val sleepTime = retrySleepTimeInMS(retryCount)
           val stringWriter = new StringWriter
-          e.printStackTrace(new PrintWriter(stringWriter))
-          val errmsg = s"${e.getMessage}, stacktrace: ${stringWriter.toString}"
+          th.printStackTrace(new PrintWriter(stringWriter))
+          val errmsg = s"${th.getMessage}, stacktrace: ${stringWriter.toString}"
 
           CloudStorageOperations.log.info(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: hit download error:
@@ -847,26 +851,26 @@ sealed trait CloudStorage {
       SnowflakeTelemetry.sendTelemetryOOB(
         sfURL,
         this.getClass.getSimpleName,
-        "read",
+        TelemetryConstValues.OPERATION_READ,
         retryCount,
         maxRetryCount,
         downloadDone,
         proxyInfo.isDefined,
         None,
-        error)
+        throwable)
     }
 
     if (downloadDone) {
       inputStream
     } else {
       // Fail to download data after retry
-      val errorMessage = error.get.getMessage
+      val errorMessage = throwable.get.getMessage
       CloudStorageOperations.log.info(
         s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: last error message
            | after retry $retryCount times is [ $errorMessage ]
            |""".stripMargin.filter(_ >= ' ')
       )
-      throw error.get
+      throw throwable.get
     }
   }
 
@@ -1014,8 +1018,8 @@ case class InternalAzureStorage(param: MergedParameters,
         )
         new CipherOutputStream(azureOutput, cipher)
       } catch {
-        case ex: Exception =>
-          throw StorageUtils.logAzureException(true, "internal", file,  blob, opContext, ex)
+        case th: Throwable =>
+          throw StorageUtils.logAzureThrowable(true, "internal", file,  blob, opContext, th)
       }
     }
 
@@ -1111,8 +1115,8 @@ case class InternalAzureStorage(param: MergedParameters,
         "Negative test to raise error when creating a download stream"
       )
     } catch {
-      case ex: Exception =>
-        throw StorageUtils.logAzureException(false, "internal", fileName,  blob, opContext, ex)
+      case th: Throwable =>
+        throw StorageUtils.logAzureThrowable(false, "internal", fileName,  blob, opContext, th)
     }
 
     val inputStream: InputStream =
@@ -1178,8 +1182,8 @@ case class ExternalAzureStorage(containerName: String,
         azureOutput
       }
     } catch {
-      case ex: Exception =>
-        throw StorageUtils.logAzureException(true, "external", fileName,  blob, opContext, ex)
+      case th: Throwable =>
+        throw StorageUtils.logAzureThrowable(true, "external", fileName,  blob, opContext, th)
     }
   }
 
@@ -1233,8 +1237,8 @@ case class ExternalAzureStorage(containerName: String,
         opContext)
       StorageUtils.logAzureInfo(false, "external", fileName, opContext.getClientRequestID, blob.getContainer.getName)
     } catch {
-      case ex: Exception =>
-        throw StorageUtils.logAzureException(false, "external", fileName,  blob, opContext, ex)
+      case th: Throwable =>
+        throw StorageUtils.logAzureThrowable(false, "external", fileName,  blob, opContext, th)
     }
 
     val inputStream: InputStream =
@@ -1372,25 +1376,45 @@ case class InternalS3Storage(param: MergedParameters,
 
     if (compress) meta.setContentEncoding("GZIP")
 
-    var outputStream: OutputStream = new OutputStream {
-      val buffer: ByteArrayOutputStream = new ByteArrayOutputStream()
+    // The AWS multiple parts upload API will be used is
+    // data size is bigger than the upload chunk size.
+    var outputStream: OutputStream =
+      if (param.useAwsMultiplePartsUpload) {
+        new S3UploadOutputStream(
+          s3Client,
+          meta,
+          storageInfo,
+          param.uploadChunkSize,
+          file)
+      } else {
+        new OutputStream {
+          val buffer: ByteArrayOutputStream = new ByteArrayOutputStream()
 
-      override def write(b: Int): Unit = buffer.write(b)
+          override def write(b: Int): Unit = buffer.write(b)
 
-      override def close(): Unit = {
-        buffer.close()
-        val resultByteArray = buffer.toByteArray
-        // Set up length to avoid S3 client API to raise warning message.
-        meta.setContentLength(resultByteArray.length)
-        val inputStream: InputStream =
-          new ByteArrayInputStream(resultByteArray)
-        s3Client.putObject(
-          storageInfo(StorageInfo.BUCKET_NAME),
-          storageInfo(StorageInfo.PREFIX).concat(file),
-          inputStream,
-          meta
-        )
-      }
+          override def close(): Unit = {
+            val start = System.currentTimeMillis()
+            buffer.close()
+            val resultByteArray = buffer.toByteArray
+            // Set up length to avoid S3 client API to raise warning message.
+            meta.setContentLength(resultByteArray.length)
+            val inputStream: InputStream =
+              new ByteArrayInputStream(resultByteArray)
+            s3Client.putObject(
+              storageInfo(StorageInfo.BUCKET_NAME),
+              storageInfo(StorageInfo.PREFIX).concat(file),
+              inputStream,
+              meta
+            )
+            val usedTime = System.currentTimeMillis() - start
+            CloudStorageOperations.log.info(
+              s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+                 | Finish uploading file $file without AWS multiple parts API
+                 | uploadTime=${Utils.getTimeString(usedTime)}
+                 | compressedSize=${Utils.getSizeString(resultByteArray.length)}
+                 |""".stripMargin.filter(_ >= ' '))
+          }
+        }
     }
 
     outputStream = new CipherOutputStream(outputStream, fileCipher)
@@ -1717,6 +1741,9 @@ case class InternalGcsStorage(param: MergedParameters,
         // Begin code snippet to executed on worker
         ///////////////////////////////////////////////////////////////////////
 
+        // Log system configuration if not yet.
+        SparkConnectorContext.recordConfig()
+
         // Get file transfer metadata object
         val metadata = if (oneMetadataPerFile) {
           metadatas(index)
@@ -1814,12 +1841,12 @@ object StorageUtils {
         ' '))
   }
 
-  private[io] def logAzureException(isUpload: Boolean,
+  private[io] def logAzureThrowable(isUpload: Boolean,
                                     stageType: String,
                                     file: String,
                                     blob: CloudBlockBlob,
                                     opContext: OperationContext,
-                                    ex: Exception): Exception = {
+                                    th: Throwable): Throwable = {
     val streamInfo = if (isUpload) {
       s"outputStream for uploading to"
     } else {
@@ -1832,12 +1859,12 @@ object StorageUtils {
          | file: $file client request id: ${opContext.getClientRequestID}
          | container=${blob.getContainer.getName}
          | URI=${blob.getUri.getAuthority}
-         | error message: ${ex.getMessage}
+         | error message: ${th.getMessage}
          |""".stripMargin.filter(_ >=
         ' '))
 
     // Return the exception because the caller needs to re-throw it
-    ex
+    th
   }
 
   private[io] def logPresignedUrlGenerateProgress(total: Int,
@@ -1850,6 +1877,187 @@ object StorageUtils {
          | $index/$total files is
          | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
+  }
+}
+
+private[io] class S3UploadOutputStream(s3Client: AmazonS3Client,
+                                       meta: ObjectMetadata,
+                                       storageInfo: Map[String, String],
+                                       bufferSize: Int,
+                                       file: String) extends OutputStream {
+  // If the total data size is <= bufferSize, just use normal API to upload data
+  private var useMultipleBlockUpload = false
+  // Data size in buffer
+  private var dataSizeInBuffer: Int = 0
+  private val byteArrayOutputStream = new ByteArrayOutputStream()
+  private var totalDataSize: Long = 0
+  private var totalUploadTime: Long = 0
+  // Create a list of ETag objects. You retrieves ETags for each object part uploaded,
+  // then, after each individual part has been uploaded, pass the list of ETags to
+  // the request to complete the upload.
+  private val partETags = new java.util.ArrayList[PartETag]
+  // Valid part ID is [1-10000]
+  private var partId = 1
+  // AWS bucket and file information
+  private val bucketName = storageInfo(StorageInfo.BUCKET_NAME)
+  private val keyName = storageInfo(StorageInfo.PREFIX).concat(file)
+
+  // If data size is less than one block, normal API is used to upload data,
+  // so initiate the multipart upload lazily.
+  private lazy val initRequest =
+    new InitiateMultipartUploadRequest(bucketName, keyName, meta)
+  private lazy val initResponse: InitiateMultipartUploadResult =
+    s3Client.initiateMultipartUpload(initRequest)
+
+  // get data in buffer for testing purpose only
+  private[io] def getDataInBufferForTest(): Array[Byte] =
+    byteArrayOutputStream.toByteArray
+
+  private def uploadDataChunk(isLastChunk: Boolean): Unit = {
+    // If there total data size is less than 1 chunk, use normal API
+    if (isLastChunk && !useMultipleBlockUpload) {
+      val start = System.currentTimeMillis()
+      // Set up length to avoid S3 client API to raise warning message.
+      meta.setContentLength(dataSizeInBuffer)
+      byteArrayOutputStream.close()
+      val buffer = byteArrayOutputStream.toByteArray
+      val inputStream: InputStream =
+        new ByteArrayInputStream(buffer, 0, dataSizeInBuffer)
+      s3Client.putObject(bucketName, keyName, inputStream, meta)
+      val usedTime = System.currentTimeMillis() - start
+      totalUploadTime += usedTime
+
+      CloudStorageOperations.log.info(
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+           | Finish uploading file $file without AWS multiple parts API
+           | because the data size is less than the buffer size:
+           | bufferSize=${Utils.getSizeString(bufferSize)}
+           | compressedSize=${Utils.getSizeString(dataSizeInBuffer)}
+           |""".stripMargin.filter(_ >= ' '))
+    } else {
+      // Upload the data chunk with Multiple block upload API
+      doUploadOnePart()
+
+      // For last block, commit the multipart upload.
+      if (isLastChunk) {
+        byteArrayOutputStream.close()
+        val start = System.currentTimeMillis()
+        val compRequest = new CompleteMultipartUploadRequest(
+          bucketName, keyName, initResponse.getUploadId, partETags)
+        s3Client.completeMultipartUpload(compRequest)
+        val usedTime = System.currentTimeMillis() - start
+        totalUploadTime += usedTime
+        CloudStorageOperations.log.info(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+             | Finish uploading file $file with AWS multiple parts API:
+             | bufferSize=${Utils.getSizeString(bufferSize)} chunkCount=$partId
+             | compressedSize=${Utils.getSizeString(totalDataSize)}
+             |""".stripMargin.filter(_ >= ' '))
+      }
+    }
+  }
+
+  // upload one part with multiple part upload API
+  private def doUploadOnePart(): Unit = {
+    val start = System.currentTimeMillis()
+    // Indicate the upload to using multiple parts API.
+    useMultipleBlockUpload = true
+    // byteArrayOutputStream.close()
+    val buffer = byteArrayOutputStream.toByteArray
+    val inputStream: InputStream =
+      new ByteArrayInputStream(buffer, 0, dataSizeInBuffer)
+
+    // Create the request to upload a part.
+    val uploadRequest = new UploadPartRequest()
+      .withBucketName(bucketName)
+      .withKey(keyName)
+      .withUploadId(initResponse.getUploadId)
+      .withPartNumber(partId)
+      .withInputStream(inputStream)
+      .withPartSize(dataSizeInBuffer)
+
+    // Upload the part and add the response's ETag to our list.
+    val uploadResult = s3Client.uploadPart(uploadRequest)
+    partETags.add(uploadResult.getPartETag)
+
+    // Update status
+    totalDataSize += dataSizeInBuffer
+    dataSizeInBuffer = 0
+    partId += 1
+    byteArrayOutputStream.reset()
+    // byteArrayOutputStream = new ByteArrayOutputStream(bufferSize + 8)
+
+    val usedTime = System.currentTimeMillis() - start
+    totalUploadTime += usedTime
+
+    if (partId == 3) {
+      // Inject exception for test purpose
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_FAIL_UPLOAD_AWS_2ND_BLOCK,
+        "Negative test to raise error after upload 2nd parts"
+      )
+    }
+  }
+
+  override def write(b: Int): Unit = {
+    // If there is no room in the buffer, then write the buffer,
+    // and then put current BYTE in the buffer
+    if (dataSizeInBuffer >= bufferSize) {
+      uploadDataChunk(isLastChunk = false)
+    }
+
+    byteArrayOutputStream.write(b)
+    dataSizeInBuffer += 1
+  }
+
+  // This function need to be override for better performance
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    val inputSize = len - off
+    if ((inputSize + dataSizeInBuffer) <= bufferSize) {
+      // There is enough room on the buffer, just put it
+      byteArrayOutputStream.write(b, off, inputSize)
+      dataSizeInBuffer += inputSize
+    } else {
+      // There is not enough room on the buffer,
+      // The input needs to be moved to buffer with 2 parts
+      // (If the input data size is bigger than buffer size,
+      // it may be put in more than 2 parts)
+
+      // First, write first part into buffer
+      val firstPartSize = bufferSize - dataSizeInBuffer
+      if (firstPartSize > 0) {
+        // if the buffer is already full, skip this step
+        byteArrayOutputStream.write(b, off, firstPartSize)
+        dataSizeInBuffer += firstPartSize
+      }
+
+      var leftLen = len - firstPartSize
+      var newOff = off + firstPartSize
+      // Second, write the second (or following) part.
+      // NOTE: If input size is much bigger than buffer size,
+      // it can be multiple parts
+      do {
+        // write the full buffer
+        uploadDataChunk(isLastChunk = false)
+
+        // Put the next part.
+        val partSize = Math.min(bufferSize, leftLen)
+        byteArrayOutputStream.write(b, newOff, partSize)
+        dataSizeInBuffer += partSize
+
+        // move indicators
+        leftLen -= partSize
+        newOff += partSize
+      } while (leftLen > 0)
+    }
+  }
+
+  override def close(): Unit = {
+    // "dataSizeInBuffer is zero" means write() is never called.
+    // For this case, the file upload is skipped.
+    if (dataSizeInBuffer > 0) {
+      uploadDataChunk(isLastChunk = true)
+    }
   }
 }
 

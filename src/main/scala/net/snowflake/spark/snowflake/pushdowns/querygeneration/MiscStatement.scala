@@ -73,9 +73,9 @@ private[querygeneration] object MiscStatement {
         ConstantString("TO_DECIMAL") + blockStatement(
           blockStatement(
             convertStatement(child, fields) + "/ POW(10," +
-              IntVariable(scale) + ")"
-          ) + "," + IntVariable(precision) + "," +
-            IntVariable(scale)
+              IntVariable(Some(scale)) + ")"
+          ) + "," + IntVariable(Some(precision)) + "," +
+            IntVariable(Some(scale))
         )
       case ShiftLeft(col, num) =>
         ConstantString("BITSHIFTLEFT") +
@@ -98,7 +98,7 @@ private[querygeneration] object MiscStatement {
           case d: DecimalType =>
             blockStatement(
               convertStatement(child, fields) + "* POW(10," + IntVariable(
-                d.scale
+                Some(d.scale)
               ) + ")"
             )
           case _ => null

@@ -23,7 +23,7 @@ import java.util.{Properties, UUID}
 
 import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import org.apache.spark.{SPARK_VERSION, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkContext, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -54,12 +54,12 @@ object Utils {
     */
   val SNOWFLAKE_SOURCE_SHORT_NAME = "snowflake"
 
-  val VERSION = "2.8.2"
+  val VERSION = "2.8.3"
 
   /**
     * The certified JDBC version to work with this spark connector version.
     */
-  val CERTIFIED_JDBC_VERSION = "3.12.12"
+  val CERTIFIED_JDBC_VERSION = "3.12.15"
 
   /**
     * Important:
@@ -71,8 +71,11 @@ object Utils {
   /**
     * Client info related variables
     */
-  private[snowflake] lazy val sparkAppName =
-    SparkContext.getOrCreate().getConf.get("spark.app.name", "")
+  private[snowflake] lazy val sparkAppName = if (SparkEnv.get != null) {
+    SparkEnv.get.conf.get("spark.app.name", "")
+  } else {
+    ""
+  }
   private[snowflake] lazy val scalaVersion =
     util.Properties.versionNumberString
   private[snowflake] lazy val javaVersion =
@@ -670,8 +673,10 @@ object Utils {
   }
 
   def getClientInfoJson(): ObjectNode = {
-    val metric: ObjectNode = mapper.createObjectNode()
+    SnowflakeTelemetry.getClientConfig()
+  }
 
+  private[snowflake] def addVersionInfo(metric: ObjectNode): ObjectNode = {
     metric.put(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION, esc(VERSION))
     metric.put(TelemetryClientInfoFields.SPARK_VERSION, esc(SPARK_VERSION))
     metric.put(TelemetryClientInfoFields.APPLICATION_NAME, esc(sparkAppName))
@@ -703,8 +708,8 @@ object Utils {
         println(sb.toString())
       }
     } catch {
-      case e: Exception =>
-        println(s"Fail to print result set: ${e.getMessage}")
+      case th: Throwable =>
+        println(s"Fail to print result set: ${th.getMessage}")
     }
   }
 }

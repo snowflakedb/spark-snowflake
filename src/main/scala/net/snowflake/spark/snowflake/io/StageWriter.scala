@@ -16,6 +16,9 @@
 package net.snowflake.spark.snowflake.io
 
 import java.sql.{Connection, ResultSet}
+import java.time.LocalDateTime
+import java.util.TimeZone
+
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -27,6 +30,7 @@ import org.apache.spark.sql.SaveMode
 import org.slf4j.LoggerFactory
 
 import scala.collection._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 // Snowflake doesn't support DDL in tran, so the State Machine is
@@ -306,12 +310,24 @@ private[io] object StageWriter {
       // Commit a user transaction
       writeTableState.commit()
     } catch {
-      case e: Exception =>
+      case th: Throwable =>
         // Rollback all the changes
         writeTableState.rollback()
 
-        log.error("Error occurred while loading files to Snowflake: " + e)
-        throw e
+        log.error("Error occurred while loading files to Snowflake: " + th)
+        throw th
+    }
+  }
+
+  private[snowflake] def getStageTableName(tableName: String): String = {
+    val trimmedName = tableName.trim
+    val postfix = s"_staging_${Math.abs(Random.nextInt()).toString}"
+    if (trimmedName.endsWith("\"")) {
+      // The table name is quoted, insert the postfix before last '"'
+      s"""${trimmedName.substring(0, trimmedName.length - 1)}$postfix""""
+    } else {
+      // Append the postfix
+      s"$trimmedName$postfix"
     }
   }
 
@@ -329,10 +345,15 @@ private[io] object StageWriter {
                                            fileUploadResults: List[FileUploadResult])
   : Unit = {
     val table = params.table.get
-    val tempTable =
-      TableName(
-        s"${table.name.replaceAll("\\W", "X")}_staging_${Math.abs(Random.nextInt()).toString}"
-      )
+    val tempTable = TableName(
+      if (params.stagingTableNameRemoveQuotesOnly) {
+        // NOTE: This is the staging table name generation for SC 2.8.1 and earlier.
+        // It is kept for back-compatibility and it will be removed later without any notice.
+        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
+      } else {
+        getStageTableName(table.name)
+      }
+    )
     val targetTable =
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         tempTable
@@ -432,13 +453,23 @@ private[io] object StageWriter {
                                        format: SupportedFormat,
                                        fileUploadResults: List[FileUploadResult])
   : Unit = {
+    val progress = new ArrayBuffer[String]()
+    val start = System.currentTimeMillis()
+    logAndAppend(progress, s"Begin to write at ${LocalDateTime.now()} ("
+      + TimeZone.getDefault.getDisplayName + ")")
+
     // If a file is empty, there is no file are upload.
     // So the expected files are non empty files.
+    var totalSize: Long = 0
     val expectedFileSet = mutable.Set[String]()
     fileUploadResults.foreach(fileUploadResult =>
       if (fileUploadResult.fileSize > 0) {
         expectedFileSet += fileUploadResult.fileName
+        totalSize += fileUploadResult.fileSize
       })
+    logAndAppend(progress, s"Total file count is ${fileUploadResults.size}, " +
+      s"non-empty files count is ${expectedFileSet.size}, " +
+      s"total file size is ${Utils.getSizeString(totalSize)}.")
 
     // Indicate whether to use FILES clause in the copy command
     var useFilesClause = false
@@ -468,66 +499,107 @@ private[io] object StageWriter {
       firstCopyFileSet.get.toSet
     )
     log.debug(Utils.sanitizeQueryText(copyStatement.toString))
+    logAndAppend(progress, s"First COPY command is: ${copyStatement.toString}")
 
-    // execute the COPY INTO TABLE statement
-    val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
+    var lastStatement = copyStatement
+    try {
+      // execute the COPY INTO TABLE statement
+      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
+      val firstCopyEnd = System.currentTimeMillis()
+      logAndAppend(progress,
+        s"""First COPY command is done in
+           | ${Utils.getTimeString(firstCopyEnd - start)}
+           | at ${LocalDateTime.now()}, queryID is
+           | ${lastStatement.getLastQueryID()}
+           |""".stripMargin.filter(_ >= ' '))
 
-    // Save the original COPY command even if additional COPY is run.
-    Utils.setLastCopyLoad(copyStatement.toString)
+      // Save the original COPY command even if additional COPY is run.
+      Utils.setLastCopyLoad(copyStatement.toString)
 
-    // Get missed files if there are any.
-    var missedFileSet = getCopyMissedFiles(params, resultSet, expectedFileSet)
+      // Get missed files if there are any.
+      var missedFileSet = getCopyMissedFiles(params, resultSet, expectedFileSet)
 
-    // If any files are missed, execute 2nd COPY command
-    if (missedFileSet.nonEmpty) {
-      // Negative test:
-      // Only load part of missed files.
-      // Exception is raised for the failure.
-      val secondCopyFileSet: Option[mutable.Set[String]] =
-      if (TestHook.isTestFlagEnabled(
-        TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
-        Some(missedFileSet.grouped(2).toList.head)
-      } else {
-        Some(missedFileSet)
-      }
-
-      // Generate copy command with missed files only
-      useFilesClause = true
-      val copyWithFileClause = StageWriter.copySql(
-        schema,
-        saveMode,
-        params,
-        targetTable,
-        file,
-        tempStage,
-        format,
-        conn,
-        useFilesClause,
-        secondCopyFileSet.get.toSet
-      )
-
-      def getMissedFileInfo(missedFileSet: mutable.Set[String]): String = {
-        s"""missedFileCount=${missedFileSet.size}
-           | Files: (${missedFileSet.mkString(", ")})
-           |""".stripMargin.filter(_ >= ' ')
-      }
-
-      // Log missed files info
-      log.warn(
-        s"""Some files are not loaded into the table, execute additional COPY
-           | to load them: ${getMissedFileInfo(missedFileSet)}
-           | """.stripMargin)
-
-      // Run the command
-      val resultSet = copyWithFileClause.execute(params.bindVariableEnabled)(conn)
-      missedFileSet = getCopyMissedFiles(params, resultSet, missedFileSet)
-
-      // It is expected all the files must be loaded.
+      // If any files are missed, execute 2nd COPY command
       if (missedFileSet.nonEmpty) {
-        throw new SnowflakeConnectorException(
-          s"""These files are missed when COPY INTO TABLE:
-             | ${getMissedFileInfo(missedFileSet)}
-             | """.stripMargin.filter(_ >= ' '))
+        // Negative test:
+        // Only load part of missed files.
+        // Exception is raised for the failure.
+        val secondCopyFileSet: Option[mutable.Set[String]] =
+        if (TestHook.isTestFlagEnabled(
+          TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
+          Some(missedFileSet.grouped(2).toList.head)
+        } else {
+          Some(missedFileSet)
+        }
+
+        // Generate copy command with missed files only
+        useFilesClause = true
+        val copyWithFileClause = StageWriter.copySql(
+          schema,
+          saveMode,
+          params,
+          targetTable,
+          file,
+          tempStage,
+          format,
+          conn,
+          useFilesClause,
+          secondCopyFileSet.get.toSet
+        )
+        lastStatement = copyWithFileClause
+        logAndAppend(progress, s"Second COPY command: $lastStatement")
+
+        def getMissedFileInfo(missedFileSet: mutable.Set[String]): String = {
+          s"""missedFileCount=${missedFileSet.size}
+             | Files: (${missedFileSet.mkString(", ")})
+             |""".stripMargin.filter(_ >= ' ')
+        }
+
+        // Log missed files info
+        log.warn(
+          s"""Some files are not loaded into the table, execute additional COPY
+             | to load them: ${getMissedFileInfo(missedFileSet)}
+             | """.stripMargin)
+
+        // Run the command
+        val resultSet = copyWithFileClause.execute(params.bindVariableEnabled)(conn)
+        val secondCopyEnd = System.currentTimeMillis()
+        logAndAppend(progress,
+          s"""Second COPY command is done in
+             | ${Utils.getTimeString(secondCopyEnd - firstCopyEnd)}
+             | at ${LocalDateTime.now()}, queryID is
+             | ${lastStatement.getLastQueryID()}
+             |""".stripMargin.filter(_ >= ' '))
+        missedFileSet = getCopyMissedFiles(params, resultSet, missedFileSet)
+
+        // It is expected all the files must be loaded.
+        if (missedFileSet.nonEmpty) {
+          throw new SnowflakeConnectorException(
+            s"""These files are missed when COPY INTO TABLE:
+               | ${getMissedFileInfo(missedFileSet)}
+               | """.stripMargin.filter(_ >= ' '))
+        }
+      }
+      val end = System.currentTimeMillis()
+      logAndAppend(progress,
+        s"Succeed to write in ${Utils.getTimeString(end - start)}" +
+          s" at ${LocalDateTime.now()}")
+    } catch {
+      case th: Throwable => {
+        val end = System.currentTimeMillis()
+        val message = s"Fail to write in ${Utils.getTimeString(end - start)} at ${LocalDateTime.now()}"
+        logger.error(message)
+        progress.append(message)
+        // send telemetry message
+        SnowflakeTelemetry.sendQueryStatus(conn,
+          TelemetryConstValues.OPERATION_WRITE,
+          lastStatement.getLastQueryID(),
+          TelemetryConstValues.STATUS_FAIL,
+          end - start,
+          Some(th),
+          progress.mkString("\n"))
+        // Re-throw the exception
+        throw th
       }
     }
   }
@@ -770,6 +842,11 @@ private[io] object StageWriter {
     ConstantString("copy into") + table.name + mappingToString +
       mappingFromString + filesClause + formatString + truncateCol +
       purge + onError
+  }
+
+  private def logAndAppend(messages: ArrayBuffer[String], message: String) : Unit = {
+    log.info(message)
+    messages.append(message)
   }
 
 }

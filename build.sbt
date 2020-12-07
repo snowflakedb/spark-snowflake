@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.8.2"
+val sparkConnectorVersion = "2.8.3"
 
 lazy val ItTest = config("it") extend Test
 
@@ -51,7 +51,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.9",
-      "net.snowflake" % "snowflake-jdbc" % "3.12.12",
+      "net.snowflake" % "snowflake-jdbc" % "3.12.15",
       "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
@@ -60,6 +60,13 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test",
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "tests",
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "test-sources",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "test-sources",
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "test-sources"
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 

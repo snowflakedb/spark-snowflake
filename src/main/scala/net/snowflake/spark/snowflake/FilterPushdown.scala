@@ -63,27 +63,26 @@ private[snowflake] object FilterPushdown {
       dataType match {
         case StringType =>
           StringVariable(
-            value.toString
+            Option(value).map(_.toString
               .replace("'", "''")
               .replace("\\", "\\\\")
-          ) !
+            )) !
         case DateType =>
-          StringVariable(value.asInstanceOf[Date].toString) + "::DATE"
+          StringVariable(Option(value).map(_.asInstanceOf[Date].toString)) + "::DATE"
         case TimestampType =>
-          StringVariable(value.asInstanceOf[Timestamp].toString) + "::TIMESTAMP(3)"
+          StringVariable(Option(value).map(_.asInstanceOf[Timestamp].toString)) + "::TIMESTAMP(3)"
         case _ =>
           value match {
-            case v: Int => IntVariable(v) !
-            case v: Long => LongVariable(v) !
-            case v: Short => ShortVariable(v) !
-            case v: Boolean => BooleanVariable(v) !
-            case v: Float => FloatVariable(v) !
-            case v: Double => DoubleVariable(v) !
-            case v: Byte => ByteVariable(v) !
-            case _ => ConstantString(value.toString) !
+            case v: Int => IntVariable(Some(v)) !
+            case v: Long => LongVariable(Some(v)) !
+            case v: Short => ShortVariable(Some(v)) !
+            case v: Boolean => BooleanVariable(Some(v)) !
+            case v: Float => FloatVariable(Some(v)) !
+            case v: Double => DoubleVariable(Some(v)) !
+            case v: Byte => ByteVariable(Some(v)) !
+            case _ => ConstantStringVal(value) !
           }
       }
-
     }
 
     // Builds an escaped value, based on the value itself
@@ -91,19 +90,19 @@ private[snowflake] object FilterPushdown {
       value match {
         case x: String =>
           StringVariable(
-            x.replace("'", "''")
-              .replace("\\", "\\\\")
+            Option(x).map(_.replace("'", "''")
+              .replace("\\", "\\\\"))
           ) !
-        case x: Date => StringVariable(x.toString) + "::DATE"
-        case x: Timestamp => StringVariable(x.toString) + "::TIMESTAMP(3)"
-        case x: Int => IntVariable(x) !
-        case x: Long => LongVariable(x) !
-        case x: Short => ShortVariable(x) !
-        case x: Boolean => BooleanVariable(x) !
-        case x: Float => FloatVariable(x) !
-        case x: Double => DoubleVariable(x) !
-        case x: Byte => ByteVariable(x) !
-        case _ => ConstantString(value.toString) !
+        case x: Date => StringVariable(Option(x).map(_.toString)) + "::DATE"
+        case x: Timestamp => StringVariable(Option(x).map(_.toString)) + "::TIMESTAMP(3)"
+        case x: Int => IntVariable(Some(x)) !
+        case x: Long => LongVariable(Some(x)) !
+        case x: Short => ShortVariable(Some(x)) !
+        case x: Boolean => BooleanVariable(Some(x)) !
+        case x: Float => FloatVariable(Some(x)) !
+        case x: Double => DoubleVariable(Some(x)) !
+        case x: Byte => ByteVariable(Some(x)) !
+        case _ => ConstantStringVal(value) !
       }
     }
 
