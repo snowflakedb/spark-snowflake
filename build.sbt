@@ -16,7 +16,7 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.0.0"
+val sparkVersion = "2.3.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
 /*
@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.8.2"
+val sparkConnectorVersion = "2.8.3"
 
 lazy val ItTest = config("it") extend Test
 
@@ -41,10 +41,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.0",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    // Spark 3.0 only supports scala 2.12
-    crossScalaVersions := Seq("2.12.11"),
+    version := s"${sparkConnectorVersion}-spark_2.3",
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.11.12"),
+    crossScalaVersions := Seq("2.11.12"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -52,7 +51,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.9.9",
-      "net.snowflake" % "snowflake-jdbc" % "3.12.12",
+      "net.snowflake" % "snowflake-jdbc" % "3.12.15",
       "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
@@ -64,7 +63,10 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "tests",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "tests"
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "test-sources",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "test-sources",
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "test-sources"
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 

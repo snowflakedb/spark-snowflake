@@ -16,33 +16,26 @@
 
 package net.snowflake.spark.snowflake
 
-import java.io.{ByteArrayOutputStream, OutputStream}
 import java.net.Proxy.Type
 import java.net.{InetSocketAddress, Proxy}
 import java.security.InvalidKeyException
 import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
+import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
-import org.slf4j.LoggerFactory
-
-// Below is mock class to tesst LoggerWrapper
-private[snowflake] class MockTelemetryReporter(outputStream: OutputStream)
-  extends TelemetryReporter() {
-  private[snowflake] override def sendLogTelemetry(level: String, msg: String): Unit = {
-    // Write data to OutputStream
-    val data = s"$level: $msg"
-    outputStream.write(data.getBytes())
-    outputStream.flush()
-  }
-}
 
 /**
   * Unit tests for all kinds of some classes
   */
 class MiscSuite01 extends FunSuite with Matchers {
+
+  private val mapper = new ObjectMapper()
 
   test("test ProxyInfo with all fields") {
     val sfOptions = Map(
@@ -51,7 +44,7 @@ class MiscSuite01 extends FunSuite with Matchers {
       Parameters.PARAM_PROXY_PORT -> "1234",
       Parameters.PARAM_PROXY_USER -> "proxyUser",
       Parameters.PARAM_PROXY_PASSWORD -> "proxyPassword",
-      Parameters.PARAM_NON_PROXY_HOSTS -> "nonProxyHosts",
+      Parameters.PARAM_NON_PROXY_HOSTS -> "nonProxyHosts"
     )
     val param = Parameters.MergedParameters(sfOptions)
     val proxyInfo = param.proxyInfo.get
@@ -157,6 +150,23 @@ class MiscSuite01 extends FunSuite with Matchers {
     })
   }
 
+  test("test Parameters.removeQuoteForStageTableName()") {
+    // Explicitly set it as true
+    var sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "true")
+    var param = Parameters.MergedParameters(sfOptions)
+    assert(param.stagingTableNameRemoveQuotesOnly)
+
+    // Explicitly set it as false
+    sfOptions = Map(Parameters.PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY -> "false")
+    param = Parameters.MergedParameters(sfOptions)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
+
+    // It is false by default.
+    sfOptions = Map(Parameters.PARAM_USE_PROXY -> "false")
+    param = Parameters.MergedParameters(sfOptions)
+    assert(!param.stagingTableNameRemoveQuotesOnly)
+  }
+
   test("test SnowflakeConnectorUtils.handleS3Exception") {
     // positive test
     val ex1 = new Exception("test S3Exception",
@@ -179,101 +189,79 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
   }
 
-  test("test LoggerWrapper") {
-    // Test LoggerWrapper with MockTelemetryReporter
-    val targetOutputStream = new ByteArrayOutputStream()
-    var logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 1"))
-    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(targetOutputStream))
+  test("unit test for SnowflakeTelemetry.getClientConfig") {
+    // Configure some spark options for the spark session
+    SparkSession.builder
+      .master("local")
+      .appName("test config info sent")
+      .config("spark.driver.memory", "2G")
+      .config("spark.executor.memory", "888M")
+      .config("spark.driver.extraJavaOptions", s"-Duser.timezone=GMT")
+      .config("spark.executor.extraJavaOptions", s"-Duser.timezone=UTC")
+      .config("spark.sql.session.timeZone", "America/Los_Angeles")
+      .getOrCreate()
 
-    // log one message with TRACE; logger is created before setting Driver telemetry
-    val message = "Hello Logger!"
-    logger.trace(message)
-    var loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("TRACE") && loggedMessage.endsWith(message))
-
-    // log one message with DEBUG; logger is created after setting Driver telemetry
-    logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger 2"))
-    targetOutputStream.reset()
-    logger.debug(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("DEBUG") && loggedMessage.endsWith(message))
-
-    // log one message with INFO
-    targetOutputStream.reset()
-    logger.info(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("INFO") && loggedMessage.endsWith(message))
-
-    // log one message with warn(msg: String)
-    targetOutputStream.reset()
-    logger.warn(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("WARN") && loggedMessage.endsWith(message))
-
-    // log one message with warn(msg: String, t: Throwable)
-    targetOutputStream.reset()
-    logger.warn(message, new Exception("Test Exception String"))
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("WARN") &&
-      loggedMessage.contains("Test Exception String") &&
-      loggedMessage.contains(message))
-
-    // log one message with error(msg: String)
-    targetOutputStream.reset()
-    logger.error(message)
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("ERROR") &&
-      loggedMessage.contains(message))
-
-    // log one message with error(msg: String, t: Throwable)
-    targetOutputStream.reset()
-    logger.error(message, new Exception("Test Exception String"))
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("ERROR") &&
-      loggedMessage.contains("Test Exception String") &&
-      loggedMessage.contains(message))
-
-    // log one message with error(format: String, arg1: Any, arg2: Any)
-    targetOutputStream.reset()
-    logger.error("test format: {}. {}", "TEST_STRING_1", "TEST_STRING_2")
-    loggedMessage = new String(targetOutputStream.toByteArray)
-    assert(loggedMessage.startsWith("ERROR") &&
-      loggedMessage.contains("TEST_STRING_1") &&
-      loggedMessage.contains("TEST_STRING_2") &&
-      loggedMessage.contains("test format:"))
-
-    // reset TelemetryReporter
-    TelemetryReporter.resetDriverTelemetryReporter()
+    val metric = SnowflakeTelemetry.getClientConfig()
+    // Check one version
+    assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
+    // check one JVM option
+    assert(metric.get(TelemetryClientInfoFields.MAX_MEMORY_IN_MB).asLong() > 0)
+    // check Spark options
+    val sparkConfNode = metric.get(TelemetryClientInfoFields.SPARK_CONFIG)
+    assert(sparkConfNode.get("spark.master").asText().equals("local"))
+    assert(sparkConfNode.get("spark.app.name").asText().equals("test config info sent"))
+    assert(sparkConfNode.get("spark.driver.memory").asText().equals("2G"))
+    assert(sparkConfNode.get("spark.executor.memory").asText().equals("888M"))
+    assert(sparkConfNode.get("spark.driver.extraJavaOptions").asText().equals("-Duser.timezone=GMT"))
+    assert(sparkConfNode.get("spark.executor.extraJavaOptions").asText().equals("-Duser.timezone=UTC"))
+    assert(sparkConfNode.get("spark.sql.session.timeZone").asText().equals("America/Los_Angeles"))
   }
 
-  test("negative test LoggerWrapper") {
-    // set an invalid OutputStream, but no exception is raised.
-    val invalidOutputStream = new OutputStream {
-      override def write(b: Int): Unit = {
-        throw new Throwable("negative test invalid OutputStream")
-      }
-    }
-    TelemetryReporter.setDriverTelemetryReporter(new MockTelemetryReporter(invalidOutputStream))
-    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
-    // MockTelemetryReporter raise exception, but warn() doesn't
-    logger.warn("no exception is raised")
+  test("unit test for SnowflakeTelemetry.addThrowable()") {
+    val errorMessage = "SnowflakeTelemetry.addThrowable() test exception message"
+    val queryId = "019840d2-04c3-90c5-0000-0ca911a381c6"
+    val sqlState = "22018"
+    val errorCode = 100038
 
-    // reset TelemetryReporter
-    TelemetryReporter.resetDriverTelemetryReporter()
+    // Test a SnowflakeSQLException Exception
+    var metric: ObjectNode = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new SnowflakeSQLException(queryId, errorMessage, sqlState, errorCode))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class net.snowflake.client.jdbc.SnowflakeSQLException"))
+    var expectedMessage = s"SnowflakeSQLException: ErrorCode=$errorCode SQLState=$sqlState QueryId=$queryId"
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(expectedMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(expectedMessage))
+    assert(!metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
+
+    // Test an OutOfMemoryError
+    metric = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new OutOfMemoryError(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class java.lang.OutOfMemoryError"))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
+
+    // Test an Exception
+    metric = mapper.createObjectNode()
+    SnowflakeTelemetry.addThrowable(metric, new Exception(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
+      .equals("class java.lang.Exception"))
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(errorMessage))
+    assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
   }
 
-  test("driver logger set/get") {
-    val logger = new LoggerWithTelemetry(LoggerFactory.getLogger("TestLogger"))
-    // It's NoopTelemetry by default
-    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[NoopTelemetryReporter])
-
-    // Set driver telemetry report
-    TelemetryReporter.setDriverTelemetryReporter(new DriverTelemetryReporter)
-    assert(TelemetryReporter.getTelemetryReporter().isInstanceOf[DriverTelemetryReporter])
-
-    // reset TelemetryReporter
-    TelemetryReporter.resetDriverTelemetryReporter()
+  test("test Parameters invalid option values") {
+    var sfOptions = Map(
+      Parameters.PARAM_EXPECTED_PARTITION_SIZE_IN_MB -> "wrong_number",
+      Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "1"
+    )
+    var param = Parameters.MergedParameters(sfOptions)
+    assertThrows[IllegalArgumentException]({
+      param.expectedPartitionSize
+    })
+    assertThrows[IllegalArgumentException]({
+      param.uploadChunkSize
+    })
   }
 
 }
-

@@ -78,13 +78,13 @@ abstract class SnowflakeSQLImplicits(sfSession: SFTestWrapperSparkSession)
   implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
 
   /** @since 3.0.0 */
-  implicit def newLocalDateEncoder: Encoder[java.time.LocalDate] = Encoders.LOCALDATE
+  // implicit def newLocalDateEncoder: Encoder[java.time.LocalDate] = Encoders.LOCALDATE
 
   /** @since 2.2.0 */
   implicit def newTimeStampEncoder: Encoder[java.sql.Timestamp] = Encoders.TIMESTAMP
 
   /** @since 3.0.0 */
-  implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
+  // implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
   // Boxed primitives
 

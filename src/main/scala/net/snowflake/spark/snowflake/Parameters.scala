@@ -21,12 +21,15 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 import java.util.Properties
 
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  AWSCredentials,
+  BasicSessionCredentials
+}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
@@ -34,7 +37,7 @@ import org.slf4j.LoggerFactory
   */
 object Parameters {
 
-  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
   private[snowflake] val KNOWN_PARAMETERS =
     new scala.collection.mutable.HashSet[String]()
@@ -111,6 +114,16 @@ object Parameters {
   val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam(
     "jdbc_query_result_format"
   )
+  // When uploading large partition to AWS, AWS multipart upload API is used
+  // to save peak memory. This parameter is used to configure the chunk size.
+  val PARAM_UPLOAD_CHUNK_SIZE_IN_MB: String = knownParam(
+    "upload_chunk_size_in_mb"
+  )
+  val MIN_UPLOAD_CHUNK_SIZE_IN_BYTE = 5 * 1024 * 1024
+  // Internal option to disable to use AWS multipart upload API.
+  val PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD: String = knownParam(
+    "use_aws_multiple_parts_upload"
+  )
 
   // Proxy related info
   val PARAM_USE_PROXY: String = knownParam("use_proxy")
@@ -128,6 +141,11 @@ object Parameters {
   // the task should use exponential backoff for next retry.
   val PARAM_USE_EXPONENTIAL_BACKOFF: String = knownParam(
     "use_exponential_backoff"
+  )
+  // Internal option to remove (") in stage table name.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY: String = knownParam(
+    "internal_staging_table_name_remove_quotes_only"
   )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
@@ -173,7 +191,9 @@ object Parameters {
     PARAM_USE_PROXY -> "false",
     PARAM_EXPECTED_PARTITION_COUNT -> "1000",
     PARAM_MAX_RETRY_COUNT -> "10",
-    PARAM_USE_EXPONENTIAL_BACKOFF -> "off"
+    PARAM_USE_EXPONENTIAL_BACKOFF -> "off",
+    PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "8",
+    PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD -> "true"
   )
 
   /**
@@ -577,6 +597,9 @@ object Parameters {
     def useExponentialBackoff: Boolean = {
       isTrue(parameters.getOrElse(PARAM_USE_EXPONENTIAL_BACKOFF, "false"))
     }
+    def stagingTableNameRemoveQuotesOnly: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))
+    }
 
     /**
       * set column map
@@ -744,10 +767,29 @@ object Parameters {
       } catch {
         case _: Exception =>
           throw new IllegalArgumentException(
-            "Input expected partition size is invalid"
+            s"Input value for $PARAM_EXPECTED_PARTITION_SIZE_IN_MB is invalid"
           )
       }
     }
+
+    def uploadChunkSize: Int = {
+      try {
+        val chunkSize =
+          parameters(PARAM_UPLOAD_CHUNK_SIZE_IN_MB).toInt * 1024 * 1024
+        if (chunkSize < MIN_UPLOAD_CHUNK_SIZE_IN_BYTE) {
+          throw new Exception(s"valid part size must be from 5M to 5G")
+        }
+        chunkSize
+      } catch {
+        case _: Exception =>
+          throw new IllegalArgumentException(
+            s"Input value for $PARAM_UPLOAD_CHUNK_SIZE_IN_MB is invalid. " +
+            "It must be an integer value to be greater than or equal to 5."
+          )
+      }
+    }
+    def useAwsMultiplePartsUpload: Boolean =
+      isTrue(parameters(PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD))
 
     /**
       * Snowflake time output format

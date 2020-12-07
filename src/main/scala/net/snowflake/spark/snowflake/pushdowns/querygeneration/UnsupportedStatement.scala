@@ -4,7 +4,6 @@ import net.snowflake.spark.snowflake._
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   Expression,
-  PythonUDF,
   ScalaUDF
 }
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
@@ -42,9 +41,9 @@ private[querygeneration] object UnsupportedStatement {
 
   // Determine whether the unsupported operation is known or not.
   private def isKnownUnsupportedOperation(expr: Expression): Boolean = {
+    // PythonUDF is not supported on spark 2.3
     // The pushdown for UDF is known unsupported
-    (expr.isInstanceOf[PythonUDF]
-      || expr.isInstanceOf[ScalaUDF]
+    (expr.isInstanceOf[ScalaUDF]
       || expr.isInstanceOf[ScalaUDAF])
   }
 }

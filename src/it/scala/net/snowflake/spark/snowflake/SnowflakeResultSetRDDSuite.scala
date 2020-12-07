@@ -24,6 +24,8 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
+
+import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 // scalastyle:off println
@@ -891,18 +893,20 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       jdbcUpdate(s"drop table if exists $test_table_write")
 
-      // Some files are missed, so the spark job fails.
-      assertThrows[SnowflakeConnectorException] {
-        tmpDF.write
-          .format(SNOWFLAKE_SOURCE_NAME)
-          .options(thisConnectorOptionsNoTable)
-          .option("dbtable", test_table_write)
-          .mode(SaveMode.Overwrite)
-          .save()
+      try {
+        // Some files are missed, so the spark job fails.
+        assertThrows[SnowflakeConnectorException] {
+          tmpDF.write
+            .format(SNOWFLAKE_SOURCE_NAME)
+            .options(thisConnectorOptionsNoTable)
+            .option("dbtable", test_table_write)
+            .mode(SaveMode.Overwrite)
+            .save()
+        }
+      } finally {
+        // Disable the test flags
+        TestHook.disableTestHook()
       }
-
-      // Disable the test flags
-      TestHook.disableTestHook()
     }
   }
 
@@ -1348,7 +1352,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   // This is supported from Spark 3.0
-  test("test LIKE with ESCAPE pushdown 1") {
+  ignore("test LIKE with ESCAPE pushdown 1") {
     setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
@@ -1383,7 +1387,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   // Apache Spark engineers have fixed it. This test can be enabled in formal
   // Apache Spark release.
   // This is supported from Spark 3.0
-  test ("test LIKE with ESCAPE pushdown 2") {
+  ignore("test LIKE with ESCAPE pushdown 2") {
     setupTableForLike
     // Table values in test_table_like
     // ('John  Dddoe'), ('Joe   Doe'), ('John_down'),
@@ -1411,7 +1415,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   // This is supported from Spark 3.0
-  test("test NOT LIKE with ESCAPE pushdown") {
+  ignore("test NOT LIKE with ESCAPE pushdown") {
     setupTableForLike
     // Only run the test with Arrow format,
     // there is empty string in the result, it is read as NULL for COPY UNLOAD.
@@ -1494,9 +1498,252 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
-        .option("dbtable", "test_sink")
+        .option("dbtable", test_table_write)
         .mode(SaveMode.Overwrite)
         .save()
+      assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+    }
+  }
+
+  test("test upload with AWS multiple parts upload API") {
+    val partitionCount = 1
+    val rowCountPerPartition = 1024 * 50
+    // It is enough to run this test on AWS for Arrow
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+      val thisSparkSession = SparkSession
+        .builder()
+        .appName("Spark SQL basic example")
+        .config("spark.some.config.option", "some-value")
+        .config("spark.master", "local")
+        .getOrCreate()
+
+      def getRandomString(len: Int): String = {
+        Random.alphanumeric take len mkString ""
+      }
+
+      // Create RDD which generates 1 large partition
+      val testRDD: RDD[Row] = thisSparkSession.sparkContext
+        .parallelize(Seq[Int](), partitionCount)
+        .mapPartitions { _ => {
+          (1 to rowCountPerPartition).map { _ => {
+            // generate value for each row for large compressed size
+            val strValue = getRandomString(512)
+            Row(strValue, strValue, strValue, strValue)
+          }
+          }.iterator
+        }
+        }
+      val schema = StructType(
+        List(
+          StructField("str1", StringType),
+          StructField("str2", StringType),
+          StructField("str3", StringType),
+          StructField("str4", StringType)
+        )
+      )
+
+      // Convert RDD to DataFrame
+      val df = thisSparkSession.createDataFrame(testRDD, schema)
+
+      // Write to snowflake with upload multiple part API
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "5")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+      assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+
+      // Write to snowflake without upload multiple part API
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD, "off")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+      assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+
+      // Negative test to inject exception after upload 2nd block
+      TestHook.enableTestFlagOnly(TestHookFlag.TH_FAIL_UPLOAD_AWS_2ND_BLOCK)
+      assertThrows[Exception]({
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "5")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+      TestHook.disableTestHook()
+    }
+  }
+
+  ignore("perf test for AWS multiple parts upload API") {
+    val maxRunTime = 3
+    val partitionCount = 1
+    val rowCountPerPartition = 1024 * 300
+    // It is enough to run this test on AWS for Arrow
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+      val thisSparkSession = SparkSession
+        .builder()
+        .appName("Spark SQL basic example")
+        .config("spark.some.config.option", "some-value")
+        .config("spark.master", "local")
+        .getOrCreate()
+
+      def getRandomString(len: Int): String = {
+        Random.alphanumeric take len mkString ""
+      }
+
+      // Create RDD which generates 1 large partition
+      val testRDD: RDD[Row] = thisSparkSession.sparkContext
+        .parallelize(Seq[Int](), partitionCount)
+        .mapPartitions { _ => {
+          (1 to rowCountPerPartition).map { _ => {
+            // generate value for each row for large compressed size
+            val strValue = getRandomString(512)
+            Row(strValue, strValue, strValue, strValue)
+          }
+          }.iterator
+        }
+        }
+      val schema = StructType(
+        List(
+          StructField("str1", StringType),
+          StructField("str2", StringType),
+          StructField("str3", StringType),
+          StructField("str4", StringType)
+        )
+      )
+
+      // Convert RDD to DataFrame
+      val df = thisSparkSession.createDataFrame(testRDD, schema)
+
+      var perfResults = new ListBuffer[Long]()
+      var runId = 0
+      // Write to snowflake without upload multiple part API
+      // This is the baseline
+      while (runId < maxRunTime) {
+        jdbcUpdate(s"drop table if exists $test_table_write")
+
+        val start = System.currentTimeMillis()
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD, "off")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+        perfResults += (System.currentTimeMillis() - start)
+        runId += 1
+
+        assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+      }
+      val result_no_buf = perfResults.toArray
+
+      runId = 0
+      perfResults = new ListBuffer[Long]()
+      // Write to snowflake with upload multiple part API: block size 8m
+      while (runId < maxRunTime) {
+        jdbcUpdate(s"drop table if exists $test_table_write")
+
+        val start = System.currentTimeMillis()
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "8") // default
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+        perfResults += (System.currentTimeMillis() - start)
+        runId += 1
+
+        assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+      }
+      val result_8m_buf = perfResults.toArray
+
+      runId = 0
+      perfResults = new ListBuffer[Long]()
+      // Write to snowflake with upload multiple part API: block size 16M
+      while (runId < maxRunTime) {
+        jdbcUpdate(s"drop table if exists $test_table_write")
+
+        val start = System.currentTimeMillis()
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "16")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+        perfResults += (System.currentTimeMillis() - start)
+        runId += 1
+
+        assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+      }
+      val result_16m_buf = perfResults.toArray
+
+      runId = 0
+      perfResults = new ListBuffer[Long]()
+      // Write to snowflake with upload multiple part API: block size 32M
+      while (runId < maxRunTime) {
+        jdbcUpdate(s"drop table if exists $test_table_write")
+
+        val start = System.currentTimeMillis()
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "32")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+        perfResults += (System.currentTimeMillis() - start)
+        runId += 1
+
+        assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+      }
+      val result_32m_buf = perfResults.toArray
+
+      runId = 0
+      perfResults = new ListBuffer[Long]()
+      // Write to snowflake with upload multiple part API: block size 64M
+      while (runId < maxRunTime) {
+        jdbcUpdate(s"drop table if exists $test_table_write")
+
+        val start = System.currentTimeMillis()
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_UPLOAD_CHUNK_SIZE_IN_MB, "64")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+        perfResults += (System.currentTimeMillis() - start)
+        runId += 1
+
+        assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+      }
+      val result_64m_buf = perfResults.toArray
+
+      // output perf result
+      if (maxRunTime > 0) {
+        def getPerfReport(results: Array[Long]): String = {
+          val buf = new StringBuilder(s"Average ${Utils.getTimeString(results.sum / results.size)}: ")
+          results.foreach(x => buf.append(Utils.getTimeString(x)).append(", "))
+          buf.toString()
+        }
+
+        println(s"AWS_PERF: Run $maxRunTime times")
+        println(s"AWS_PERF: without new API : ${getPerfReport(result_no_buf)}")
+        println(s"AWS_PERF: with new API 8M : ${getPerfReport(result_8m_buf)}")
+        println(s"AWS_PERF: with new API 16M: ${getPerfReport(result_16m_buf)}")
+        println(s"AWS_PERF: with new API 32M: ${getPerfReport(result_32m_buf)}")
+        println(s"AWS_PERF: with new API 64M: ${getPerfReport(result_64m_buf)}")
+      }
     }
   }
 
@@ -1548,7 +1795,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("dbtable", "test_sink")
+      .option("dbtable", test_table_write)
       .mode(SaveMode.Overwrite)
       .save()
   }

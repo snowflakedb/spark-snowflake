@@ -1,4 +1,6 @@
 /*
+ * Copyright 2015-2020 Snowflake Computing
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,15 +17,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.snowflake
+package net.snowflake.spark.snowflake
 
-import org.apache.spark.annotation.InterfaceStability.Stable
-import org.apache.spark.sql.{DataFrame, Encoder}
+import org.slf4j.LoggerFactory
 
-@Stable
-case class SFDatasetHolder[T: Encoder](
-    private val data: Seq[T],
-    private val sfSession: SFTestWrapperSparkSession) {
-  def toDF(): DataFrame = sfSession.seqToDF(data)
-  def toDF(colNames: String*): DataFrame = sfSession.seqToDF(data, colNames: _*)
+object SparkConnectorContext {
+  private[snowflake] val logger = LoggerFactory.getLogger(getClass)
+
+  private var isConfigLogged = false
+
+  private val locker = new Object
+
+  // The system configuration is logged once.
+  private[snowflake] def recordConfig(): Unit = {
+    locker.synchronized {
+      if (!isConfigLogged) {
+        isConfigLogged = true
+        logger.info(s"Spark Connector system config: " +
+          s"${SnowflakeTelemetry.getClientConfig().toPrettyString}")
+      }
+    }
+  }
 }

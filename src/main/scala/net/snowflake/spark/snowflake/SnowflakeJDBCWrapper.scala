@@ -44,7 +44,7 @@ import scala.util.Try
   */
 private[snowflake] class JDBCWrapper {
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   private val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
@@ -199,9 +199,9 @@ private[snowflake] class JDBCWrapper {
            |""".stripMargin.filter(_ >= ' '))
     }
 
-    val snowflakeClientInfo = Utils.getClientInfoString()
-    log.info(snowflakeClientInfo)
-    System.setProperty("snowflake.client.info", snowflakeClientInfo)
+    // Important: Set "snowflake.client.info" is very important!
+    // For more details, refer to PROPERTY_NAME_OF_CONNECTOR_VERSION
+    System.setProperty("snowflake.client.info", Utils.getClientInfoString())
 
     val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
 
@@ -453,7 +453,7 @@ private[snowflake] class JDBCWrapper {
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
-  private val LOGGER = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass.getName))
+  private val LOGGER = LoggerFactory.getLogger(getClass.getName)
 
   implicit class DataBaseOperations(connection: Connection) {
 
@@ -666,7 +666,6 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         val result: ResultSet =
           (ConstantString("desc pipe") + Identifier(name))
             .execute(bindVariableEnabled)(connection)
-//        definition = result.getString("definition")
 
         result.next()
         definition = result.getString("definition")
@@ -689,7 +688,7 @@ private[snowflake] class SnowflakeSQLStatement(
   val list: List[StatementElement] = Nil
 ) {
 
-  private val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  private val log = LoggerFactory.getLogger(getClass)
 
   private var lastQueryID: String = _
 

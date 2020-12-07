@@ -2,8 +2,7 @@ package net.snowflake.spark.snowflake.test
 
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeSQLException}
 import net.snowflake.spark.snowflake.test.TestHookFlag.TestHookFlag
-import net.snowflake.spark.snowflake.LoggerWithTelemetry
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 object TestHookFlag extends Enumeration {
   type TestHookFlag = Value
@@ -21,10 +20,11 @@ object TestHookFlag extends Enumeration {
   val TH_ARROW_FAIL_READ_RESULT_SET = Value("TH_ARROW_FAIL_READ_RESULT_SET")
   val TH_FAIL_CREATE_DOWNLOAD_STREAM = Value("TH_FAIL_CREATE_DOWNLOAD_STREAM")
   val TH_FAIL_CREATE_UPLOAD_STREAM = Value("TH_FAIL_CREATE_UPLOAD_STREAM")
+  val TH_FAIL_UPLOAD_AWS_2ND_BLOCK = Value("TH_FAIL_UPLOAD_AWS_BLOCK")
 }
 
 object TestHook {
-  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass))
+  val log: Logger = LoggerFactory.getLogger(getClass)
 
   private val ENABLED_TEST_FLAGS =
     new scala.collection.mutable.HashSet[TestHookFlag]()

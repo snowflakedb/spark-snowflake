@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+import org.slf4j.{Logger, LoggerFactory}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{SnowflakeResultSetRDD, StageReader, SupportedFormat}
@@ -32,7 +33,6 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConversions
 
@@ -52,7 +52,7 @@ private[snowflake] case class SnowflakeRelation(
     "SnowflakeRelation"
   }
 
-  val log = new LoggerWithTelemetry(LoggerFactory.getLogger(getClass)) // Create a temporary stage
+  val log: Logger = LoggerFactory.getLogger(getClass) // Create a temporary stage
 
   override lazy val schema: StructType = {
     userSchema.getOrElse {
@@ -195,7 +195,6 @@ private[snowflake] case class SnowflakeRelation(
         SnowflakeTelemetry.sendQueryStatus(
           conn,
           TelemetryConstValues.OPERATION_READ,
-          statement.toString,
           statement.getLastQueryID(),
           TelemetryConstValues.STATUS_FAIL,
           System.currentTimeMillis() - startTime,
