@@ -1,8 +1,8 @@
 #!/bin/bash
 
 export TEST_COMPILE_SCALA_VERSION=2.11
-export TEST_SPARK_CONNECTOR_VERSION=2.8.2
-export TEST_SPARK_VERSION=3.0
+export TEST_SPARK_CONNECTOR_VERSION=2.8.3
+export TEST_SPARK_VERSION=2.3
 export TEST_CLUSTERTEST_VERSION=1.0
 
 # Test Revision ID; bump up this value whenever the test data in 
