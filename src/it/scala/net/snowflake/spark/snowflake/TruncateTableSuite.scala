@@ -384,7 +384,10 @@ class TruncateTableSuite extends IntegrationSuiteBase {
   // 2. Configure truncate_table = on and usestagingtable=off can workaround this issue.
   test("write table with different schema") {
     val accountName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
-    if (accountName == null || accountName.equals("aws")) {
+    val isAWS = accountName == null || accountName.equals("aws")
+    // It is necessary to check extraTestForCoverage because the released SC back-compatibility
+    // regress test for preprod3/QA is on AWS too, but the test schema is not set up there.
+    if (isAWS && extraTestForCoverage) {
       tableNames.foreach(table => {
         println(s"""Test table: "$table"""")
         jdbcUpdate(s"drop table if exists $table")
