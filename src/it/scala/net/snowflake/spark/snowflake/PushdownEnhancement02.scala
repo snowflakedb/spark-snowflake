@@ -322,40 +322,49 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   test("test pushdown WindowExpression: Rank without PARTITION BY") {
-    // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
-    if (!params.useCopyUnload) {
-      jdbcUpdate(s"create or replace table $test_table_rank" +
-        s"(state String, bushels_produced Integer)")
-      jdbcUpdate(s"insert into $test_table_rank values" +
-        s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
-        s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
+    jdbcUpdate(s"create or replace table $test_table_rank" +
+      s"(state String, bushels_produced Integer)")
+    jdbcUpdate(s"insert into $test_table_rank values" +
+      s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
+      s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
 
-      val tmpDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_rank)
-        .load()
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_rank)
+      .load()
 
-      tmpDF.printSchema()
-      tmpDF.createOrReplaceTempView("test_table_rank")
+    tmpDF.printSchema()
+    tmpDF.createOrReplaceTempView("test_table_rank")
 
-      val resultDF =
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " rank() over (order by bushels_produced desc) as total_rank" +
-            " from test_table_rank")
+    val resultDF =
+      sparkSession
+        .sql(s"select state, bushels_produced," +
+          " rank() over (order by bushels_produced desc) as total_rank" +
+          " from test_table_rank")
 
-      resultDF.show(10, false)
+    resultDF.show(10, false)
 
-      val expectedResult = Seq(
-        Row("Iowa", 130, 1),
-        Row("Iowa", 120, 2),
-        Row("Iowa", 120, 2),
-        Row("Kansas", 100, 4),
-        Row("Kansas", 100, 4),
-        Row("Kansas", 90, 6)
+    val expectedResult = Seq(
+      Row("Iowa", 130, 1),
+      Row("Iowa", 120, 2),
+      Row("Iowa", 120, 2),
+      Row("Kansas", 100, 4),
+      Row("Kansas", 100, 4),
+      Row("Kansas", 90, 6)
+    )
+
+    if (params.useCopyUnload) {
+      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
+      // The COPY UNLOAD supported function list can be found at
+      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
+      testPushdown(
+        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
+           |""".stripMargin,
+        resultDF,
+        expectedResult
       )
-
+    } else {
       testPushdown(
         s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
            |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
@@ -364,7 +373,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
            |    AS "SUBQUERY_1_COL_2"
            |FROM ( SELECT * FROM ( $test_table_rank )
            |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |
            |""".stripMargin,
         resultDF,
         expectedResult
@@ -373,40 +381,50 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   test("test pushdown WindowExpression: Rank with PARTITION BY") {
-    // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
-    if (!params.useCopyUnload) {
-      jdbcUpdate(s"create or replace table $test_table_rank" +
-        s"(state String, bushels_produced Integer)")
-      jdbcUpdate(s"insert into $test_table_rank values" +
-        s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
-        s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
+    jdbcUpdate(s"create or replace table $test_table_rank" +
+      s"(state String, bushels_produced Integer)")
+    jdbcUpdate(s"insert into $test_table_rank values" +
+      s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
+      s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
 
-      val tmpDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_rank)
-        .load()
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_rank)
+      .load()
 
-      tmpDF.printSchema()
-      tmpDF.createOrReplaceTempView("test_table_rank")
+    tmpDF.printSchema()
+    tmpDF.createOrReplaceTempView("test_table_rank")
 
-      val resultDF =
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " rank() over (partition by state " +
-            "   order by bushels_produced desc) as group_rank" +
-            " from test_table_rank")
+    val resultDF =
+      sparkSession
+        .sql(s"select state, bushels_produced," +
+          " rank() over (partition by state " +
+          "   order by bushels_produced desc) as group_rank" +
+          " from test_table_rank")
 
-      resultDF.show(10, false)
+    resultDF.show(10, false)
 
-      val expectedResult = Seq(
-        Row("Iowa", 130, 1),
-        Row("Iowa", 120, 2),
-        Row("Iowa", 120, 2),
-        Row("Kansas", 100, 1),
-        Row("Kansas", 100, 1),
-        Row("Kansas", 90, 3)
+    val expectedResult = Seq(
+      Row("Iowa", 130, 1),
+      Row("Iowa", 120, 2),
+      Row("Iowa", 120, 2),
+      Row("Kansas", 100, 1),
+      Row("Kansas", 100, 1),
+      Row("Kansas", 90, 3)
+    )
+
+    if (params.useCopyUnload) {
+      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
+      // The COPY UNLOAD supported function list can be found at
+      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
+      testPushdown(
+        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
+           |""".stripMargin,
+        resultDF,
+        expectedResult
       )
+    } else {
       testPushdown(
         s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
            |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
@@ -416,7 +434,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
            |    AS "SUBQUERY_1_COL_2"
            |FROM ( SELECT * FROM ( $test_table_rank )
            |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |
            |""".stripMargin,
         resultDF,
         expectedResult
@@ -425,40 +442,49 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   test("test pushdown WindowExpression: DenseRank without PARTITION BY") {
-    // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
-    if (!params.useCopyUnload) {
-      jdbcUpdate(s"create or replace table $test_table_rank" +
-        s"(state String, bushels_produced Integer)")
-      jdbcUpdate(s"insert into $test_table_rank values" +
-        s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
-        s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
+    jdbcUpdate(s"create or replace table $test_table_rank" +
+      s"(state String, bushels_produced Integer)")
+    jdbcUpdate(s"insert into $test_table_rank values" +
+      s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
+      s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
 
-      val tmpDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_rank)
-        .load()
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_rank)
+      .load()
 
-      tmpDF.printSchema()
-      tmpDF.createOrReplaceTempView("test_table_rank")
+    tmpDF.printSchema()
+    tmpDF.createOrReplaceTempView("test_table_rank")
 
-      val resultDF =
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " dense_rank() over (order by bushels_produced desc) as total_rank" +
-            " from test_table_rank")
+    val resultDF =
+      sparkSession
+        .sql(s"select state, bushels_produced," +
+          " dense_rank() over (order by bushels_produced desc) as total_rank" +
+          " from test_table_rank")
 
-      resultDF.show(10, false)
+    resultDF.show(10, false)
 
-      val expectedResult = Seq(
-        Row("Iowa", 130, 1),
-        Row("Iowa", 120, 2),
-        Row("Iowa", 120, 2),
-        Row("Kansas", 100, 3),
-        Row("Kansas", 100, 3),
-        Row("Kansas", 90, 4)
+    val expectedResult = Seq(
+      Row("Iowa", 130, 1),
+      Row("Iowa", 120, 2),
+      Row("Iowa", 120, 2),
+      Row("Kansas", 100, 3),
+      Row("Kansas", 100, 3),
+      Row("Kansas", 90, 4)
+    )
+
+    if (params.useCopyUnload) {
+      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
+      // The COPY UNLOAD supported function list can be found at
+      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
+      testPushdown(
+        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
+           |""".stripMargin,
+        resultDF,
+        expectedResult
       )
-
+    } else {
       testPushdown(
         s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
            |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
@@ -467,7 +493,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
            |    AS "SUBQUERY_1_COL_2"
            |FROM ( SELECT * FROM ( $test_table_rank )
            |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |
            |""".stripMargin,
         resultDF,
         expectedResult
@@ -476,40 +501,50 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   test("test pushdown WindowExpression: DenseRank with PARTITION BY") {
-    // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
-    if (!params.useCopyUnload) {
-      jdbcUpdate(s"create or replace table $test_table_rank" +
-        s"(state String, bushels_produced Integer)")
-      jdbcUpdate(s"insert into $test_table_rank values" +
-        s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
-        s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
+    jdbcUpdate(s"create or replace table $test_table_rank" +
+      s"(state String, bushels_produced Integer)")
+    jdbcUpdate(s"insert into $test_table_rank values" +
+      s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
+      s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
 
-      val tmpDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_rank)
-        .load()
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_rank)
+      .load()
 
-      tmpDF.printSchema()
-      tmpDF.createOrReplaceTempView("test_table_rank")
+    tmpDF.printSchema()
+    tmpDF.createOrReplaceTempView("test_table_rank")
 
-      val resultDF =
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " dense_rank() over (partition by state " +
-            "   order by bushels_produced desc) as group_rank" +
-            " from test_table_rank")
+    val resultDF =
+      sparkSession
+        .sql(s"select state, bushels_produced," +
+          " dense_rank() over (partition by state " +
+          "   order by bushels_produced desc) as group_rank" +
+          " from test_table_rank")
 
-      resultDF.show(10, false)
+    resultDF.show(10, false)
 
-      val expectedResult = Seq(
-        Row("Iowa", 130, 1),
-        Row("Iowa", 120, 2),
-        Row("Iowa", 120, 2),
-        Row("Kansas", 100, 1),
-        Row("Kansas", 100, 1),
-        Row("Kansas", 90, 2)
+    val expectedResult = Seq(
+      Row("Iowa", 130, 1),
+      Row("Iowa", 120, 2),
+      Row("Iowa", 120, 2),
+      Row("Kansas", 100, 1),
+      Row("Kansas", 100, 1),
+      Row("Kansas", 90, 2)
+    )
+
+    if (params.useCopyUnload) {
+      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
+      // The COPY UNLOAD supported function list can be found at
+      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
+      testPushdown(
+        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
+           |""".stripMargin,
+        resultDF,
+        expectedResult
       )
+    } else {
       testPushdown(
         s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
            |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
@@ -523,90 +558,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
            |""".stripMargin,
         resultDF,
         expectedResult
-      )
-    }
-  }
-
-  /*
-   * PercentRank can't be pushdown to snowflake, because Snowflake's percent_rank only
-   * support window frame type: RANGE. But, PercentRank in Spark only supports window
-   * frame type: ROWS. If a window frame is not specified, a default ROWS window frame
-   * is added by spark.
-   * https://databricks.com/blog/2015/07/15/introducing-window-functions-in-spark-sql.html
-   *
-   * Doc on Snowflake:
-   * PERCENT_RANK supports range-based cumulative window frames,
-   * but not other types of window frames.
-   * https://docs.snowflake.com/en/sql-reference/functions/percent_rank.html
-   */
-  ignore("test pushdown WindowExpression: PercentRank without PARTITION BY") {
-    // There is bug to execute rank()/dense_rank() with COPY UNLOAD: SNOW-177604
-    if (!params.useCopyUnload) {
-      jdbcUpdate(s"create or replace table $test_table_rank" +
-        s"(state String, bushels_produced Integer)")
-      jdbcUpdate(s"insert into $test_table_rank values" +
-        s"('Iowa', 130), ('Iowa', 120), ('Iowa', 120)," +
-        s"('Kansas', 100), ('Kansas', 100), ('Kansas', 90)")
-
-      val tmpDF = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_rank)
-        .load()
-
-      tmpDF.printSchema()
-      tmpDF.createOrReplaceTempView("test_table_rank")
-
-    /*
-     * With useRangeWindow = true, spark raises below exception.
-     *   Window Frame specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())
-     *   must match the required frame
-     *   specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())
-     *
-     * With useRangeWindow = false, snowflake raises below exception.
-     *   SQL compilation error: error line 1 at position 442
-     *   Cumulative window frame unsupported for function PERCENT_RANK
-     */
-      val useRangeWindow = false
-      val resultDF = if (useRangeWindow) {
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " percent_rank() over" +
-            "  ( order by bushels_produced desc" +
-            "    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)" +
-            "  as total_rank" +
-            " from test_table_rank")
-      } else {
-        sparkSession
-          .sql(s"select state, bushels_produced," +
-            " percent_rank() over" +
-            "  ( order by bushels_produced desc)" +
-            "  as total_rank" +
-            " from test_table_rank")
-      }
-      resultDF.show(10, false)
-
-      val expectedResult = Seq(
-        Row("Iowa", 130, 0.0),
-        Row("Iowa", 120, 0.2),
-        Row("Iowa", 120, 0.2),
-        Row("Kansas", 100, 0.6),
-        Row("Kansas", 100, 0.6),
-        Row("Kansas", 90, 1.0)
-      )
-
-      testPushdown(
-        s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
-           |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
-           |( PERCENT__RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
-           |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
-           |    AS "SUBQUERY_1_COL_2"
-           |FROM ( SELECT * FROM ( $test_table_rank )
-           |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |
-           |""".stripMargin,
-        resultDF,
-        expectedResult, false, true
       )
     }
   }
