@@ -219,7 +219,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
-  test("test pushdown functions date_add/date_sub/add_months") {
+  test("test pushdown functions date_add/date_sub") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
     jdbcUpdate(s"insert into $test_table_date values " +
@@ -233,8 +233,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val resultDF = tmpDF.select(
       col("d1"),
-      add_months(col("d1"),3).as("add_months"),
-      add_months(col("d1"),-3).as("sub_months"),
       date_add(col("d1"),4).as("date_add"),
       date_sub(col("d1"),4).as("date_sub")
     )
@@ -242,8 +240,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     val expectedResult = Seq(
       Row(
         Date.valueOf("2020-07-28"),
-        Date.valueOf("2020-10-28"),
-        Date.valueOf("2020-04-28"),
         Date.valueOf("2020-08-01"),
         Date.valueOf("2020-07-24"))
     )
@@ -251,10 +247,67 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     testPushdown(
       s"""SELECT (
          |  "SUBQUERY_0"."D1" ) AS "SUBQUERY_1_COL_0" ,
-         |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , 3 ) ) AS "SUBQUERY_1_COL_1" ,
-         |  ( ADD_MONTHS( "SUBQUERY_0"."D1" , -3 ) ) AS "SUBQUERY_1_COL_2" ,
-         |  ( DATEADD(day, 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_3" ,
-         |  ( DATEADD(day, (0 - ( 4 )), "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_4"
+         |  ( DATEADD(day, 4 , "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( DATEADD(day, (0 - ( 4 )), "SUBQUERY_0"."D1" ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM (
+         |    $test_table_date
+         |  ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
+  }
+
+  test("test pushdown functions date_add/date_sub on Feb last day in leap and non-leap year") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(leap_02_29 date, leap_03_01 date, non_leap_02_28 date, non_leap_03_01 date)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('2016-02-29', '2016-03-01', '2015-02-28', '2015-03-01')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.select(
+      col("leap_02_29"),
+      date_add(col("leap_02_29"),1),  // Add +1
+      date_sub(col("leap_02_29"),-1), // Sub -1
+      date_add(col("leap_03_01"),-1), // Add -1
+      date_sub(col("leap_03_01"),1),  // Sub +1
+      date_add(col("non_leap_02_28"),1),  // Add +1
+      date_sub(col("non_leap_02_28"),-1), // Sub -1
+      date_add(col("non_leap_03_01"),-1), // Add -1
+      date_sub(col("non_leap_03_01"),1)   // Sub +1
+    )
+
+    val expectedResult = Seq(
+      Row(
+        Date.valueOf("2016-02-29"),
+        Date.valueOf("2016-03-01"),
+        Date.valueOf("2016-03-01"),
+        Date.valueOf("2016-02-29"),
+        Date.valueOf("2016-02-29"),
+        Date.valueOf("2015-03-01"),
+        Date.valueOf("2015-03-01"),
+        Date.valueOf("2015-02-28"),
+        Date.valueOf("2015-02-28"))
+    )
+
+    testPushdown(
+      s"""SELECT
+         |  ( "SUBQUERY_0"."LEAP_02_29" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( DATEADD ( day, 1 , "SUBQUERY_0"."LEAP_02_29" ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( DATEADD ( day, (0 - ( -1 ) ), "SUBQUERY_0"."LEAP_02_29" ) ) AS "SUBQUERY_1_COL_2" ,
+         |  ( DATEADD ( day, -1 , "SUBQUERY_0"."LEAP_03_01" ) ) AS "SUBQUERY_1_COL_3" ,
+         |  ( DATEADD ( day, (0 - ( 1 ) ), "SUBQUERY_0"."LEAP_03_01" ) ) AS "SUBQUERY_1_COL_4" ,
+         |  ( DATEADD ( day, 1 , "SUBQUERY_0"."NON_LEAP_02_28" ) ) AS "SUBQUERY_1_COL_5" ,
+         |  ( DATEADD ( day, (0 - ( -1 ) ), "SUBQUERY_0"."NON_LEAP_02_28" ) ) AS "SUBQUERY_1_COL_6" ,
+         |  ( DATEADD ( day, -1 , "SUBQUERY_0"."NON_LEAP_03_01" ) ) AS "SUBQUERY_1_COL_7" ,
+         |  ( DATEADD ( day, (0 - ( 1 ) ), "SUBQUERY_0"."NON_LEAP_03_01" ) ) AS "SUBQUERY_1_COL_8"
          |FROM (
          |  SELECT * FROM (
          |    $test_table_date

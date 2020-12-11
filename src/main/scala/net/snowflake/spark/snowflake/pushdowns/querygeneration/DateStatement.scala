@@ -46,10 +46,12 @@ private[querygeneration] object DateStatement {
               convertStatement(startDate, fields)
           )
 
-      case AddMonths(startDate, days) =>
-        ConstantString(expr.prettyName.toUpperCase) +
-          blockStatement(convertStatement(startDate, fields) + "," +
-            convertStatement(days, fields))
+      // AddMonths can't be pushdown to snowflake because their functionality is different.
+      // For Snowflake and Spark 2.3/2.4, AddMonths() will preserve the end-of-month information.
+      // But, Spark 3.0, it doesn't. For example,
+      // On spark 2.3/2.4, "2015-02-28" +1 month -> "2015-03-31"
+      // On spark 3.0,     "2015-02-28" +1 month -> "2015-03-28"
+      case AddMonths(_, _) => null
 
       case _: Month | _: Quarter | _: Year |
            _: TruncDate | _: TruncTimestamp =>
