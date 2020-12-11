@@ -659,7 +659,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |)
          |""".stripMargin,
       result,
-      expectedResult
+      expectedResult,
+      testPushdownOff = false
     )
   }
 
