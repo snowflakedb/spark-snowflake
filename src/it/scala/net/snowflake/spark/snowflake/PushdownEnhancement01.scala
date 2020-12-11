@@ -105,7 +105,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |FROM ( SELECT * FROM ( $test_table_length ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" """.stripMargin,
       result,
-      expectedResult
+      expectedResult,
+      testPushdownOff = false
     )
   }
 
