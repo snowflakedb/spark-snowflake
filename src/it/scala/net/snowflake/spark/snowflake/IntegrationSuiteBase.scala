@@ -47,11 +47,11 @@ trait IntegrationSuiteBase
     * Verify that the pushdown was done by looking at the generated SQL,
     * and check the results are as expected
     */
-  def testPushdownBasic(reference: String,
-                        result: DataFrame,
-                        expectedAnswer: Seq[Row],
-                        bypass: Boolean = false,
-                        printSqlText: Boolean = false): Unit = {
+  private def testPushdownBasic(reference: String,
+                                result: DataFrame,
+                                expectedAnswer: Seq[Row],
+                                bypass: Boolean = false,
+                                printSqlText: Boolean = false): Unit = {
 
     // Verify the query issued is what we expect
     checkAnswer(result, expectedAnswer)
