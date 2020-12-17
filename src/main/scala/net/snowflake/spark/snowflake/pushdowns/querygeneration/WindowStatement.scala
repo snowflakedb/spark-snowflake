@@ -34,7 +34,7 @@ private[querygeneration] object WindowStatement {
     val fields = expAttr._2
 
     Option(expr match {
-      // Handle Window Expression. (It is moved from MiscStatement)
+      // Handle Window Expression.
       case WindowExpression(func, spec) =>
         func match {
           // These functions in Snowflake support a window frame.
@@ -59,7 +59,7 @@ private[querygeneration] object WindowStatement {
       case _: RowNumber | _: Rank | _: DenseRank =>
         ConstantString(expr.prettyName.toUpperCase) + "()"
 
-      // Until July 21 2020, PercentRank can't be pushdown to snowflake.
+      // PercentRank can't be pushdown to snowflake because:
       //   1. Snowflake's percent_rank only supports window frame type: RANGE.
       //   2. Spark's PercentRank only supports window frame type: ROWS
       case _: PercentRank => null
@@ -68,7 +68,7 @@ private[querygeneration] object WindowStatement {
     })
   }
 
-  // Handle window block. (It is moved from MiscStatement)
+  // Handle window block.
   private final def windowBlock(
                                  spec: WindowSpecDefinition,
                                  fields: Seq[Attribute],
