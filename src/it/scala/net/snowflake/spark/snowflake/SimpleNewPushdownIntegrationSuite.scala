@@ -439,7 +439,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
                     |AS "SUBQUERY_1_COL_1" FROM ( SELECT * FROM (
                     |$test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" )
                     |AS "SUBQUERY_0"
-      """.stripMargin, result, expResultSet, disablePushDown)
+      """.stripMargin, result, expResultSet, disablePushDown, testPushdownOff = false)
 
     // Set back.
     if (disablePushDown) {
