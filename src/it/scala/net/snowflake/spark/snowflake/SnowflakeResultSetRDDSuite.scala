@@ -1800,6 +1800,152 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .save()
   }
 
+  test("write with JSON and special characters in field name") {
+    val partitionCount = 1
+    val rowCountPerPartition = 2
+    // Create RDD which generates data with multiple partitions
+    val testRDD: RDD[Row] = sparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { i => {
+          Row(s"name_$i",
+            Map("a1" -> s"value_a$i", "a2" -> s"value_aa$i"),
+            Map("b1" -> s"value_b$i", "b2" -> s"value_bb$i"),
+            Map("c1" -> s"value_c$i", "c2" -> s"value_cc$i"),
+            Map("d1" -> s"value_d$i", "d2" -> s"value_dd$i"))
+        }
+        }.iterator
+      }
+      }
+
+    // Field names have special characters
+    val (colName0, colName1, colName2, colName3, colName4)
+    : (String, String, String, String, String) =
+      ("first_name", "some:for", "some;for", "some,for", "some for")
+    val schema = StructType(List(
+      StructField(colName0, StringType),
+      StructField(colName1, MapType(StringType, StringType)),
+      StructField(colName2, MapType(StringType, StringType)),
+      StructField(colName3, MapType(StringType, StringType)),
+      StructField(colName4, MapType(StringType, StringType))
+    ))
+
+    // Convert RDD to DataFrame
+    val df = sparkSession.createDataFrame(testRDD, schema)
+
+    // Write to snowflake
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // read data back to check correctness
+    val result = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select * from $test_table_write")
+      .load()
+
+    val expectedResult = Seq(
+      Row("name_1",
+        s"""{\n  "a1": "value_a1",\n  "a2": "value_aa1"\n}""",
+        s"""{\n  "b1": "value_b1",\n  "b2": "value_bb1"\n}""",
+        s"""{\n  "c1": "value_c1",\n  "c2": "value_cc1"\n}""",
+        s"""{\n  "d1": "value_d1",\n  "d2": "value_dd1"\n}"""),
+      Row("name_2",
+        s"""{\n  "a1": "value_a2",\n  "a2": "value_aa2"\n}""",
+        s"""{\n  "b1": "value_b2",\n  "b2": "value_bb2"\n}""",
+        s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
+        s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
+    )
+
+    // Check the result is expected.
+    testPushdown(
+      s"SELECT * FROM $test_table_write",
+      result,
+      expectedResult, bypass = true
+    )
+  }
+
+  test("write with JSON and without special characters in field name") {
+    val partitionCount = 1
+    val rowCountPerPartition = 2
+    // Create RDD which generates data with multiple partitions
+    val testRDD: RDD[Row] = sparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { i => {
+          Row(s"name_$i",
+            Map("a1" -> s"value_a$i", "a2" -> s"value_aa$i"),
+            Map("b1" -> s"value_b$i", "b2" -> s"value_bb$i"),
+            Map("c1" -> s"value_c$i", "c2" -> s"value_cc$i"),
+            Map("d1" -> s"value_d$i", "d2" -> s"value_dd$i"))
+        }
+        }.iterator
+      }
+      }
+
+    // Field names have special characters
+    val (colName0, colName1, colName2, colName3, colName4)
+    : (String, String, String, String, String) =
+      ("FIRST_name", "some_for1", "some_for2", "some_for3", "some_for4")
+    val schema = StructType(List(
+      StructField(colName0, StringType),
+      StructField(colName1, MapType(StringType, StringType)),
+      StructField(colName2, MapType(StringType, StringType)),
+      StructField(colName3, MapType(StringType, StringType)),
+      StructField(colName4, MapType(StringType, StringType))
+    ))
+
+    // Convert RDD to DataFrame
+    val df = sparkSession.createDataFrame(testRDD, schema)
+
+    val quotesFieldName = Seq("true", "false")
+    // If there is no special characters in field names,
+    // it works no matter PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME is true or false.
+    quotesFieldName.foreach( quote => {
+      val localSFOption = replaceOption(thisConnectorOptionsNoTable,
+        Parameters.PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, quote)
+      // Write to snowflake
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(localSFOption)
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // read data back to check correctness
+      val result = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(localSFOption)
+        .option("query", s"select * from $test_table_write")
+        .load()
+
+      val expectedResult = Seq(
+        Row("name_1",
+          s"""{\n  "a1": "value_a1",\n  "a2": "value_aa1"\n}""",
+          s"""{\n  "b1": "value_b1",\n  "b2": "value_bb1"\n}""",
+          s"""{\n  "c1": "value_c1",\n  "c2": "value_cc1"\n}""",
+          s"""{\n  "d1": "value_d1",\n  "d2": "value_dd1"\n}"""),
+        Row("name_2",
+          s"""{\n  "a1": "value_a2",\n  "a2": "value_aa2"\n}""",
+          s"""{\n  "b1": "value_b2",\n  "b2": "value_bb2"\n}""",
+          s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
+          s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
+      )
+
+      // Check the result is expected.
+      testPushdown(
+        s"SELECT * FROM $test_table_write",
+        result,
+        expectedResult, bypass = true
+      )
+    })
+  }
+
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
