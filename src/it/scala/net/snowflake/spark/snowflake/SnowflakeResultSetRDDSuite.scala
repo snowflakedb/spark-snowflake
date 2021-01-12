@@ -1848,7 +1848,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .option("query", s"select * from $test_table_write")
       .load()
 
-    val expectedResult = Seq(
+    val expectedResultArrow = Seq(
       Row("name_1",
         s"""{\n  "a1": "value_a1",\n  "a2": "value_aa1"\n}""",
         s"""{\n  "b1": "value_b1",\n  "b2": "value_bb1"\n}""",
@@ -1860,6 +1860,18 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
         s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
     )
+    val expectedResult = if (params.useCopyUnload) {
+      // The returned format is different for USE_COPY_UNLOAD=true.
+      def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+      expectedResultArrow.map(r => Row(
+        r.getString(0),
+        replaceSpace(r.getString(1)),
+        replaceSpace(r.getString(2)),
+        replaceSpace(r.getString(3)),
+        replaceSpace(r.getString(4))))
+    } else {
+      expectedResultArrow
+    }
 
     // Check the result is expected.
     testPushdown(
@@ -1923,7 +1935,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .option("query", s"select * from $test_table_write")
         .load()
 
-      val expectedResult = Seq(
+      val expectedResultArrow = Seq(
         Row("name_1",
           s"""{\n  "a1": "value_a1",\n  "a2": "value_aa1"\n}""",
           s"""{\n  "b1": "value_b1",\n  "b2": "value_bb1"\n}""",
@@ -1935,6 +1947,18 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
           s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
       )
+      val expectedResult = if (params.useCopyUnload) {
+        // The returned format is different for USE_COPY_UNLOAD=true.
+        def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+        expectedResultArrow.map(r => Row(
+          r.getString(0),
+          replaceSpace(r.getString(1)),
+          replaceSpace(r.getString(2)),
+          replaceSpace(r.getString(3)),
+          replaceSpace(r.getString(4))))
+      } else {
+        expectedResultArrow
+      }
 
       // Check the result is expected.
       testPushdown(
