@@ -147,6 +147,12 @@ object Parameters {
   val PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY: String = knownParam(
     "internal_staging_table_name_remove_quotes_only"
   )
+  // Internal option to quote the JSON field names when writing
+  // DataFrame to a snowflake table with JSON format.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME: String = knownParam(
+    "internal_quote_json_field_name"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -599,6 +605,9 @@ object Parameters {
     }
     def stagingTableNameRemoveQuotesOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))
+    }
+    def quoteJsonFieldName: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "true"))
     }
 
     /**

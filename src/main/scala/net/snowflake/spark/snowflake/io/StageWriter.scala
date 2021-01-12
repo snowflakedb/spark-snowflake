@@ -740,13 +740,25 @@ private[io] object StageWriter {
         case SupportedFormat.JSON =>
           if (list.isEmpty || list.get.isEmpty) {
             val names = schema.fields
-              .map(x => "parse_json($1):".concat(x.name))
+              .map(x => "parse_json($1):".concat(
+                if (params.quoteJsonFieldName) {
+                  "\"" + x.name + "\""
+                } else {
+                  x.name
+                }
+              ))
               .mkString(",")
             ConstantString("from (select") + names + from + "tmp)"
           } else {
             ConstantString("from (select") +
               list.get
-                .map(x => "parse_json($1):".concat(schema(x._1 - 1).name))
+                .map(x => "parse_json($1):".concat(
+                  if (params.quoteJsonFieldName) {
+                    "\"" + schema(x._1 - 1).name + "\""
+                  } else {
+                    schema(x._1 - 1).name
+                  }
+                ))
                 .mkString(", ") +
               from + "tmp)"
           }
