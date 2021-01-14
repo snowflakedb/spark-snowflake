@@ -56,7 +56,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     */
   override def createRelation(sqlContext: SQLContext,
                               parameters: Map[String, String]): BaseRelation = {
-    val params = Parameters.mergeParameters(parameters)
+    val params = Parameters.mergeParameters(parameters ++ SystemProperties.readParameters)
     // check spark version for push down
     if (params.autoPushdown) {
       SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
