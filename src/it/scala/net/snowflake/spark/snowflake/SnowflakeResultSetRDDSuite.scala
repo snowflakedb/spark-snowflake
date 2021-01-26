@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
@@ -1969,6 +1970,41 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     })
   }
 
+  test("repro & test SNOW-262080") {
+    setupLargeResultTable
+    val tmpDF = sparkSession
+      .sql("select * from test_table_large_result where int_c < 10")
+
+    try {
+      // create one same name table in schema:public
+      jdbcUpdate(s"create table public.$test_table_write(c1 int)")
+      // drop table in this schema
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Write with "internal_use_full_qualified_name" = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "false")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Write with "internal_use_full_qualified_name" = "true"
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+    } finally {
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      jdbcUpdate(s"drop table if exists public.$test_table_write")
+    }
+  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -1982,7 +2018,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_timestamp")
       jdbcUpdate(s"drop table if exists $test_table_large_result")
       jdbcUpdate(s"drop table if exists $test_table_inf")
-      jdbcUpdate(s"drop table if exists $test_table_write")
+      jdbcUpdate(s"drop table if exists public.$test_table_write")
       jdbcUpdate(s"drop table if exists $test_table_like")
     } finally {
       TestHook.disableTestHook()

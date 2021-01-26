@@ -362,9 +362,14 @@ private[io] object StageWriter {
       }
 
     try {
+      val tableName = if (params.useFullQualifiedName) {
+        Utils.getFullQualifiedName(table.toString, params)
+      } else {
+        table.toString
+      }
       // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite &&
-          DefaultJDBCWrapper.tableExists(conn, table.toString)) {
+          DefaultJDBCWrapper.tableExists(conn, tableName)) {
         if (params.useStagingTable) {
           if (params.truncateTable) {
             conn.createTableLike(tempTable.name, table.name)
@@ -377,7 +382,7 @@ private[io] object StageWriter {
       // CREATE TABLE IF NOT EXIST command. This command doesn't actually
       // create a table but it needs CREATE TABLE privilege.
       if (saveMode == SaveMode.Overwrite ||
-        !DefaultJDBCWrapper.tableExists(conn, table.toString))
+        !DefaultJDBCWrapper.tableExists(conn, tableName))
       {
         conn.createTable(targetTable.name, schema, params,
           overwrite = false, temporary = false)

@@ -712,4 +712,51 @@ object Utils {
         println(s"Fail to print result set: ${th.getMessage}")
     }
   }
+
+  private[snowflake] def splitNameAs2Parts(objectName: String): (String, String) = {
+    if (objectName.endsWith("\"")) {
+      val nameStartIndex = objectName.dropRight(1).lastIndexOf(".\"")
+      if (nameStartIndex > 0) {
+        (objectName.substring(0, nameStartIndex), objectName.substring(nameStartIndex + 1))
+      } else if (objectName.startsWith("\"")) {
+        ("", objectName)
+      } else {
+        throw new Exception(s"Meet invalidate objectName: '$objectName'")
+      }
+    } else {
+      if (objectName.indexOf(".") > -1) {
+        (objectName.substring(0, objectName.lastIndexOf(".")),
+          objectName.substring(objectName.lastIndexOf(".") + 1))
+      } else {
+        ("", objectName)
+      }
+    }
+  }
+
+  private[snowflake] def getFullQualifiedName(originalName: String, params: MergedParameters): String = {
+    val trimmedName = originalName.trim
+    val (databaseSchemaName, tableName) = splitNameAs2Parts(trimmedName)
+    val currentDatabase = Utils.ensureQuoted(params.sfDatabase)
+    val currentSchema = Utils.ensureQuoted(params.sfSchema)
+    if (databaseSchemaName.isEmpty) {
+      // The originalName format is <tableName>
+      s"$currentDatabase.$currentSchema.$tableName"
+    } else {
+      if (databaseSchemaName.endsWith(".")) {
+        // The originalName format is <database>..<tableName>
+        val databaseName = databaseSchemaName.dropRight(1)
+        s"$databaseName.$currentSchema.$tableName"
+      } else {
+        val (databaseName, schemaName) = splitNameAs2Parts(databaseSchemaName)
+        if (databaseName.isEmpty) {
+          // The originalName format is <schema>.<tableName>
+          s"$currentDatabase.$schemaName.$tableName"
+        } else {
+          // The originalName format is <database>.<schema>.<tableName>
+          s"$databaseName.$schemaName.$tableName"
+        }
+      }
+    }
+  }
+
 }

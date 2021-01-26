@@ -127,4 +127,71 @@ class UtilsSuite extends FunSuite with Matchers {
     assert(Utils.getLastPutCommand == null)
     assert(Utils.getLastGetCommand == null)
   }
+
+  test("Utils.getFullQualifiedName()") {
+    case class TestItem(sfDatabase: String,
+                        sfSchema: String,
+                        tableName: String,
+                        fullQualifiedName: String)
+    val TestItems = Seq(
+      // un-quoted database & schema, un-quoted table name
+      TestItem("test_db", "test_schema", "table1", s""""TEST_DB"."TEST_SCHEMA".table1"""),
+      TestItem("test_db", "test_schema", "schema1.table1", s""""TEST_DB".schema1.table1"""),
+      TestItem("test_db", "test_schema", "database1.schema1.table1", s"""database1.schema1.table1"""),
+      TestItem("test_db", "test_schema", "database1..table1", s"""database1."TEST_SCHEMA".table1"""),
+      // quoted database & schema, un-quoted table name
+      TestItem("test_db", "test_schema", "\"schema1 !\".table1", s""""TEST_DB"."schema1 !".table1"""),
+      TestItem("test_db", "test_schema", "\"database1 .\".\"schema1 !\".table1", s""""database1 ."."schema1 !".table1"""),
+      TestItem("test_db", "test_schema", "\"database1 .\"..table1", s""""database1 ."."TEST_SCHEMA".table1"""),
+      // un-quoted database & schema, quoted table name
+      TestItem("test_db", "test_schema", "\"table1\"", s""""TEST_DB"."TEST_SCHEMA"."table1""""),
+      TestItem("test_db", "test_schema", "schema1.\"table1\"", s""""TEST_DB".schema1."table1""""),
+      TestItem("test_db", "test_schema", "database1.schema1.\"table1\"", s"""database1.schema1."table1""""),
+      TestItem("test_db", "test_schema", "database1..\"table1\"", s"""database1."TEST_SCHEMA"."table1""""),
+      // quoted database & schema, quoted table name
+      TestItem("test_db", "test_schema", "\"schema1 !\".\"table1\"", s""""TEST_DB"."schema1 !"."table1""""),
+      TestItem("test_db", "test_schema", "\"database1 .\".\"schema1 !\".\"table1\"", s""""database1 ."."schema1 !"."table1""""),
+      TestItem("test_db", "test_schema", "\"database1 .\"..\"table1\"", s""""database1 ."."TEST_SCHEMA"."table1""""),
+      // sfDatabase and sfSchema are quoted.
+      TestItem("\"test_db\"", "\"test_schema\"", "table1", s""""test_db"."test_schema".table1"""),
+      TestItem("test db", "test ! schema", "table1", s""""test db"."test ! schema".table1"""),
+    )
+
+    TestItems.foreach(item => {
+      val sfOptions = Map(
+        Parameters.PARAM_SF_DATABASE -> item.sfDatabase,
+        Parameters.PARAM_SF_SCHEMA -> item.sfSchema
+      )
+      val param = Parameters.MergedParameters(sfOptions)
+      // println(s"${item.sfDatabase}, ${item.sfSchema}, ${item.tableName} -> ${item.fullQualifiedName}")
+      // println(Utils.getFullQualifiedName(item.tableName, param))
+      assert(Utils.getFullQualifiedName(item.tableName, param)
+        .equals(item.fullQualifiedName))
+    })
+  }
+
+  test("Utils.splitNameAs2Parts") {
+    var v1 = ("", "")
+    v1 = Utils.splitNameAs2Parts("name1")
+    assert(v1._1.isEmpty && v1._2.equals("name1"))
+    v1 = Utils.splitNameAs2Parts("schema1.name1")
+    assert(v1._1.equals("schema1") && v1._2.equals("name1"))
+    v1 = Utils.splitNameAs2Parts("\"schema1\".name1")
+    assert(v1._1.equals("\"schema1\"") && v1._2.equals("name1"))
+    v1 = Utils.splitNameAs2Parts("database1.schema1.name1")
+    assert(v1._1.equals("database1.schema1") && v1._2.equals("name1"))
+
+    v1 = Utils.splitNameAs2Parts("\"name1\"")
+    assert(v1._1.isEmpty && v1._2.equals("\"name1\""))
+    v1 = Utils.splitNameAs2Parts("schema1.\"name1\"")
+    assert(v1._1.equals("schema1") && v1._2.equals("\"name1\""))
+    v1 = Utils.splitNameAs2Parts("\"schema1\".\"name1\"")
+    assert(v1._1.equals("\"schema1\"") && v1._2.equals("\"name1\""))
+    v1 = Utils.splitNameAs2Parts("\"database1\".\"schema1\".\"name1\"")
+    assert(v1._1.equals("\"database1\".\"schema1\"") && v1._2.equals("\"name1\""))
+
+    // negative test
+    assertThrows[Exception](Utils.splitNameAs2Parts("name1\""))
+  }
+
 }

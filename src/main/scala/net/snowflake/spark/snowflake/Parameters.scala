@@ -153,6 +153,12 @@ object Parameters {
   val PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME: String = knownParam(
     "internal_quote_json_field_name"
   )
+  // Internal option to use full qualified table name
+  // when detecting the table existence.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME: String = knownParam(
+    "internal_use_full_qualified_name"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -608,6 +614,9 @@ object Parameters {
     }
     def quoteJsonFieldName: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "true"))
+    }
+    def useFullQualifiedName: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "true"))
     }
 
     /**
