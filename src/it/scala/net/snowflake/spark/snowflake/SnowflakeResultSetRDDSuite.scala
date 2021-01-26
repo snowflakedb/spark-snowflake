@@ -1981,33 +1981,33 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       // drop table in this schema
       jdbcUpdate(s"drop table if exists $test_table_write")
 
-      // Staging table with "internal_use_full_qualified_name" = "false"
+      // Staging table with "internal_use_fully_qualified_name" = "false"
       assertThrows[Exception]({
         tmpDF.write
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(thisConnectorOptionsNoTable)
-          .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "false")
+          .option(Parameters.PARAM_INTERNAL_USE_FULLY_QUALIFIED_NAME, "false")
           .option("dbtable", test_table_write)
           .mode(SaveMode.Overwrite)
           .save()
       })
 
-      // Staging table with "internal_use_full_qualified_name" = "true"
+      // Staging table with "internal_use_fully_qualified_name" = "true"
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
-        .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "true")
+        .option(Parameters.PARAM_INTERNAL_USE_FULLY_QUALIFIED_NAME, "true")
         .option("dbtable", test_table_write)
         .mode(SaveMode.Overwrite)
         .save()
       jdbcUpdate(s"drop table if exists $test_table_write")
 
-      // Without staging table with "internal_use_full_qualified_name" = "false"
+      // Without staging table with "internal_use_fully_qualified_name" = "false"
       assertThrows[Exception]({
         tmpDF.write
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(thisConnectorOptionsNoTable)
-          .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "false")
+          .option(Parameters.PARAM_INTERNAL_USE_FULLY_QUALIFIED_NAME, "false")
           .option("dbtable", test_table_write)
           .option("usestagingtable", "false")
           .option("truncate_table", "true")
@@ -2015,11 +2015,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           .save()
       })
 
-      // Without staging table with "internal_use_full_qualified_name" = "true"
+      // Without staging table with "internal_use_fully_qualified_name" = "true"
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
-        .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "true")
+        .option(Parameters.PARAM_INTERNAL_USE_FULLY_QUALIFIED_NAME, "true")
         .option("dbtable", test_table_write)
         .option("usestagingtable", "false")
         .option("truncate_table", "true")

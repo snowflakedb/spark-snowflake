@@ -128,11 +128,11 @@ class UtilsSuite extends FunSuite with Matchers {
     assert(Utils.getLastGetCommand == null)
   }
 
-  test("Utils.getFullQualifiedName()") {
+  test("Utils.getFullyQualifiedName()") {
     case class TestItem(sfDatabase: String,
                         sfSchema: String,
                         tableName: String,
-                        fullQualifiedName: String)
+                        fullyQualifiedName: String)
     val TestItems = Seq(
       // un-quoted database & schema, un-quoted table name
       TestItem("test_db", "test_schema", "table1", s""""TEST_DB"."TEST_SCHEMA".table1"""),
@@ -163,32 +163,32 @@ class UtilsSuite extends FunSuite with Matchers {
         Parameters.PARAM_SF_SCHEMA -> item.sfSchema
       )
       val param = Parameters.MergedParameters(sfOptions)
-      // println(s"${item.sfDatabase}, ${item.sfSchema}, ${item.tableName} -> ${item.fullQualifiedName}")
-      // println(Utils.getFullQualifiedName(item.tableName, param))
-      assert(Utils.getFullQualifiedName(item.tableName, param)
-        .equals(item.fullQualifiedName))
+      // println(s"${item.sfDatabase}, ${item.sfSchema}, ${item.tableName} -> ${item.fullyQualifiedName}")
+      // println(Utils.getFullyQualifiedName(item.tableName, param))
+      assert(Utils.getFullyQualifiedName(item.tableName, param)
+        .equals(item.fullyQualifiedName))
     })
   }
 
   test("Utils.splitNameAs2Parts") {
-    var v1 = ("", "")
+    var v1 = (Option(""), "")
     v1 = Utils.splitNameAs2Parts("name1")
     assert(v1._1.isEmpty && v1._2.equals("name1"))
     v1 = Utils.splitNameAs2Parts("schema1.name1")
-    assert(v1._1.equals("schema1") && v1._2.equals("name1"))
+    assert(v1._1.get.equals("schema1") && v1._2.equals("name1"))
     v1 = Utils.splitNameAs2Parts("\"schema1\".name1")
-    assert(v1._1.equals("\"schema1\"") && v1._2.equals("name1"))
+    assert(v1._1.get.equals("\"schema1\"") && v1._2.equals("name1"))
     v1 = Utils.splitNameAs2Parts("database1.schema1.name1")
-    assert(v1._1.equals("database1.schema1") && v1._2.equals("name1"))
+    assert(v1._1.get.equals("database1.schema1") && v1._2.equals("name1"))
 
     v1 = Utils.splitNameAs2Parts("\"name1\"")
     assert(v1._1.isEmpty && v1._2.equals("\"name1\""))
     v1 = Utils.splitNameAs2Parts("schema1.\"name1\"")
-    assert(v1._1.equals("schema1") && v1._2.equals("\"name1\""))
+    assert(v1._1.get.equals("schema1") && v1._2.equals("\"name1\""))
     v1 = Utils.splitNameAs2Parts("\"schema1\".\"name1\"")
-    assert(v1._1.equals("\"schema1\"") && v1._2.equals("\"name1\""))
+    assert(v1._1.get.equals("\"schema1\"") && v1._2.equals("\"name1\""))
     v1 = Utils.splitNameAs2Parts("\"database1\".\"schema1\".\"name1\"")
-    assert(v1._1.equals("\"database1\".\"schema1\"") && v1._2.equals("\"name1\""))
+    assert(v1._1.get.equals("\"database1\".\"schema1\"") && v1._2.equals("\"name1\""))
 
     // negative test
     assertThrows[Exception](Utils.splitNameAs2Parts("name1\""))
