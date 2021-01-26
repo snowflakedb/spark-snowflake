@@ -2044,6 +2044,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_timestamp")
       jdbcUpdate(s"drop table if exists $test_table_large_result")
       jdbcUpdate(s"drop table if exists $test_table_inf")
+      jdbcUpdate(s"drop table if exists $test_table_write")
       jdbcUpdate(s"drop table if exists public.$test_table_write")
       jdbcUpdate(s"drop table if exists $test_table_like")
     } finally {
