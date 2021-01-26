@@ -1981,7 +1981,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       // drop table in this schema
       jdbcUpdate(s"drop table if exists $test_table_write")
 
-      // Write with "internal_use_full_qualified_name" = "false"
+      // Staging table with "internal_use_full_qualified_name" = "false"
       assertThrows[Exception]({
         tmpDF.write
           .format(SNOWFLAKE_SOURCE_NAME)
@@ -1992,7 +1992,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           .save()
       })
 
-      // Write with "internal_use_full_qualified_name" = "true"
+      // Staging table with "internal_use_full_qualified_name" = "true"
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
@@ -2000,6 +2000,32 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .option("dbtable", test_table_write)
         .mode(SaveMode.Overwrite)
         .save()
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Without staging table with "internal_use_full_qualified_name" = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "false")
+          .option("dbtable", test_table_write)
+          .option("usestagingtable", "false")
+          .option("truncate_table", "true")
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Without staging table with "internal_use_full_qualified_name" = "true"
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_USE_FULL_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .option("usestagingtable", "false")
+        .option("truncate_table", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+      jdbcUpdate(s"drop table if exists $test_table_write")
     } finally {
       jdbcUpdate(s"drop table if exists $test_table_write")
       jdbcUpdate(s"drop table if exists public.$test_table_write")
