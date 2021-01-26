@@ -277,25 +277,24 @@ private[io] object StageWriter {
                                               tempStage: String,
                                               format: SupportedFormat,
                                               fileUploadResults: List[FileUploadResult]): Unit = {
-    val tableName: String = params.table.get.name
+    val tableName = if (params.useFullyQualifiedName) {
+      Utils.getFullyQualifiedName(params.table.get.name, params)
+    } else {
+      params.table.get.name
+    }
     val writeTableState = new WriteTableState(conn)
 
     try {
-      val fullyQualifiedName = if (params.useFullyQualifiedName) {
-        Utils.getFullyQualifiedName(tableName, params)
-      } else {
-        tableName
-      }
       // Drop table only if necessary.
       if (saveMode == SaveMode.Overwrite &&
-        DefaultJDBCWrapper.tableExists(conn, fullyQualifiedName) &&
+        DefaultJDBCWrapper.tableExists(conn, tableName) &&
         !params.truncateTable )
       {
         writeTableState.dropTable(tableName)
       }
 
       // If create table if table doesn't exist
-      if (!DefaultJDBCWrapper.tableExists(conn, fullyQualifiedName))
+      if (!DefaultJDBCWrapper.tableExists(conn, tableName))
       {
         writeTableState.createTable(tableName, schema, params)
       } else if (params.truncateTable && saveMode == SaveMode.Overwrite) {
@@ -367,14 +366,14 @@ private[io] object StageWriter {
       }
 
     try {
-      val fullyQualifiedName = if (params.useFullyQualifiedName) {
-        Utils.getFullyQualifiedName(table.toString, params)
+      val tableName = if (params.useFullyQualifiedName) {
+        Utils.getFullyQualifiedName(params.table.get.name, params)
       } else {
-        table.toString
+        params.table.get.name
       }
       // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite &&
-          DefaultJDBCWrapper.tableExists(conn, fullyQualifiedName)) {
+          DefaultJDBCWrapper.tableExists(conn, tableName)) {
         if (params.useStagingTable) {
           if (params.truncateTable) {
             conn.createTableLike(tempTable.name, table.name)
@@ -387,7 +386,7 @@ private[io] object StageWriter {
       // CREATE TABLE IF NOT EXIST command. This command doesn't actually
       // create a table but it needs CREATE TABLE privilege.
       if (saveMode == SaveMode.Overwrite ||
-        !DefaultJDBCWrapper.tableExists(conn, fullyQualifiedName))
+        !DefaultJDBCWrapper.tableExists(conn, tableName))
       {
         conn.createTable(targetTable.name, schema, params,
           overwrite = false, temporary = false)
@@ -422,7 +421,7 @@ private[io] object StageWriter {
       )
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (DefaultJDBCWrapper.tableExists(conn, fullyQualifiedName)) {
+        if (DefaultJDBCWrapper.tableExists(conn, tableName)) {
           conn.swapTable(table.name, tempTable.name)
           conn.dropTable(tempTable.name)
         } else {
