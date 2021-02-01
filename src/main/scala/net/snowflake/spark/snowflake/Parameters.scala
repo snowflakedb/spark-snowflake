@@ -156,8 +156,8 @@ object Parameters {
   // Internal option to check table existence in current schema only.
   // By default, if customer specifies an unqualified table name
   // (without schema or database name), snowflake checks table existence
-  // through a search path. For example, it checks current schema and PUBLIC
-  // schema.
+  // through a search path. For example, it checks whether it exists
+  // in current schema first; if not, it will check PUBLIC schema.
   // This option may be removed without any notice in any time.
   val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY: String = knownParam(
     "internal_check_table_existence_in_current_schema_only"
