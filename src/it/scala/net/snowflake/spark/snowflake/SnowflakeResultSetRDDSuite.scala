@@ -1969,6 +1969,86 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     })
   }
 
+  test("repro & test SNOW-262080") {
+    setupLargeResultTable
+    val tmpDF = sparkSession
+      .sql("select * from test_table_large_result where int_c < 10")
+
+    try {
+      // create one same name table in schema:public
+      jdbcUpdate(s"create table public.$test_table_write(c1 int)")
+      // drop table in this schema
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Staging table with check_table_existence_in_current_schema = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "false")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Staging table with check_table_existence_in_current_schema = "true", table doesn't exist
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Staging table with check_table_existence_in_current_schema = "true", table exists
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      // Without staging table with check_table_existence_in_current_schema = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "false")
+          .option("dbtable", test_table_write)
+          .option("usestagingtable", "false")
+          .option("truncate_table", "true")
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Without staging table with check_table_existence_in_current_schema = "true", table doesn't exist
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true")
+        .option("dbtable", test_table_write)
+        .option("usestagingtable", "false")
+        .option("truncate_table", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Without staging table with check_table_existence_in_current_schema = "true", table exists
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true")
+        .option("dbtable", test_table_write)
+        .option("usestagingtable", "false")
+        .option("truncate_table", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+    } finally {
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      jdbcUpdate(s"drop table if exists public.$test_table_write")
+    }
+  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()

@@ -287,9 +287,29 @@ private[snowflake] class JDBCWrapper {
 
   /**
     * Returns true if the table already exists in the JDBC database.
+    * By default, if table is an unqualified table name (without schema or database name),
+    * snowflake checks table existence through a search path. For example,
+    * it checks current schema and PUBLIC schema. If the caller intends to check
+    * the table existence in current schema only. The caller needs to alter session to set
+    * search_path as $current explicitly, for example,
+    * conn.createStatement().execute("alter session set search_path='$current'")
+    * or use alternative function: tableExistsInCurrentSchema().
     */
   def tableExists(conn: Connection, table: String): Boolean =
     conn.tableExists(table)
+
+  /**
+    * Returns true if the table already exists in the current schema.
+    */
+  private[snowflake] def tableExistsInCurrentSchema(params: MergedParameters, table: String): Boolean = {
+    val conn = getConnector(params)
+    try {
+      conn.createStatement().execute("alter session set search_path='$current'")
+      conn.tableExists(table)
+    } finally {
+      conn.close()
+    }
+  }
 
   // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
   // SQL database systems, considering "table" could also include the database name.
