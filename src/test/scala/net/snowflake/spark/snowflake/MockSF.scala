@@ -112,7 +112,7 @@ class MockSF(params: Map[String, String],
     override def answer(invocation: InvocationOnMock): Boolean = {
       existingTablesAndSchemas.contains(invocation.getArguments()(1).asInstanceOf[String])
     }
-  }).when(jdbcWrapper).tableExists(any[Connection], anyString())
+  }).when(jdbcWrapper).tableExists(any[MergedParameters], anyString())
 
   doAnswer(new Answer[StructType] {
     override def answer(invocation: InvocationOnMock): StructType = {

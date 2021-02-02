@@ -131,7 +131,7 @@ trait IntegrationSuiteBase
         .option("dbtable", tableName)
         .mode(saveMode)
         .save()
-      assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+      assert(DefaultJDBCWrapper.tableExists(params, tableName))
       val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
