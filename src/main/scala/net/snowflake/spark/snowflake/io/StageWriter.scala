@@ -281,16 +281,15 @@ private[io] object StageWriter {
     val writeTableState = new WriteTableState(conn)
 
     try {
+      val tableExists = DefaultJDBCWrapper.tableExists(params, tableName)
       // Drop table only if necessary.
-      if (saveMode == SaveMode.Overwrite &&
-        DefaultJDBCWrapper.tableExists(conn, tableName) &&
-        !params.truncateTable )
+      if (saveMode == SaveMode.Overwrite && tableExists && !params.truncateTable)
       {
         writeTableState.dropTable(tableName)
       }
 
       // If create table if table doesn't exist
-      if (!DefaultJDBCWrapper.tableExists(conn, tableName))
+      if (!tableExists)
       {
         writeTableState.createTable(tableName, schema, params)
       } else if (params.truncateTable && saveMode == SaveMode.Overwrite) {
@@ -362,9 +361,9 @@ private[io] object StageWriter {
       }
 
     try {
+      val tableExists = DefaultJDBCWrapper.tableExists(params, table.toString)
       // purge tables when overwriting
-      if (saveMode == SaveMode.Overwrite &&
-          DefaultJDBCWrapper.tableExists(conn, table.toString)) {
+      if (saveMode == SaveMode.Overwrite && tableExists) {
         if (params.useStagingTable) {
           if (params.truncateTable) {
             conn.createTableLike(tempTable.name, table.name)
@@ -376,8 +375,7 @@ private[io] object StageWriter {
       // If the SaveMode is 'Append' and the target exists, skip
       // CREATE TABLE IF NOT EXIST command. This command doesn't actually
       // create a table but it needs CREATE TABLE privilege.
-      if (saveMode == SaveMode.Overwrite ||
-        !DefaultJDBCWrapper.tableExists(conn, table.toString))
+      if (saveMode == SaveMode.Overwrite || !tableExists)
       {
         conn.createTable(targetTable.name, schema, params,
           overwrite = false, temporary = false)
@@ -412,7 +410,7 @@ private[io] object StageWriter {
       )
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (conn.tableExists(table.toString)) {
+        if (tableExists) {
           conn.swapTable(table.name, tempTable.name)
           conn.dropTable(tempTable.name)
         } else {

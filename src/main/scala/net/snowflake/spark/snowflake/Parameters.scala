@@ -153,6 +153,15 @@ object Parameters {
   val PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME: String = knownParam(
     "internal_quote_json_field_name"
   )
+  // Internal option to check table existence in current schema only.
+  // By default, if customer specifies an unqualified table name
+  // (without schema or database name), snowflake checks table existence
+  // through a search path. For example, it checks whether it exists
+  // in current schema first; if not, it will check PUBLIC schema.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY: String = knownParam(
+    "internal_check_table_existence_in_current_schema_only"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -608,6 +617,9 @@ object Parameters {
     }
     def quoteJsonFieldName: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "true"))
+    }
+    def checkTableExistenceInCurrentSchemaOnly: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
     }
 
     /**
