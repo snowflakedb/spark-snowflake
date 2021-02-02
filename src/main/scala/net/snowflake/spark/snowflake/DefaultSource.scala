@@ -109,17 +109,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
       )
     }
 
-    def tableExists: Boolean =
-      if (params.checkTableExistenceInCurrentSchemaOnly) {
-        jdbcWrapper.tableExistsInCurrentSchema(params, table.toString)
-      } else {
-        val conn = jdbcWrapper.getConnector(params)
-        try {
-          jdbcWrapper.tableExists(conn, table.toString)
-        } finally {
-          conn.close()
-        }
-      }
+    def tableExists: Boolean = jdbcWrapper.tableExists(params, table.toString)
 
     val (doSave, dropExisting) = saveMode match {
       case SaveMode.Append => (true, false)

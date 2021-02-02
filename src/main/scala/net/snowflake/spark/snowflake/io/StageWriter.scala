@@ -281,11 +281,7 @@ private[io] object StageWriter {
     val writeTableState = new WriteTableState(conn)
 
     try {
-      val tableExists = if (params.checkTableExistenceInCurrentSchemaOnly){
-        DefaultJDBCWrapper.tableExistsInCurrentSchema(params, tableName)
-      } else {
-        DefaultJDBCWrapper.tableExists(conn, tableName)
-      }
+      val tableExists = DefaultJDBCWrapper.tableExists(params, tableName)
       // Drop table only if necessary.
       if (saveMode == SaveMode.Overwrite && tableExists && !params.truncateTable)
       {
@@ -365,11 +361,7 @@ private[io] object StageWriter {
       }
 
     try {
-      val tableExists = if (params.checkTableExistenceInCurrentSchemaOnly){
-        DefaultJDBCWrapper.tableExistsInCurrentSchema(params, table.toString)
-      } else {
-        DefaultJDBCWrapper.tableExists(conn, table.toString)
-      }
+      val tableExists = DefaultJDBCWrapper.tableExists(params, table.toString)
       // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite && tableExists) {
         if (params.useStagingTable) {
