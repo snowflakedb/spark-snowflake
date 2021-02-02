@@ -23,9 +23,16 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.concurrent.TimeUnit
 import java.util.{Locale, TimeZone}
 
-import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+// SparkUpgradeException is new class from spark 3.0.
+// So, test about SparkUpgradeException is not applicable.
+// import org.apache.spark.SparkUpgradeException
+
+// DateTimeTestUtils and DateTimeUtils are defined different for spark 3.0.
+// So, org.apache.spark.sql.snowflake.SFTestUtils is created to meet the gap for spark 2.3/2.4.
+// import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
+import org.apache.spark.sql.snowflake.SFTestUtils.{CEST, LA}
+import org.apache.spark.sql.snowflake.{SFTestUtils => DateTimeUtils}
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestSessionBase}
@@ -92,21 +99,23 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-  test("date format") {
-    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
-        val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
-
-        checkAnswer(
-          df.select(date_format($"a", "y"), date_format($"b", "y"), date_format($"c", "y")),
-          Row("2015", "2015", "2013"))
-
-        checkAnswer(
-          df.selectExpr("date_format(a, 'y')", "date_format(b, 'y')", "date_format(c, 'y')"),
-          Row("2015", "2015", "2013"))
-      }
-    }
-  }
+  // LEGACY_TIME_PARSER_POLICY is new option from spark 3.0.
+  // So this test is not applicable to spark 2.3/2.4.
+//  test("date format") {
+//    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+//      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+//        val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+//
+//        checkAnswer(
+//          df.select(date_format($"a", "y"), date_format($"b", "y"), date_format($"c", "y")),
+//          Row("2015", "2015", "2013"))
+//
+//        checkAnswer(
+//          df.selectExpr("date_format(a, 'y')", "date_format(b, 'y')", "date_format(c, 'y')"),
+//          Row("2015", "2015", "2013"))
+//      }
+//    }
+//  }
 
   test("year") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
@@ -207,9 +216,12 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
       df.select(date_add(col("ss"), 7)),
       Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
 
-    checkAnswer(
-      df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    // Spark 2.3/2.4 doesn't support date_add(Column, Column)
+    // It only supports date_add(Column, Int)
+    // So below test is not applicable.
+//    checkAnswer(
+//      df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
+//      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
 
     checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
     checkAnswer(
@@ -242,9 +254,12 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(df.select(date_sub(lit(null), 1)).limit(1), Row(null))
 
-    checkAnswer(
-      df.withColumn("x", lit(1)).select(date_sub(col("d"), col("x"))),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    // Spark 2.3/2.4 doesn't support date_sub(Column, Column)
+    // It only supports date_sub(Column, Int)
+    // So below test is not applicable.
+//    checkAnswer(
+//      df.withColumn("x", lit(1)).select(date_sub(col("d"), col("x"))),
+//      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
 
     checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
     checkAnswer(
@@ -252,53 +267,74 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
   }
 
-  test("time_add") {
-    val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
-    val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
-    val d1 = Date.valueOf("2015-07-31")
-    val d2 = Date.valueOf("2015-12-31")
-    val i = new CalendarInterval(2, 2, 2000000L)
-    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
-    checkAnswer(
-      df.selectExpr(s"d + INTERVAL'${i.toString}'"),
-      Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
-    checkAnswer(
-      df.selectExpr(s"t + INTERVAL'${i.toString}'"),
-      Seq(
-        Row(Timestamp.valueOf("2015-10-03 00:00:01")),
-        Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
-  }
+  // Spark 3.0 supports CalendarInterval(months: Int, days: Int, microseconds: Long)
+  // Spark 2.3/2.4 supports CalendarInterval(months: Int, microseconds: Long)
+  // CalendarInterval(2, 2, 2000000L) in Spark 3.0 is equal to
+  // CalendarInterval(2, microsecondsPerDay * 2 + 2000000L) in spark 2.3/2.4
+  //
+  // This test case is disabled because "Literals of type 'INTERVAL' are currently not supported." on spark 2.3/2.4
+//  test("time_add") {
+//    val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
+//    val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
+//    val d1 = Date.valueOf("2015-07-31")
+//    val d2 = Date.valueOf("2015-12-31")
+//    val microsecondsPerDay = 24L * 60 * 60 * 1000000
+//    val i = new CalendarInterval(2, microsecondsPerDay * 2 + 2000000L)
+//    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+//    checkAnswer(
+//      df.selectExpr(s"d + INTERVAL'${i.toString}'"),
+//      Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
+//    checkAnswer(
+//      df.selectExpr(s"t + INTERVAL'${i.toString}'"),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-10-03 00:00:01")),
+//        Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
+//  }
 
-  test("time_sub") {
-    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
-    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
-    val d1 = Date.valueOf("2015-09-30")
-    val d2 = Date.valueOf("2016-02-29")
-    val i = new CalendarInterval(2, 2, 2000000L)
-    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
-    checkAnswer(
-      df.selectExpr(s"d - INTERVAL'${i.toString}'"),
-      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
-    checkAnswer(
-      df.selectExpr(s"t - INTERVAL'${i.toString}'"),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-29 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
-  }
+  // Spark 3.0 supports CalendarInterval(months: Int, days: Int, microseconds: Long)
+  // Spark 2.3/2.4 supports CalendarInterval(months: Int, microseconds: Long)
+  // CalendarInterval(2, 2, 2000000L) in Spark 3.0 is equal to
+  // CalendarInterval(2, microsecondsPerDay * 2 + 2000000L) in spark 2.3/2.4
+  //
+  // This test case is disabled because "Literals of type 'INTERVAL' are currently not supported." on spark 2.3/2.4
+//  test("time_sub") {
+//    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
+//    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
+//    val d1 = Date.valueOf("2015-09-30")
+//    val d2 = Date.valueOf("2016-02-29")
+//    val microsecondsPerDay = 24L * 60 * 60 * 1000000
+//    val i = new CalendarInterval(2, microsecondsPerDay * 2 + 2000000L)
+//    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+//    checkAnswer(
+//      df.selectExpr(s"d - INTERVAL'${i.toString}'"),
+//      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
+//    checkAnswer(
+//      df.selectExpr(s"t - INTERVAL'${i.toString}'"),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-07-29 23:59:59")),
+//        Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
+//  }
 
   test("function add_months") {
     val d1 = Date.valueOf("2015-08-31")
     val d2 = Date.valueOf("2015-02-28")
     val df = Seq((1, d1), (2, d2)).toDF("n", "d")
+    // There is behavior difference for spark 2.3 and 3.0.
+    // On spark 2.3, "2015-02-28" +1 month -> "2015-03-31"
+    // On spark 3.0, "2015-02-28" +1 month -> "2015-03-28"
+    // NOTE: It's sure add_months() is not pushdown to snowflake.
+    //       This behavior difference comes from spark.
     checkAnswer(
       df.select(add_months(col("d"), 1)),
-      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-28"))))
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-31"))))
     checkAnswer(
       df.selectExpr("add_months(d, -1)"),
-      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-28"))))
-    checkAnswer(
-      df.withColumn("x", lit(1)).select(add_months(col("d"), col("x"))),
-      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-28"))))
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-31"))))
+    // Spark 2.3 doesn't support add_months(Column, Column)
+    // It only supports add_months(Column, Int)
+//    checkAnswer(
+//      df.withColumn("x", lit(1)).select(add_months(col("d"), col("x"))),
+//      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-28"))))
   }
 
   test("function months_between") {
@@ -311,15 +347,18 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
     checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
     checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
-    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
-    Seq(true, false).foreach { roundOff =>
-      checkAnswer(
-        df.select(months_between(col("t"), col("d"), roundOff)),
-        Seq(Row(-10.0), Row(7.0)))
-      checkAnswer(
-        df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
-        Seq(Row(0.5), Row(-0.5)))
-    }
+    // Spark 3.0     supports months_between(Column, Column, boolean)
+    // Spark 2.3/2.4 supports months_between(Column, Column)
+    // Below test are not applicable for Spark 2.3/2.4
+//    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
+//    Seq(true, false).foreach { roundOff =>
+//      checkAnswer(
+//        df.select(months_between(col("t"), col("d"), roundOff)),
+//        Seq(Row(-10.0), Row(7.0)))
+//      checkAnswer(
+//        df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
+//        Seq(Row(0.5), Row(-0.5)))
+//    }
   }
 
   test("function last_day") {
@@ -401,12 +440,14 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
         Row(Date.valueOf("2015-07-22")),
         Row(Date.valueOf("2015-07-01")),
         Row(Date.valueOf("2014-12-31"))))
-    val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
-    withSQLConf(confKey -> "corrected") {
-      checkAnswer(
-        df.select(to_date(col("s"), "yyyy-MM-dd")),
-        Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
-    }
+    // LEGACY_TIME_PARSER_POLICY is new option for spark 3.0
+    // it is not applicable for spark 2.3/2.4
+//    val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+//    withSQLConf(confKey -> "corrected") {
+//      checkAnswer(
+//        df.select(to_date(col("s"), "yyyy-MM-dd")),
+//        Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
+//    }
     //withSQLConf(confKey -> "exception") {
     //  checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
     //}
@@ -418,9 +459,11 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
 
     // invalid format
     checkAnswer(df.select(to_date(col("s"), "yyyy-hh-MM")), Seq(Row(null), Row(null), Row(null)))
-    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
-    assert(e.getCause.isInstanceOf[IllegalArgumentException])
-    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
+    // SparkUpgradeException is new class from spark 3.0.
+    // This test is not applicable to spark 2.3/2.4
+//    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
+//    assert(e.getCause.isInstanceOf[IllegalArgumentException])
+//    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
@@ -515,49 +558,51 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     }
   }
 
-  test("from_unixtime") {
-    Seq("corrected", "legacy").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
-        val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-        val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-        val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
-        val fmt3 = "yy-MM-dd HH-mm-ss"
-        val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        val df =
-          Seq((1000, "yyyy-MM-dd HH:mm:ss.SSS"), (-1000, "yy-MM-dd HH-mm-ss")).toDF("a", "b")
-        checkAnswer(
-          df.select(from_unixtime(col("a"))),
-          Seq(
-            Row(sdf1.format(new Timestamp(1000000))),
-            Row(sdf1.format(new Timestamp(-1000000)))))
-        checkAnswer(
-          df.select(from_unixtime(col("a"), fmt2)),
-          Seq(
-            Row(sdf2.format(new Timestamp(1000000))),
-            Row(sdf2.format(new Timestamp(-1000000)))))
-        checkAnswer(
-          df.select(from_unixtime(col("a"), fmt3)),
-          Seq(
-            Row(sdf3.format(new Timestamp(1000000))),
-            Row(sdf3.format(new Timestamp(-1000000)))))
-        checkAnswer(
-          df.selectExpr("from_unixtime(a)"),
-          Seq(
-            Row(sdf1.format(new Timestamp(1000000))),
-            Row(sdf1.format(new Timestamp(-1000000)))))
-        checkAnswer(
-          df.selectExpr(s"from_unixtime(a, '$fmt2')"),
-          Seq(
-            Row(sdf2.format(new Timestamp(1000000))),
-            Row(sdf2.format(new Timestamp(-1000000)))))
-        checkAnswer(
-          df.selectExpr(s"from_unixtime(a, '$fmt3')"),
-          Seq(
-            Row(sdf3.format(new Timestamp(1000000))),
-            Row(sdf3.format(new Timestamp(-1000000)))))
-      }
-    }
-  }
+  // LEGACY_TIME_PARSER_POLICY is new option for spark 3.0
+  // it is not applicable for spark 2.3/2.4
+//  test("from_unixtime") {
+//    Seq("corrected", "legacy").foreach { legacyParserPolicy =>
+//      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+//        val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+//        val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+//        val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
+//        val fmt3 = "yy-MM-dd HH-mm-ss"
+//        val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
+//        val df =
+//          Seq((1000, "yyyy-MM-dd HH:mm:ss.SSS"), (-1000, "yy-MM-dd HH-mm-ss")).toDF("a", "b")
+//        checkAnswer(
+//          df.select(from_unixtime(col("a"))),
+//          Seq(
+//            Row(sdf1.format(new Timestamp(1000000))),
+//            Row(sdf1.format(new Timestamp(-1000000)))))
+//        checkAnswer(
+//          df.select(from_unixtime(col("a"), fmt2)),
+//          Seq(
+//            Row(sdf2.format(new Timestamp(1000000))),
+//            Row(sdf2.format(new Timestamp(-1000000)))))
+//        checkAnswer(
+//          df.select(from_unixtime(col("a"), fmt3)),
+//          Seq(
+//            Row(sdf3.format(new Timestamp(1000000))),
+//            Row(sdf3.format(new Timestamp(-1000000)))))
+//        checkAnswer(
+//          df.selectExpr("from_unixtime(a)"),
+//          Seq(
+//            Row(sdf1.format(new Timestamp(1000000))),
+//            Row(sdf1.format(new Timestamp(-1000000)))))
+//        checkAnswer(
+//          df.selectExpr(s"from_unixtime(a, '$fmt2')"),
+//          Seq(
+//            Row(sdf2.format(new Timestamp(1000000))),
+//            Row(sdf2.format(new Timestamp(-1000000)))))
+//        checkAnswer(
+//          df.selectExpr(s"from_unixtime(a, '$fmt3')"),
+//          Seq(
+//            Row(sdf3.format(new Timestamp(1000000))),
+//            Row(sdf3.format(new Timestamp(-1000000)))))
+//      }
+//    }
+//  }
 
 
 // SNOW-205533: disabled temporarily because test fails. Investigate pushdown bug
@@ -765,15 +810,17 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
   }
 
-  test("to_timestamp with microseconds precision") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      val timestamp = "1970-01-01T00:00:00.123456Z"
-      val df = Seq(timestamp).toDF("t")
-      checkAnswer(
-        df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")),
-        Seq(Row(Instant.parse(timestamp))))
-    }
-  }
+  // DATETIME_JAVA8API_ENABLED is new option for spark 3.0
+  // it is not applicable for spark 2.3/2.4
+//  test("to_timestamp with microseconds precision") {
+//    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+//      val timestamp = "1970-01-01T00:00:00.123456Z"
+//      val df = Seq(timestamp).toDF("t")
+//      checkAnswer(
+//        df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")),
+//        Seq(Row(Instant.parse(timestamp))))
+//    }
+//  }
 
   test("from_utc_timestamp with literal zone") {
     val df = Seq(
@@ -791,31 +838,34 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
         Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
   }
 
-  test("from_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", CEST.getId),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", LA.getId))
-      .toDF("a", "b", "c")
-    checkAnswer(
-      df.select(from_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    checkAnswer(
-      df.select(from_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-  }
+  // Spark 2.3/2.4 doesn't support from_utc_timestamp(Column, Column)
+  // It only supports from_utc_timestamp(Column, String)
+//  test("from_utc_timestamp with column zone") {
+//    val df = Seq(
+//      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", CEST.getId),
+//      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", LA.getId))
+//      .toDF("a", "b", "c")
+//    checkAnswer(
+//      df.select(from_utc_timestamp(col("a"), col("c"))),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+//        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+//    checkAnswer(
+//      df.select(from_utc_timestamp(col("b"), col("c"))),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+//        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+//  }
 
-  test("handling null field by date_part") {
-    val input = Seq(Date.valueOf("2019-09-20")).toDF("d")
-    Seq("date_part(null, d)", "date_part(null, date'2019-09-20')").foreach { expr =>
-      val df = input.selectExpr(expr)
-      assert(df.schema.headOption.get.dataType == DoubleType)
-      checkAnswer(df, Row(null))
-    }
-  }
+  // Spark 2.3/2.4 doesn't support date_part()
+//  test("handling null field by date_part") {
+//    val input = Seq(Date.valueOf("2019-09-20")).toDF("d")
+//    Seq("date_part(null, d)", "date_part(null, date'2019-09-20')").foreach { expr =>
+//      val df = input.selectExpr(expr)
+//      assert(df.schema.headOption.get.dataType == DoubleType)
+//      checkAnswer(df, Row(null))
+//    }
+//  }
 
   test("to_utc_timestamp with literal zone") {
     val df = Seq(
@@ -833,22 +883,24 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
         Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
   }
 
-  test("to_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", LA.getId),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", CEST.getId))
-      .toDF("a", "b", "c")
-    checkAnswer(
-      df.select(to_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-    checkAnswer(
-      df.select(to_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-  }
+  // Spark 2.3/2.4 doesn't support from_utc_timestamp(Column, Column)
+  // It only supports from_utc_timestamp(Column, String)
+//  test("to_utc_timestamp with column zone") {
+//    val df = Seq(
+//      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", LA.getId),
+//      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", CEST.getId))
+//      .toDF("a", "b", "c")
+//    checkAnswer(
+//      df.select(to_utc_timestamp(col("a"), col("c"))),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+//        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+//    checkAnswer(
+//      df.select(to_utc_timestamp(col("b"), col("c"))),
+//      Seq(
+//        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+//        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+//  }
 
   // SNOW-205533: disabled temporarily because test fails. Investigate pushdown bug
 //  test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
@@ -866,29 +918,31 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
 //    //  }
 //  }
 
-  test("SPARK-30752: convert time zones on a daylight saving day") {
-    val systemTz = LA.getId
-    val sessionTz = "UTC"
-    val fromTz = "Asia/Hong_Kong"
-    val fromTs = "2019-11-03T12:00:00" // daylight saving date in America/Los_Angeles
-    val utsTs = "2019-11-03T04:00:00"
-    val defaultTz = TimeZone.getDefault
-    try {
-      TimeZone.setDefault(DateTimeUtils.getTimeZone(systemTz))
-      withSQLConf(
-        SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz) {
-        val expected = LocalDateTime
-          .parse(utsTs)
-          .atZone(DateTimeUtils.getZoneId(sessionTz))
-          .toInstant
-        val df = Seq(fromTs).toDF("localTs")
-        checkAnswer(df.select(to_utc_timestamp(col("localTs"), fromTz)), Row(expected))
-      }
-    } finally {
-      TimeZone.setDefault(defaultTz)
-    }
-  }
+  // DATETIME_JAVA8API_ENABLED is new option for spark 3.0
+  // it is not applicable for spark 2.3/2.4
+//  test("SPARK-30752: convert time zones on a daylight saving day") {
+//    val systemTz = LA.getId
+//    val sessionTz = "UTC"
+//    val fromTz = "Asia/Hong_Kong"
+//    val fromTs = "2019-11-03T12:00:00" // daylight saving date in America/Los_Angeles
+//    val utsTs = "2019-11-03T04:00:00"
+//    val defaultTz = TimeZone.getDefault
+//    try {
+//      TimeZone.setDefault(DateTimeUtils.getTimeZone(systemTz))
+//      withSQLConf(
+//        SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+//        SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz) {
+//        val expected = LocalDateTime
+//          .parse(utsTs)
+//          .atZone(DateTimeUtils.getZoneId(sessionTz))
+//          .toInstant
+//        val df = Seq(fromTs).toDF("localTs")
+//        checkAnswer(df.select(to_utc_timestamp(col("localTs"), fromTz)), Row(expected))
+//      }
+//    } finally {
+//      TimeZone.setDefault(defaultTz)
+//    }
+//  }
 
   // SNOW-205533: disabled temporarily because test fails. Investigate pushdown bug
 //  test("SPARK-30766: date_trunc of old timestamps to hours and days") {
