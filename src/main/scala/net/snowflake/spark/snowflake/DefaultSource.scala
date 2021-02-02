@@ -111,7 +111,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     def tableExists: Boolean =
       if (params.checkTableExistenceInCurrentSchemaOnly) {
-        DefaultJDBCWrapper.tableExistsInCurrentSchema(params, table.toString)
+        jdbcWrapper.tableExistsInCurrentSchema(params, table.toString)
       } else {
         val conn = jdbcWrapper.getConnector(params)
         try {
