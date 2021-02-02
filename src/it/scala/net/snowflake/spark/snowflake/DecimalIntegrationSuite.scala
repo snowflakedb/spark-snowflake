@@ -55,7 +55,7 @@ class DecimalIntegrationSuite extends IntegrationSuiteBase {
             .executeUpdate(s"INSERT INTO $tableName VALUES ($x)")
         }
         conn.commit()
-        assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+        assert(DefaultJDBCWrapper.tableExists(params, tableName))
         val loadedDf = sparkSession.read
           .format(SNOWFLAKE_SOURCE_NAME)
           .options(connectorOptions)

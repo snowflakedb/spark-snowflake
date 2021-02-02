@@ -244,7 +244,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       println(s"""Test table: "$table"""")
       // Make sure table doesnt' exist
       jdbcUpdate(s"drop table if exists $table")
-      assert(!DefaultJDBCWrapper.tableExists(conn, table.toString))
+      assert(!DefaultJDBCWrapper.tableExists(params, table.toString))
 
       // Old table doesn't exist so DROP table and TRUNCATE table never happen
       val testConditions = Array(
@@ -274,7 +274,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
         }
 
         // The original table should not exist
-        assert(!DefaultJDBCWrapper.tableExists(conn, table.toString))
+        assert(!DefaultJDBCWrapper.tableExists(params, table.toString))
       })
 
       // Disable test hook in the end

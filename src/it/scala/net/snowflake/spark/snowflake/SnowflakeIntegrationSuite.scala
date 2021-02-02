@@ -268,7 +268,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .mode(SaveMode.ErrorIfExists)
         .save()
 
-      assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+      assert(DefaultJDBCWrapper.tableExists(params, tableName))
 
       val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -449,7 +449,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .option("dbtable", tableName)
         .mode(SaveMode.ErrorIfExists)
         .save()
-      assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+      assert(DefaultJDBCWrapper.tableExists(params, tableName))
       val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
@@ -511,7 +511,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .option("dbtable", tableName)
         .mode(SaveMode.ErrorIfExists)
         .save()
-      assert(DefaultJDBCWrapper.tableExists(conn, s"PUBLIC.$tableName"))
+      assert(DefaultJDBCWrapper.tableExists(params, s"PUBLIC.$tableName"))
       // Try overwriting that table while using the schema-qualified table name:
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -551,7 +551,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .option("dbtable", tableName)
         .mode(SaveMode.ErrorIfExists)
         .save()
-      assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+      assert(DefaultJDBCWrapper.tableExists(params, tableName))
 
       sparkSession
         .createDataFrame(
@@ -565,7 +565,7 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      assert(DefaultJDBCWrapper.tableExists(conn, tableName))
+      assert(DefaultJDBCWrapper.tableExists(params, tableName))
       val loadedDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)

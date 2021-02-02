@@ -45,7 +45,7 @@ class ClusterTestResult(builder: ClusterTestResultBuilder) {
 
     // Create test result table if it doesn't exist.
     if (!DefaultJDBCWrapper.tableExists(
-          connection,
+          TestUtils.param,
           TestUtils.CLUSTER_TEST_RESULT_TABLE
         )) {
       DefaultJDBCWrapper.executeInterruptibly(
