@@ -1,7 +1,7 @@
 # `spark-snowflake`
 
 ## Snowflake Data Source for Apache Spark.
-
+![Build Status](https://github.com/snowflakedb/spark-snowflake/workflows/Spark%20Connector%20Integration%20Test/badge.svg)
 [![codecov](https://codecov.io/gh/snowflakedb/spark-snowflake/branch/master/graph/badge.svg)](https://codecov.io/gh/snowflakedb/spark-snowflake)
 [![License](http://img.shields.io/:license-Apache%202-brightgreen.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
