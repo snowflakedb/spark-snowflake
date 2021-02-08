@@ -50,26 +50,4 @@ And with integration tests:
 To see the results:      
 
     firefox $PWD/target/scala-2.11/scoverage-report/index.html
-
-### Setting up Travis credentials
-
-* Follow initial setup as described in the [Travis manual](https://docs.travis-ci.com/user/encrypting-files/).
-* Encrypt your config file
-     
-      travis encrypt-file snowflake.travis.conf
-      
-* Add the output line to .travis.yml e.g.
-
-      before_install:
-      - openssl aes-256-cbc -K $encrypted_XX_key -iv $encrypted_XXX_iv -in snowflake.travis.conf.enc -out snowflake.travis.conf -d
-
-### Running `dev/run-tests-travis.sh` manually
-
-Travis uses the `dev/run-tests-travis.sh` script to run its test.
-
-To test its behavior locally, run e.g. this:
-
-    export PATH=$PATH:$PWD/build/ HADOOP_VERSION="2.2.0" SPARK_VERSION="2.0.0" SPARK_SCALA_VERSION="2.11.7" TRAVIS_SCALA_VERSION="2.11.7" 
-    ./dev/run-tests-travis.sh
-    INTEGRATION_TESTS=true ./dev/run-tests-travis.sh
     
