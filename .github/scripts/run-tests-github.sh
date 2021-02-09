@@ -24,7 +24,7 @@ if [ "$INTEGRATION_TESTS" != "true" ]; then
   sbt coverageReport
 else
   # Run both test and it
-  sbt -Dspark.version=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test # it:test # test only
+  sbt -Dspark.version=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test it:test
   sbt coverageReport
 fi
 
