@@ -41,5 +41,5 @@ jobs:
     - uses: codecov/codecov-action@v1
       if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
       with:
-        files: ./target/scala-2.12/scoverage-report/scoverage.xml,./target/scala-2.11/scoverage-report/scoverage.xml
+        files: ./target/scala-*/scoverage-report/scoverage.xml
         fail_ci_if_error: true
