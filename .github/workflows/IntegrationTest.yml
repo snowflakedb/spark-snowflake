@@ -38,5 +38,7 @@ jobs:
         SNOWFLAKE_TEST_ACCOUNT: ${{ matrix.cloud_provider }}
         SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
 
-    - name: Update test coverage report
-      run: bash <(curl -s https://codecov.io/bash)
+    - uses: codecov/codecov-action@v1
+      if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
+      with:
+        fail_ci_if_error: true
