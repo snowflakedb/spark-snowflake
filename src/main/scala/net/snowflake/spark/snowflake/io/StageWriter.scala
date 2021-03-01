@@ -697,7 +697,18 @@ private[io] object StageWriter {
             DefaultJDBCWrapper.resolveTable(conn, table.name, params)
           if (list.isEmpty || list.get.isEmpty) {
             ConstantString("(") + tableSchema.fields
-              .map(_.name)
+              .map(
+                x =>
+                  if (params.quoteJsonFieldName) {
+                    if (params.keepOriginalColumnNameCase) {
+                      Utils.quotedNameIgnoreCase(x.name)
+                    } else {
+                      Utils.ensureQuoted(x.name)
+                    }
+                  } else {
+                    x.name
+                  }
+              )
               .mkString(",") + ")"
           } else {
             ConstantString("(") +
