@@ -1945,7 +1945,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
                             colName3: String,
                             colName4: String): DataFrame = {
     val partitionCount = 1
-    val rowCountPerPartition = 1
+    val rowCountPerPartition = 2
     val testRDD: RDD[Row] = sparkSession.sparkContext
       .parallelize(Seq[Int](), partitionCount)
       .mapPartitions { _ => {
@@ -1981,6 +1981,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select * from $test_table_write")
+      .load().count == 2)
+
     // It fails if disable the column name quotation
     assertThrows[Exception] {
       df.write
@@ -1992,14 +1998,21 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .save()
     }
 
-    // If the column name is not key word, disable it also work
+    // If the column name is not keyword, it works even if the internal disable is disabled
     val df2 = getTestJsonDF("create1", "table1", "View1", "INSERT1", "test1")
     df2.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
       .option(Parameters.PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "false")
       .mode(SaveMode.Overwrite)
       .save()
+
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select * from $test_table_write")
+      .load().count == 2)
   }
 
   test("repro & test SNOW-262080") {
