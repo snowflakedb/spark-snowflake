@@ -56,9 +56,25 @@ private[querygeneration] object AggregationStatement {
   // and it supports Window Frame
   private[querygeneration] def supportWindowFrame(aggExpr: AggregateExpression): Boolean = {
     aggExpr.aggregateFunction match {
-      case _: Average | _: Count | _: CountIf |
-           _: Max | _: Min | _: Sum | _: StddevPop | _: StddevSamp |
-           _: VariancePop | _: VarianceSamp =>
+      case _: Average =>
+        true
+      case _: Count =>
+        true
+      case _: Max =>
+        true
+      case _: Min =>
+        true
+      case _: Sum =>
+        true
+      case _: CountIf =>
+        true
+      case _: StddevPop =>
+        true
+      case _: StddevSamp =>
+        true
+      case _: VariancePop =>
+        true
+      case _: VarianceSamp =>
         true
       case _ =>
         false
