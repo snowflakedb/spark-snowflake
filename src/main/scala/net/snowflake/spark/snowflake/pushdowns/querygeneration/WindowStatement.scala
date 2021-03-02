@@ -11,6 +11,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowExpression,
   WindowSpecDefinition
 }
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
   * Windowing functions
@@ -36,10 +37,19 @@ private[querygeneration] object WindowStatement {
     Option(expr match {
       // Handle Window Expression.
       case WindowExpression(func, spec) =>
+        println(spec.orderSpec + " : " + spec.frameSpecification)
         func match {
           // These functions in Snowflake support a window frame.
           // Note that pushdown for these may or may not yet be supported in the connector.
           case _: Rank | _: DenseRank | _: PercentRank =>
+            convertStatement(func, fields) + " OVER " + windowBlock(
+              spec,
+              fields,
+              useWindowFrame = true
+            )
+
+          case agg: AggregateExpression if AggregationStatement.supportWindowFrame(agg) =>
+            println("supportWindowFrame returns true")
             convertStatement(func, fields) + " OVER " + windowBlock(
               spec,
               fields,

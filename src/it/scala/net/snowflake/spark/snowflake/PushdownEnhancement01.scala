@@ -22,6 +22,8 @@ import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions._
 
 // scalastyle:off println
 class PushdownEnhancement01 extends IntegrationSuiteBase {
@@ -715,6 +717,39 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       result,
       expectedResult
     )
+  }
+
+  test("test pushdown windown AVG()") {
+    // https://snowflakecomputing.atlassian.net/browse/SNOW-290292
+    jdbcUpdate(s"""create or replace table sales (product_id integer, store_id integer,
+                  |      date1 date, quantity integer)""".stripMargin)
+
+    jdbcUpdate(s"""insert into sales (product_id, store_id, date1, quantity) values
+                  |    (1, 1,  '2020-02-02', 100),
+                  |    (1, 2,  '2020-02-03', 100),
+                  |    (1, 3,  '2020-02-04', 100),
+                  |    (1, 4,  '2020-02-05', 100),
+                  |    (2, 1,  '2020-02-06', 100),
+                  |    (2, 2,  '2020-02-07', 100),
+                  |    (2, 3,  '2020-02-08', 100),
+                  |    (2, 4,  '2020-02-09', 100);""".stripMargin)
+
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", "sales")
+      .load()
+
+    val w1 = Window.partitionBy("product_id").orderBy("date1")
+//    val w2 = w1.rowsBetween(Window.currentRow - 1, Window.currentRow)
+
+    val tmpDF = df.select(col("product_id"), col("store_id"),
+      avg("quantity").over(w1).alias("quantity_1"))
+
+//    val tmpDF = df.select(col("product_id"), col("store_id"),
+//      avg("quantity").over(w2).alias("quantity_1"))
+
+    tmpDF.show()
   }
 
   override def beforeEach(): Unit = {
