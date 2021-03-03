@@ -55,37 +55,8 @@ private[querygeneration] object AggregationStatement {
   // Return true if the aggregation function is also a window function
   // and it supports Window Frame
   private[querygeneration] def supportWindowFrame(aggExpr: AggregateExpression): Boolean = {
-    val func = aggExpr.aggregateFunction
-    func match {
-      case _: Average =>
-        println("mrui: " + func)
-        true
-      case _: Count =>
-        println("mrui: " + func)
-        true
-      case _: Max =>
-        println("mrui: " + func)
-        true
-      case _: Min =>
-        println("mrui: " + func)
-        true
-      case _: Sum =>
-        println("mrui: " + func)
-        true
-      case _: CountIf =>
-        println("mrui: " + func)
-        true
-      case _: StddevPop =>
-        println("mrui: " + func)
-        true
-      case _: StddevSamp =>
-        println("mrui: " + func)
-        true
-      case _: VariancePop =>
-        println("mrui: " + func)
-        true
-      case _: VarianceSamp =>
-        println("mrui: " + func)
+    aggExpr.aggregateFunction match {
+      case _: Average | _: Count | _: Max | _: Min | _: Sum =>
         true
       case _ =>
         false

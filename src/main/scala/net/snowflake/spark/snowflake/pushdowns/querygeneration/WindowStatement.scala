@@ -37,7 +37,6 @@ private[querygeneration] object WindowStatement {
     Option(expr match {
       // Handle Window Expression.
       case WindowExpression(func, spec) =>
-        println(spec.orderSpec + " : " + spec.frameSpecification)
         func match {
           // These functions in Snowflake support a window frame.
           // Note that pushdown for these may or may not yet be supported in the connector.
@@ -49,7 +48,6 @@ private[querygeneration] object WindowStatement {
             )
 
           case agg: AggregateExpression if AggregationStatement.supportWindowFrame(agg) =>
-            println("supportWindowFrame returns true")
             convertStatement(func, fields) + " OVER " + windowBlock(
               spec,
               fields,

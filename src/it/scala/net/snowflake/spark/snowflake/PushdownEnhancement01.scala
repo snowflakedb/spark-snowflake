@@ -44,6 +44,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
   private val test_table_cast: String = s"test_table_cast_$randomSuffix"
   private val test_table_coalesce = s"test_table_coalesce_$randomSuffix"
+  private val test_table_window = s"test_table_window_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -63,6 +64,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_in_set")
       jdbcUpdate(s"drop table if exists $test_table_cast")
       jdbcUpdate(s"drop table if exists $test_table_coalesce")
+      jdbcUpdate(s"drop table if exists $test_table_window")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -719,37 +721,101 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
-  test("test pushdown windown AVG()") {
+  test("test aggregate/window functions: avg/min/max/count/sum") {
     // https://snowflakecomputing.atlassian.net/browse/SNOW-290292
-    jdbcUpdate(s"""create or replace table sales (product_id integer, store_id integer,
-                  |      date1 date, quantity integer)""".stripMargin)
+    jdbcUpdate(
+      s"""create or replace table $test_table_window (product_id integer,
+         | store_id integer,date1 date, quantity integer)""".stripMargin)
 
-    jdbcUpdate(s"""insert into sales (product_id, store_id, date1, quantity) values
-                  |    (1, 1,  '2020-02-02', 100),
-                  |    (1, 2,  '2020-02-03', 100),
-                  |    (1, 3,  '2020-02-04', 100),
-                  |    (1, 4,  '2020-02-05', 100),
-                  |    (2, 1,  '2020-02-06', 100),
-                  |    (2, 2,  '2020-02-07', 100),
-                  |    (2, 3,  '2020-02-08', 100),
-                  |    (2, 4,  '2020-02-09', 100);""".stripMargin)
+    jdbcUpdate(
+      s"""insert into $test_table_window (product_id, store_id, date1, quantity) values
+         |    (1, 1, '2020-02-02', 100),
+         |    (1, 2, '2020-02-03', 200),
+         |    (1, 3, '2020-02-04', 300),
+         |    (1, 4, '2020-02-05', 400),
+         |    (2, 1, '2020-02-06', 900),
+         |    (2, 2, '2020-02-07', 800),
+         |    (2, 3, '2020-02-08', 700),
+         |    (2, 4, '2020-02-09', 600)""".stripMargin)
 
     val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("dbtable", "sales")
+      .option("dbtable", test_table_window)
       .load()
 
-    val w1 = Window.partitionBy("product_id").orderBy("date1")
-//    val w2 = w1.rowsBetween(Window.currentRow - 1, Window.currentRow)
+    val window = Window
+      .partitionBy("product_id")
+      .orderBy("date1")
+      .rowsBetween(Window.currentRow, Window.currentRow + 1)
 
-    val tmpDF = df.select(col("product_id"), col("store_id"),
-      avg("quantity").over(w1).alias("quantity_1"))
+    val result = df.select(col("product_id"), col("store_id"),
+      avg("quantity").over(window).alias("avg"),
+      count("quantity").over(window).alias("count"),
+      min("quantity").over(window).alias("min"),
+      max("quantity").over(window).alias("max"),
+      sum("quantity").over(window).alias("sum"))
 
-//    val tmpDF = df.select(col("product_id"), col("store_id"),
-//      avg("quantity").over(w2).alias("quantity_1"))
+    result.orderBy(col("product_id"), col("store_id")).show()
 
-    tmpDF.show()
+    val expectedResult = Seq(
+      Row(1, 1, 150.0, 2, 100, 200, 300),
+      Row(1, 2, 250.0, 2, 200, 300, 500),
+      Row(1, 3, 350.0, 2, 300, 400, 700),
+      Row(1, 4, 400.0, 1, 400, 400, 400),
+      Row(2, 1, 850.0, 2, 800, 900, 1700),
+      Row(2, 2, 750.0, 2, 700, 800, 1500),
+      Row(2, 3, 650.0, 2, 600, 700, 1300),
+      Row(2, 4, 600.0, 1, 600, 600, 600)
+    )
+
+    testPushdown(
+      s""" SELECT
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) AS "SUBQUERY_3_COL_1" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_4" ) AS "SUBQUERY_3_COL_2" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_5" ) AS "SUBQUERY_3_COL_3" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_6" ) AS "SUBQUERY_3_COL_4" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_7" ) AS "SUBQUERY_3_COL_5" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_8" ) AS "SUBQUERY_3_COL_6"
+         | FROM ( SELECT
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) AS "SUBQUERY_2_COL_1" ,
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_2" ) AS "SUBQUERY_2_COL_2" ,
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) AS "SUBQUERY_2_COL_3" ,
+         |  ( AVG ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |        OVER  ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |        ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) ASC
+         |        ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING ) ) AS "SUBQUERY_2_COL_4" ,
+         |  ( COUNT ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |        OVER  ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |        ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) ASC
+         |        ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING ) ) AS "SUBQUERY_2_COL_5" ,
+         |  ( MIN ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |         OVER  ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |         ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) ASC
+         |         ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING ) ) AS "SUBQUERY_2_COL_6" ,
+         |  ( MAX ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |         OVER  ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |         ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) ASC
+         |         ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING ) ) AS "SUBQUERY_2_COL_7" ,
+         |  ( SUM ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |         OVER  ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |         ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_3" ) ASC
+         |         ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING ) ) AS "SUBQUERY_2_COL_8"
+         |    FROM ( SELECT
+         |    ( "SUBQUERY_0"."PRODUCT_ID" ) AS "SUBQUERY_1_COL_0" ,
+         |    ( "SUBQUERY_0"."STORE_ID" ) AS "SUBQUERY_1_COL_1" ,
+         |    ( "SUBQUERY_0"."QUANTITY" ) AS "SUBQUERY_1_COL_2" ,
+         |    ( "SUBQUERY_0"."DATE1" ) AS "SUBQUERY_1_COL_3"
+         |       FROM ( SELECT * FROM ( $test_table_window ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         |    AS "SUBQUERY_0" )
+         |  AS "SUBQUERY_1" )
+         |AS "SUBQUERY_2"
+         |""".stripMargin,
+      result,
+      expectedResult
+    )
   }
 
   override def beforeEach(): Unit = {
