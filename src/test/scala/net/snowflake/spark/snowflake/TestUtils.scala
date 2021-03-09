@@ -20,7 +20,7 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, ResultSet, Timestamp}
 import java.util.Calendar
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
 
 /**
@@ -213,5 +213,12 @@ object TestUtils {
     }
 
     str.toString()
+  }
+
+  def createTable(df: DataFrame, options: Map[String, String], name: String): Unit = {
+    import DefaultJDBCWrapper._
+    val params = Parameters.mergeParameters(options)
+    val conn = DefaultJDBCWrapper.getConnector(params)
+    conn.createTable(name, df.schema, params, true, false)
   }
 }

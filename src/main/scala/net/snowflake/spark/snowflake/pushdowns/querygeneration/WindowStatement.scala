@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   DenseRank,
@@ -45,6 +46,14 @@ private[querygeneration] object WindowStatement {
               fields,
               useWindowFrame = true
             )
+
+          // Disable window function pushdown if
+          // 1. The function are both window function and aggregate function
+          // 2. The function support Window Frame
+          // 3. The user specify ORDER-BY clause
+          case agg: AggregateExpression
+            if AggregationStatement.supportWindowFrame(agg) && spec.orderSpec.nonEmpty =>
+            null
 
           // These do not.
           case _ =>
