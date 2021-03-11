@@ -62,6 +62,19 @@ object SFQueryTest {
     case (a: java.math.BigDecimal, b: Float) =>
       (a.toString.toFloat - b).abs < 0.0001
     case (a: java.math.BigDecimal, b: java.math.BigDecimal) => a.equals(b)
+    case (a: Double, b: scala.math.BigDecimal) =>
+      (a - b.toString.toDouble).abs < 0.0001
+    case (a: Float, b: scala.math.BigDecimal) =>
+      (a - b.toString.toFloat).abs < 0.0001
+    case (a: scala.math.BigDecimal, b: Double) =>
+      (a.toString.toDouble - b).abs < 0.0001
+    case (a: scala.math.BigDecimal, b: Float) =>
+      (a.toString.toFloat - b).abs < 0.0001
+    case (a: scala.math.BigDecimal, b: java.math.BigDecimal) =>
+      (a.toString.toDouble - b.toString.toDouble).abs < 0.0001
+    case (a: java.math.BigDecimal, b: scala.math.BigDecimal) =>
+      (a.toString.toDouble - b.toString.toDouble).abs < 0.0001
+    case (a: scala.math.BigDecimal, b: scala.math.BigDecimal) => a.equals(b)
     case (a: Date, b: Date) => a.toString == b.toString
     case (a, b) => a == b
   }

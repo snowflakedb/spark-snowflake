@@ -1729,7 +1729,8 @@ case class InternalGcsStorage(param: MergedParameters,
     val metadatas = generateFileTransferMetadatas(
       data, format, compress, directory, data.getNumPartitions)
 
-    val oneMetadataPerFile = metadatas.head.isForOneFile
+    // If the partition count is 0, no metadata is created.
+    val oneMetadataPerFile = metadatas.nonEmpty && metadatas.head.isForOneFile
 
     // Some explain for newbies on spark connector:
     // Bellow code is executed in distributed by spark FRAMEWORK
