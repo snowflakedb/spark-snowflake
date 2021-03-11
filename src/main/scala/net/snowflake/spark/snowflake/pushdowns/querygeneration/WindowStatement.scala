@@ -49,10 +49,11 @@ private[querygeneration] object WindowStatement {
 
           // Disable window function pushdown if
           // 1. The function are both window function and aggregate function
-          // 2. The function support Window Frame
-          // 3. The user specify ORDER-BY clause
-          case agg: AggregateExpression
-            if AggregationStatement.supportWindowFrame(agg) && spec.orderSpec.nonEmpty =>
+          // 2. User specifies Window Frame. But there is no way to detect
+          //    whether the window function have Window Frame or not.
+          //    This may disable the window function which has ORDER BY but
+          //    without Window Frame. This is not an issue because it still works.
+          case _: AggregateExpression if spec.orderSpec.nonEmpty =>
             null
 
           // These do not.
