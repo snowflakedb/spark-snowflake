@@ -147,8 +147,8 @@ object Parameters {
   val PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY: String = knownParam(
     "internal_staging_table_name_remove_quotes_only"
   )
-  // Internal option to quote the JSON field names when writing
-  // DataFrame to a snowflake table with JSON format.
+  // Internal option to quote the JSON field names and column names
+  // when writing DataFrame to a snowflake table with JSON format.
   // This option may be removed without any notice in any time.
   val PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME: String = knownParam(
     "internal_quote_json_field_name"

@@ -1882,37 +1882,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   test("write with JSON and without special characters in field name") {
-    val partitionCount = 1
-    val rowCountPerPartition = 2
-    // Create RDD which generates data with multiple partitions
-    val testRDD: RDD[Row] = sparkSession.sparkContext
-      .parallelize(Seq[Int](), partitionCount)
-      .mapPartitions { _ => {
-        (1 to rowCountPerPartition).map { i => {
-          Row(s"name_$i",
-            Map("a1" -> s"value_a$i", "a2" -> s"value_aa$i"),
-            Map("b1" -> s"value_b$i", "b2" -> s"value_bb$i"),
-            Map("c1" -> s"value_c$i", "c2" -> s"value_cc$i"),
-            Map("d1" -> s"value_d$i", "d2" -> s"value_dd$i"))
-        }
-        }.iterator
-      }
-      }
-
-    // Field names have special characters
-    val (colName0, colName1, colName2, colName3, colName4)
-    : (String, String, String, String, String) =
-      ("FIRST_name", "some_for1", "some_for2", "some_for3", "some_for4")
-    val schema = StructType(List(
-      StructField(colName0, StringType),
-      StructField(colName1, MapType(StringType, StringType)),
-      StructField(colName2, MapType(StringType, StringType)),
-      StructField(colName3, MapType(StringType, StringType)),
-      StructField(colName4, MapType(StringType, StringType))
-    ))
-
-    // Convert RDD to DataFrame
-    val df = sparkSession.createDataFrame(testRDD, schema)
+    val df = getTestJsonDF("FIRST_name", "some_for1", "some_for2", "some_for3", "some_for4")
 
     val quotesFieldName = Seq("true", "false")
     // If there is no special characters in field names,
@@ -1967,6 +1937,82 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         expectedResult, bypass = true
       )
     })
+  }
+
+  private def getTestJsonDF(colName0: String,
+                            colName1: String,
+                            colName2: String,
+                            colName3: String,
+                            colName4: String): DataFrame = {
+    val partitionCount = 1
+    val rowCountPerPartition = 2
+    val testRDD: RDD[Row] = sparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { i => {
+          Row(s"name_$i",
+            Map("a1" -> s"value_a$i", "a2" -> s"value_aa$i"),
+            Map("b1" -> s"value_b$i", "b2" -> s"value_bb$i"),
+            Map("c1" -> s"value_c$i", "c2" -> s"value_cc$i"),
+            Map("d1" -> s"value_d$i", "d2" -> s"value_dd$i")
+          )
+        }
+        }.iterator
+      }
+      }
+
+    val schema = StructType(List(
+      StructField(colName0, StringType),
+      StructField(colName1, MapType(StringType, StringType)),
+      StructField(colName2, MapType(StringType, StringType)),
+      StructField(colName3, MapType(StringType, StringType)),
+      StructField(colName4, MapType(StringType, StringType))
+    ))
+
+    sparkSession.createDataFrame(testRDD, schema)
+  }
+
+  test("column name is snowflake keyword: SNOW-293194") {
+    val df = getTestJsonDF("create", "table", "View", "INSERT", "test")
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select * from $test_table_write")
+      .load().count == 2)
+
+    // It fails if disable the column name quotation
+    assertThrows[Exception] {
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option(Parameters.PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "false")
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+
+    // If the column name is not keyword, it works even if the internal disable is disabled
+    val df2 = getTestJsonDF("create1", "table1", "View1", "INSERT1", "test1")
+    df2.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .option(Parameters.PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "false")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select * from $test_table_write")
+      .load().count == 2)
   }
 
   test("repro & test SNOW-262080") {
