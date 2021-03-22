@@ -18,6 +18,7 @@ import scala.util.Random
 class TruncateTableSuite extends IntegrationSuiteBase {
   val normalTable = s"test_table_$randomSuffix"
   val specialTable = s""""test_table_.'!@#$$%^&*"" $randomSuffix""""""
+  val targetTable = s""""test_table_target_$randomSuffix""""""
 
   // This test will test normal table and table name including special characters
   val tableNames = Array(normalTable, specialTable)
@@ -413,6 +414,89 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("Write empty DataFrame: SNOW-297134") {
+    import testImplicits._
+    val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
+    // Below CSV and PARQUET WRITE generate empty file.
+    // So snowflake should also create an empty table.
+    // emptyDf.write.csv("/tmp/output/csv")
+    // emptyDf.write.parquet("/tmp/output/parquet")
+    // create a table has 3 columns.
+
+    // Make sure target table doesn't exist
+    jdbcUpdate(s"drop table if exists $targetTable")
+    // Write empty DataFrame
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // success reads the target table
+    val newRowCount = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .load()
+      .count()
+    assert(newRowCount == 0)
+  }
+
+  test("Write empty DataFrame and over write old table: SNOW-297134") {
+    import testImplicits._
+    val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
+    // Below CSV and PARQUET WRITE generate empty file.
+    // So snowflake should also create an empty table.
+    // emptyDf.write.csv("/tmp/output/csv")
+    // emptyDf.write.parquet("/tmp/output/parquet")
+    // create a table has 3 columns.
+
+    jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 int, c3 int)")
+    // Write empty DataFrame
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // success reads the target table
+    val readDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .load()
+    // The table has been over writted, so it only has 2 columns.
+    assert(readDF.schema.fields.length == 2)
+  }
+
+  test("Negative test to write empty DataFrame: SNOW-297134") {
+    import testImplicits._
+    val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
+
+    // Make sure target table doesn't exist
+    jdbcUpdate(s"drop table if exists $targetTable")
+    // Write empty DataFrame
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .option(Parameters.PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Fail to read table because no table is created in last step.
+    assertThrows[Exception]({
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", targetTable)
+        .load()
+        .count()
+    })
+  }
+
   def checkSchema1(tableName: String): Boolean = {
     val st = DefaultJDBCWrapper.resolveTable(conn, tableName, params)
     val st1 = new StructType(
@@ -428,6 +512,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     TestHook.disableTestHook()
     jdbcUpdate(s"drop table if exists $normalTable")
     jdbcUpdate(s"drop table if exists $specialTable")
+    jdbcUpdate(s"drop table if exists $targetTable")
     super.afterAll()
   }
 }

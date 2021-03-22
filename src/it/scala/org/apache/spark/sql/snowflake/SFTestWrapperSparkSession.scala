@@ -1,8 +1,8 @@
 package org.apache.spark.sql.snowflake
 
-import net.snowflake.spark.snowflake.{TestUtils, Utils}
+import net.snowflake.spark.snowflake.Utils
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, Encoder, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoder, SparkSession}
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
@@ -28,10 +28,6 @@ class SFTestWrapperSparkSession(sc: SparkContext, sfConfigs: Map[String, String]
       .options(sfConfigs)
       .option("dbtable", tableName)
       .save()
-    if (df.count() == 0) {
-      val options = sfConfigs ++ Map("dbtable" -> tableName)
-      TestUtils.createTable(df, options , tableName)
-    }
     read
       .format(Utils.SNOWFLAKE_SOURCE_SHORT_NAME)
       .options(sfConfigs)

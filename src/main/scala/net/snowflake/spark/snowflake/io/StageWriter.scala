@@ -225,12 +225,23 @@ private[io] object StageWriter {
           format,
           fileUploadResults
         )
-      } else {
+      } else if (params.skipWriteWhenWritingEmptyDataFrame) {
         log.info(
           s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
              | Skip to execute COPY INTO TABLE command because
              | no file is uploaded.
              |""".stripMargin.filter(_ >= ' '))
+      } else {
+        writeToTable(
+          conn,
+          schema,
+          saveMode,
+          params,
+          "dummy_prefix_for_write_empty_partition",
+          stage,
+          format,
+          fileUploadResults
+        )
       }
       val endTime = System.currentTimeMillis()
 
