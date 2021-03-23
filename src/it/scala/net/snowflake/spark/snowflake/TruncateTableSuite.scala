@@ -414,7 +414,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     }
   }
 
-  test("Write empty DataFrame: SNOW-297134") {
+  test("Write empty DataFrame and target table doesn't exist: SNOW-297134") {
     import testImplicits._
     val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
     // Below CSV and PARQUET WRITE generate empty file.
@@ -425,7 +425,7 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
     // Make sure target table doesn't exist
     jdbcUpdate(s"drop table if exists $targetTable")
-    // Write empty DataFrame
+    // Write empty DataFrame with Overwrite mode
     emptyDf.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -434,16 +434,33 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .save()
 
     // success reads the target table
-    val newRowCount = sparkSession.read
+    var readDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", targetTable)
       .load()
-      .count()
-    assert(newRowCount == 0)
+    assert(readDF.count() == 0 && readDF.schema.fields.length == 2)
+
+    // Make sure target table doesn't exist
+    jdbcUpdate(s"drop table if exists $targetTable")
+    // Write empty DataFrame with Append mode
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
+
+    // success reads the target table
+    readDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .load()
+    assert(readDF.count() == 0 && readDF.schema.fields.length == 2)
   }
 
-  test("Write empty DataFrame and over write old table: SNOW-297134") {
+  test("Write empty DataFrame and target table exists: SNOW-297134") {
     import testImplicits._
     val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
     // Below CSV and PARQUET WRITE generate empty file.
@@ -453,7 +470,8 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     // create a table has 3 columns.
 
     jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 int, c3 int)")
-    // Write empty DataFrame
+    jdbcUpdate(s"insert into $targetTable values (1, 2 ,3)")
+    // Write empty DataFrame with Override mode
     emptyDf.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -462,13 +480,32 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .save()
 
     // success reads the target table
-    val readDF = sparkSession.read
+    var readDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", targetTable)
       .load()
-    // The table has been over writted, so it only has 2 columns.
-    assert(readDF.schema.fields.length == 2)
+    // The table has been over written, so it only has 2 columns.
+    assert(readDF.schema.fields.length == 2 && readDF.count() == 0)
+
+    jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 int, c3 int)")
+    jdbcUpdate(s"insert into $targetTable values (1, 2 ,3)")
+    // Write empty DataFrame with Append mode
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
+
+    // success reads the target table
+    readDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .load()
+    // The table has not been over written, so it has 3 columns
+    assert(readDF.schema.fields.length == 3 && readDF.count() == 1)
   }
 
   test("Negative test to write empty DataFrame: SNOW-297134") {

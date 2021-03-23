@@ -232,16 +232,8 @@ private[io] object StageWriter {
              | no file is uploaded.
              |""".stripMargin.filter(_ >= ' '))
       } else {
-        writeToTable(
-          conn,
-          schema,
-          saveMode,
-          params,
-          "dummy_prefix_for_write_empty_partition",
-          stage,
-          format,
-          fileUploadResults
-        )
+          conn.createTable(params.table.get.name, schema, params,
+            overwrite = saveMode.equals(SaveMode.Overwrite), temporary = false)
       }
       val endTime = System.currentTimeMillis()
 
