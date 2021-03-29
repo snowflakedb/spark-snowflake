@@ -1,15 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  EmptySnowflakeSQLStatement,
-  SnowflakePushdownException,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  AttributeReference,
-  NamedExpression
-}
+import net.snowflake.spark.snowflake.{EmptySnowflakeSQLStatement, SnowflakePushdownException, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, NamedExpression}
 
 /**
   * Helper class to maintain the fields, output, and projection expressions of
@@ -62,16 +54,20 @@ private[querygeneration] case class QueryHelper(
   val processedProjections: Option[Seq[NamedExpression]] = projections
     .map(
       p =>
-        p.map(
-          e =>
+        p.map {
+          case alias: Alias =>
+            println("Hit Alias: " + alias.getClass.getCanonicalName)
+            alias
+          case e =>
+            println("Hit Attribute: " + e.getClass.getCanonicalName)
             colSet.find(c => c.exprId == e.exprId) match {
               case Some(a) =>
                 AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
                   a.exprId
                 )
               case None => e
-          }
-      )
+            }
+        }
     )
     .map(p => renameColumns(p, alias))
 

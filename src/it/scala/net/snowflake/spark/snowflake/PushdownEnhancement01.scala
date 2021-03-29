@@ -82,6 +82,54 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       connectorOptionsNoTable, "max_retry_count", "1")
   }
 
+  test("test dropDuplicates") {
+    import org.apache.spark.sql.functions._
+
+    jdbcUpdate(s""" create or replace table nation
+    (N_REGIONKEY String, N_NATIONKEY String, N_NAME String)""")
+    val df_nation = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", "nation")
+      .load()
+
+    val df1 = df_nation.dropDuplicates("N_REGIONKEY")
+    df1.explain()
+    df1.collect()
+  }
+
+  test("test groupby with min") {
+    import org.apache.spark.sql.functions._
+
+    jdbcUpdate(s""" create or replace table nation
+    (N_REGIONKEY String, N_NATIONKEY String, N_NAME String)""")
+    val df_nation = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", "nation")
+      .load()
+
+    val df2 = df_nation.groupBy("N_REGIONKEY").agg(min("N_NATIONKEY"), min("N_NAME"))
+    df2.explain()
+    df2.collect()
+  }
+
+  test("test groupby with min + alias") {
+    import org.apache.spark.sql.functions._
+
+    jdbcUpdate(s""" create or replace table nation
+    (N_REGIONKEY String, N_NATIONKEY String, N_NAME String)""")
+    val df_nation = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", "nation")
+      .load()
+
+    val df2 = df_nation.groupBy(col("N_REGIONKEY").as("RUI_ALIAS")).agg(min("N_NATIONKEY"), min("N_NAME"))
+    df2.explain()
+    df2.collect()
+  }
+
   test("test pushdown length() function") {
     jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('', 'abc', null)")
