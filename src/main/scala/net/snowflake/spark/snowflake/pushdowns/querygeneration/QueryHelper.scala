@@ -65,11 +65,11 @@ private[querygeneration] case class QueryHelper(
         p.map(
           e =>
             colSet.find(c => c.exprId == e.exprId) match {
-              case Some(a) =>
+              case Some(a) if e.isInstanceOf[AttributeReference] =>
                 AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
                   a.exprId
                 )
-              case None => e
+              case _ => e
           }
       )
     )
