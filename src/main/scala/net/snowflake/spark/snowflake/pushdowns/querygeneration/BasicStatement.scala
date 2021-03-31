@@ -9,6 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   BitwiseNot,
   BitwiseOr,
   BitwiseXor,
+  EqualNullSafe,
   Expression,
   Literal,
   Or
@@ -67,6 +68,10 @@ private[querygeneration] object BasicStatement {
       case BitwiseNot(child) =>
         ConstantString("BITNOT") + blockStatement(
           convertStatement(child, fields)
+        )
+      case EqualNullSafe(left, right) =>
+        ConstantString("EQUAL_NULL") + blockStatement(
+          convertStatements(fields, left, right)
         )
       case b: BinaryOperator =>
         blockStatement(
