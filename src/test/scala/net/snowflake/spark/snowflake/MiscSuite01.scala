@@ -187,6 +187,7 @@ class MiscSuite01 extends FunSuite with Matchers {
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_GENERATE_QUERY)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
+    println(SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION)
   }
 
   test("unit test for SnowflakeTelemetry.getClientConfig") {
