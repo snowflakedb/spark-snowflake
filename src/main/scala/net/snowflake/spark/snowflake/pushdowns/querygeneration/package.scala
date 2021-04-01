@@ -140,12 +140,14 @@ package object querygeneration {
 
       val altName = s"""${alias}_${col_names.next()}"""
 
-      expr match {
+      val result = expr match {
         case a @ Alias(child: Expression, name: String) =>
           Alias(child, altName)(a.exprId, Seq.empty[String], Some(metadata))
         case _ =>
           Alias(expr, altName)(expr.exprId, Seq.empty[String], Some(metadata))
       }
+      println(s"renameColumns: ${expr.getClass.getSimpleName} $expr -> $result")
+      result
     }
   }
 

@@ -288,6 +288,7 @@ class FullNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     )
   }
 
+  // this case hit
   test( "test INNER JOIN with not-Null column") {
     sparkSession.sql("select l.id, r.id, r.flag, length(r.flag) from" +
       " LEFT_VIEW l join RIGHT_VIEW r on l.id = r.id")

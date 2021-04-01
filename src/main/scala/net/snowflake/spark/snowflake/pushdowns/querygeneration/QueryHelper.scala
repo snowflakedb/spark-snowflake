@@ -67,10 +67,18 @@ private[querygeneration] case class QueryHelper(
                 } else {
                   println(s"PROCESS_COLUMN DIFF: (${e.getClass.getSimpleName}, ${a.getClass.getSimpleName}), (${e.name},  ${a.name}) (${e.dataType}, ${a.dataType}), (${e.nullable}, ${a.nullable}), (${e.metadata}, ${a.metadata})")
                 }
-//                AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
-//                  a.exprId
-//                )
-                e
+                val old = false
+                if (old) {
+                  val ret = AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+                    a.exprId
+                  )
+                  println(s"PROCESS_COLUMN rename: ${e.name} -> ${a.name}")
+                  ret
+                } else {
+                  println(s"PROCESS_COLUMN not rename: ${e.name} -> ${a.name}")
+                  e
+                }
+
               case None => e
           }
       )
@@ -79,7 +87,11 @@ private[querygeneration] case class QueryHelper(
 
   val columns: Option[SnowflakeSQLStatement] =
     processedProjections.map(
-      p => mkStatement(p.map(convertStatement(_, colSet)), ",")
+      p => mkStatement(p.map({x => {
+        val result = convertStatement(x, colSet)
+        println(s"convertStatement: ${x.getClass.getSimpleName} -> $result")
+        result
+      }}), ",")
     )
 
   lazy val output: Seq[Attribute] = {
