@@ -1,15 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  EmptySnowflakeSQLStatement,
-  SnowflakePushdownException,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  AttributeReference,
-  NamedExpression
-}
+import net.snowflake.spark.snowflake.{EmptySnowflakeSQLStatement, SnowflakePushdownException, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, NamedExpression}
 
 /**
   * Helper class to maintain the fields, output, and projection expressions of
@@ -66,9 +58,19 @@ private[querygeneration] case class QueryHelper(
           e =>
             colSet.find(c => c.exprId == e.exprId) match {
               case Some(a) =>
-                AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
-                  a.exprId
-                )
+                // TODO POC to test whether below code is optional.
+                if (e.name.equalsIgnoreCase(a.name) && e.dataType.equals(a.dataType) &&
+                    e.nullable.equals(a.nullable) && a.metadata.equals(e.metadata) &&
+                  e.getClass.equals(a.getClass))
+                {
+                  println(s"PROCESS_COLUMN EQUAL: (${e.getClass.getSimpleName}, ${a.getClass.getSimpleName}), (${e.name},  ${a.name}) (${e.dataType}, ${a.dataType}), (${e.nullable}, ${a.nullable}), (${e.metadata}, ${a.metadata})")
+                } else {
+                  println(s"PROCESS_COLUMN DIFF: (${e.getClass.getSimpleName}, ${a.getClass.getSimpleName}), (${e.name},  ${a.name}) (${e.dataType}, ${a.dataType}), (${e.nullable}, ${a.nullable}), (${e.metadata}, ${a.metadata})")
+                }
+//                AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
+//                  a.exprId
+//                )
+                e
               case None => e
           }
       )
