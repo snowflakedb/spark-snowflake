@@ -22,6 +22,7 @@ import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
 
 // scalastyle:off println
 class PushdownEnhancement01 extends IntegrationSuiteBase {
@@ -42,6 +43,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_in_set: String = s"test_table_in_set_$randomSuffix"
   private val test_table_cast: String = s"test_table_cast_$randomSuffix"
   private val test_table_coalesce = s"test_table_coalesce_$randomSuffix"
+  private val test_table_equal_null = s"test_table_equal_null_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -61,6 +63,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_in_set")
       jdbcUpdate(s"drop table if exists $test_table_cast")
       jdbcUpdate(s"drop table if exists $test_table_coalesce")
+      jdbcUpdate(s"drop table if exists $test_table_equal_null")
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
@@ -713,6 +716,41 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
       result,
+      expectedResult
+    )
+  }
+
+  test("pushdown EqualNullSafe: operator <=>") {
+    jdbcUpdate(s""" create or replace table $test_table_equal_null(c1 String, c2 String)""")
+    jdbcUpdate(s"insert into $test_table_equal_null values(null, null), ('a', null), ('a', 'a')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable",test_table_equal_null)
+      .load()
+
+    tmpDF.createOrReplaceTempView("test_table_equal_null")
+    val df1 = sparkSession.sql("select * from test_table_equal_null where c1 <=> c2")
+    val expectedResult = Seq(Row(null, null), Row("a", "a"))
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_equal_null ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         |AS "SUBQUERY_0" WHERE EQUAL_NULL ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" )
+         |""".stripMargin,
+      df1,
+      expectedResult
+    )
+
+    val df2 = sparkSession.sql("select * from test_table_equal_null")
+        .select(col("c1").as("alias_c1"), col("c2").as("alias_c2"))
+        .filter(col("alias_c1").eqNullSafe(col("alias_c2")))
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_1"."C1" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."C2" ) AS "SUBQUERY_2_COL_1"
+         |FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_equal_null ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE EQUAL_NULL ( "SUBQUERY_0"."C1" ,
+         |"SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1"
+         |""".stripMargin,
+      df2,
       expectedResult
     )
   }
