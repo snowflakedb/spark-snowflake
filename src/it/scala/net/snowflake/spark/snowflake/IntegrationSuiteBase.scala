@@ -32,6 +32,14 @@ trait IntegrationSuiteBase
     extends IntegrationEnv
     with QueryTest {
 
+  /**
+    * A helper object for importing spark SQL implicits.
+    * It is equivalent to org.apache.spark.sql.test.SQLTestUtilsBase.testImplicits
+    */
+  protected object testImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = sparkSession.sqlContext
+  }
+
   private val log = LoggerFactory.getLogger(getClass)
 
   def getAzureURL(input: String): String = {

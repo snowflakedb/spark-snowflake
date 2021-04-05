@@ -162,6 +162,13 @@ object Parameters {
   val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY: String = knownParam(
     "internal_check_table_existence_in_current_schema_only"
   )
+  // Internal option to skip write operation when writing a DataFrame
+  // without any partitions. By default, it it is 'false'.
+  // This option may be removed without any notice in any time.
+  // Introduced since Spark Connector 2.8.5
+  val PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME: String = knownParam(
+    "internal_skip_write_when_writing_empty_dataframe"
+  )
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -620,6 +627,9 @@ object Parameters {
     }
     def checkTableExistenceInCurrentSchemaOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
+    }
+    def skipWriteWhenWritingEmptyDataFrame: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "false"))
     }
 
     /**
