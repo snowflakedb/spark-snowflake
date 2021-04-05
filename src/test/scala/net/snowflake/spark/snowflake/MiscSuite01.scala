@@ -200,6 +200,7 @@ class MiscSuite01 extends FunSuite with Matchers {
       .config("spark.driver.extraJavaOptions", s"-Duser.timezone=GMT")
       .config("spark.executor.extraJavaOptions", s"-Duser.timezone=UTC")
       .config("spark.sql.session.timeZone", "America/Los_Angeles")
+      .config("spark.driver.bindAddress", "127.0.0.1")
       .getOrCreate()
 
     val metric = SnowflakeTelemetry.getClientConfig()
