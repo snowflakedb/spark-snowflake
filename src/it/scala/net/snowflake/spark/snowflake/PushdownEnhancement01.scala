@@ -113,6 +113,51 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
+  test("test/reproduce SNOW-304320: call DataFrame.dropDuplicates(c1)") {
+    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_length)
+      .load()
+    tmpDF.dropDuplicates("c1").show()
+
+    testPushdown(
+      s"""SELECT * FROM ( $test_table_length ) AS "SF_CONNECTOR_QUERY_ALIAS"""".stripMargin,
+      tmpDF.dropDuplicates("c1"),
+      Seq(Row("a", "b1", "c1"))
+    )
+
+    testPushdown(
+      s"""SELECT * FROM ( $test_table_length ) AS "SF_CONNECTOR_QUERY_ALIAS"""".stripMargin,
+      tmpDF.groupBy(col("c1")).agg(first("c2"), first("c3")),
+      Seq(Row("a", "b1", "c1"))
+    )
+  }
+
+  test("test SNOW-304320") {
+    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_length)
+      .load()
+
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" , ( MIN ( "SUBQUERY_0"."C2" ) )
+         | AS "SUBQUERY_1_COL_1" , ( MAX ( "SUBQUERY_0"."C3" ) ) AS "SUBQUERY_1_COL_2"
+         | FROM ( SELECT * FROM ( $test_table_length ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" GROUP BY "SUBQUERY_0"."C1"
+         |""".stripMargin,
+      tmpDF.groupBy(col("c1")).agg(min("c2"), max("c3")),
+      Seq(Row("a", "b1", "c2"))
+    )
+  }
+
   test("test pushdown date_trunc function") {
     jdbcUpdate(s"create or replace table $test_table_ts_trunc(ts timestamp_ntz)")
     jdbcUpdate(s"insert into $test_table_ts_trunc values ('2019-08-21 12:34:56.789')")
