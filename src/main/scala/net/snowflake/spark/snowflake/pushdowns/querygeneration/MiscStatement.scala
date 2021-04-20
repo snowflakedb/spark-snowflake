@@ -46,6 +46,24 @@ private[querygeneration] object MiscStatement {
       case Cast(child, t, _) =>
         getCastType(t) match {
           case Some(cast) =>
+            /** For known unsupported data conversion, raise exception to break the pushdown process.
+              * For example, snowflake doesn't support to convert DATE/TIMESTAMP to NUMBER
+              */
+            (child.dataType, t) match {
+              case (_: DateType | _: TimestampType,
+              _: IntegerType | _: LongType | _: FloatType | _: DoubleType | _: DecimalType) => {
+                // This exception will not break the connector. It will be caught in
+                // QueryBuilder.treeRoot and a telemetry message will be sent if
+                // there are any snowflake tables in the query.
+                throw new SnowflakePushdownUnsupportedException(
+                  SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION,
+                  s"Don't support to convert ${child.dataType} column to $t type",
+                  "",
+                  false)
+              }
+              case _ =>
+            }
+
             ConstantString("CAST") +
               blockStatement(convertStatement(child, fields) + "AS" + cast)
           case _ => convertStatement(child, fields)
@@ -159,4 +177,5 @@ private[querygeneration] object MiscStatement {
       case DoubleType => "DOUBLE"
       case _ => null
     })
+
 }

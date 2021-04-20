@@ -99,15 +99,14 @@ class UtilsSuite extends FunSuite with Matchers {
   }
 
   test("test Utils.readMapFromFile/readMapFromString") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("SnowflakeSourceSuite")
-    val sc = SparkContext.getOrCreate(conf)
-
     // Test valid map file
     val mapContentString = "#key0 = value0\nkey1=value1\nkey2=value2"
     val (file, fullName, name) = writeTempFile(mapContentString)
     try {
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName("SnowflakeSourceSuite")
+      val sc = SparkContext.getOrCreate(conf)
       val resultMap = Utils.readMapFromFile(sc, fullName)
       assert(resultMap.size == 2)
       assert(resultMap("key1").equals("value1"))

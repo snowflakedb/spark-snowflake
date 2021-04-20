@@ -23,6 +23,7 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 // scalastyle:off println
 class PushdownEnhancement01 extends IntegrationSuiteBase {
@@ -83,6 +84,29 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     // read data without caching data for use_copy_unload = true
     thisConnectorOptionsNoTable = replaceOption(
       connectorOptionsNoTable, "max_retry_count", "1")
+  }
+
+  test("negative test for cast DATE/TIMESTAMP to NUMBER") {
+    jdbcUpdate(s"create or replace table $test_table_cast(d date, ts timestamp)")
+    jdbcUpdate(s"insert into $test_table_cast values ('2021-10-10', '2021-12-12 12:12:12.123')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_cast)
+      .load()
+
+    testPushdown(
+      s"""SELECT "D" FROM $test_table_cast""".stripMargin,
+      tmpDF.select(col("d").cast(DoubleType)),
+      Seq(Row(null))
+    )
+
+    testPushdown(
+      s"""SELECT "TS" FROM $test_table_cast""".stripMargin,
+      tmpDF.select(col("TS").cast(LongType)),
+      Seq(Row(1639311132))
+    )
   }
 
   test("test pushdown length() function") {
