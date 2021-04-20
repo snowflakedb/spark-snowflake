@@ -354,30 +354,18 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 6)
     )
 
-    if (params.useCopyUnload) {
-      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
-      // The COPY UNLOAD supported function list can be found at
-      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
-      testPushdown(
-        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    } else {
-      testPushdown(
-        s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
-           |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
-           |( RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
-           |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
-           |    AS "SUBQUERY_1_COL_2"
-           |FROM ( SELECT * FROM ( $test_table_rank )
-           |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    }
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
+         |( RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
+         |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |    AS "SUBQUERY_1_COL_2"
+         |FROM ( SELECT * FROM ( $test_table_rank )
+         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   test("test pushdown WindowExpression: Rank with PARTITION BY") {
@@ -414,31 +402,19 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 3)
     )
 
-    if (params.useCopyUnload) {
-      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
-      // The COPY UNLOAD supported function list can be found at
-      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
-      testPushdown(
-        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    } else {
-      testPushdown(
-        s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
-           |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
-           |( RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
-           |  ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
-           |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
-           |    AS "SUBQUERY_1_COL_2"
-           |FROM ( SELECT * FROM ( $test_table_rank )
-           |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    }
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
+         |( RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
+         |  ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
+         |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |    AS "SUBQUERY_1_COL_2"
+         |FROM ( SELECT * FROM ( $test_table_rank )
+         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   test("test pushdown WindowExpression: DenseRank without PARTITION BY") {
@@ -474,30 +450,18 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 4)
     )
 
-    if (params.useCopyUnload) {
-      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
-      // The COPY UNLOAD supported function list can be found at
-      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
-      testPushdown(
-        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    } else {
-      testPushdown(
-        s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
-           |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
-           |( DENSE_RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
-           |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
-           |    AS "SUBQUERY_1_COL_2"
-           |FROM ( SELECT * FROM ( $test_table_rank )
-           |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    }
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
+         |( DENSE_RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
+         |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |    AS "SUBQUERY_1_COL_2"
+         |FROM ( SELECT * FROM ( $test_table_rank )
+         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   test("test pushdown WindowExpression: DenseRank with PARTITION BY") {
@@ -534,32 +498,20 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 2)
     )
 
-    if (params.useCopyUnload) {
-      // COPY UNLOAD doesn't support rank()/dense_rank(). Refer to SNOW-177604
-      // The COPY UNLOAD supported function list can be found at
-      // https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions
-      testPushdown(
-        s"""SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS"
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    } else {
-      testPushdown(
-        s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
-           |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
-           |( DENSE_RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
-           |  ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
-           |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
-           |    AS "SUBQUERY_1_COL_2"
-           |FROM ( SELECT * FROM ( $test_table_rank )
-           |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           |
-           |""".stripMargin,
-        resultDF,
-        expectedResult
-      )
-    }
+    testPushdown(
+      s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
+         |( DENSE_RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
+         |  ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
+         |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |    AS "SUBQUERY_1_COL_2"
+         |FROM ( SELECT * FROM ( $test_table_rank )
+         |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
   }
 
   override def beforeEach(): Unit = {
