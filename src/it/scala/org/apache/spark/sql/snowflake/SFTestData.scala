@@ -88,7 +88,9 @@ trait SFTestData extends SQLTestData {
           NullStrings(2, "ABC") ::
           NullStrings(3, null) :: Nil)
 
-  override protected lazy val lowerCaseDataWithDuplicates: DataFrame =
+  // SQLTestData doesn't define lowerCaseDataWithDuplicates for spark 2.3
+  // So don't use 'override' key word.
+  protected lazy val lowerCaseDataWithDuplicates: DataFrame =
     spark
       .createDataFrame(
         LowerCaseData(1, "a") ::

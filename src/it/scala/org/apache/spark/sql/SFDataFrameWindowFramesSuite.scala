@@ -342,7 +342,9 @@ class SFDataFrameWindowFramesSuite
         Row(10, 6000) :: Nil)
   }
 
-  test("SPARK-24033: Analysis Failure of OffsetWindowFunction") {
+  // Spark-24033 affects spark from 2.3.1, spark test uses 2.3.0, So this test case is not applicable.
+  // https://issues.apache.org/jira/browse/SPARK-24033
+  ignore("SPARK-24033: Analysis Failure of OffsetWindowFunction") {
     val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
     val res =
       Row(1, 1, null) :: Row (1, 2, 1) :: Row(1, 3, 2) :: Row(2, 1, null) :: Row(2, 2, 1) :: Nil

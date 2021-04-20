@@ -21,7 +21,7 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
 
           Alias(Cast(col, col.dataType), orig_name)(
             col.exprId,
-            Seq.empty[String],
+            None,
             Some(col.metadata)
           )
         }
@@ -371,7 +371,7 @@ case class UnionQuery(children: Seq[LogicalPlan],
           a =>
             AttributeReference(a.name, a.dataType, a.nullable, a.metadata)(
               a.exprId,
-              Seq[String](alias)
+              Option[String](alias)
             )))
     )
 

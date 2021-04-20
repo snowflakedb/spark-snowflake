@@ -2,7 +2,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+// TransposeWindow is new class from spark 3.0
+// import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
@@ -434,6 +435,8 @@ class SFDataFrameWindowFunctionsSuite
         Row("b", 2, 4, 8)))
   }
 
+  // udaf() is new function from spark 3.0, so disable this test case.
+  /*
   test("window function with aggregator") {
     val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
       def zero: Long = 0L
@@ -469,6 +472,7 @@ class SFDataFrameWindowFunctionsSuite
         Row("b", 3, 8, 32),
         Row("b", 2, 4, 8)))
   }
+  */
 
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
@@ -691,7 +695,9 @@ class SFDataFrameWindowFunctionsSuite
   }
   */
 
-  test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
+  // This spark fix affects spark from 2.4, This test case is not applicable for spark 2.3
+  // https://issues.apache.org/jira/browse/SPARK-24575
+  ignore("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
     def checkAnalysisError(df: => DataFrame, clause: String): Unit = {
       val thrownException = the[AnalysisException] thrownBy {
         df.queryExecution.analyzed

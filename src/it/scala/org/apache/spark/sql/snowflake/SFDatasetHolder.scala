@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.snowflake
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.InterfaceStability.Stable
 import org.apache.spark.sql.{DataFrame, Encoder}
 
 @Stable
