@@ -19,13 +19,13 @@ if [ -z "$GPG_PRIVATE_KEY" ]; then
   exit 1
 fi
 
-if [ -z "$JENKINS_BINTRAY_USER" ]; then
-  echo "[ERROR] Jenkins bintry user is not specified!"
+if [ -z "$SONATYPE_USER" ]; then
+  echo "[ERROR] Jenkins sonatype user is not specified!"
   exit 1
 fi
 
-if [ -z "$JENKINS_BINTRAY_KEY" ]; then
-  echo "[ERROR] Jenkins bintry key is not specified!"
+if [ -z "$SONATYPE_PASSWORD" ]; then
+  echo "[ERROR] Jenkins sonatype pwd is not specified!"
   exit 1
 fi
 
@@ -54,13 +54,12 @@ if [ -z "$GITHUB_TAG_3" ]; then
   exit 1
 fi
 
-STR=$'realm = Bintray API Realm\n
-host = api.bintray.com\n
-user = '$JENKINS_BINTRAY_USER$'\n
-password = '$JENKINS_BINTRAY_KEY$'\n
-organization = snowflakedb'
+STR=$'realm=Sonatype Nexus Repository Manager
+host=oss.sonatype.org
+user='$SONATYPE_USER$'
+password='$SONATYPE_PASSWORD$''
 
-echo "$STR" > .bintray
+echo "$STR" > ~/.ivy2/.credentials
 
 # import private key first
 if [ ! -z "$GPG_PRIVATE_KEY" ] && [ -f "$GPG_PRIVATE_KEY" ]; then
@@ -114,4 +113,3 @@ fi
 
 echo "Run White Source scan"
 whitesource/run_whitesource.sh
-
