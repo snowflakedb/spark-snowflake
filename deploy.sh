@@ -54,7 +54,7 @@ if [ -z "$GITHUB_TAG_3" ]; then
   exit 1
 fi
 
-mkdir ~/.ivy2
+mkdir -p ~/.ivy2
 
 STR=$'realm=Sonatype Nexus Repository Manager
 host=oss.sonatype.org
