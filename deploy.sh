@@ -54,10 +54,13 @@ if [ -z "$GITHUB_TAG_3" ]; then
   exit 1
 fi
 
+mkdir ~/.ivy2
+
 STR=$'realm=Sonatype Nexus Repository Manager
 host=oss.sonatype.org
 user='$SONATYPE_USER$'
 password='$SONATYPE_PASSWORD$''
+
 
 echo "$STR" > ~/.ivy2/.credentials
 
@@ -85,4 +88,3 @@ fi
 
 echo "Run White Source scan"
 whitesource/run_whitesource.sh
-
