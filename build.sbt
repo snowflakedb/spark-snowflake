@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.8.5"
+val sparkConnectorVersion = "2.8.6"
 
 lazy val ItTest = config("it") extend Test
 
@@ -113,14 +113,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           </developer>
         </developers>,
 
-    ThisBuild / bintrayReleaseOnPublish := true,
-    bintrayOrganization := Some("snowflakedb"),
-    bintrayCredentialsFile := {
-      val user = Properties.envOrNone("JENKINS_BINTRAY_USER")
-      if (user.isDefined) {
-        val workspace = Properties.envOrElse("WORKSPACE", ".")
-        new File(s"$workspace/.bintray")
-      } else bintrayCredentialsFile.value
-    }
-  )
+    publishTo := Some(
+      if (isSnapshot.value)
+        Opts.resolver.sonatypeSnapshots
+      else
+        Opts.resolver.sonatypeStaging
+    )
 
+  )
