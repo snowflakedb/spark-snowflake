@@ -195,6 +195,8 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
 
       // From Spark 3.1, Union has 3 parameters
       case Union(children, byName, allowMissingCol) =>
+        // Snowflake doesn't support Union by Name. For details about what's UNION by Name,
+        // refer to the comment and example at Spark function: DataSet.unionByName()
         if (byName || allowMissingCol) {
           // This exception is not a real issue. It will be caught in
           // QueryBuilder.treeRoot and a telemetry message will be sent if

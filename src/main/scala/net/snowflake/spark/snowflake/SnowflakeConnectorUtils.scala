@@ -123,7 +123,7 @@ object SnowflakeFailMessage {
   final val FAIL_PUSHDOWN_SET_TO_EXPR = "pushdown failed in setToExpr"
   final val FAIL_PUSHDOWN_AGGREGATE_EXPRESSION = "pushdown failed for aggregate expression"
   final val FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION = "pushdown failed for unsupported conversion"
-  final val FAIL_PUSHDOWN_UNSUPPORTED_UNION = "pushdown failed for Spark featured UNION"
+  final val FAIL_PUSHDOWN_UNSUPPORTED_UNION = "pushdown failed for Spark feature: UNION by name"
 }
 
 class SnowflakePushdownUnsupportedException(message: String,
