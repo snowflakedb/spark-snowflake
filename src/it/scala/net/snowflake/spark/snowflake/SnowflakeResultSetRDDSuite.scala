@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
@@ -2180,6 +2181,35 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_write")
       jdbcUpdate(s"drop table if exists public.$test_table_write")
     }
+  }
+
+  // For the connection from spark connector, spark.snowflakedb.version must have been set.
+  test("Test client_info is set correctly") {
+    val clientInfo = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select current_session_client_info()")
+      .load()
+      .collect()(0).getString(0)
+
+    val objectMapper = new ObjectMapper()
+    val jsonNode = objectMapper.readTree(clientInfo)
+    assert(jsonNode.get(Utils.PROPERTY_NAME_OF_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
+  }
+
+  // Refer to SNOW-346101 for details
+  test("If client_info is not set, this case will fail") {
+    val dateStringDF = sparkSession.sql(s"select '2014-04-25'")
+    jdbcUpdate(s"create or replace table $test_table_write(d date)")
+
+    // If client_inf is not set, this case fails. The error message is:
+    // Date '2014-04-25' is not recognized
+    dateStringDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
   }
 
   override def beforeEach(): Unit = {

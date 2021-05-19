@@ -24,6 +24,7 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 
+import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
@@ -199,9 +200,11 @@ private[snowflake] class JDBCWrapper {
            |""".stripMargin.filter(_ >= ' '))
     }
 
-    // Important: Set "snowflake.client.info" is very important!
+    // Important: Set client_info is very important!
     // For more details, refer to PROPERTY_NAME_OF_CONNECTOR_VERSION
-    System.setProperty("snowflake.client.info", Utils.getClientInfoString())
+    // NOTE: From JDBC 3.13.3, the client info can be set with JDBC properties
+    // instead of system property: "snowflake.client.info".
+    jdbcProperties.put(SFSessionProperty.CLIENT_INFO.getPropertyKey, Utils.getClientInfoString())
 
     val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
 
