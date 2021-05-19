@@ -193,8 +193,23 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           }
         }
 
-      case Union(children) =>
-        Some(UnionQuery(children, alias.next))
+      // From Spark 3.1, Union has 3 parameters
+      case Union(children, byName, allowMissingCol) =>
+        // Snowflake doesn't support Union by Name. For details about what's UNION by Name,
+        // refer to the comment and example at Spark function: DataSet.unionByName()
+        if (byName || allowMissingCol) {
+          // This exception is not a real issue. It will be caught in
+          // QueryBuilder.treeRoot and a telemetry message will be sent if
+          // there are any snowflake tables in the query.
+          throw new SnowflakePushdownUnsupportedException(
+            SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_UNION,
+            s"${plan.nodeName} with byName=$byName allowMissingCol=$allowMissingCol",
+            plan.getClass.getName,
+            false
+          )
+        } else {
+          Some(UnionQuery(children, alias.next))
+        }
 
       case Expand(projections, output, child) =>
         val children = projections.map { p =>

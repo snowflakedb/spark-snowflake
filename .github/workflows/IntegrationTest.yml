@@ -13,7 +13,7 @@ jobs:
     strategy:
      matrix:
        scala_version: [ '2.12.11' ]
-       spark_version: [ '3.0.0' ]
+       spark_version: [ '3.1.1' ]
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure', 'gcp' ]
 

@@ -60,7 +60,8 @@ private[querygeneration] object NumericStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
-      case UnaryMinus(child) =>
+      // From spark 3.1, UnaryMinus() has 2 parameters.
+      case UnaryMinus(child, _) =>
         ConstantString("-") +
           blockStatement(convertStatement(child, fields))
 
@@ -87,7 +88,8 @@ private[querygeneration] object NumericStatement {
       // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
-      case Rand(seed) =>
+      // From spark 3.1, Rand() has 2 parameters.
+      case Rand(seed, _) =>
         ConstantString("RANDOM") + blockStatement(
           LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
         )
