@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.1.1")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.8.6"
+val sparkConnectorVersion = "2.9.0"
 
 lazy val ItTest = config("it") extend Test
 
@@ -51,7 +51,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.1",
+      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.2",
       "net.snowflake" % "snowflake-jdbc" % "3.13.3",
       "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
