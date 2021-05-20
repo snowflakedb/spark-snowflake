@@ -41,8 +41,11 @@ object SnowflakeConnectorUtils {
       enablePushdownSession(session)
       true
     } else {
-      log.warn("Don't support query pushdown because the Spark Connector is built for " +
-        s"Spark $SUPPORT_SPARK_VERSION, but this Spark version is ${session.version}")
+      log.warn("Query pushdown is not supported because you are using " +
+        s"Spark ${session.version} with a connector designed to support Spark " +
+        s"$SUPPORT_SPARK_VERSION. Either use the version of Spark supported by " +
+        s"the connector or install a version of the connector that supports " +
+        s"your version of Spark.")
       disablePushdownSession(session)
       false
     }
