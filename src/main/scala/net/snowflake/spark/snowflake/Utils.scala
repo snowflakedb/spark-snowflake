@@ -712,4 +712,5 @@ object Utils {
         println(s"Fail to print result set: ${th.getMessage}")
     }
   }
+
 }
