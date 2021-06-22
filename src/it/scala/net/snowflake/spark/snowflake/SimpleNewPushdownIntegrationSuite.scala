@@ -19,7 +19,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.functions.row_number
+import org.apache.spark.sql.functions._
 
 class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
 
@@ -153,11 +153,63 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
                      |	) AS "subquery_1"
                      | ORDER BY ("subquery_1"."P") DESC
                      |) AS "subquery_2"
-                     | LIMIT 1
+                     | ORDER BY ( "SUBQUERY_2"."P" ) DESC LIMIT 1
       """.stripMargin,
       result,
       Seq(Row(2, 2))
     )
+  }
+
+  test("LIMIT and SORT with large table") {
+    val accountName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
+    val isAWS = accountName == null || accountName.equals("aws")
+    // This test case can only be enabled on AWS test account
+    // because the large test table only is accessible on it.
+    if (isAWS) {
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("use_cached_result", "false")
+        .option("dbtable", "SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.ORDERS")
+        .load()
+
+      val df2 = df.groupBy("O_CUSTKEY")
+        .agg(sum("O_TOTALPRICE").alias("PRICE_NAME"))
+        .sort(col("PRICE_NAME").desc)
+        .limit(10)
+
+      val expected = Seq(
+        Row(9471283, 8147199.65),
+        Row(7835755, 8010905.61),
+        Row(12313900, 7695645.46),
+        Row(56890, 7617665.20),
+        Row(12671056, 7581766.55),
+        Row(988180, 7506550.69),
+        Row(13118692, 7491430.61),
+        Row(3361195, 7479928.77),
+        Row(12060172, 7412950.79),
+        Row(8260897, 7395003.01)
+      )
+
+      testPushdown(
+        s"""SELECT * FROM
+           |  ( SELECT * FROM
+           |    ( SELECT ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+           |             ( SUM ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) ) AS "SUBQUERY_2_COL_1" FROM
+           |      ( SELECT ( "SUBQUERY_0"."O_CUSTKEY" ) AS "SUBQUERY_1_COL_0" ,
+           |               ( "SUBQUERY_0"."O_TOTALPRICE" ) AS "SUBQUERY_1_COL_1" FROM
+           |        ( SELECT * FROM ( SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.ORDERS
+           |        ) AS "SF_CONNECTOR_QUERY_ALIAS"
+           |      ) AS "SUBQUERY_0"
+           |    ) AS "SUBQUERY_1" GROUP BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+           |  ) AS "SUBQUERY_2" ORDER BY ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) DESC
+           |) AS "SUBQUERY_3" ORDER BY ( "SUBQUERY_3"."SUBQUERY_2_COL_1" ) DESC LIMIT 10
+      """.stripMargin,
+        df2,
+        expected,
+        testPushdownOff = false // The table is big, only test pushdown is on
+      )
+    }
   }
 
   test("Nested query with column alias") {
