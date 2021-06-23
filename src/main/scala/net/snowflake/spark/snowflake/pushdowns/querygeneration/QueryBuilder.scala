@@ -153,10 +153,10 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
               ProjectQuery(fields, subQuery, alias.next)
             case Aggregate(groups, fields, _) =>
               AggregateQuery(fields, groups, subQuery, alias.next)
-            case Limit(limitExpr, _) =>
-              SortLimitQuery(Some(limitExpr), Seq.empty, subQuery, alias.next)
             case Limit(limitExpr, Sort(orderExpr, true, _)) =>
               SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
+            case Limit(limitExpr, _) =>
+              SortLimitQuery(Some(limitExpr), Seq.empty, subQuery, alias.next)
 
             case Sort(orderExpr, true, Limit(limitExpr, _)) =>
               SortLimitQuery(Some(limitExpr), orderExpr, subQuery, alias.next)
