@@ -161,11 +161,12 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("LIMIT and SORT with large table") {
-    val accountName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
-    val isAWS = accountName == null || accountName.equals("aws")
-    // This test case can only be enabled on AWS test account
+    val deploymentName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
+    val isAWS = deploymentName == null || deploymentName.equals("aws")
+    // This test case can only be enabled on AWS test account sfctest0
     // because the large test table only is accessible on it.
-    if (isAWS) {
+    val accountName = connectorOptionsNoTable("sfurl").toLowerCase
+    if (isAWS && accountName.contains("sfctest0")) {
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
