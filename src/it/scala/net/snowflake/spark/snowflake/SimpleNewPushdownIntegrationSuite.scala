@@ -161,16 +161,15 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
   }
 
   test("LIMIT and SORT with large table") {
-    val accountName = System.getenv(SNOWFLAKE_TEST_ACCOUNT)
-    val isAWS = accountName == null || accountName.equals("aws")
-    // This test case can only be enabled on AWS test account
+    val largeTableName = "SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.ORDERS"
+    // This test case can only be enabled on AWS test account sfctest0
     // because the large test table only is accessible on it.
-    if (isAWS) {
+    if (DefaultJDBCWrapper.tableExists(params, largeTableName)) {
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("use_cached_result", "false")
-        .option("dbtable", "SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.ORDERS")
+        .option("dbtable", largeTableName)
         .load()
 
       val df2 = df.groupBy("O_CUSTKEY")
@@ -198,7 +197,7 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
            |             ( SUM ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) ) AS "SUBQUERY_2_COL_1" FROM
            |      ( SELECT ( "SUBQUERY_0"."O_CUSTKEY" ) AS "SUBQUERY_1_COL_0" ,
            |               ( "SUBQUERY_0"."O_TOTALPRICE" ) AS "SUBQUERY_1_COL_1" FROM
-           |        ( SELECT * FROM ( SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.ORDERS
+           |        ( SELECT * FROM ( $largeTableName
            |        ) AS "SF_CONNECTOR_QUERY_ALIAS"
            |      ) AS "SUBQUERY_0"
            |    ) AS "SUBQUERY_1" GROUP BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
@@ -209,6 +208,8 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         expected,
         testPushdownOff = false // The table is big, only test pushdown is on
       )
+    } else {
+      println("Skip test: LIMIT and SORT with large table")
     }
   }
 
