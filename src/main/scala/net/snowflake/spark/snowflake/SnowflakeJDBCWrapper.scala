@@ -556,7 +556,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       bindVariableEnabled: Boolean = true
     ): ResultSetMetaData =
       (ConstantString("select * from") + statement + "where 1 = 0")
-        .execute(bindVariableEnabled)(connection)
+        .prepareStatement(bindVariableEnabled)(connection)
         .getMetaData
 
     def tableSchema(name: String, params: MergedParameters): StructType =
@@ -726,11 +726,27 @@ private[snowflake] class SnowflakeSQLStatement(
 
   def execute(
     bindVariableEnabled: Boolean
-  )(implicit conn: Connection): ResultSet =
-    if (bindVariableEnabled) executeWithBindVariable(conn)
-    else executeWithoutBindVariable(conn)
+  )(implicit conn: Connection): ResultSet = {
+    val statement = prepareStatement(bindVariableEnabled)
+    try {
+      val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+      rs
+    } catch {
+      case th: Throwable => {
+        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
+        throw th
+      }
+    }
+  }
 
-  private def executeWithoutBindVariable(conn: Connection): ResultSet = {
+  private[snowflake] def prepareStatement(
+    bindVariableEnabled: Boolean
+  )(implicit conn: Connection): PreparedStatement =
+    if (bindVariableEnabled) prepareWithBindVariable(conn)
+    else parepareWithoutBindVariable(conn)
+
+  private def parepareWithoutBindVariable(conn: Connection): PreparedStatement = {
     val sql = list.reverse
     val query = sql
       .foldLeft(new StringBuilder) {
@@ -748,20 +764,10 @@ private[snowflake] class SnowflakeSQLStatement(
                        |""".stripMargin.filter(_ >= ' ')
     log.info(s"$logPrefix $query")
 
-    val statement = conn.prepareStatement(query)
-    try {
-      val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
-      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
-      rs
-    } catch {
-      case th: Throwable => {
-        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
-        throw th
-      }
-    }
+    conn.prepareStatement(query)
   }
 
-  private def executeWithBindVariable(conn: Connection): ResultSet = {
+  private def prepareWithBindVariable(conn: Connection): PreparedStatement = {
     val sql = list.reverse
     val varArray: Array[StatementElement] =
       new Array[StatementElement](numOfVar)
@@ -837,16 +843,7 @@ private[snowflake] class SnowflakeSQLStatement(
         }
     }
 
-    try {
-      val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
-      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
-      rs
-    } catch {
-      case th: Throwable => {
-        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
-        throw th
-      }
-    }
+    statement
   }
 
   override def equals(obj: scala.Any): Boolean =
