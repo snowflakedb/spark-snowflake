@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.9.0"
+val sparkConnectorVersion = "2.9.1"
 val scalaVersionMajor = "2.12"
 val sparkVersionMajor = "3.1"
 val sparkVersion = s"${sparkVersionMajor}.1"
@@ -35,8 +35,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.2",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.3",
+      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
+      "net.snowflake" % "snowflake-jdbc" % "3.13.6",
       // "net.snowflake" %% "spark-snowflake" % "2.8.0-spark_3.0",
       // "com.google.guava" % "guava" % "14.0.1" % Test,
       // "org.scalatest" %% "scalatest" % "3.0.5" % Test,
