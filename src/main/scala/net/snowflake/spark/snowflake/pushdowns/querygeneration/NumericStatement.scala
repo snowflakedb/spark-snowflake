@@ -60,8 +60,8 @@ private[querygeneration] object NumericStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
-      // From spark 3.1, UnaryMinus() has 2 parameters.
-      case UnaryMinus(child, _) =>
+      // On Spark 2.4, UnaryMinus() has 1 parameter only.
+      case UnaryMinus(child) =>
         ConstantString("-") +
           blockStatement(convertStatement(child, fields))
 
@@ -76,7 +76,8 @@ private[querygeneration] object NumericStatement {
 
       case PromotePrecision(child) => convertStatement(child, fields)
 
-      case CheckOverflow(child, t, _) =>
+      // The 3rd parameter is new from spark 3.0
+      case CheckOverflow(child, t) =>
         MiscStatement.getCastType(t) match {
           case Some(cast) =>
             ConstantString("CAST") +
@@ -88,8 +89,8 @@ private[querygeneration] object NumericStatement {
       // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
-      // From spark 3.1, Rand() has 2 parameters.
-      case Rand(seed, _) =>
+      // On Spark 2.4, Rand() has 1 parameter only.
+      case Rand(seed) =>
         ConstantString("RANDOM") + blockStatement(
           LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
         )
