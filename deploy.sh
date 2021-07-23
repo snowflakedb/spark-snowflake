@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 #
 # Push the Spark Connector to the public maven repository
 # This script needs to be executed by snowflake jenkins job
