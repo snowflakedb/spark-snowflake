@@ -71,17 +71,27 @@ if [ ! -z "$GPG_PRIVATE_KEY" ] && [ -f "$GPG_PRIVATE_KEY" ]; then
   fi
 fi
 
-# Put sbt in PATH because white source scan needs it.
-export PATH=build:$PATH
+which sbt
+if [ $? -ne 0 ]
+then
+   echo "sbt is not installed, download latest sbt for test and build"
+   curl -L -o sbt-1.5.3.zip https://github.com/sbt/sbt/releases/download/v1.5.3/sbt-1.5.3.zip
+   unzip sbt-1.5.3.zip
+   PATH=$PWD/sbt/bin:$PATH
+else
+   echo "use system installed sbt"
+fi
+which sbt
+sbt version
 
 echo publishing main branch...
 git checkout tags/$GITHUB_TAG_1
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  sbt +publishSigned
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
-  build/sbt +publishLocalSigned
+  sbt +publishLocalSigned
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
 fi
 
@@ -91,11 +101,11 @@ whitesource/run_whitesource.sh
 echo publishing previous_spark_version branch...
 git checkout tags/$GITHUB_TAG_2
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  sbt +publishSigned
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
-  build/sbt +publishLocalSigned
+  sbt +publishLocalSigned
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_2}/ --recursive
 fi
 
@@ -105,11 +115,11 @@ whitesource/run_whitesource.sh
 echo publishing previous_spark_version branch...
 git checkout tags/$GITHUB_TAG_3
 if [ "$PUBLISH" = true ]; then
-  build/sbt +publishSigned
+  sbt +publishSigned
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
-  build/sbt +publishLocalSigned
+  sbt +publishLocalSigned
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_3}/ --recursive
 fi
 
