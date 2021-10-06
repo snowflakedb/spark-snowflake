@@ -182,7 +182,7 @@ private[snowflake] case class SnowflakeRelation(
     resultSchema: StructType
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
-    Utils.genPrologueSql(params).execute(bindVariableEnabled = false)(conn)
+    Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
     Utils.setLastSelect(statement.toString)
 

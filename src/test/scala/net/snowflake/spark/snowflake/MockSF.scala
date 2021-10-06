@@ -154,15 +154,4 @@ class MockSF(params: Map[String, String],
       )
     }
   }
-
-  def verifyThatExpectedQueriesWereIssuedForUnload(
-    expectedQueries: Seq[Regex]
-  ): Unit = {
-    val queriesWithPrologueAndEpilogue = Seq(
-      Utils.genPrologueSql(mergedParams).toString.r
-    ) ++
-      expectedQueries
-    verifyThatExpectedQueriesWereIssued(queriesWithPrologueAndEpilogue)
-  }
-
 }

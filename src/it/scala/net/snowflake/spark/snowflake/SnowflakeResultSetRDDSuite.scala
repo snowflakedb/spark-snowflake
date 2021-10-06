@@ -2212,6 +2212,21 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .save()
   }
 
+  test("if timezone and timestamp output formats are sf_current, they are not set") {
+    var sfOptions = thisConnectorOptionsNoTable
+    sfOptions += (Parameters.PARAM_SF_TIMEZONE -> "sf_current")
+    sfOptions += (Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "sf_current")
+    sfOptions += (Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "sf_current")
+    sfOptions += (Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "sf_current")
+
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptions)
+      .option("query", s"select current_timestamp()")
+      .load()
+      .collect()
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }

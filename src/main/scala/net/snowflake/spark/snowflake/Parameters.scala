@@ -111,6 +111,10 @@ object Parameters {
     "partition_size_in_mb"
   )
   val PARAM_TIME_OUTPUT_FORMAT: String = knownParam("time_output_format")
+  val PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT: String = knownParam("timestamp_ntz_output_format")
+  val PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT: String = knownParam("timestamp_ltz_output_format")
+  val PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT: String = knownParam("timestamp_tz_output_format")
+  val TIMESTAMP_OUTPUT_FORMAT_SF_CURRENT: String = "sf_current"
   val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam(
     "jdbc_query_result_format"
   )
@@ -215,7 +219,10 @@ object Parameters {
     PARAM_MAX_RETRY_COUNT -> "10",
     PARAM_USE_EXPONENTIAL_BACKOFF -> "off",
     PARAM_UPLOAD_CHUNK_SIZE_IN_MB -> "8",
-    PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD -> "true"
+    PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD -> "true",
+    PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF3",
+    PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
+    PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3"
   )
 
   /**
@@ -612,6 +619,15 @@ object Parameters {
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
     }
+
+    def sfTimestampNTZOutputFormat: Option[String] =
+      parameters.get(PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT)
+    def sfTimestampLTZOutputFormat: Option[String] =
+      parameters.get(PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT)
+    def sfTimestampTZOutputFormat: Option[String] =
+      parameters.get(PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT)
+    def isTimestampSnowflake(timestampFormat: String): Boolean =
+      TIMESTAMP_OUTPUT_FORMAT_SF_CURRENT.equals(timestampFormat)
 
     def maxRetryCount: Int = {
       parameters.getOrElse(PARAM_MAX_RETRY_COUNT, "10").toInt

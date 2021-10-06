@@ -204,7 +204,7 @@ private[io] object StageWriter {
     val conn = DefaultJDBCWrapper.getConnector(params)
 
     try {
-      prologueSql.execute(params.bindVariableEnabled)(conn)
+      prologueSql.foreach(x => x.execute(params.bindVariableEnabled)(conn))
 
       val (storage, stage) = CloudStorageOperations.createStorageClient(
         params, conn, tempStage = true, None, "load")
