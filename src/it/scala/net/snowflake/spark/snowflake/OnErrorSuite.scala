@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.SnowflakeSQLException
+import java.sql.SQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -31,7 +31,7 @@ class OnErrorSuite extends IntegrationSuiteBase {
 
   test("continue_on_error off") {
 
-    assertThrows[SnowflakeSQLException] {
+    assertThrows[SQLException] {
       df.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
