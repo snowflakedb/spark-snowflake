@@ -16,6 +16,8 @@ jobs:
        spark_version: [ '3.1.1' ]
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure', 'gcp' ]
+       # run_query_in_async can be removed after async mode is stable
+       run_query_in_async: [ 'true', 'false' ]
 
     steps:
     - uses: actions/checkout@v2
@@ -37,6 +39,7 @@ jobs:
         SPARK_VERSION: ${{ matrix.spark_version }}
         SNOWFLAKE_TEST_ACCOUNT: ${{ matrix.cloud_provider }}
         SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
+        SPARK_CONN_ENV_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: ${{ matrix.run_query_in_async }}
 
     - uses: codecov/codecov-action@v1
       if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
