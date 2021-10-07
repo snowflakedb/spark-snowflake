@@ -505,7 +505,18 @@ private[io] object StageWriter {
     var lastStatement = copyStatement
     try {
       // execute the COPY INTO TABLE statement
-      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
+      val resultSet = if (params.isExecuteQueryWithSyncMode) {
+        copyStatement.execute(params.bindVariableEnabled)(conn)
+      } else {
+        val asyncRs = copyStatement.executeAsync(params.bindVariableEnabled)(conn)
+        val queryID = lastStatement.getLastQueryID()
+        logAndAppend(progress,
+          s"Start to execute first COPY command at ${LocalDateTime.now()}, queryID is: " +
+            s"$queryID; The query URL is:\n${params.getQueryIDUrl(queryID)}")
+        // Wait fot the async query to be done
+        asyncRs.getMetaData
+        asyncRs
+      }
       val firstCopyEnd = System.currentTimeMillis()
       logAndAppend(progress,
         s"""First COPY command is done in

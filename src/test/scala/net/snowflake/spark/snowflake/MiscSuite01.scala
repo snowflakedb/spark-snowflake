@@ -385,4 +385,55 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(setString.isEmpty)
   }
 
+  test("test getQueryIDUrl") {
+    // test URL without port, with postfix
+    var sfOptions = Map(
+      Parameters.PARAM_SF_URL -> "account123.us-east-1.snowflakecomputing.com?QUERY_TAG=tag1",
+      Parameters.PARAM_SF_SSL -> "on"
+    )
+    var param = Parameters.MergedParameters(sfOptions)
+    var queryURL = param.getQueryIDUrl("my_query_id_123")
+    assert(queryURL.equals("https://account123.us-east-1.snowflakecomputing.com" +
+      "/console#/monitoring/queries/detail?queryId=my_query_id_123"))
+
+    // test URL without port, without postfix
+    sfOptions = Map(
+      Parameters.PARAM_SF_URL -> "account123.us-east-1.snowflakecomputing.com",
+      Parameters.PARAM_SF_SSL -> "on"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    queryURL = param.getQueryIDUrl("my_query_id_123")
+    assert(queryURL.equals("https://account123.us-east-1.snowflakecomputing.com" +
+      "/console#/monitoring/queries/detail?queryId=my_query_id_123"))
+
+    // test URL with port, with postfix
+    sfOptions = Map(
+      Parameters.PARAM_SF_URL -> "account123.us-east-1.snowflakecomputing.com:443/",
+      Parameters.PARAM_SF_SSL -> "on"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    queryURL = param.getQueryIDUrl("my_query_id_123")
+    assert(queryURL.equals("https://account123.us-east-1.snowflakecomputing.com:443" +
+      "/console#/monitoring/queries/detail?queryId=my_query_id_123"))
+
+    // test URL with port, without postfix
+    sfOptions = Map(
+      Parameters.PARAM_SF_URL -> "ecosystem_sparktest.preprod3.int.snowflakecomputing.com:8084",
+      Parameters.PARAM_SF_SSL -> "on"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    queryURL = param.getQueryIDUrl("my_query_id_123")
+    assert(queryURL.equals("https://ecosystem_sparktest.preprod3.int.snowflakecomputing.com:8084" +
+      "/console#/monitoring/queries/detail?queryId=my_query_id_123"))
+
+    // negative test.
+    sfOptions = Map(
+      Parameters.PARAM_SF_URL -> "unrecognized_url",
+      Parameters.PARAM_SF_SSL -> "on"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    queryURL = param.getQueryIDUrl("my_query_id_123")
+    assert(queryURL.startsWith("Cannot generate queryID URL for https://unrecognized_url"))
+  }
+
 }
