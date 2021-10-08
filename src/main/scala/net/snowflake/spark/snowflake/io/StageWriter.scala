@@ -501,7 +501,8 @@ private[io] object StageWriter {
       firstCopyFileSet.get.toSet
     )
     log.debug(Utils.sanitizeQueryText(copyStatement.toString))
-    logAndAppend(progress, s"First COPY command is: ${copyStatement.toString}")
+    logAndAppend(progress,
+      s"Now executing below command to write into table:\n${copyStatement.toString}")
 
     var lastStatement = copyStatement
     try {
@@ -512,8 +513,8 @@ private[io] object StageWriter {
         val asyncRs = copyStatement.executeAsync(params.bindVariableEnabled)(conn)
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
         logAndAppend(progress,
-          s"Start to execute first COPY command at ${LocalDateTime.now()}, queryID is: " +
-            s"$queryID; The query URL is:\n${params.getQueryIDUrl(queryID)}")
+          s"The query ID for the write into table command is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
         // Call getMetaData() to wait fot the async query to be done
         // Note: do not call next() to wait for the query to be done because
         // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
@@ -583,8 +584,8 @@ private[io] object StageWriter {
           val asyncRs = copyWithFileClause.executeAsync(params.bindVariableEnabled)(conn)
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
           logAndAppend(progress,
-            s"Start to execute second COPY command at ${LocalDateTime.now()}, queryID is: " +
-              s"$queryID; The query URL is:\n${params.getQueryIDUrl(queryID)}")
+            s"The query ID for the write into table command is: $queryID; " +
+              s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
           // Call getMetaData() to wait fot the async query to be done
           // Note: do not call next() to wait for the query to be done because
           // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
