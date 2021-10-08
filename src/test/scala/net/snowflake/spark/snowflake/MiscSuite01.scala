@@ -266,4 +266,123 @@ class MiscSuite01 extends FunSuite with Matchers {
     })
   }
 
+  test("test timestamp setting") {
+    var sfOptions: Map[String, String] = Parameters.DEFAULT_PARAMETERS
+    var param = Parameters.MergedParameters(sfOptions)
+    // test default values
+    assert(param.sfTimestampNTZOutputFormat.get.equals("YYYY-MM-DD HH24:MI:SS.FF3"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampNTZOutputFormat.get))
+    assert(param.sfTimestampLTZOutputFormat.get.equals("TZHTZM YYYY-MM-DD HH24:MI:SS.FF3"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampLTZOutputFormat.get))
+    assert(param.sfTimestampTZOutputFormat.get.equals("TZHTZM YYYY-MM-DD HH24:MI:SS.FF3"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampTZOutputFormat.get))
+
+    sfOptions = Map(
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF4",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF5",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF6"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    // test normal settings
+    assert(param.sfTimestampNTZOutputFormat.get.equals("YYYY-MM-DD HH24:MI:SS.FF4"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampNTZOutputFormat.get))
+    assert(param.sfTimestampLTZOutputFormat.get.equals("YYYY-MM-DD HH24:MI:SS.FF5"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampLTZOutputFormat.get))
+    assert(param.sfTimestampTZOutputFormat.get.equals("YYYY-MM-DD HH24:MI:SS.FF6"))
+    assert(!param.isTimestampSnowflake(param.sfTimestampTZOutputFormat.get))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "sf_current"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    // test sf_current settings
+    assert(param.sfTimestampNTZOutputFormat.get.equals("sf_current"))
+    assert(param.isTimestampSnowflake(param.sfTimestampNTZOutputFormat.get))
+    assert(param.sfTimestampLTZOutputFormat.get.equals("sf_current"))
+    assert(param.isTimestampSnowflake(param.sfTimestampLTZOutputFormat.get))
+    assert(param.sfTimestampTZOutputFormat.get.equals("sf_current"))
+    assert(param.isTimestampSnowflake(param.sfTimestampTZOutputFormat.get))
+  }
+
+  test("test Utils.genPrologueSql()") {
+    var sfOptions: Map[String, String] = Parameters.DEFAULT_PARAMETERS +
+      (Parameters.PARAM_SF_TIMEZONE -> "GMT")
+    var param = Parameters.MergedParameters(sfOptions)
+    // test default values
+    var setString = Utils.genPrologueSql(param)
+    assert(setString.get.toString.equals("alter session set timezone = 'GMT' , " +
+      "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3', " +
+      "timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3', " +
+      "timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3' ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "UTC",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF4",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF5",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF6"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    // test normal settings
+    setString = Utils.genPrologueSql(param)
+    assert(setString.get.toString.equals("alter session set timezone = 'UTC' , " +
+      "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
+      "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5', " +
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF4",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF5",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF6"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    // test timezone is sf_current
+    setString = Utils.genPrologueSql(param)
+    assert(setString.get.toString.equals("alter session set " +
+      "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
+      "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5', " +
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "UTC",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF4",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF6"
+    )
+    param = Parameters.MergedParameters(sfOptions)
+    // test timestamp_ltz_output_format is sf_current
+    setString = Utils.genPrologueSql(param)
+    assert(setString.get.toString.equals("alter session set timezone = 'UTC' , " +
+      "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF5",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "sf_current"
+    )
+
+    param = Parameters.MergedParameters(sfOptions)
+    // test timezone, timestamp_ntz_output_format and timestamp_tz_output_format are sf_current
+    setString = Utils.genPrologueSql(param)
+    assert(setString.get.toString.equals("alter session set " +
+      "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5' ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "sf_current"
+    )
+
+    param = Parameters.MergedParameters(sfOptions)
+    // test all are sf_current
+    setString = Utils.genPrologueSql(param)
+    assert(setString.isEmpty)
+  }
+
 }

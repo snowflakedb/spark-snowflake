@@ -334,31 +334,41 @@ object Utils {
   // the TIMESTAMP_FORMAT option of COPY.
   private[snowflake] def genPrologueSql(
     params: MergedParameters
-  ): SnowflakeSQLStatement = {
+  ): Option[SnowflakeSQLStatement] = {
     // Determine the timezone we want to use
     val tz = params.sfTimezone
     var timezoneSetString = ""
     if (params.isTimezoneSpark) {
       // Use the Spark-level one
       val tzStr = java.util.TimeZone.getDefault.getID
-      timezoneSetString = s"timezone = '$tzStr',"
+      timezoneSetString = s"timezone = '$tzStr'"
     } else if (params.isTimezoneSnowflake) {
       // Do nothing
     } else if (params.isTimezoneSnowflakeDefault) {
       // Set it to the Snowflake default
-      timezoneSetString = "timezone = default,"
+      timezoneSetString = "timezone = default"
     } else {
       // Otherwise, use the specified value
-      timezoneSetString = s"timezone = '${tz.get}',"
+      timezoneSetString = s"timezone = '${tz.get}'"
     }
     log.debug(s"sfTimezone: '$tz'   timezoneSetString '$timezoneSetString'")
 
-    ConstantString("alter session set") + timezoneSetString +
-      ConstantString(s"""
-         |timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3',
-         |timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3',
-         |timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3';
-       """.stripMargin)
+    val timestampFormats = Seq(
+      ("timestamp_ntz_output_format", params.sfTimestampNTZOutputFormat.get),
+      ("timestamp_ltz_output_format", params.sfTimestampLTZOutputFormat.get),
+      ("timestamp_tz_output_format", params.sfTimestampTZOutputFormat.get))
+    val timestampSettings = timestampFormats.filter(x => !params.isTimestampSnowflake(x._2))
+    val timestampSetString = timestampSettings.map(x => s"${x._1} = '${x._2}'").mkString(", ")
+    if (timezoneSetString.isEmpty && timestampSetString.isEmpty) {
+      log.info("Timezone and timestamp output formats are sf_current, so skip setting them.")
+      None
+    } else if (timezoneSetString.isEmpty) {
+      Some(ConstantString(s"alter session set $timestampSetString ;")!)
+    } else if (timestampSettings.isEmpty) {
+      Some(ConstantString(s"alter session set $timezoneSetString ;")!)
+    } else {
+      Some(ConstantString(s"alter session set $timezoneSetString , $timestampSetString ;")!)
+    }
   }
   // Issue a set of changes reverting genPrologueSql
   private[snowflake] def genEpilogueSql(

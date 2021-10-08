@@ -30,7 +30,7 @@ private[snowflake] object StageReader {
     val compress = params.sfCompress
     val compressFormat = if (params.sfCompress) "gzip" else "none"
 
-    Utils.genPrologueSql(params).execute(params.bindVariableEnabled)(conn)
+    Utils.genPrologueSql(params).foreach(x => x.execute(params.bindVariableEnabled)(conn))
 
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
 
