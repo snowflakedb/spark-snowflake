@@ -19,7 +19,6 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
-import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
@@ -32,16 +31,6 @@ import scala.util.matching.Regex
 trait IntegrationSuiteBase
     extends IntegrationEnv
     with QueryTest {
-
-//  override def afterAll(): Unit = {
-//    // Clear any test hooks to avoid affecting other test suite.
-//    TestHook.disableTestHook()
-//    // After test suite done, no query is running for this application.
-//    val runningQueries = SparkConnectorContext.getRunningQueries.get(
-//      sparkSession.sparkContext.applicationId)
-//    assert(runningQueries.isEmpty || runningQueries.get.isEmpty)
-//    super.afterAll()
-//  }
 
   /**
     * A helper object for importing spark SQL implicits.

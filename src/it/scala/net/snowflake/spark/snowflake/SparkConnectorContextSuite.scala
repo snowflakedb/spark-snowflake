@@ -18,12 +18,13 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
+import org.apache.spark.sql.SparkSession
 import org.slf4j.LoggerFactory
 
 class SparkConnectorContextSuite extends IntegrationSuiteBase {
   private val logger = LoggerFactory.getLogger(getClass)
 
-  test("SparkConnectorContext: add/remove running query") {
+  test("SparkConnectorContext: add/remove running query unit test") {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
@@ -77,7 +78,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     conn2.close()
   }
 
-  test("SparkConnectorContext: add running query and cancel query") {
+  test("SparkConnectorContext: add running query and cancel query unit test") {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
@@ -120,8 +121,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     conn2.close()
   }
 
-  // NOTE: This test closes the sparkSession, so put the below test case in the end.
-  test("SparkConnectorContext: test a running query is canceled") {
+  test("SparkConnectorContext: test a running query is canceled by Application End") {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
@@ -172,6 +172,16 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     assert("SQL execution canceled".equals(message))
 
     conn.close()
+
+    // Recreate spark session to avoid affect following test cases
+    sparkSession = SparkSession.builder
+      .master("local")
+      .appName("SnowflakeSourceSuite")
+      .config("spark.sql.shuffle.partitions", "6")
+      // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+      // spark 3.0 to support legacy conversion for unix_timestamp().
+      // It may not be necessary for spark 2.X.
+      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+      .getOrCreate()
   }
-  // NOTE: This test closes the sparkSession, so put the above test case in the end.
 }
