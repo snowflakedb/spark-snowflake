@@ -174,6 +174,15 @@ object Parameters {
     "internal_skip_write_when_writing_empty_dataframe"
   )
 
+  // Internal option to use sync mode to execute query and COPY INTO TABLE command.
+  // By default, it it is 'false'.
+  // Since Spark Connector 2.9.2, spark connector will use JDBC async API to
+  // execute query and COPY INTO TABLE command.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: String = knownParam(
+    "internal_execute_query_in_sync_mode"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -646,6 +655,22 @@ object Parameters {
     }
     def skipWriteWhenWritingEmptyDataFrame: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "false"))
+    }
+    def isExecuteQueryWithSyncMode: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE, "false"))
+    }
+    def getQueryIDUrl(queryID: String): String = {
+      val patternWithPort = "(.*)(.snowflakecomputing.com)(:\\d*)(.*)".r
+      val patternWithoutPort = "(.*)(.snowflakecomputing.com)(.*)".r
+      val endpoint = "/console#/monitoring/queries/detail?queryId="
+      sfFullURL match {
+        case patternWithPort(prefix, domain, port, _) =>
+         s"$prefix$domain$port$endpoint$queryID"
+        case patternWithoutPort(prefix, domain, _) =>
+          s"$prefix$domain$endpoint$queryID"
+        case _ => s"Cannot generate queryID URL for $sfFullURL, you can generate queryID URL" +
+                  s" with the format of https://account.snowflakecomputing.com/$endpoint$queryID"
+      }
     }
 
     /**

@@ -29,7 +29,7 @@ import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
-import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.client.jdbc.{SnowflakePreparedStatement, SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
@@ -328,6 +328,15 @@ private[snowflake] class JDBCWrapper {
     executeInterruptibly(statement, { stmt: Statement =>
       val prepStmt = stmt.asInstanceOf[PreparedStatement]
       prepStmt.executeQuery()
+    })
+  }
+
+  def executePreparedQueryAsyncInterruptibly(
+    statement: PreparedStatement
+  ): ResultSet = {
+    executeInterruptibly(statement, { stmt: Statement =>
+      val prepStmt = stmt.asInstanceOf[SnowflakePreparedStatement]
+      prepStmt.executeAsyncQuery()
     })
   }
 
@@ -730,6 +739,22 @@ private[snowflake] class SnowflakeSQLStatement(
     val statement = prepareStatement(bindVariableEnabled)
     try {
       val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
+      lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+      rs
+    } catch {
+      case th: Throwable => {
+        lastQueryID = statement.asInstanceOf[SnowflakeStatement].getQueryID
+        throw th
+      }
+    }
+  }
+
+  def executeAsync(
+    bindVariableEnabled: Boolean
+  )(implicit conn: Connection): ResultSet = {
+    val statement = prepareStatement(bindVariableEnabled)
+    try {
+      val rs = DefaultJDBCWrapper.executePreparedQueryAsyncInterruptibly(statement)
       lastQueryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
       rs
     } catch {

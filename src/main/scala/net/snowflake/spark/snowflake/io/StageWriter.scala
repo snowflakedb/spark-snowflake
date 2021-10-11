@@ -19,6 +19,7 @@ import java.sql.{Connection, ResultSet}
 import java.time.LocalDateTime
 import java.util.TimeZone
 
+import net.snowflake.client.jdbc.SnowflakeResultSet
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -500,12 +501,26 @@ private[io] object StageWriter {
       firstCopyFileSet.get.toSet
     )
     log.debug(Utils.sanitizeQueryText(copyStatement.toString))
-    logAndAppend(progress, s"First COPY command is: ${copyStatement.toString}")
+    logAndAppend(progress,
+      s"Now executing below command to write into table:\n${copyStatement.toString}")
 
     var lastStatement = copyStatement
     try {
       // execute the COPY INTO TABLE statement
-      val resultSet = copyStatement.execute(params.bindVariableEnabled)(conn)
+      val resultSet = if (params.isExecuteQueryWithSyncMode) {
+        copyStatement.execute(params.bindVariableEnabled)(conn)
+      } else {
+        val asyncRs = copyStatement.executeAsync(params.bindVariableEnabled)(conn)
+        val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+        logAndAppend(progress,
+          s"The query ID for the write into table command is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+        // Call getMetaData() to wait fot the async query to be done
+        // Note: do not call next() to wait for the query to be done because
+        // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
+        asyncRs.getMetaData
+        asyncRs
+      }
       val firstCopyEnd = System.currentTimeMillis()
       logAndAppend(progress,
         s"""First COPY command is done in
@@ -562,8 +577,21 @@ private[io] object StageWriter {
              | to load them: ${getMissedFileInfo(missedFileSet)}
              | """.stripMargin)
 
-        // Run the command
-        val resultSet = copyWithFileClause.execute(params.bindVariableEnabled)(conn)
+        // Run the 2nd COPY command
+        val resultSet = if (params.isExecuteQueryWithSyncMode) {
+          copyWithFileClause.execute(params.bindVariableEnabled)(conn)
+        } else {
+          val asyncRs = copyWithFileClause.executeAsync(params.bindVariableEnabled)(conn)
+          val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+          logAndAppend(progress,
+            s"The query ID for the write into table command is: $queryID; " +
+              s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+          // Call getMetaData() to wait fot the async query to be done
+          // Note: do not call next() to wait for the query to be done because
+          // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
+          asyncRs.getMetaData
+          asyncRs
+        }
         val secondCopyEnd = System.currentTimeMillis()
         logAndAppend(progress,
           s"""Second COPY command is done in

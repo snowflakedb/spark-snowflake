@@ -1,8 +1,7 @@
 package net.snowflake.spark.snowflake
 
-import java.sql.Date
+import java.sql.{Date, SQLException}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
-import net.snowflake.client.jdbc.SnowflakeSQLException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.types._
@@ -93,7 +92,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
       )
     )
 
-    // throw exception because only suppert SavaMode.Append
+    // throw exception because only support SaveMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
@@ -116,7 +115,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     }
 
     // throw exception because "AAA" is not a column name of table in snowflake database
-    assertThrows[SnowflakeSQLException] {
+    assertThrows[SQLException] {
       df.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
@@ -138,7 +137,7 @@ class ColumnMappingIntegrationSuite extends IntegrationSuiteBase {
     val df1 = sparkSession.createDataFrame(data1, schema1)
 
     // error by default
-    assertThrows[SnowflakeSQLException] {
+    assertThrows[SQLException] {
       df1.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
