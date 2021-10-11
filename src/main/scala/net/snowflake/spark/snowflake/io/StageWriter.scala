@@ -269,9 +269,11 @@ private[io] object StageWriter {
                            format: SupportedFormat,
                            fileUploadResults: List[FileUploadResult]): Unit = {
     if (params.useStagingTable || !params.truncateTable) {
-      writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
+      writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params,
+        file, tempStage, format, fileUploadResults)
     } else {
-      writeToTableWithoutStagingTable(sqlContext, conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
+      writeToTableWithoutStagingTable(sqlContext, conn, schema, saveMode, params,
+        file, tempStage, format, fileUploadResults)
     }
   }
 

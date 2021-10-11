@@ -17,8 +17,11 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
+import org.slf4j.LoggerFactory
 
 class SparkConnectorContextSuite extends IntegrationSuiteBase {
+  private val logger = LoggerFactory.getLogger(getClass)
 
   test("SparkConnectorContext: add/remove running query") {
     val sc = sparkSession.sparkContext
@@ -128,9 +131,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     val rs = conn
       .createStatement()
       .asInstanceOf[SnowflakeStatement]
-      .executeAsyncQuery(
-        "select seq4(), random() from table(generator(timelimit => 60))"
-      )
+      .executeAsyncQuery("call system$wait(2, 'MINUTES')")
     val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
 
     // Add the running query
@@ -143,18 +144,32 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     )
 
     // Stop the application, it will trigger the Application End event.
+    Thread.sleep(5000)
     sparkSession.stop()
-    Thread.sleep(10000)
+    Thread.sleep(5000)
 
+    def getQueryMessage(queryID: String): String = {
+      val rs2 = conn
+        .createStatement()
+        .executeQuery(
+          "select * from table(information_schema.query_history_by_session())" +
+            s" where QUERY_ID = '$queryID'"
+        )
+      assert(rs2.next())
+      rs2.getString("ERROR_MESSAGE")
+    }
+
+    var message = getQueryMessage(queryID)
+    var tryCount: Int = 0
     // Check the query history, and the query must be cancelled
-    val rs2 = conn
-      .createStatement()
-      .executeQuery(
-        "select * from table(information_schema.query_history_by_session())" +
-          s" where QUERY_ID = '$queryID'"
-      )
-    assert(rs2.next())
-    assert(rs2.getString("ERROR_MESSAGE").equals("SQL execution canceled"))
+    // There may be latency to get query history
+    while (message == null && tryCount < 10) {
+      Thread.sleep(10000)
+      message = getQueryMessage(queryID)
+      tryCount = tryCount + 1
+      logger.warn(s"Retry count: $tryCount, Get query history message: $message")
+    }
+    assert("SQL execution canceled".equals(message))
 
     conn.close()
   }
