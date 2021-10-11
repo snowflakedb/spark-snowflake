@@ -27,7 +27,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
 import scala.collection._
@@ -108,7 +108,8 @@ class WriteTableState(conn: Connection) {
     )
   }
 
-  def copyIntoTable(schema: StructType,
+  def copyIntoTable(sqlContext: SQLContext,
+                    schema: StructType,
                     saveMode: SaveMode,
                     params: MergedParameters,
                     file: String,
@@ -129,6 +130,7 @@ class WriteTableState(conn: Connection) {
 
     // Execute COPY INTO TABLE to load data
     StageWriter.executeCopyIntoTable(
+      sqlContext,
       conn,
       schema,
       saveMode,
@@ -189,7 +191,8 @@ private[io] object StageWriter {
 
   private[io] val log = LoggerFactory.getLogger(getClass)
 
-  def writeToStage(rdd: RDD[String],
+  def writeToStage(sqlContext: SQLContext,
+                   rdd: RDD[String],
                    schema: StructType,
                    saveMode: SaveMode,
                    params: MergedParameters,
@@ -217,6 +220,7 @@ private[io] object StageWriter {
       if (fileUploadResults.nonEmpty) {
         val firstFileName = fileUploadResults.head.fileName
         writeToTable(
+          sqlContext,
           conn,
           schema,
           saveMode,
@@ -255,7 +259,8 @@ private[io] object StageWriter {
   /**
     * load data from stage to table
     */
-  private def writeToTable(conn: Connection,
+  private def writeToTable(sqlContext: SQLContext,
+                           conn: Connection,
                            schema: StructType,
                            saveMode: SaveMode,
                            params: MergedParameters,
@@ -264,16 +269,17 @@ private[io] object StageWriter {
                            format: SupportedFormat,
                            fileUploadResults: List[FileUploadResult]): Unit = {
     if (params.useStagingTable || !params.truncateTable) {
-      writeToTableWithStagingTable(conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
+      writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
     } else {
-      writeToTableWithoutStagingTable(conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
+      writeToTableWithoutStagingTable(sqlContext, conn, schema, saveMode, params, file, tempStage, format, fileUploadResults)
     }
   }
 
   /**
     * load data from stage to table without staging table
     */
-  private def writeToTableWithoutStagingTable(conn: Connection,
+  private def writeToTableWithoutStagingTable(sqlContext: SQLContext,
+                                              conn: Connection,
                                               schema: StructType,
                                               saveMode: SaveMode,
                                               params: MergedParameters,
@@ -302,6 +308,7 @@ private[io] object StageWriter {
 
       // Run COPY INTO and related commands
       writeTableState.copyIntoTable(
+        sqlContext,
         schema,
         saveMode,
         params,
@@ -338,7 +345,8 @@ private[io] object StageWriter {
     * load data from stage to table with staging table
     * This function is deprecated.
     */
-  private def writeToTableWithStagingTable(conn: Connection,
+  private def writeToTableWithStagingTable(sqlContext: SQLContext,
+                                           conn: Connection,
                                            schema: StructType,
                                            saveMode: SaveMode,
                                            params: MergedParameters,
@@ -395,6 +403,7 @@ private[io] object StageWriter {
 
       // Execute COPY INTO TABLE to load data
       StageWriter.executeCopyIntoTable(
+        sqlContext,
         conn,
         schema,
         saveMode,
@@ -445,7 +454,8 @@ private[io] object StageWriter {
     * missed, an additional COPY INTO table with FILES clause is used to load
     * the missed files.
     */
-  private[io] def executeCopyIntoTable(conn: Connection,
+  private[io] def executeCopyIntoTable(sqlContext: SQLContext,
+                                       conn: Connection,
                                        schema: StructType,
                                        saveMode: SaveMode,
                                        params: MergedParameters,
@@ -512,6 +522,7 @@ private[io] object StageWriter {
       } else {
         val asyncRs = copyStatement.executeAsync(params.bindVariableEnabled)(conn)
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+        SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
         logAndAppend(progress,
           s"The query ID for the write into table command is: $queryID; " +
             s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
@@ -519,6 +530,7 @@ private[io] object StageWriter {
         // Note: do not call next() to wait for the query to be done because
         // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
         asyncRs.getMetaData
+        SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
         asyncRs
       }
       val firstCopyEnd = System.currentTimeMillis()
@@ -583,6 +595,7 @@ private[io] object StageWriter {
         } else {
           val asyncRs = copyWithFileClause.executeAsync(params.bindVariableEnabled)(conn)
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+          SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
           logAndAppend(progress,
             s"The query ID for the write into table command is: $queryID; " +
               s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
@@ -590,6 +603,7 @@ private[io] object StageWriter {
           // Note: do not call next() to wait for the query to be done because
           // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
           asyncRs.getMetaData
+          SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
           asyncRs
         }
         val secondCopyEnd = System.currentTimeMillis()
