@@ -68,7 +68,7 @@ object SparkConnectorContext {
           if (!rq.conn.isClosed) {
             val statement = rq.conn.createStatement()
             val sessionID = rq.conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
-            logger.warn(s"Cancel one query for session: $sessionID queryID: ${rq.queryID}")
+            logger.warn(s"Canceling query ${rq.queryID} for session: $sessionID")
             statement.execute(s"select SYSTEM$$CANCEL_QUERY('${rq.queryID}')")
             statement.close()
           }
