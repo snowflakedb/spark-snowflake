@@ -91,9 +91,8 @@ object SparkConnectorContext {
       val appId = sparkContext.applicationId
       val sessionID = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
       logger.info(s"Add running query for $appId session: $sessionID queryId: $queryID")
-      val queries = runningQueries.getOrElse(appId, mutable.Set())
-      queries.add(RunningQuery(conn, queryID))
-      runningQueries.put(appId, queries)
+      val queries = runningQueries.get(appId)
+      queries.foreach(_.add(RunningQuery(conn, queryID)))
     }
 
   private[snowflake] def removeRunningQuery(sparkContext: SparkContext,
