@@ -81,6 +81,8 @@ case class ResultIterator[T: ClassTag](
   }
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
+  // currentRowNotConsumedYet needs to be initialized before data
+  var currentRowNotConsumedYet: Boolean = false
   val data: ResultSet = {
     try {
       SnowflakeResultSetRDD.logger.info(
@@ -97,7 +99,7 @@ case class ResultIterator[T: ClassTag](
         "Negative test to raise error when opening a result set"
       )
 
-      resultSet.getResultSet(
+      def getResultSet = resultSet.getResultSet(
         SnowflakeResultSetSerializable
           .ResultSetRetrieveConfig
           .Builder
@@ -106,6 +108,26 @@ case class ResultIterator[T: ClassTag](
           .setSfFullURL(sfFullURL)
           .build()
       )
+
+      // Prepare the first row
+      var rs = getResultSet
+//      if (expectedRowCount > 0) {
+//        // In some rare case, rs is not well prepared, retry to generate it
+//        var retryCount = 0
+//        while (!currentRowNotConsumedYet && retryCount < 10) {
+//          if (rs.next()) {
+//            currentRowNotConsumedYet = true
+//          } else {
+//            // rs is wrong.
+//            retryCount = retryCount + 1
+//            logger.warn(s"Retry to get the ResultSet retryCount: $retryCount")
+//            Thread.sleep(retryCount * 1000)
+//            rs.close()
+//            rs = getResultSet
+//          }
+//        }
+//      }
+      rs
     } catch {
       case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
@@ -127,7 +149,6 @@ case class ResultIterator[T: ClassTag](
 
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
-  var currentRowNotConsumedYet: Boolean = false
 
   override def hasNext: Boolean = {
     // In some cases, hasNext() may be called but next() isn't.
