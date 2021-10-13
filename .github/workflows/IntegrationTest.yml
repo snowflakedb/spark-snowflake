@@ -41,7 +41,3 @@ jobs:
         SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
         SPARK_CONN_ENV_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: ${{ matrix.run_query_in_async }}
 
-    - uses: codecov/codecov-action@v1
-      if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
-      with:
-        fail_ci_if_error: true
