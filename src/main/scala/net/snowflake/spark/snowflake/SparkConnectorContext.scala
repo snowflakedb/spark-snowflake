@@ -19,9 +19,93 @@
 
 package net.snowflake.spark.snowflake
 
+import java.sql.Connection
+
+import net.snowflake.client.jdbc.SnowflakeConnectionV1
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.slf4j.LoggerFactory
 
+import scala.collection.mutable
+
+private[snowflake] case class RunningQuery (conn: Connection, queryID: String)
+
 object SparkConnectorContext {
+  // The map to track running queries for spark application.
+  // The key is the application ID, the value is the set of running queries.
+  private val runningQueries = mutable.Map[String, mutable.Set[RunningQuery]]()
+
+  private[snowflake] def getRunningQueries = runningQueries
+
+  // Register spark listener to cancel any running queries if application fails.
+  // Only one listener is registered for one spark application
+  private[snowflake] def registerSparkListenerIfNotYet(sparkContext: SparkContext): Unit =
+    withSyncAndDoNotThrowException {
+      val appId = sparkContext.applicationId
+      if (!runningQueries.keySet.contains(appId)) {
+        logger.info("Spark connector register listener for: " + appId)
+        runningQueries.put(appId, mutable.Set.empty)
+        sparkContext.addSparkListener(new SparkListener {
+          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+            try {
+              cancelRunningQueries(appId)
+            } finally {
+              super.onApplicationEnd(applicationEnd)
+            }
+          }
+        })
+      }
+    }
+
+  // Currently, this function is called when the spark application is END,
+  // so, the map entry for this application is removed after all the running queries
+  // are canceled.
+  private[snowflake] def cancelRunningQueries(appId: String): Unit =
+    withSyncAndDoNotThrowException {
+      val queries = runningQueries.get(appId)
+      if (queries.nonEmpty) {
+        queries.get.foreach(rq => try {
+          if (!rq.conn.isClosed) {
+            val statement = rq.conn.createStatement()
+            val sessionID = rq.conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+            logger.warn(s"Canceling query ${rq.queryID} for session: $sessionID")
+            statement.execute(s"select SYSTEM$$CANCEL_QUERY('${rq.queryID}')")
+            statement.close()
+          }
+        } catch {
+          case th: Throwable =>
+            logger.warn("Fail to cancel running queries: ", th)
+        })
+        logger.warn(s"Finish cancelling all queries for $appId")
+        runningQueries.remove(appId)
+      } else {
+        logger.info(s"No running query for: $appId")
+      }
+    }
+
+  private[snowflake] def addRunningQuery(sparkContext: SparkContext,
+                                         conn: Connection,
+                                         queryID: String): Unit =
+    withSyncAndDoNotThrowException {
+      registerSparkListenerIfNotYet(sparkContext)
+      val appId = sparkContext.applicationId
+      val sessionID = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      logger.info(s"Add running query for $appId session: $sessionID queryId: $queryID")
+      val queries = runningQueries.get(appId)
+      queries.foreach(_.add(RunningQuery(conn, queryID)))
+    }
+
+  private[snowflake] def removeRunningQuery(sparkContext: SparkContext,
+                                            conn: Connection,
+                                            queryID: String): Unit =
+    withSyncAndDoNotThrowException {
+      val appId = sparkContext.applicationId
+      val sessionID = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      logger.info(s"Remove running query for $appId session: $sessionID queryId: $queryID")
+      val queries = runningQueries.get(appId)
+      queries.foreach(_.remove(RunningQuery(conn, queryID)))
+    }
+
   private[snowflake] val logger = LoggerFactory.getLogger(getClass)
 
   private var isConfigLogged = false
@@ -30,7 +114,7 @@ object SparkConnectorContext {
 
   // The system configuration is logged once.
   private[snowflake] def recordConfig(): Unit = {
-    locker.synchronized {
+    withSyncAndDoNotThrowException {
       if (!isConfigLogged) {
         isConfigLogged = true
         logger.info(s"Spark Connector system config: " +
@@ -38,4 +122,15 @@ object SparkConnectorContext {
       }
     }
   }
+
+  private def withSyncAndDoNotThrowException(block: => Unit): Unit =
+    try {
+      locker.synchronized {
+        block
+      }
+    } catch {
+      case th: Throwable =>
+        logger.warn("Hit un-caught exception: " + th.getMessage)
+    }
+
 }
