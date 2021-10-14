@@ -16,10 +16,16 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
-import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
+import java.sql.Connection
+
+import net.snowflake.client.jdbc.{SnowflakeConnectionV1, SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.slf4j.LoggerFactory
+
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class SparkConnectorContextSuite extends IntegrationSuiteBase {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -127,12 +133,13 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     val param = Parameters.MergedParameters(connectorOptions)
     val conn = DefaultJDBCWrapper.getConnector(param)
 
-    // Execute a 60 second query in async mode and get the query ID
+    // Execute a 2 minutes query in async mode and get the query ID
     val rs = conn
       .createStatement()
       .asInstanceOf[SnowflakeStatement]
       .executeAsyncQuery("call system$wait(2, 'MINUTES')")
     val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+    val sessionID = getSessionID(conn)
 
     // Add the running query
     SparkConnectorContext.addRunningQuery(sc, conn, queryID)
@@ -148,24 +155,13 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     sparkSession.stop()
     Thread.sleep(5000)
 
-    def getQueryMessage(queryID: String): String = {
-      val rs2 = conn
-        .createStatement()
-        .executeQuery(
-          "select * from table(information_schema.query_history_by_session())" +
-            s" where QUERY_ID = '$queryID'"
-        )
-      assert(rs2.next())
-      rs2.getString("ERROR_MESSAGE")
-    }
-
-    var message = getQueryMessage(queryID)
+    var message = getQueryMessage(conn, queryID, sessionID)
     var tryCount: Int = 0
     // Check the query history, and the query must be cancelled
     // There may be latency to get query history
     while (message == null && tryCount < 10) {
       Thread.sleep(10000)
-      message = getQueryMessage(queryID)
+      message = getQueryMessage(conn, queryID, sessionID)
       tryCount = tryCount + 1
       logger.warn(s"Retry count: $tryCount, Get query history message: $message")
     }
@@ -184,4 +180,95 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
       .getOrCreate()
   }
+
+  private def getSessionID(connection: Connection): String = {
+    connection.asInstanceOf[SnowflakeConnectionV1].getSessionID
+  }
+
+  private def getQueryMessage(connection: Connection,
+                              queryID: String,
+                              sessionID: String): String = {
+    val rs2 = connection
+      .createStatement()
+      .executeQuery(
+        s"select * from table(information_schema.query_history_by_session" +
+          s"(SESSION_ID => $sessionID)) where QUERY_ID = '$queryID'"
+      )
+    if (rs2.next()) {
+      rs2.getString("ERROR_MESSAGE")
+    } else {
+      null
+    }
+  }
+
+  test("SparkConnectorContext: end-2-end test to cancel a running query") {
+    // This test only available for async execution query.
+    if (!params.isExecuteQueryWithSyncMode) {
+      val sc = sparkSession.sparkContext
+      val appId = sc.applicationId
+      val param = Parameters.MergedParameters(connectorOptions)
+      val conn = DefaultJDBCWrapper.getConnector(param)
+
+      val schema = StructType(
+        List(
+          StructField("str1", StringType)
+        )
+      )
+      // Execute a 2 minutes query with DataFrame in a Future
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .schema(schema)
+        .options(connectorOptionsNoTable)
+        .option("query", "select system$wait(2, 'MINUTES')")
+        .load()
+      Future {
+        df.collect()
+      }
+
+      // We can see one running query sooner or later
+      var runningQueries = SparkConnectorContext.getRunningQueries
+      var retryCount = 0
+      while (retryCount < 20 && !runningQueries.contains(appId)) {
+        Thread.sleep(10000)
+        retryCount = retryCount + 1
+        runningQueries = SparkConnectorContext.getRunningQueries
+        logger.info("retry to check running query, retryCount = " + retryCount)
+      }
+      assert(runningQueries.size == 1)
+      assert(runningQueries(appId).size == 1)
+      // Get the running query ID for later check
+      val queryID = runningQueries(appId).head.queryID
+      val sessionID = getSessionID(runningQueries(appId).head.conn)
+
+      // Stop the application, it will trigger the Application End event.
+      sparkSession.stop()
+      Thread.sleep(5000)
+
+      var message = getQueryMessage(conn, queryID, sessionID)
+      var tryCount: Int = 0
+      // Check the query history, and the query must be cancelled
+      // There may be latency to get query history
+      while (message == null && tryCount < 10) {
+        Thread.sleep(10000)
+        message = getQueryMessage(conn, queryID, sessionID)
+        tryCount = tryCount + 1
+        logger.warn(s"Retry count: $tryCount, Get query history message: $message")
+      }
+      assert("SQL execution canceled".equals(message))
+
+      // Clean up
+      conn.close()
+      // Recreate spark session to avoid affect following test cases
+      sparkSession = SparkSession.builder
+        .master("local")
+        .appName("SnowflakeSourceSuite")
+        .config("spark.sql.shuffle.partitions", "6")
+        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+        // spark 3.0 to support legacy conversion for unix_timestamp().
+        // It may not be necessary for spark 2.X.
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+        .getOrCreate()
+    }
+  }
+
 }
