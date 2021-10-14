@@ -200,7 +200,7 @@ private[snowflake] case class SnowflakeRelation(
       } else {
         val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-        log.info(s"The query ID for reading from snowflake is: $queryID; " +
+        log.info(s"The query ID for async reading from snowflake is: $queryID; " +
           s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
         SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
         // The query is executed in async mode, getResultSetSerializables() is blocked

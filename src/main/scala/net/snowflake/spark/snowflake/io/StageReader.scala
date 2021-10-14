@@ -53,8 +53,8 @@ private[snowflake] object StageReader {
       } else {
         val asyncRs = copyStatement.executeAsync(bindVariableEnabled = false)(conn)
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-        logger.info(s"The query ID for reading from snowflake is: $queryID; " +
-          s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+        logger.info(s"The query ID for async reading from snowflake with COPY INTO LOCATION is: " +
+          s"$queryID; The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
         SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
         // Call getMetaData() to wait fot the async query to be done
         // Note: do not call next() to wait for the query to be done because

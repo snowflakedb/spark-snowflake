@@ -155,13 +155,13 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     sparkSession.stop()
     Thread.sleep(5000)
 
-    var message = getQueryMessage(conn, queryID, sessionID)
+    var (message, _) = getQueryMessage(conn, queryID, sessionID)
     var tryCount: Int = 0
     // Check the query history, and the query must be cancelled
     // There may be latency to get query history
     while (message == null && tryCount < 10) {
       Thread.sleep(10000)
-      message = getQueryMessage(conn, queryID, sessionID)
+      message = getQueryMessage(conn, queryID, sessionID)._1
       tryCount = tryCount + 1
       logger.warn(s"Retry count: $tryCount, Get query history message: $message")
     }
@@ -187,17 +187,17 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
 
   private def getQueryMessage(connection: Connection,
                               queryID: String,
-                              sessionID: String): String = {
-    val rs2 = connection
+                              sessionID: String): (String, String) = {
+    val rs = connection
       .createStatement()
       .executeQuery(
         s"select * from table(information_schema.query_history_by_session" +
           s"(SESSION_ID => $sessionID)) where QUERY_ID = '$queryID'"
       )
-    if (rs2.next()) {
-      rs2.getString("ERROR_MESSAGE")
+    if (rs.next()) {
+      (rs.getString("ERROR_MESSAGE"), rs.getString("QUERY_TEXT"))
     } else {
-      null
+      (null, null)
     }
   }
 
@@ -214,12 +214,13 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
           StructField("str1", StringType)
         )
       )
+      val query = "SELECT SYSTEM$WAIT(2, 'MINUTES')"
       // Execute a 2 minutes query with DataFrame in a Future
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .schema(schema)
         .options(connectorOptionsNoTable)
-        .option("query", "select system$wait(2, 'MINUTES')")
+        .option("query", query)
         .load()
       Future {
         df.collect()
@@ -244,17 +245,20 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       sparkSession.stop()
       Thread.sleep(5000)
 
-      var message = getQueryMessage(conn, queryID, sessionID)
+      var (message, queryText) = getQueryMessage(conn, queryID, sessionID)
       var tryCount: Int = 0
       // Check the query history, and the query must be cancelled
       // There may be latency to get query history
       while (message == null && tryCount < 10) {
         Thread.sleep(10000)
-        message = getQueryMessage(conn, queryID, sessionID)
+        val res = getQueryMessage(conn, queryID, sessionID)
+        message = res._1
+        queryText = res._2
         tryCount = tryCount + 1
         logger.warn(s"Retry count: $tryCount, Get query history message: $message")
       }
       assert("SQL execution canceled".equals(message))
+      assert(queryText.contains(query))
 
       // Clean up
       conn.close()
