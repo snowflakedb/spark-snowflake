@@ -526,7 +526,7 @@ private[io] object StageWriter {
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
         SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
         logAndAppend(progress,
-          s"The query ID for the write into table command is: $queryID; " +
+          s"The query ID for async writing into table command is: $queryID; " +
             s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
         // Call getMetaData() to wait fot the async query to be done
         // Note: do not call next() to wait for the query to be done because
@@ -599,7 +599,7 @@ private[io] object StageWriter {
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
           SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
           logAndAppend(progress,
-            s"The query ID for the write into table command is: $queryID; " +
+            s"The query ID for 2nd async writing into table command is: $queryID; " +
               s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
           // Call getMetaData() to wait fot the async query to be done
           // Note: do not call next() to wait for the query to be done because

@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake.io
 
 import java.sql.Connection
 
+import net.snowflake.client.jdbc.SnowflakeResultSet
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
@@ -43,10 +44,25 @@ private[snowflake] object StageReader {
       compressFormat,
       format
     )
+    logger.info(s"Now executing below command to read from snowflake:\n${copyStatement.toString}")
 
     val startTime = System.currentTimeMillis()
     val res = try {
-      copyStatement.execute(params.bindVariableEnabled)(conn)
+      if (params.isExecuteQueryWithSyncMode) {
+        copyStatement.execute(params.bindVariableEnabled)(conn)
+      } else {
+        val asyncRs = copyStatement.executeAsync(bindVariableEnabled = false)(conn)
+        val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+        logger.info(s"The query ID for async reading from snowflake with COPY INTO LOCATION is: " +
+          s"$queryID; The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+        SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
+        // Call getMetaData() to wait fot the async query to be done
+        // Note: do not call next() to wait for the query to be done because
+        // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
+        asyncRs.getMetaData
+        SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
+        asyncRs
+      }
     } catch {
       case th: Throwable => {
         // send telemetry message
