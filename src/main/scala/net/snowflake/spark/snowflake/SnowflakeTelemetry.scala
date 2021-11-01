@@ -30,7 +30,6 @@ object SnowflakeTelemetry {
   private val logger = LoggerFactory.getLogger(getClass)
   private val mapper = new ObjectMapper()
 
-  private var hasClientInfoSent = false
   private[snowflake] val MB = 1024 * 1024
 
   private[snowflake] var output: ObjectNode = _
@@ -49,22 +48,18 @@ object SnowflakeTelemetry {
       service
   }
 
-  // The client info telemetry message is only sent one time.
-  def sendClientInfoTelemetryIfNotYet(extraValues: Map[String, String],
-                                      conn: Connection): Unit = {
-    if (!hasClientInfoSent) {
-      SparkConnectorContext.recordConfig()
-      val metric = Utils.getClientInfoJson()
-      for ((key, value) <- extraValues) {
-        metric.put(key, value)
-      }
-      addLog(
-        (TelemetryTypes.SPARK_CLIENT_INFO, metric),
-        System.currentTimeMillis()
-      )
-      send(conn.getTelemetry)
-      hasClientInfoSent = true
+  def sendClientInfoTelemetry(extraValues: Map[String, String],
+                              conn: Connection): Unit = {
+    SparkConnectorContext.recordConfig()
+    val metric = Utils.getClientInfoJson()
+    for ((key, value) <- extraValues) {
+      metric.put(key, value)
     }
+    addLog(
+      (TelemetryTypes.SPARK_CLIENT_INFO, metric),
+      System.currentTimeMillis()
+    )
+    send(conn.getTelemetry)
   }
 
   def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
@@ -278,6 +273,10 @@ object SnowflakeTelemetry {
 
       // Add Spark configuration
       val sparkConf = SparkEnv.get.conf
+      metric.put(TelemetryClientInfoFields.SPARK_APPLICATION_ID,
+        sparkConf.get("spark.app.id", "spark.app.id not set"))
+      metric.put(TelemetryClientInfoFields.IS_PYSPARK,
+        sparkConf.contains("spark.pyspark.python"))
       val sparkMetric: ObjectNode = mapper.createObjectNode()
       sparkOptions.foreach(
         optionName => {
@@ -426,6 +425,8 @@ private[snowflake] object TelemetryFieldNames {
   val TASK_STAGE_ATTEMPT_NUMBER = "task_stage_attempt_number"
   val THREAD_ID = "thread_id"
   val SPARK_CONFIG = "spark_config"
+  val SPARK_APPLICATION_ID = "spark_application_id"
+  val IS_PYSPARK = "is_pyspark"
 }
 
 private[snowflake] object TelemetryConstValues {
@@ -484,6 +485,8 @@ object TelemetryClientInfoFields {
 
   // Spark configuration
   val SPARK_CONFIG = TelemetryFieldNames.SPARK_CONFIG
+  val SPARK_APPLICATION_ID = TelemetryFieldNames.SPARK_APPLICATION_ID
+  val IS_PYSPARK = TelemetryFieldNames.IS_PYSPARK
 }
 
 object TelemetryTaskInfoFields {
