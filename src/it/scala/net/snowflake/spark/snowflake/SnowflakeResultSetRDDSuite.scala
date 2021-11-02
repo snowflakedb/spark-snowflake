@@ -1196,10 +1196,12 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   test("count super large table") {
     if (!skipBigDataTest) {
       val expectedCount = Int.MaxValue + 1L
-      val actualCount = getRowCount(
-        s"table(generator(rowcount => $expectedCount))",
-        thisConnectorOptionsNoTable
-      )
+      val actualCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("query", s"select 1 from table(generator(rowcount => $expectedCount))")
+        .load()
+        .count()
       assert(actualCount == expectedCount)
     }
   }
