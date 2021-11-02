@@ -27,6 +27,7 @@ import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
 
@@ -208,6 +209,9 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
     // check one JVM option
     assert(metric.get(TelemetryClientInfoFields.MAX_MEMORY_IN_MB).asLong() > 0)
+    assert(metric.get(TelemetryClientInfoFields.SPARK_APPLICATION_ID).asText().equals(
+      SparkEnv.get.conf.get("spark.app.id")))
+    assert(!metric.get(TelemetryClientInfoFields.IS_PYSPARK).asBoolean())
     // check Spark options
     val sparkConfNode = metric.get(TelemetryClientInfoFields.SPARK_CONFIG)
     assert(sparkConfNode.get("spark.master").asText().equals("local"))
