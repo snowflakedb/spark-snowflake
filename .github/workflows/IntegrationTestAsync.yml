@@ -1,4 +1,8 @@
-name: Spark Connector Integration Test
+# The GCP test account is not stable,
+# IT test for Spark 2.4 triggers 4 test jobs for GCP.
+# It causes timeout happen often.
+# So split the IT as 2: sync and async
+name: Spark Connector Integration Test Async
 
 on:
   push:
@@ -17,7 +21,7 @@ jobs:
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure', 'gcp' ]
        # run_query_in_async can be removed after async mode is stable
-       run_query_in_async: [ 'false' ]
+       run_query_in_async: [ 'true' ]
 
     steps:
     - uses: actions/checkout@v2
