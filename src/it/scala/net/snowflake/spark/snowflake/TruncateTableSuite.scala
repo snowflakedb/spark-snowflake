@@ -423,6 +423,8 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     // emptyDf.write.parquet("/tmp/output/parquet")
     // create a table has 3 columns.
 
+    println(emptyDf.rdd.partitions.size)
+
     // Make sure target table doesn't exist
     jdbcUpdate(s"drop table if exists $targetTable")
     // Write empty DataFrame with Overwrite mode
@@ -458,6 +460,37 @@ class TruncateTableSuite extends IntegrationSuiteBase {
       .option("dbtable", targetTable)
       .load()
     assert(readDF.count() == 0 && readDF.schema.fields.length == 2)
+  }
+
+  test("test region url") {
+    import testImplicits._
+
+    // Make sure target table doesn't exist
+    jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 string)")
+
+    // Write DataFrame and commit
+    val df = Seq[(Int, String)]((1, "abc"), (2, "eee")).toDF("key", "value")
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .option("internal_support_aws_region_url", "false")
+      .mode(SaveMode.Append)
+      .save()
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
   }
 
   test("Write empty DataFrame and target table exists: SNOW-297134") {

@@ -165,4 +165,12 @@ private[io] class SFInternalStage(isWrite: Boolean,
 
   private[io] def getEncryptionMaterials = encryptionMaterials
 
+  private[io] def useS3RegionalUrl: Boolean = {
+    logger.info(getRegion + " " + sfAgent.getStageInfo.getUseS3RegionalUrl +
+      " " + sfAgent.getStageInfo.getUseS3RegionalUrl)
+    sfAgent.getStageInfo.getUseS3RegionalUrl ||
+      connection.getSFBaseSession.getUseRegionalS3EndpointsForPresignedURL
+  }
+
+  private[io] def getRegion: String = sfAgent.getStageInfo.getRegion
 }
