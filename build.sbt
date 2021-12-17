@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.1"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.1.1")
+val sparkVersion = "3.2"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.2.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -41,7 +41,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.1",
+    version := s"${sparkConnectorVersion}-spark_3.2",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.1 only supports scala 2.12
     crossScalaVersions := Seq("2.12.11"),

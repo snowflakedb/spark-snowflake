@@ -43,7 +43,7 @@ private[querygeneration] object MiscStatement {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         blockStatement(convertStatement(child, fields), name)
-      case Cast(child, t, _) =>
+      case Cast(child, t, _, _) =>
         getCastType(t) match {
           case Some(cast) =>
             /** For known unsupported data conversion, raise exception to break the pushdown process.
@@ -104,7 +104,7 @@ private[querygeneration] object MiscStatement {
       case SortOrder(child, Descending, _, _) =>
         blockStatement(convertStatement(child, fields)) + "DESC"
 
-      case ScalarSubquery(subquery, _, _) =>
+      case ScalarSubquery(subquery, _, _, _) =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>
