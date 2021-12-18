@@ -128,6 +128,16 @@ case class ResultIterator[T: ClassTag](
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
   var currentRowNotConsumedYet: Boolean = false
+  var resultSetIsClosed: Boolean = false
+
+  TaskContext.get().addTaskCompletionListener[Unit](_ => closeResultSet())
+
+  private def closeResultSet(): Unit = {
+    if (!resultSetIsClosed) {
+      resultSetIsClosed = true
+      data.close()
+    }
+  }
 
   override def hasNext: Boolean = {
     // In some cases, hasNext() may be called but next() isn't.
@@ -150,8 +160,7 @@ case class ResultIterator[T: ClassTag](
              | actualReadRowCount=$actualReadRowCount
              |""".stripMargin.filter(_ >= ' '))
 
-        // Close the result set.
-        data.close()
+        closeResultSet()
 
         // Inject Exception for test purpose
         TestHook.raiseExceptionIfTestFlagEnabled(
