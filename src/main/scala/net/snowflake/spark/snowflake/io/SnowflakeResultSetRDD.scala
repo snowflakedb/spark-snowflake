@@ -45,7 +45,6 @@ class SnowflakeResultSetRDD[T: ClassTag](
     SparkConnectorContext.recordConfig()
 
     ResultIterator[T](
-      context: TaskContext,
       schema,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
@@ -63,7 +62,6 @@ class SnowflakeResultSetRDD[T: ClassTag](
 }
 
 case class ResultIterator[T: ClassTag](
-  context: TaskContext,
   schema: StructType,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
@@ -127,17 +125,17 @@ case class ResultIterator[T: ClassTag](
     }
   }
 
-  context.addTaskCompletionListener[Unit](_ => closeResultSet())
-
   val isIR: Boolean = isInternalRow[T]
   val mapper: ObjectMapper = new ObjectMapper()
   var currentRowNotConsumedYet: Boolean = false
   var resultSetIsClosed: Boolean = false
 
+  TaskContext.get().addTaskCompletionListener[Unit](_ => closeResultSet())
+
   private def closeResultSet(): Unit = {
     if (!resultSetIsClosed) {
-      data.close()
       resultSetIsClosed = true
+      data.close()
     }
   }
 
