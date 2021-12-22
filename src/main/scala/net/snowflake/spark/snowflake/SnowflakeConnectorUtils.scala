@@ -30,21 +30,14 @@ object SnowflakeConnectorUtils {
 
   @transient lazy val log: Logger = LoggerFactory.getLogger(getClass.getName)
 
-  def checkVersionHigherOrEqualTo(version: String, compareTo: String): Boolean = {
-    return version.split("\\.")
-      .zipAll(compareTo.split("\\."), "0", "0")
-      .find {case(a, b) => a != b }
-      .fold(0) { case (a, b) => a.toInt - b.toInt } >= 0
-  }
-
   /**
     * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
     * otherwise disable it.
     */
-  val SUPPORT_SPARK_VERSION = "3.1"
+  val SUPPORT_SPARK_VERSION = "3.2"
 
   def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
-    if (checkVersionHigherOrEqualTo(session.version, SUPPORT_SPARK_VERSION)) {
+    if (session.version.startsWith(SUPPORT_SPARK_VERSION)) {
       enablePushdownSession(session)
       true
     } else {
