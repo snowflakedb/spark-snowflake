@@ -10,9 +10,13 @@ import org.apache.spark.sql.types.{StructField, StructType}
 case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
     extends SparkPlan {
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan = this
-
   override def children: Seq[SparkPlan] = Nil
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan = {
+    assert(newChildren == children, "SnowflakePlan has no children.")
+    return this
+  }
+ 
   protected override def doExecute(): RDD[InternalRow] = {
 
     val schema = StructType(
