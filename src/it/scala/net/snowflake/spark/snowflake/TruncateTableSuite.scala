@@ -9,6 +9,7 @@ import net.snowflake.spark.snowflake.test.TestHookFlag.{
   TH_WRITE_ERROR_AFTER_DROP_OLD_TABLE,
   TH_WRITE_ERROR_AFTER_TRUNCATE_TABLE
 }
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
@@ -16,6 +17,8 @@ import scala.util.Random
 // scalastyle:off println
 
 class TruncateTableSuite extends IntegrationSuiteBase {
+  import testImplicits._
+
   val normalTable = s"test_table_$randomSuffix"
   val specialTable = s""""test_table_.'!@#$$%^&*"" $randomSuffix""""""
   val targetTable = s""""test_table_target_$randomSuffix""""""
@@ -532,6 +535,87 @@ class TruncateTableSuite extends IntegrationSuiteBase {
         .load()
         .count()
     })
+  }
+
+  test("AWS use region url with small data") {
+    // This test case only affect AWS account
+    val accountName: String = Option(System.getenv(SNOWFLAKE_TEST_ACCOUNT)).getOrElse("aws")
+    if (accountName.equalsIgnoreCase("aws")) {
+      // Make sure target table doesn't exist
+      jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 string)")
+
+      // Write DataFrame and commit
+      val df = Seq[(Int, String)]((1, "a"), (2, "b")).toDF("key", "value")
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", targetTable)
+        .option(Parameters.PARAM_INTERNAL_USE_AWS_REGION_URL, "false")
+        .mode(SaveMode.Append)
+        .save()
+      assert(getRowCount(targetTable) == 2)
+
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", targetTable)
+        .option(Parameters.PARAM_INTERNAL_USE_AWS_REGION_URL, "true")
+        .mode(SaveMode.Append)
+        .save()
+      assert(getRowCount(targetTable) == 4)
+    }
+  }
+
+  test("AWS use region url with large data") {
+    // This test case only affect AWS account
+    val accountName: String = Option(System.getenv(SNOWFLAKE_TEST_ACCOUNT)).getOrElse("aws")
+    if (accountName.equalsIgnoreCase("aws")) {
+      def getRandomString(len: Int): String = {
+        Random.alphanumeric take len mkString ""
+      }
+
+      val partitionCount = 4
+      val rowCountPerPartition = 1024
+      val strValue = getRandomString(512)
+      // Create RDD which generates 1 large partition
+      val testRDD: RDD[Row] = sparkSession.sparkContext
+        .parallelize(Seq[Int](), partitionCount)
+        .mapPartitions { _ => {
+          (1 to rowCountPerPartition).map { _ => {
+            Row(strValue, strValue, strValue, strValue)
+          }
+          }.iterator
+        }
+        }
+      val schema = StructType(
+        List(
+          StructField("str1", StringType),
+          StructField("str2", StringType),
+          StructField("str3", StringType),
+          StructField("str4", StringType)
+        )
+      )
+
+      // Write to snowflake
+      sparkSession.createDataFrame(testRDD, schema).write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", targetTable)
+        .option(Parameters.PARAM_INTERNAL_USE_AWS_REGION_URL, "false")
+        .mode(SaveMode.Overwrite)
+        .save()
+      assert(getRowCount(targetTable) == partitionCount * rowCountPerPartition)
+
+      // Write to the table again
+      sparkSession.createDataFrame(testRDD, schema).write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", targetTable)
+        .option(Parameters.PARAM_INTERNAL_USE_AWS_REGION_URL, "true")
+        .mode(SaveMode.Append)
+        .save()
+      assert(getRowCount(targetTable) == partitionCount * rowCountPerPartition * 2)
+    }
   }
 
   def checkSchema1(tableName: String): Boolean = {

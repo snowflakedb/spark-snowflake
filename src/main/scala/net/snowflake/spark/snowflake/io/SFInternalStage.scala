@@ -165,4 +165,11 @@ private[io] class SFInternalStage(isWrite: Boolean,
 
   private[io] def getEncryptionMaterials = encryptionMaterials
 
+  // Determine whether to use URL with region name in the same logic as JDBC,
+  // refer to StorageClientFactory.createClient() for details.
+  private[io] def useS3RegionalUrl: Boolean =
+    sfAgent.getStageInfo.getUseS3RegionalUrl ||
+      connection.getSFBaseSession.getUseRegionalS3EndpointsForPresignedURL
+
+  private[io] def getRegion: String = sfAgent.getStageInfo.getRegion
 }
