@@ -463,6 +463,69 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     assert(readDF.count() == 0 && readDF.schema.fields.length == 2)
   }
 
+  test("Write empty DataFrame and target table doesn't exist: SNOW-495389") {
+    import testImplicits._
+    val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
+    // Create target table
+    jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 string)")
+    jdbcUpdate(s"insert into $targetTable values (123, 'abc')")
+
+    // case 1: Write DF with Overwrite, truncate_table = on, and usestagingtable = off
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .option("truncate_table", "on")
+      .option("usestagingtable", "off")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // target table is empty, and table is not recreated.
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1 from $targetTable") // "c1" is old table column name
+      .load().count() == 0)
+
+    // case 2: Write DF with Overwrite, truncate_table = on, and usestagingtable = off
+    // But disable the fix
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .option("truncate_table", "on")
+      .option("usestagingtable", "off")
+      .option(Parameters.PARAM_INTERNAL_USE_COPY_TO_WRITE_EMPTY_DATAFRAME, "false")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // If this fix is disabled, the table will be recreated.
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select key from $targetTable") // "key" is old table column name
+      .load().count() == 0)
+
+    // case 3: Write DF with Overwrite, truncate_table = off, and usestagingtable = off
+    jdbcUpdate(s"create or replace table $targetTable (c1 int, c2 string)")
+    jdbcUpdate(s"insert into $targetTable values (123, 'abc')")
+    emptyDf.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .option("truncate_table", "off")
+      .option("usestagingtable", "off")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // target table is empty, and table is recreated.
+    assert(sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select key from $targetTable") // "key" is new table column name
+      .load().count() == 0)
+  }
+
   test("Write empty DataFrame and target table exists: SNOW-297134") {
     import testImplicits._
     val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")

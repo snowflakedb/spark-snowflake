@@ -236,7 +236,27 @@ private[io] object StageWriter {
              | Skip to execute COPY INTO TABLE command because
              | no file is uploaded.
              |""".stripMargin.filter(_ >= ' '))
+      } else if (params.useCopyToWriteEmptyDataFrame) {
+        log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | use dummy prefix to handle the special case that no file is uploaded.
+             |""".stripMargin.filter(_ >= ' '))
+        writeToTable(
+          sqlContext,
+          conn,
+          schema,
+          saveMode,
+          params,
+          s"dummy_not_exist_prefix_${Math.abs(Random.nextLong()).toString}",
+          stage,
+          format,
+          fileUploadResults // empty file
+        )
       } else {
+        log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | use CREATE TABLE directly to handle the special case that no file is uploaded.
+             |""".stripMargin.filter(_ >= ' '))
           conn.createTable(params.table.get.name, schema, params,
             overwrite = saveMode.equals(SaveMode.Overwrite), temporary = false)
       }
