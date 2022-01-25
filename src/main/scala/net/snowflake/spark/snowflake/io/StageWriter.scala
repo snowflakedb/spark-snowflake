@@ -237,8 +237,21 @@ private[io] object StageWriter {
              | no file is uploaded.
              |""".stripMargin.filter(_ >= ' '))
       } else {
-          conn.createTable(params.table.get.name, schema, params,
-            overwrite = saveMode.equals(SaveMode.Overwrite), temporary = false)
+        log.info(
+          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+             | use dummy prefix to handle the special case that no file is uploaded.
+             |""".stripMargin.filter(_ >= ' '))
+        writeToTable(
+          sqlContext,
+          conn,
+          schema,
+          saveMode,
+          params,
+          s"dummy_not_exist_prefix_${Math.abs(Random.nextLong()).toString}",
+          stage,
+          format,
+          fileUploadResults // empty file
+        )
       }
       val endTime = System.currentTimeMillis()
 
