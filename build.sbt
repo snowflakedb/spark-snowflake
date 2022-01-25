@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.1"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.1.1")
+val sparkVersion = "2.4.0"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -41,10 +41,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.1",
+    version := s"${sparkConnectorVersion}-spark_2.4",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    // Spark 3.1 only supports scala 2.12
-    crossScalaVersions := Seq("2.12.11"),
+    crossScalaVersions := Seq("2.11.12", "2.12.11"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -54,7 +53,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
       "net.snowflake" % "snowflake-jdbc" % "3.13.14",
       "com.google.guava" % "guava" % "14.0.1" % Test,
-      "org.scalatest" %% "scalatest" % "3.1.1" % Test,
+      // Spark 3.0 needs to use scalatest 3.0.5
+      "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
       // Below is for Spark Streaming from Kafka test only

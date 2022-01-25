@@ -2,7 +2,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+// TransposeWindow is new class from Spark 3.0
+// import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
@@ -45,6 +46,11 @@ class SFDataFrameWindowFunctionsSuite
       "corr, covar_pop, stddev_pop functions in specific window",
       // TS - covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window
       "covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window",
+      // Below test case uses test DataFrame "testData2" and a temp view "testData2".
+      // We override "testData2", but no temp view is created, so hit below error when run it.
+      //     "Table or view not found: testData2" did not contain "window functions inside WHERE and HAVING clauses"
+      // So, skip below test case for spark 2.4
+      "SPARK-24575: Window functions inside WHERE and HAVING clauses",
       // TS - NaN and -0.0 in window partition keys
       "NaN and -0.0 in window partition keys",
       // TS - This case is commented out because the column name in error is upper case.
@@ -434,6 +440,8 @@ class SFDataFrameWindowFunctionsSuite
         Row("b", 2, 4, 8)))
   }
 
+  // 'udaf' is new feature from spark 3.0, So disable this case for spark 2.4
+  /*
   test("window function with aggregator") {
     val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
       def zero: Long = 0L
@@ -469,6 +477,7 @@ class SFDataFrameWindowFunctionsSuite
         Row("b", 3, 8, 32),
         Row("b", 2, 4, 8)))
   }
+  */
 
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))

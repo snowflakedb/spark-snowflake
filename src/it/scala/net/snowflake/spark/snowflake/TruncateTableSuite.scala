@@ -555,7 +555,9 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     assert(readDF.schema.fields.length == 3 && readDF.count() == 1)
   }
 
-  test("Negative test to write empty DataFrame: SNOW-297134") {
+  // For spark 2.4, test dataframe `emptyDf` has partitions.
+  // So this test case is not applicable for spark 2.4
+  ignore("Negative test to write empty DataFrame: SNOW-297134") {
     import testImplicits._
     val emptyDf = Seq.empty[(Int, String)].toDF("key", "value")
 
