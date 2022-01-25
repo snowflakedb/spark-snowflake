@@ -372,7 +372,9 @@ class StageSuite extends IntegrationSuiteBase {
         param.useExponentialBackoff,
         param.expectedPartitionCount,
         pref = "test_dir",
-        connection = connection
+        connection = connection,
+        useRegionUrl = None,
+        regionName = None
       )
 
       assertThrows[Exception]({
@@ -489,7 +491,9 @@ class StageSuite extends IntegrationSuiteBase {
         param.useExponentialBackoff,
         param.expectedPartitionCount,
         pref = "test_dir",
-        connection = connection
+        connection = connection,
+        useRegionUrl = None,
+        regionName = None
       )
 
       val storageInfo: Map[String, String] = Map()

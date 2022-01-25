@@ -39,14 +39,20 @@ import net.snowflake.client.jdbc.{
 import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
 import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
 import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+  AWSStaticCredentialsProvider,
   BasicAWSCredentials,
   BasicSessionCredentials
 }
+import net.snowflake.client.jdbc.internal.amazonaws.client.builder.AwsClientBuilder
 import net.snowflake.client.jdbc.internal.amazonaws.retry.{
   PredefinedRetryPolicies,
   RetryPolicy
 }
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AmazonS3Client
+import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{
+  AmazonS3,
+  AmazonS3Client,
+  AmazonS3ClientBuilder
+}
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{
@@ -352,7 +358,10 @@ object CloudStorageOperations {
             param.useExponentialBackoff,
             param.expectedPartitionCount,
             pref = prefix,
-            connection = conn
+            connection = conn,
+            // For S3 external stage, it doesn't use region name in URL
+            useRegionUrl = None,
+            regionName = None
           ),
           stageName
         )
@@ -395,8 +404,10 @@ object CloudStorageOperations {
     awsKey: String,
     awsToken: Option[String],
     parallelism: Int,
-    proxyInfo: Option[ProxyInfo]
-  ): AmazonS3Client = {
+    proxyInfo: Option[ProxyInfo],
+    useRegionUrl: Option[String],
+    regionName: Option[String]
+  ): AmazonS3 = {
     val awsCredentials = awsToken match {
       case Some(token) => new BasicSessionCredentials(awsId, awsKey, token)
       case None => new BasicAWSCredentials(awsId, awsKey)
@@ -425,7 +436,24 @@ object CloudStorageOperations {
       case None =>
     }
 
-    new AmazonS3Client(awsCredentials, clientConfig)
+    if (useRegionUrl.isEmpty) {
+      new AmazonS3Client(awsCredentials, clientConfig)
+    } else {
+      val s3ClientBuilder = AmazonS3ClientBuilder.standard
+        .withCredentials(new AWSStaticCredentialsProvider(awsCredentials))
+        .withClientConfiguration(clientConfig)
+      // Use URL with region name with the same logic as JDBC,
+      // refer to SnowflakeS3Client.setupSnowflakeS3Client() for details.
+      if (useRegionUrl.get.toBoolean) {
+        s3ClientBuilder.withEndpointConfiguration(
+          new AwsClientBuilder.EndpointConfiguration(
+            "s3." + regionName.get + ".amazonaws.com", regionName.get))
+      } else {
+        s3ClientBuilder.withRegion(regionName.get)
+      }
+
+      s3ClientBuilder.build()
+    }
   }
 
   private[io] final def createAzureClient(
@@ -480,6 +508,8 @@ private[io] object StorageInfo {
   @inline val AZURE_ACCOUNT = "azureAccount"
   @inline val AZURE_END_POINT = "azureEndPoint"
   @inline val AZURE_SAS = "azureSAS"
+  @inline val AWS_REGION = "awsRegion"
+  @inline val AWS_USE_REGION_URL = "awsUseRegionUrl"
 }
 
 sealed trait CloudStorage {
@@ -1319,6 +1349,10 @@ case class InternalS3Storage(param: MergedParameters,
     storageInfo += StorageInfo.AWS_ID -> stageManager.awsId.get
     storageInfo += StorageInfo.AWS_KEY -> stageManager.awsKey.get
     stageManager.awsToken.foreach(storageInfo += StorageInfo.AWS_TOKEN -> _)
+    if (param.useAWSRegionURL) {
+      storageInfo += StorageInfo.AWS_REGION -> stageManager.getRegion
+      storageInfo += StorageInfo.AWS_USE_REGION_URL -> stageManager.useS3RegionalUrl.toString
+    }
 
     val prefix: String =
       if (path.isEmpty) path else if (path.endsWith("/")) path else path + "/"
@@ -1358,13 +1392,15 @@ case class InternalS3Storage(param: MergedParameters,
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
-    val s3Client: AmazonS3Client =
+    val s3Client: AmazonS3 =
       CloudStorageOperations.createS3Client(
         storageInfo(StorageInfo.AWS_ID),
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
         parallelism,
-        proxyInfo
+        proxyInfo,
+        storageInfo.get(StorageInfo.AWS_USE_REGION_URL),
+        storageInfo.get(StorageInfo.AWS_REGION)
       )
 
     val (fileCipher, meta) =
@@ -1431,7 +1467,9 @@ case class InternalS3Storage(param: MergedParameters,
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
         parallelism,
-        proxyInfo
+        proxyInfo,
+        storageInfo.get(StorageInfo.AWS_USE_REGION_URL),
+        storageInfo.get(StorageInfo.AWS_REGION)
       )
       .deleteObject(
         storageInfo(StorageInfo.BUCKET_NAME),
@@ -1447,7 +1485,9 @@ case class InternalS3Storage(param: MergedParameters,
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
         parallelism,
-        proxyInfo
+        proxyInfo,
+        storageInfo.get(StorageInfo.AWS_USE_REGION_URL),
+        storageInfo.get(StorageInfo.AWS_REGION)
       )
       .deleteObjects(
         new DeleteObjectsRequest(storageInfo(StorageInfo.BUCKET_NAME))
@@ -1463,7 +1503,9 @@ case class InternalS3Storage(param: MergedParameters,
         storageInfo(StorageInfo.AWS_KEY),
         storageInfo.get(StorageInfo.AWS_TOKEN),
         parallelism,
-        proxyInfo
+        proxyInfo,
+        storageInfo.get(StorageInfo.AWS_USE_REGION_URL),
+        storageInfo.get(StorageInfo.AWS_REGION)
       )
       .doesObjectExist(
         storageInfo(StorageInfo.BUCKET_NAME),
@@ -1476,14 +1518,16 @@ case class InternalS3Storage(param: MergedParameters,
     compress: Boolean,
     storageInfo: Map[String, String]
   ): InputStream = {
-    val s3Client: AmazonS3Client =
+    val s3Client: AmazonS3 =
       CloudStorageOperations
         .createS3Client(
           storageInfo(StorageInfo.AWS_ID),
           storageInfo(StorageInfo.AWS_KEY),
           storageInfo.get(StorageInfo.AWS_TOKEN),
           parallelism,
-          proxyInfo
+          proxyInfo,
+          storageInfo.get(StorageInfo.AWS_USE_REGION_URL),
+          storageInfo.get(StorageInfo.AWS_REGION)
         )
     val dateObject =
       s3Client.getObject(
@@ -1516,7 +1560,9 @@ case class ExternalS3Storage(bucketName: String,
                              pref: String = "",
                              @transient override val connection: Connection,
                              parallelism: Int =
-                               CloudStorageOperations.DEFAULT_PARALLELISM)
+                               CloudStorageOperations.DEFAULT_PARALLELISM,
+                             useRegionUrl: Option[String],
+                             regionName: Option[String])
     extends CloudStorage {
 
   lazy val prefix: String =
@@ -1532,12 +1578,14 @@ case class ExternalS3Storage(bucketName: String,
       if (dir.isDefined) s"${dir.get}/$fileName"
       else fileName
 
-    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
+    val s3Client: AmazonS3 = CloudStorageOperations.createS3Client(
       awsId,
       awsKey,
       awsToken,
       parallelism,
-      proxyInfo
+      proxyInfo,
+      useRegionUrl,
+      regionName
     )
 
     val meta = new ObjectMetadata()
@@ -1566,24 +1614,26 @@ case class ExternalS3Storage(bucketName: String,
 
   override def deleteFile(fileName: String): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo, useRegionUrl, regionName)
       .deleteObject(bucketName, prefix.concat(fileName))
 
   override def deleteFiles(fileNames: List[String]): Unit =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo, useRegionUrl, regionName)
       .deleteObjects(
         new DeleteObjectsRequest(bucketName)
           .withKeys(fileNames.map(prefix.concat): _*)
       )
 
   override def fileExists(fileName: String): Boolean = {
-    val s3Client: AmazonS3Client = CloudStorageOperations.createS3Client(
+    val s3Client: AmazonS3 = CloudStorageOperations.createS3Client(
       awsId,
       awsKey,
       awsToken,
       parallelism,
-      proxyInfo
+      proxyInfo,
+      useRegionUrl,
+      regionName
     )
     s3Client.doesObjectExist(bucketName, prefix.concat(fileName))
   }
@@ -1593,13 +1643,15 @@ case class ExternalS3Storage(bucketName: String,
     compress: Boolean,
     storageInfo: Map[String, String]
   ): InputStream = {
-    val s3Client: AmazonS3Client =
+    val s3Client: AmazonS3 =
       CloudStorageOperations.createS3Client(
         awsId,
         awsKey,
         awsToken,
         parallelism,
-        proxyInfo
+        proxyInfo,
+        useRegionUrl,
+        regionName
       )
     val dataObject = s3Client.getObject(bucketName, prefix.concat(fileName))
     val inputStream: InputStream = dataObject.getObjectContent
@@ -1625,7 +1677,7 @@ case class ExternalS3Storage(bucketName: String,
 
   private def getFileNames(subDir: String): List[String] =
     CloudStorageOperations
-      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo)
+      .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo, useRegionUrl, regionName)
       .listObjects(bucketName, prefix + subDir)
       .getObjectSummaries
       .toList
@@ -1881,7 +1933,7 @@ object StorageUtils {
   }
 }
 
-private[io] class S3UploadOutputStream(s3Client: AmazonS3Client,
+private[io] class S3UploadOutputStream(s3Client: AmazonS3,
                                        meta: ObjectMetadata,
                                        storageInfo: Map[String, String],
                                        bufferSize: Int,
