@@ -174,7 +174,16 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
          |( ( "SUBQUERY_1"."SUBQUERY_1_COL_2" IS NOT NULL ) AND ( "SUBQUERY_1".
          |"SUBQUERY_1_COL_2" = 1 ) )
-         |""".stripMargin.replaceAll("\\s", ""))
+         |""".stripMargin.replaceAll("\\s", "")) ||
+        Utils.getLastSelect
+          .replaceAll("\\s", "")
+          .equals(s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."id" ) AS "SUBQUERY_1_COL_0" ,
+                     | ( "SUBQUERY_0"."time" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
+                     | ( PARTITION BY "SUBQUERY_0"."id" ORDER BY ( "SUBQUERY_0"."time" ) DESC
+                     | ) ) AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $table3 ) AS
+                     | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
+                     | ( "SUBQUERY_1"."SUBQUERY_1_COL_2" = 1 )
+                     |""".stripMargin.replaceAll("\\s", ""))
     )
 
   }

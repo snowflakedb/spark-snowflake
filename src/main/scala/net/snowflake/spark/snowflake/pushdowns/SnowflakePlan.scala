@@ -23,4 +23,18 @@ case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
     }
   }
 
+  // withNewChildrenInternal() is a new interface function from spark 3.2 in
+  // org.apache.spark.sql.catalyst.trees.TreeNode. For details refer to
+  // https://github.com/apache/spark/pull/32030
+  // As for spark connector the SnowflakePlan is a leaf Node, we don't expect
+  // caller to set any new children for it.
+  // SnowflakePlan is only used for spark connector PushDown. Even if the Exception is
+  // raised, the PushDown will not be used and it still works.
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan = {
+  if (newChildren.nonEmpty) {
+    throw new Exception("Spark connector internal error: " +
+      "SnowflakePlan.withNewChildrenInternal() is called to set some children nodes.")
+  }
+  this
+  }
 }

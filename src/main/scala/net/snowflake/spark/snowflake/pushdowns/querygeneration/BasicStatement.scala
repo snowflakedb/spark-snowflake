@@ -94,7 +94,14 @@ private[querygeneration] object BasicStatement {
             ) +
               ", TO_DATE('1970-01-01'))" // s"DATEADD(day, ${l.value}, TO_DATE('1970-01-01'))"
           case TimestampType =>
-            ConstantString("to_timestamp_ntz(") + l.toString() + ", 6)"
+            // From spark 3.2, for TimestampType, it is l.toString() is 2019-07-29 00:00:00
+            // But on Spark 3.1 and previous, it is number such as 1564358400000000:
+            //   case TimestampType =>
+            //          TimestampFormatter.getFractionFormatter(timeZoneId)
+            //            .format(value.asInstanceOf[Long])
+            ConstantString("to_timestamp_ntz(") + LongVariable(
+              Option(l.value).map(_.asInstanceOf[Long])
+            ) + ", 6)"
           case _ =>
             l.value match {
               case v: Int => IntVariable(Some(v)) !

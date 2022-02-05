@@ -29,8 +29,13 @@ import scala.util.matching.Regex
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
 trait IntegrationSuiteBase
-    extends IntegrationEnv
-    with QueryTest {
+    extends QueryTest
+    with IntegrationEnv {
+
+  // New test interface function for QueryTest from Spark 3.2
+  // Note: It is only introduced for Spark 3.2, scala 2.13,
+  //       So do not add 'override` keyword to it.
+  protected def spark: SparkSession = sparkSession
 
   /**
     * A helper object for importing spark SQL implicits.
@@ -39,8 +44,6 @@ trait IntegrationSuiteBase
   protected object testImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = sparkSession.sqlContext
   }
-
-  private val log = LoggerFactory.getLogger(getClass)
 
   def getAzureURL(input: String): String = {
     val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.+)?".r
@@ -55,7 +58,7 @@ trait IntegrationSuiteBase
     * Verify that the pushdown was done by looking at the generated SQL,
     * and check the results are as expected
     */
-  private def testPushdownBasic(reference: String,
+  private def testPushdownBasic(references: Seq[String],
                                 result: DataFrame,
                                 expectedAnswer: Seq[Row],
                                 bypass: Boolean = false,
@@ -70,10 +73,10 @@ trait IntegrationSuiteBase
     }
 
     if (!bypass) {
-      assert(
-        Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase == reference.trim
-          .replaceAll("\\s+", "")
-          .toLowerCase
+      val potentialQueries = references.map {
+        _.trim.replaceAll("\\s+", "").toLowerCase
+      }
+      assert(potentialQueries.contains(Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase)
       )
     }
   }
@@ -89,8 +92,23 @@ trait IntegrationSuiteBase
                    expectedAnswer: Seq[Row],
                    bypass: Boolean = false,
                    printSqlText: Boolean = false,
-                   testPushdownOff: Boolean = true): Unit = {
-    testPushdownBasic(reference, result, expectedAnswer, bypass, printSqlText)
+                   testPushdownOff: Boolean = true): Unit =
+    testPushdownMultiplefQueries(Seq(reference), result, expectedAnswer,
+      bypass, printSqlText, testPushdownOff)
+
+  /**
+    * Verify that the pushdown was done by looking at the generated SQL,
+    * and check the results are as expected.
+    * It also reads the DataFrame after disabling the pushdown.
+    * The test result should be as expected too.
+    */
+  def testPushdownMultiplefQueries(references: Seq[String],
+                                   result: DataFrame,
+                                   expectedAnswer: Seq[Row],
+                                   bypass: Boolean = false,
+                                   printSqlText: Boolean = false,
+                                   testPushdownOff: Boolean = true): Unit = {
+    testPushdownBasic(references, result, expectedAnswer, bypass, printSqlText)
 
     // Disable pushdown and rerun the dataframe, the result should match
     if (testPushdownOff && isPushdownEnabled(result.sparkSession)) {
@@ -99,7 +117,8 @@ trait IntegrationSuiteBase
         // Re-read the DataFrame but don't check the executed query text.
         // 'result' has been compiled, so spark plan with pushdown could have been cached.
         // So, use 'result.select("*")' to make sure snowflake pushdown is not used.
-        testPushdownBasic(reference, result.select("*"), expectedAnswer, bypass = true, printSqlText)
+        testPushdownBasic(references, result.select("*"), expectedAnswer,
+          bypass = true, printSqlText)
       } catch {
         case th: Throwable => {
           println(s"Fail to read DataFrame with pushdown disabled. ${th.getMessage}")

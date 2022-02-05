@@ -342,7 +342,6 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     val df1 = sparkSession.sql("select c1 from test_union_1")
     val df2 = sparkSession.sql("select c1 from test_union_2")
-    val resultUnion = df1.union(df2)
 
     val expectedResult = Seq(
       Row("row1"),
@@ -350,28 +349,24 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row("row2"),
       Row("row3"))
 
-    resultUnion.printSchema()
-    resultUnion.show()
-
-    testPushdown(
+    // The generated queries on Spark 3.2 and 3.1 are different.
+    val expectedQueries = Seq(
       s"""(select * from($test_table_union_1)as"sf_connector_query_alias")
          |union all
          |(select * from($test_table_union_2)as"sf_connector_query_alias")
          |""".stripMargin,
-      resultUnion,
-      expectedResult
+      s"""(SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" FROM (
+         |   SELECT * FROM ( $test_table_union_1 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |UNION ALL ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" FROM (
+         |   SELECT * FROM ( $test_table_union_2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin
     )
+
+    val resultUnion = df1.union(df2)
+    testPushdownMultiplefQueries(expectedQueries, resultUnion, expectedResult)
 
     val resultUnionAll = df1.unionAll(df2)
-
-    testPushdown(
-      s"""(select * from($test_table_union_1)as"sf_connector_query_alias")
-         |union all
-         |(select * from($test_table_union_2)as"sf_connector_query_alias")
-         |""".stripMargin,
-      resultUnionAll,
-      expectedResult
-    )
+    testPushdownMultiplefQueries(expectedQueries, resultUnionAll, expectedResult)
   }
 
   test("test pushdown casewhen() function with other") {
@@ -617,8 +612,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_in")
 
-    val result = sparkSession.sql("SELECT value from test_table_in where value in (-5, 123, 'test', " +
-      "(select value from test_table_in where value > 4))")
+    val result = sparkSession.sql("SELECT value from test_table_in where value in " +
+      "(-5, 123, 'test', (select value from test_table_in where value > 4))")
 
     result.show()
 
@@ -627,7 +622,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(5)
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""select * from (
          |  select * from ($test_table_in) as "sf_connector_query_alias"
          |) as "subquery_0" where (
@@ -644,9 +639,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  )
          |)
          |""".stripMargin,
-      result,
-      expectedResult
+      s"""SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM (
+         |  SELECT * FROM ($test_table_in) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE(
+         |  CAST ( "SUBQUERY_0"."VALUE" AS VARCHAR ) IN (
+         |    '-5' , '123' , 'test' , CAST (
+         |     ( SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" FROM (
+         |         SELECT * FROM ( SELECT * FROM ( $test_table_in ) AS "SF_CONNECTOR_QUERY_ALIAS")
+         |       AS "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."VALUE" IS NOT NULL ) AND
+         |          ( "SUBQUERY_0"."VALUE" > 4 ) ) ) AS "SUBQUERY_1" )
+         |      AS VARCHAR
+         |    ) ) ) ) AS "SUBQUERY_1"
+         |""".stripMargin,
     )
+
+    testPushdownMultiplefQueries(expectedQueries, result, expectedResult)
   }
 
   test("test pushdown INSET() function") {
@@ -715,13 +721,11 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       " '2014-01-01 16:00:06.000', '2014-01-01 16:00:07.000', '2014-01-01 16:00:08.000'," +
       " '2014-01-01 16:00:09.000', '2014-01-01 16:00:10.000', '2014-01-01 16:00:11.000')")
 
-    result.show(truncate=false)
-
     val expectedResult = Seq(
       Row(1.1, Timestamp.valueOf("2014-01-01 16:00:00"))
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""select * from (select * from ($test_table_in_set) as "sf_connector_query_alias") as "subquery_0"
          |where( "subquery_0"."value" in
          |  (12.0,14.14,3.0,4.0,13.0,1.1,7.0,5.0,11.0,8.0,-5.1,2.0,6.0,9.0,10.0) and cast
@@ -731,10 +735,19 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  '2014-01-0116:00:06.000','2014-01-0116:00:01.000','2014-01-0116:00:02.000','2014-01-0116:00:11.000')
          |)
          |""".stripMargin,
-      result,
-      expectedResult,
-      testPushdownOff = false
+      s"""SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."CUR_TIME" )
+         | AS "SUBQUERY_2_COL_1" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_in_set ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( "SUBQUERY_0"."VALUE" IN
+         | ( 12.0 , 14.14 , 3.0 , 4.0 , 13.0 , 1.1 , 7.0 , 5.0 , 11.0 , 8.0 , -5.1 , 2.0
+         | , 6.0 , 9.0 , 10.0 ) AND CAST ( "SUBQUERY_0"."CUR_TIME" AS VARCHAR ) IN
+         | ( '2014-01-01 16:00:08.000' , '2014-01-01 16:00:07.000' , '2014-01-01 16:00:04.000' ,
+         | '2014-01-01 16:00:05.000' , '2014-01-01 16:00:00.000' , '2014-01-01 16:00:10.000' ,
+         | '2014-01-01 16:00:09.000' , '2014-01-01 16:00:03.000' , '2014-01-01 16:00:06.000' ,
+         | '2014-01-01 16:00:01.000' , '2014-01-01 16:00:02.000' , '2014-01-01 16:00:11.000'
+         | ) ) ) AS "SUBQUERY_1"
+         |""".stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, result, expectedResult, testPushdownOff = false)
   }
 
   test("test pushdown COALESCE()") {
