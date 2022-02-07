@@ -29,13 +29,8 @@ import scala.util.matching.Regex
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
 trait IntegrationSuiteBase
-    extends QueryTest
-    with IntegrationEnv {
-
-  // New test interface function for QueryTest from Spark 3.2
-  // Note: It is only introduced for Spark 3.2, scala 2.13,
-  //       So do not add 'override` keyword to it.
-  protected def spark: SparkSession = sparkSession
+    extends IntegrationEnv
+    with net.snowflake.spark.snowflake.QueryTest {
 
   /**
     * A helper object for importing spark SQL implicits.
