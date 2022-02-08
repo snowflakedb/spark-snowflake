@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestSessionBase}
-import org.apache.spark.sql.types.{DoubleType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {

@@ -2,6 +2,7 @@ package net.snowflake.spark.snowflake.streaming
 
 import net.snowflake.spark.snowflake.{ConstantString, IntegrationSuiteBase}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
+import scala.language.postfixOps
 
 class SinkUtilsSuite extends IntegrationSuiteBase {
 

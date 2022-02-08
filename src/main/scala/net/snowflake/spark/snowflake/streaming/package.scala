@@ -13,6 +13,7 @@ import scala.collection.mutable
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 package object streaming {
 
@@ -79,7 +80,7 @@ package object streaming {
 
   private[streaming] def closeAllIngestionService(): Unit = {
     LOGGER.debug(s"closing ingestion service")
-    pipeList.par.foreach(_._2.close())
+    pipeList.foreach(_._2.close())
     LOGGER.debug(s"all ingestion service closed")
   }
 

@@ -1,0 +1,47 @@
+name: IT GCP 2.13
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    name: IT
+    runs-on: ubuntu-latest
+    strategy:
+     matrix:
+       scala_version: [ '2.13.7' ]
+       spark_version: [ '3.2.0' ]
+       use_copy_unload: [ 'false' ]
+       cloud_provider: [ 'gcp' ]
+       # run_query_in_async can be removed after async mode is stable
+       run_query_in_async: [ 'true', 'false' ]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+
+    - name: Decrypt snowflake.json for testing
+      run: ./.github/scripts/decrypt_secret.sh snowflake.travis.json snowflake.travis.json.gpg
+      env:
+        SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
+
+    - name: Run tests
+      run: ./.github/scripts/run-tests-github.sh
+      env:
+        INTEGRATION_TESTS: true
+        SPARK_SCALA_VERSION: ${{ matrix.scala_version }}
+        SPARK_VERSION: ${{ matrix.spark_version }}
+        SNOWFLAKE_TEST_ACCOUNT: ${{ matrix.cloud_provider }}
+        SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
+        SPARK_CONN_ENV_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: ${{ matrix.run_query_in_async }}
+
+    - uses: codecov/codecov-action@v2
+      if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
+      with:
+        fail_ci_if_error: true

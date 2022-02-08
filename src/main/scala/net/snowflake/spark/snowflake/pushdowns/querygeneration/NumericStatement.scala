@@ -5,6 +5,7 @@ import net.snowflake.spark.snowflake.{
   LongVariable,
   SnowflakeSQLStatement
 }
+import scala.language.postfixOps
 import org.apache.spark.sql.catalyst.expressions.{
   Abs,
   Acos,

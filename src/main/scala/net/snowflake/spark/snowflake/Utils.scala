@@ -27,6 +27,7 @@ import org.apache.spark.{SPARK_VERSION, SparkContext, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.io._
 import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
@@ -203,7 +204,6 @@ object Utils {
             )
         }
       case _ =>
-        Unit
     }
   }
 

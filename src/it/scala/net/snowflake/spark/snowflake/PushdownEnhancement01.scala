@@ -673,15 +673,12 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       "(-5, 1,2,3,4,5,6,7,8,9,10,11,12,13,14) and name in " +
       "('test1','test2','test3','test4','test6','test7','test8','test9','1','2','3','4','5','6')")
 
-    result.show()
-
     val expectedResult = Seq(
       Row(-5),
       Row(1)
     )
 
-    // Not sure whether the order of the values in the IN cluster changes.
-    testPushdown(
+    val expectedQueries = Seq(
       s"""select("subquery_1"."value") as "subquery_2_col_0" from (
          |  select * from (
          |    select * from ($test_table_in_set) as "sf_connector_query_alias"
@@ -692,9 +689,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  )
          |) as "subquery_1"
          |""".stripMargin,
-      result,
-      expectedResult
+      // The IN-VALUE orders on spark 3.2 scala 2.13 is different with other versions.
+      s"""SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" FROM (
+         |  SELECT * FROM (
+         |    SELECT * FROM ( $test_table_in_set ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |   ) AS "SUBQUERY_0" WHERE (
+         |     "SUBQUERY_0"."VALUE" IN ( 12 , 8 , 4 , 6 , 2 , 3 , -5 , 1 ,
+         |        10 , 13 , 11 , 7 , 5 , 9 , 14 )
+         |     AND "SUBQUERY_0"."NAME" IN ( 'test4' , 'test3' , '3' , '5' ,
+         |        'test2' , '6' , 'test8' , '1' , 'test6' , '4' , 'test7' ,
+         |         'test1' , '2' , 'test9' ) ) )
+         | AS "SUBQUERY_1"
+         |""".stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, result, expectedResult)
   }
 
   test("test pushdown INSET() function with timestamps and double") {
@@ -726,6 +734,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     val expectedQueries = Seq(
+      // Query for spark 3.1 and 3.0
       s"""select * from (select * from ($test_table_in_set) as "sf_connector_query_alias") as "subquery_0"
          |where( "subquery_0"."value" in
          |  (12.0,14.14,3.0,4.0,13.0,1.1,7.0,5.0,11.0,8.0,-5.1,2.0,6.0,9.0,10.0) and cast
@@ -735,12 +744,25 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          |  '2014-01-0116:00:06.000','2014-01-0116:00:01.000','2014-01-0116:00:02.000','2014-01-0116:00:11.000')
          |)
          |""".stripMargin,
+      // Query for Spark 3.2 scala 2.12 (IN-VALUES are not ordered)
       s"""SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."CUR_TIME" )
          | AS "SUBQUERY_2_COL_1" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_in_set ) AS
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( "SUBQUERY_0"."VALUE" IN
          | ( 12.0 , 14.14 , 3.0 , 4.0 , 13.0 , 1.1 , 7.0 , 5.0 , 11.0 , 8.0 , -5.1 , 2.0
-         | , 6.0 , 9.0 , 10.0 ) AND CAST ( "SUBQUERY_0"."CUR_TIME" AS VARCHAR ) IN
-         | ( '2014-01-01 16:00:08.000' , '2014-01-01 16:00:07.000' , '2014-01-01 16:00:04.000' ,
+         | , 6.0 , 9.0 , 10.0 ) AND CAST ( "SUBQUERY_0"."CUR_TIME" AS VARCHAR ) IN (
+         | '2014-01-01 16:00:08.000' , '2014-01-01 16:00:07.000' , '2014-01-01 16:00:04.000' ,
+         | '2014-01-01 16:00:05.000' , '2014-01-01 16:00:00.000' , '2014-01-01 16:00:10.000' ,
+         | '2014-01-01 16:00:09.000' , '2014-01-01 16:00:03.000' , '2014-01-01 16:00:06.000' ,
+         | '2014-01-01 16:00:01.000' , '2014-01-01 16:00:02.000' , '2014-01-01 16:00:11.000'
+         | ) ) ) AS "SUBQUERY_1"
+         |""".stripMargin,
+      // Query for Spark 3.2 scala 2.13 (IN-VALUES are ordered)
+      s"""SELECT ( "SUBQUERY_1"."VALUE" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."CUR_TIME" )
+         | AS "SUBQUERY_2_COL_1" FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_in_set ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( "SUBQUERY_0"."VALUE" IN
+         | ( 3.0 , 4.0 , 13.0 , 1.1 , 7.0 , 5.0 , 11.0 , 8.0 , -5.1 , 2.0 , 6.0 , 9.0 , 10.0 ,
+         | 12.0 , 14.14 ) AND CAST ( "SUBQUERY_0"."CUR_TIME" AS VARCHAR ) IN (
+         | '2014-01-01 16:00:08.000' , '2014-01-01 16:00:07.000' , '2014-01-01 16:00:04.000' ,
          | '2014-01-01 16:00:05.000' , '2014-01-01 16:00:00.000' , '2014-01-01 16:00:10.000' ,
          | '2014-01-01 16:00:09.000' , '2014-01-01 16:00:03.000' , '2014-01-01 16:00:06.000' ,
          | '2014-01-01 16:00:01.000' , '2014-01-01 16:00:02.000' , '2014-01-01 16:00:11.000'

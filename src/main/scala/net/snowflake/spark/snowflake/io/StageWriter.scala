@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
+import scala.language.postfixOps
 import scala.util.Random
 
 // Snowflake doesn't support DDL in tran, so the State Machine is

@@ -12,7 +12,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.slf4j.{Logger, LoggerFactory}
-
+import scala.language.postfixOps
 import scala.util.Random
 
 private[snowflake] object StageReader {

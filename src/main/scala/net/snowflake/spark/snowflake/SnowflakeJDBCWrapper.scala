@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Try
 
 /**

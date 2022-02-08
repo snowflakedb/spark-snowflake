@@ -38,5 +38,5 @@ class SFDataFrameAggregateSuite
       "SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`"
       // Replace Spark exception by Snowflake exception, replaced by
       // TS - SPARK-21896: Window functions inside aggregate functions
-       )
+    )
 }

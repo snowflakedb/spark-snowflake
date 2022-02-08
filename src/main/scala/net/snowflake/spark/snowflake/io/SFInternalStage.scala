@@ -124,7 +124,7 @@ private[io] class SFInternalStage(isWrite: Boolean,
           )
       }
     } else {
-      encryptionMaterials.asScala map { encMat =>
+      encryptionMaterials.asScala.toList map { encMat =>
         ("", encMat.getQueryId, encMat.getSmkId.toString)
       }
     }

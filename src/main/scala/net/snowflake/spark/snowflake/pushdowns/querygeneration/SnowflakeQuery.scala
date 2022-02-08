@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
+import scala.language.postfixOps
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
