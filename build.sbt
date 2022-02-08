@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.2"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.2.0")
+val sparkVersion = "3.0"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.0.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -41,10 +41,10 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.2",
+    version := s"${sparkConnectorVersion}-spark_3.0",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    // Spark 3.2 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.7"),
+    // Spark 3.0 only supports scala 2.12
+    crossScalaVersions := Seq("2.12.11"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -54,7 +54,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
       "net.snowflake" % "snowflake-jdbc" % "3.13.14",
       "com.google.guava" % "guava" % "14.0.1" % Test,
-      "org.scalatest" %% "scalatest" % "3.1.1" % Test,
+      // spark 3.0 needs scalatest 3.0.5
+      "org.scalatest" %% "scalatest" % "3.0.5" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
       // Below is for Spark Streaming from Kafka test only
