@@ -43,12 +43,16 @@ private[querygeneration] object MiscStatement {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         blockStatement(convertStatement(child, fields), name)
-      case Cast(child, t, _) =>
+      // Spark 3.2 introduces below new parameter.
+      //   override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+      // So support to pushdown, if ansiEnabled is false.
+      // https://github.com/apache/spark/commit/6f51e37eb52f21b50c8d7b15c68bf9969fee3567
+      case Cast(child, t, _, ansiEnabled) if !ansiEnabled =>
         getCastType(t) match {
           case Some(cast) =>
-            /** For known unsupported data conversion, raise exception to break the pushdown process.
-              * For example, snowflake doesn't support to convert DATE/TIMESTAMP to NUMBER
-              */
+            // For known unsupported data conversion, raise exception to break the
+            // pushdown process. For example, snowflake doesn't support to
+            // convert DATE/TIMESTAMP to NUMBER
             (child.dataType, t) match {
               case (_: DateType | _: TimestampType,
               _: IntegerType | _: LongType | _: FloatType | _: DoubleType | _: DecimalType) => {
@@ -104,7 +108,11 @@ private[querygeneration] object MiscStatement {
       case SortOrder(child, Descending, _, _) =>
         blockStatement(convertStatement(child, fields)) + "DESC"
 
-      case ScalarSubquery(subquery, _, _) =>
+      // Spark 3.2 introduces below new field
+      //   joinCond: Seq[Expression] = Seq.empty
+      // So support to pushdown, if joinCond is empty.
+      // https://github.com/apache/spark/commit/806da9d6fae403f88aac42213a58923cf6c2cb05
+      case ScalarSubquery(subquery, _, _, joinCond) if joinCond.isEmpty =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>
@@ -145,7 +153,7 @@ private[querygeneration] object MiscStatement {
   private final def setToExpr(set: Set[Any]): Seq[Expression] = {
     set.map {
       case d: Decimal => Literal(d, DecimalType(d.precision, d.scale))
-      case s @ (_:String | _:UTF8String) => Literal(s, StringType)
+      case s @ (_: String | _: UTF8String) => Literal(s, StringType)
       case d: Double => Literal(d, DoubleType)
       case e: Expression => e
       case default =>

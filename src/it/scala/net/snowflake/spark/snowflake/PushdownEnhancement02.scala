@@ -18,8 +18,7 @@ package net.snowflake.spark.snowflake
 
 import java.sql._
 import java.util.TimeZone
-
-import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.{SNOWFLAKE_SOURCE_NAME, SNOWFLAKE_SOURCE_SHORT_NAME}
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Expand
@@ -334,7 +333,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_rank)
       .load()
 
-    tmpDF.printSchema()
     tmpDF.createOrReplaceTempView("test_table_rank")
 
     val resultDF =
@@ -342,8 +340,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         .sql(s"select state, bushels_produced," +
           " rank() over (order by bushels_produced desc) as total_rank" +
           " from test_table_rank")
-
-    resultDF.show(10, false)
 
     val expectedResult = Seq(
       Row("Iowa", 130, 1),
@@ -354,7 +350,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 6)
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
          |( RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
@@ -363,9 +359,17 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |FROM ( SELECT * FROM ( $test_table_rank )
          |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      s"""SELECT ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) AS "SUBQUERY_2_COL_1" ,
+         |( RANK ()  OVER ( ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) DESC
+         |ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |AS "SUBQUERY_2_COL_2" FROM ( SELECT ( "SUBQUERY_0"."STATE" )
+         |AS "SUBQUERY_1_COL_0" , ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS
+         |"SUBQUERY_1_COL_1" FROM ( SELECT * FROM ($test_table_rank )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1"
+         |""".stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
   }
 
   test("test pushdown WindowExpression: Rank with PARTITION BY") {
@@ -381,7 +385,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_rank)
       .load()
 
-    tmpDF.printSchema()
     tmpDF.createOrReplaceTempView("test_table_rank")
 
     val resultDF =
@@ -390,8 +393,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
           " rank() over (partition by state " +
           "   order by bushels_produced desc) as group_rank" +
           " from test_table_rank")
-
-    resultDF.show(10, false)
 
     val expectedResult = Seq(
       Row("Iowa", 130, 1),
@@ -402,7 +403,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 3)
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
          |( RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
@@ -412,9 +413,20 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |FROM ( SELECT * FROM ( $test_table_rank )
          |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      s"""SELECT ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) AS "SUBQUERY_2_COL_1" ,
+         |( RANK ()  OVER ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |  ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) DESC
+         |  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) )
+         |    AS "SUBQUERY_2_COL_2"
+         |FROM ( SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         | ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" FROM
+         | ( SELECT * FROM ( $test_table_rank ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | AS "SUBQUERY_0" ) AS "SUBQUERY_1"
+         |""".stripMargin
     )
+
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
   }
 
   test("test pushdown WindowExpression: DenseRank without PARTITION BY") {
@@ -430,7 +442,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_rank)
       .load()
 
-    tmpDF.printSchema()
     tmpDF.createOrReplaceTempView("test_table_rank")
 
     val resultDF =
@@ -438,8 +449,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         .sql(s"select state, bushels_produced," +
           " dense_rank() over (order by bushels_produced desc) as total_rank" +
           " from test_table_rank")
-
-    resultDF.show(10, false)
 
     val expectedResult = Seq(
       Row("Iowa", 130, 1),
@@ -450,7 +459,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 4)
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
          |( DENSE_RANK ()  OVER ( ORDER BY ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) DESC
@@ -459,9 +468,18 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |FROM ( SELECT * FROM ( $test_table_rank )
          |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      s"""SELECT ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) AS "SUBQUERY_2_COL_1" ,
+         |( DENSE_RANK ()  OVER ( ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) DESC
+         |ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) ) AS "SUBQUERY_2_COL_2"
+         |FROM ( SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" FROM (
+         |SELECT * FROM ( $test_table_rank )
+         |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1"
+         |""".stripMargin
     )
+
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
   }
 
   test("test pushdown WindowExpression: DenseRank with PARTITION BY") {
@@ -477,7 +495,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_rank)
       .load()
 
-    tmpDF.printSchema()
     tmpDF.createOrReplaceTempView("test_table_rank")
 
     val resultDF =
@@ -486,8 +503,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
           " dense_rank() over (partition by state " +
           "   order by bushels_produced desc) as group_rank" +
           " from test_table_rank")
-
-    resultDF.show(10, false)
 
     val expectedResult = Seq(
       Row("Iowa", 130, 1),
@@ -498,7 +513,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Kansas", 90, 2)
     )
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT ( "SUBQUERY_0"."STATE" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS "SUBQUERY_1_COL_1" ,
          |( DENSE_RANK ()  OVER ( PARTITION BY "SUBQUERY_0"."STATE"
@@ -509,9 +524,48 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |  AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      s"""SELECT ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         | ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) AS "SUBQUERY_2_COL_1" ,
+         | ( DENSE_RANK ()  OVER ( PARTITION BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         | ORDER BY ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) DESC
+         | ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) ) AS
+         | "SUBQUERY_2_COL_2" FROM ( SELECT ( "SUBQUERY_0"."STATE" )
+         | AS "SUBQUERY_1_COL_0" , ( "SUBQUERY_0"."BUSHELS_PRODUCED" ) AS
+         | "SUBQUERY_1_COL_1" FROM ( SELECT * FROM ( $test_table_rank )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1"
+         |""".stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
+  }
+
+  test("literal Date/Timestamp") {
+    jdbcUpdate(s"create or replace table $test_table_date (id int, d date, ts timestamp_ntz)")
+    jdbcUpdate(s"insert into $test_table_date values(1, '2019-10-10', '2019-10-10 12:12:13.123')")
+
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val result = df
+      .filter(col("d") > lit(Date.valueOf("2019-10-09")))
+      .filter(col("d") < lit(Date.valueOf("2019-10-11")))
+      .filter(col("ts") < lit(Timestamp.valueOf("2019-10-10 12:12:13.124")))
+      .filter(col("ts") > lit(Timestamp.valueOf("2019-10-10 12:12:13.122")))
+
+    val expected = Seq(Row(1, Date.valueOf("2019-10-10"),
+      Timestamp.valueOf("2019-10-10 12:12:13.123")))
+
+    testPushdown(
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_date ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( (
+         | "SUBQUERY_0"."D" IS NOT NULL ) AND ( "SUBQUERY_0"."TS" IS NOT NULL))
+         | AND ((("SUBQUERY_0"."D" > DATEADD(day, 18178 , TO_DATE('1970-01-01')))
+         | AND (  "SUBQUERY_0"."D" < DATEADD(day, 18180 , TO_DATE('1970-01-01'))))
+         | AND (( "SUBQUERY_0"."TS" < to_timestamp_ntz( 1570709533124000 , 6) )
+         | AND (  "SUBQUERY_0"."TS" > to_timestamp_ntz( 1570709533122000 , 6) ))))
+         |""".stripMargin, result, expected)
   }
 
   override def beforeEach(): Unit = {

@@ -14,7 +14,7 @@ class SecuritySuite extends IntegrationSuiteBase {
   // The TEST_LOG_FILE_NAME needs to be configured in TEST_LOG4J_PROPERTY
   private val TEST_LOG_FILE_NAME = "spark_connector.log"
   private val TEST_LOG4J_PROPERTY = "src/it/resources/log4j_file.properties"
-  private val log = LoggerFactory.getLogger(getClass)
+  private val logger = LoggerFactory.getLogger(getClass)
 
   // Add some options for default for testing.
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
@@ -69,7 +69,7 @@ class SecuritySuite extends IntegrationSuiteBase {
   }
 
   test("verify pre-signed URL are not logged for read & write") {
-    log.info("Reconfigure to log into file")
+    logger.info("Reconfigure to log into file")
     // Reconfigure log file to output all logging entries.
     reconfigureLogFile(TEST_LOG4J_PROPERTY)
 
@@ -95,7 +95,7 @@ class SecuritySuite extends IntegrationSuiteBase {
     // Reconfigure back to the default log file.
     reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
 
-    log.info("Restore back to log into STDOUT")
+    logger.info("Restore back to log into STDOUT")
   }
 
   override def beforeEach(): Unit = {

@@ -125,15 +125,20 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3
       """.stripMargin)
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT * FROM
-                     |	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
-                     |) AS "subquery_0"
-                     | WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
+         |	(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
+         |) AS "subquery_0"
+         | WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1))
+         |  AND ("subquery_0"."P" < 3))
       """.stripMargin,
-      result,
-      Seq(Row(2, 2), Row(3, 2))
+      s"""SELECT * FROM ( SELECT * FROM ($test_table2) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         |AS "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."P" IS NOT NULL ) AND
+         | ( ( "SUBQUERY_0"."P" > 1 ) AND ( "SUBQUERY_0"."P" < 3 ) ) )
+      """.stripMargin
     )
+
+    testPushdownMultiplefQueries(expectedQueries, result, Seq(Row(2, 2), Row(3, 2)))
   }
 
   test("LIMIT and SORT") {
@@ -143,21 +148,31 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3 order by p desc limit 1
       """.stripMargin)
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT * FROM
-                     |	(SELECT * FROM
-                     |		(SELECT * FROM
-                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
-                     |		) AS "subquery_0"
-                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
-                     |	) AS "subquery_1"
-                     | ORDER BY ("subquery_1"."P") DESC
-                     |) AS "subquery_2"
-                     | ORDER BY ( "SUBQUERY_2"."P" ) DESC LIMIT 1
+         |	(SELECT * FROM
+         |		(SELECT * FROM
+         |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
+         |		) AS "subquery_0"
+         |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1))
+         |   AND ("subquery_0"."P" < 3))
+         |	) AS "subquery_1"
+         | ORDER BY ("subquery_1"."P") DESC
+         |) AS "subquery_2"
+         | ORDER BY ( "SUBQUERY_2"."P" ) DESC LIMIT 1
       """.stripMargin,
-      result,
-      Seq(Row(2, 2))
+      s"""SELECT * FROM
+         | (SELECT * FROM
+         |  (SELECT * FROM
+         |   (SELECT * FROM ($test_table2) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         | WHERE ( ( "SUBQUERY_0"."P" IS NOT NULL ) AND ( ( "SUBQUERY_0"."P" > 1 )
+         |  AND ( "SUBQUERY_0"."P" < 3 )
+         |  ) ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."P" ) DESC )
+         |   AS "SUBQUERY_2" ORDER BY ( "SUBQUERY_2"."P" ) DESC LIMIT 1
+      """.stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, result, Seq(Row(2, 2)))
   }
 
   test("LIMIT and SORT with large table") {
@@ -220,21 +235,30 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         where p > 1 AND p < 3) as foo order by f,o desc
       """.stripMargin)
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT * FROM
-                     |	(SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O") AS "subquery_2_col_1"
-                     | FROM
-                     |		(SELECT * FROM
-                     |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
-                     |		) AS "subquery_0"
-                     |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1)) AND ("subquery_0"."P" < 3))
-                     |	) AS "subquery_1"
-                     |) AS "subquery_2"
-                     | ORDER BY ("subquery_2"."subquery_2_col_0") ASC, ("subquery_2"."subquery_2_col_1") DESC
+         |	(SELECT ("subquery_1"."P") AS "subquery_2_col_0", ("subquery_1"."O")
+         |  AS "subquery_2_col_1" FROM
+         |		(SELECT * FROM
+         |			(SELECT * FROM ($test_table2) AS "sf_connector_query_alias"
+         |		) AS "subquery_0"
+         |	 WHERE ((("subquery_0"."P" IS NOT NULL) AND ("subquery_0"."P" > 1))
+         |   AND ("subquery_0"."P" < 3))
+         |	) AS "subquery_1"
+         |) AS "subquery_2"
+         | ORDER BY ("subquery_2"."subquery_2_col_0") ASC,
+         |  ("subquery_2"."subquery_2_col_1") DESC
       """.stripMargin,
-      result,
-      Seq(Row(2, 3), Row(2, 2))
+      s"""SELECT * FROM ( SELECT ( "SUBQUERY_1"."P" ) AS "SUBQUERY_2_COL_0" ,
+         | ( "SUBQUERY_1"."O" ) AS "SUBQUERY_2_COL_1" FROM ( SELECT * FROM (
+         | SELECT * FROM ( $test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
+         | "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."P" IS NOT NULL ) AND
+         | ( ( "SUBQUERY_0"."P" > 1 ) AND ( "SUBQUERY_0"."P" < 3 ) ) ) )
+         | AS "SUBQUERY_1" ) AS "SUBQUERY_2" ORDER BY
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) ASC , ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) DESC
+      """.stripMargin
     )
+    testPushdownMultiplefQueries(expectedQueries, result, Seq(Row(2, 3), Row(2, 2)))
   }
 
   test("Sum and RPAD") {
@@ -274,17 +298,24 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     val result =
       input.withColumn("rank", row_number.over(windowSpec)).filter("rank=1")
 
-    testPushdown(
+    val expectedQueries = Seq(
       s"""SELECT * FROM (SELECT ("SUBQUERY_0"."O") AS "SUBQUERY_1_COL_0",
-          | ("SUBQUERY_0"."P") AS"SUBQUERY_1_COL_1", (ROW_NUMBER() OVER
-          | (PARTITIONBY "SUBQUERY_0"."O" ORDERBY ("SUBQUERY_0"."P") DESC))
-          | AS "SUBQUERY_1_COL_2" FROM (SELECT * FROM ($test_table3)
-          | AS "SF_CONNECTOR_QUERY_ALIAS") AS "SUBQUERY_0") AS "SUBQUERY_1" WHERE
-          | (("SUBQUERY_1"."SUBQUERY_1_COL_2" ISNOTNULL) AND ("SUBQUERY_1"."SUBQUERY_1_COL_2" = 1))
+         | ("SUBQUERY_0"."P") AS"SUBQUERY_1_COL_1", (ROW_NUMBER() OVER
+         | (PARTITIONBY "SUBQUERY_0"."O" ORDERBY ("SUBQUERY_0"."P") DESC))
+         | AS "SUBQUERY_1_COL_2" FROM (SELECT * FROM ($test_table3)
+         | AS "SF_CONNECTOR_QUERY_ALIAS") AS "SUBQUERY_0") AS "SUBQUERY_1" WHERE
+         | (("SUBQUERY_1"."SUBQUERY_1_COL_2" ISNOTNULL) AND ("SUBQUERY_1"."SUBQUERY_1_COL_2" = 1))
       """.stripMargin,
-      result,
-      Seq(Row("bye", 3, 1), Row("hi", 2, 1))
+      s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."O" ) AS "SUBQUERY_1_COL_0",
+         | ( "SUBQUERY_0"."P" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
+         | ( PARTITION BY "SUBQUERY_0"."O" ORDER BY ( "SUBQUERY_0"."P" ) DESC))
+         | AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $test_table3 )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
+         | ( "SUBQUERY_1"."SUBQUERY_1_COL_2" = 1 )
+      """.stripMargin
     )
+
+    testPushdownMultiplefQueries(expectedQueries, result, Seq(Row("bye", 3, 1), Row("hi", 2, 1)))
   }
 
   test("test binary arithmetic operators on Decimal") {

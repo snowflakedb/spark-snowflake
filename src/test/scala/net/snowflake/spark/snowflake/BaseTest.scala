@@ -56,7 +56,7 @@ private class TestContext extends SparkContext("local", "SnowflakeBaseTest") {
 
 class BaseTest
     extends FunSuite
-    with QueryTest
+    with net.snowflake.spark.snowflake.QueryTest
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
 
