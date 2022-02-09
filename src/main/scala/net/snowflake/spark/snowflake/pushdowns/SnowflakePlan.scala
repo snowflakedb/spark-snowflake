@@ -30,6 +30,8 @@ case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
   // caller to set any new children for it.
   // SnowflakePlan is only used for spark connector PushDown. Even if the Exception is
   // raised, the PushDown will not be used and it still works.
+  // withNewChildrenInternal() is a new function from spark 3.2
+  /*
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan = {
   if (newChildren.nonEmpty) {
     throw new Exception("Spark connector internal error: " +
@@ -37,4 +39,5 @@ case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
   }
   this
   }
+  */
 }
