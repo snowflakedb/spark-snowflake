@@ -7,6 +7,7 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
+import scala.language.postfixOps
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 

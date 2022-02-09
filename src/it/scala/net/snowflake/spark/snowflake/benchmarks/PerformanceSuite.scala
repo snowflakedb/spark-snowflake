@@ -252,7 +252,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
     }
 
     if (outputFormat == "csv" || outputFormat == "both") {
-      writeToCSV(outputHeaders, results, name)
+      writeToCSV(outputHeaders.toSeq, results.toSeq, name)
     }
   }
 

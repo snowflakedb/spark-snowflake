@@ -42,7 +42,7 @@ class MockSF(params: Map[String, String],
   val mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS ++ params)
 
   private[this] val queriesIssued: mutable.Buffer[String] = mutable.Buffer.empty
-  def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued
+  def getQueriesIssuedAgainstSF: Seq[String] = queriesIssued.toSeq
 
   private[this] val jdbcConnections: mutable.Buffer[Connection] =
     mutable.Buffer.empty

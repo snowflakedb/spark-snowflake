@@ -29,11 +29,12 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.io.{SnowflakeResultSetRDD, StageReader, SupportedFormat}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 
-import scala.collection.JavaConversions
+import scala.collection.JavaConverters
 
 /** Data Source API implementation for Amazon Snowflake database tables */
 private[snowflake] case class SnowflakeRelation(
@@ -246,7 +247,7 @@ private[snowflake] case class SnowflakeRelation(
     // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
     // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
     // So JavaConversions.asScalaBuffer is used so far.
-    val resultSetSerializables = JavaConversions.asScalaBuffer(serializables).toArray
+    val resultSetSerializables = JavaConverters.asScalaBuffer(serializables).toArray
 
     // The result set can be closed on master side, since is it not necessary.
     try {

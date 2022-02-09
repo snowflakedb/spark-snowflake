@@ -28,11 +28,8 @@ fi
 
 if [ "$INTEGRATION_TESTS" != "true" ]; then
   # Run only test
-  sbt -Dspark.testVersion=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test
-  sbt coverageReport
+  sbt -Dspark.testVersion=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test coverageReport
 else
   # Run both test and it
-  sbt -Dspark.version=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test it:test
-  sbt coverageReport
+  sbt -Dspark.version=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test it:test coverageReport
 fi
-

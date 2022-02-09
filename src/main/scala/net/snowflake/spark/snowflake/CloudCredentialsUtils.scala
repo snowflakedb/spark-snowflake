@@ -27,6 +27,7 @@ import net.snowflake.client.jdbc.internal.amazonaws.auth.{
 }
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.SQLContext
 

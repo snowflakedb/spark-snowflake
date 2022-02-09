@@ -18,7 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-
+import scala.language.postfixOps
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 

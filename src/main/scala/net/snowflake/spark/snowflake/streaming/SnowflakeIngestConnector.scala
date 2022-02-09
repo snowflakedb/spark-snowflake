@@ -9,7 +9,6 @@ import net.snowflake.ingest.connection.IngestStatus
 import net.snowflake.ingest.utils.StagedFileWrapper
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -29,7 +28,7 @@ object SnowflakeIngestConnector {
         beginMark =
           Option[String](response.getNextBeginMark).getOrElse(beginMark)
         if (response != null && response.files != null) {
-          response.files.toList.flatMap(entry => {
+          response.files.asScala.toList.flatMap(entry => {
             if (entry.getPath != null && entry.isComplete) {
               List((entry.getPath, entry.getStatus))
             } else Nil
@@ -44,7 +43,7 @@ object SnowflakeIngestConnector {
     val response = ingestManager
       .getHistoryRange(null, timestampToDate(start), timestampToDate(end))
     if (response != null && response.files != null) {
-      response.files.toList.flatMap(entry => {
+      response.files.asScala.toList.flatMap(entry => {
         if (entry.getPath != null && entry.isComplete) {
           List((entry.getPath, entry.getStatus))
         } else Nil

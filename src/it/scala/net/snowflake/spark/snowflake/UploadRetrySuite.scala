@@ -78,9 +78,9 @@ class UploadRetrySuite extends IntegrationSuiteBase{
 
     // Initialize variables
     connectorOptions = loadConfig()
-    connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
+    connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable").toMap
     connectorOptionsNoExternalStageNoTable =
-      connectorOptionsNoTable.filterKeys(_ != "tempdir")
+      connectorOptionsNoTable.filterKeys(_ != "tempdir").toMap
     params = Parameters.mergeParameters(connectorOptions)
     // Create a single string with the Spark SQL options
     connectorOptionsString = connectorOptionsNoTable

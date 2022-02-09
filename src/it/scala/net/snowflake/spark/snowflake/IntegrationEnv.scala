@@ -30,7 +30,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
 import scala.util.Random
@@ -93,7 +93,7 @@ trait IntegrationEnv
     val fname = System.getenv(CONFIG_FILE_VARIABLE)
     if (fname != null) {
       Utils.readMapFromFile(sc, fname)
-    } else scala.collection.Map.empty[String, String]
+    } else Map.empty[String, String]
   }
 
   // Merges maps, preferring file values over env ones
@@ -208,10 +208,10 @@ trait IntegrationEnv
 
     // Initialize variables
     connectorOptions = loadConfig()
-    connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable")
+    connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable").toMap
     connectorOptionsNoExternalStageNoTable =
-      connectorOptionsNoTable.filterKeys(_ != "tempdir")
-    params = Parameters.mergeParameters(connectorOptions)
+      connectorOptionsNoTable.filterKeys(_ != "tempdir").toMap
+    params = Parameters.mergeParameters(connectorOptions.toMap)
     // Create a single string with the Spark SQL options
     connectorOptionsString = connectorOptionsNoTable
       .map {
@@ -261,6 +261,7 @@ trait IntegrationEnv
     def read(node: JsonNode): Unit =
       node
         .fields()
+        .asScala
         .foreach(
           entry => result = result + (entry.getKey.toLowerCase -> entry.getValue.asText())
         )
@@ -279,13 +280,14 @@ trait IntegrationEnv
 
       read(commonConfig)
 
-      read(
-        (
-          for (i <- 0 until accountConfig.size()
-               if accountConfig.get(i).get("name").asText() == accountName)
-            yield accountConfig.get(i).get("config")
-          ).get(0)
-      )
+      var accountUrlJson: Option[JsonNode] = None
+      for (i <- 0 until accountConfig.size()) {
+        val node = accountConfig.get(i)
+        if (node.get("name").asText().equals(accountName)) {
+          accountUrlJson = Some(node.get("config"))
+        }
+      }
+      read(accountUrlJson.get)
 
       log.info(s"load config from $CONFIG_JSON_FILE")
       jsonConfigFile.close()

@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 import scala.collection.mutable.ListBuffer
+import scala.language.postfixOps
 import scala.util.Random
 
 // scalastyle:off println
@@ -834,7 +835,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         // For COPY UNLOAD, the order can't be guaranteed
         if (!params.useCopyUnload) {
           assert(Math.abs(
-            BigDecimal(i).doubleValue() -
+            BigDecimal(i).doubleValue -
               row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
           ) < 0.00000000001)
         }
@@ -933,7 +934,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         // For COPY UNLOAD, the order can't be guaranteed
         if (!params.useCopyUnload) {
           assert(Math.abs(
-            BigDecimal(i).doubleValue() -
+            BigDecimal(i).doubleValue -
               row(0).asInstanceOf[java.math.BigDecimal].doubleValue()
           ) < 0.00000000001)
         }

@@ -83,7 +83,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
 import scala.collection.immutable.HashMap
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 object CloudStorageOperations {
@@ -1301,6 +1301,7 @@ case class ExternalAzureStorage(containerName: String,
       .createAzureClient(azureAccount, azureEndpoint, Some(azureSAS), proxyInfo)
       .getContainerReference(containerName)
       .listBlobs(prefix + subDir + "/")
+      .asScala
       .toList
       .map(x => {
         val key = x.getUri.toString
@@ -1680,6 +1681,7 @@ case class ExternalS3Storage(bucketName: String,
       .createS3Client(awsId, awsKey, awsToken, parallelism, proxyInfo, useRegionUrl, regionName)
       .listObjects(bucketName, prefix + subDir)
       .getObjectSummaries
+      .asScala
       .toList
       .map(x => {
         val key = x.getKey
@@ -1741,6 +1743,7 @@ case class InternalGcsStorage(param: MergedParameters,
         connectionV1.getSfSession,
         new SFStatement(connectionV1.getSfSession)
       ).getFileTransferMetadatas
+        .asScala
         .map(oneMetadata => result += oneMetadata)
 
       // Output time for retrieving every 1000 pre-signed URLs
