@@ -604,7 +604,9 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          | FROM ( SELECT * FROM ( $test_table_string )
          | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin)
-    testPushdownMultiplefQueries(expectedQueries1, df1, expectedResult1)
+    // ByPass query text check for COPY UNLOAD
+    testPushdownMultiplefQueries(expectedQueries1, df1, expectedResult1,
+      bypass = params.useCopyUnload)
 
     // Insert more data to test SNOW-528863
     jdbcUpdate(s"insert into $test_table_string values ('string null', 'null'), " +
@@ -619,7 +621,9 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |  ( ( "SUBQUERY_0"."C2" IS NOT NULL ) AND
          |    ( "SUBQUERY_0"."C2" != 'null' ) )
          |""".stripMargin)
-    testPushdownMultiplefQueries(expectedQueries2, df2, expectedResult2)
+    // ByPass query text check for COPY UNLOAD
+    testPushdownMultiplefQueries(expectedQueries2, df2, expectedResult2,
+      bypass = params.useCopyUnload)
   }
 
   override def beforeEach(): Unit = {
