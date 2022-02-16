@@ -67,7 +67,8 @@ trait IntegrationSuiteBase
       println(Utils.getLastSelect)
     }
 
-    if (!bypass) {
+    // For copy unload, Utils.getLastSelect is null, skip check the query
+    if (!bypass && Utils.getLastSelect != null) {
       val potentialQueries = references.map {
         _.trim.replaceAll("\\s+", "").toLowerCase
       }

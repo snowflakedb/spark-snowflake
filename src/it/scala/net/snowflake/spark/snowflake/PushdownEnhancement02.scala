@@ -45,8 +45,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_string")
     } finally {
       TestHook.disableTestHook()
-      super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+      super.afterAll()
     }
   }
 
@@ -612,7 +612,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val df2 = df.filter(col("c2") =!= "null")
     val expectedResult2 =
-      Seq( Row("not null", "java"), Row("string NULL", "NULL"), Row("string Null", "Null"))
+      Seq(Row("not null", "java"), Row("string NULL", "NULL"), Row("string Null", "Null"))
     val expectedQueries2 = Seq(
       s"""SELECT * FROM ( SELECT * FROM ( $test_table_string ) AS
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
