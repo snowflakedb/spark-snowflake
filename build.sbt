@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.2.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.9.3"
+val sparkConnectorVersion = "2.10.0"
 
 lazy val ItTest = config("it") extend Test
 
