@@ -34,6 +34,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   private val test_table_number = s"test_table_number_$randomSuffix"
   private val test_table_date = s"test_table_date_$randomSuffix"
   private val test_table_rank = s"test_table_rank_$randomSuffix"
+  private val test_table_string = s"test_table_string_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
@@ -41,10 +42,11 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_number")
       jdbcUpdate(s"drop table if exists $test_table_date")
       jdbcUpdate(s"drop table if exists $test_table_rank")
+      jdbcUpdate(s"drop table if exists $test_table_string")
     } finally {
       TestHook.disableTestHook()
-      super.afterAll()
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
+      super.afterAll()
     }
   }
 
@@ -578,6 +580,50 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |""".stripMargin
     )
     testPushdownMultiplefQueries(expectedQueries, result, expected)
+  }
+
+  test("test literal null") {
+    jdbcUpdate(s"create or replace table $test_table_string (c1 String, c2 string)")
+    jdbcUpdate(s"insert into $test_table_string values ('not null', 'java')")
+
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_string)
+      .load()
+
+    val df1 = df.select(
+      lit(null), lit(null.asInstanceOf[String]), lit("null"), lit("NULL"), lit("Null"))
+    val expectedResult1 = Seq(Row(null, null, "null", "NULL", "Null"))
+    val expectedQueries1 = Seq(
+      s"""SELECT ( NULL ) AS "SUBQUERY_1_COL_0" ,
+         |       ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |       ( 'null' ) AS "SUBQUERY_1_COL_2" ,
+         |       ( 'NULL' ) AS "SUBQUERY_1_COL_3" ,
+         |       ( 'Null' ) AS "SUBQUERY_1_COL_4"
+         | FROM ( SELECT * FROM ( $test_table_string )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin)
+    // ByPass query text check for COPY UNLOAD
+    testPushdownMultiplefQueries(expectedQueries1, df1, expectedResult1,
+      bypass = params.useCopyUnload)
+
+    // Insert more data to test SNOW-528863
+    jdbcUpdate(s"insert into $test_table_string values ('string null', 'null'), " +
+      s"('string NULL', 'NULL'), ('string Null', 'Null'), ('value is null', null)")
+
+    val df2 = df.filter(col("c2") =!= "null")
+    val expectedResult2 =
+      Seq(Row("not null", "java"), Row("string NULL", "NULL"), Row("string Null", "Null"))
+    val expectedQueries2 = Seq(
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_string ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |  ( ( "SUBQUERY_0"."C2" IS NOT NULL ) AND
+         |    ( "SUBQUERY_0"."C2" != 'null' ) )
+         |""".stripMargin)
+    // ByPass query text check for COPY UNLOAD
+    testPushdownMultiplefQueries(expectedQueries2, df2, expectedResult2,
+      bypass = params.useCopyUnload)
   }
 
   override def beforeEach(): Unit = {

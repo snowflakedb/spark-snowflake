@@ -84,7 +84,7 @@ private[querygeneration] object BasicStatement {
       case l: Literal =>
         l.dataType match {
           case StringType =>
-            if (l == null || l.toString() == "null") {
+            if (l.value == null) {
               ConstantString("NULL") !
             } else {
               StringVariable(Some(l.toString())) ! // else "'" + str + "'"
