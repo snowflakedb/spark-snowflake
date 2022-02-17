@@ -560,7 +560,16 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Timestamp.valueOf("2019-10-10 12:12:13.123")))
 
     val expectedQueries = Seq(
-      // query for Spark 3.1/3.0
+      // query for Spark 3.0: ("TS IS NOT NULL" first)
+      s"""SELECT * FROM ( SELECT * FROM ( $test_table_date ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( ( ( (
+         | "SUBQUERY_0"."TS" IS NOT NULL ) AND ( "SUBQUERY_0"."D" IS NOT NULL))
+         | AND ( "SUBQUERY_0"."D" > DATEADD(day, 18178 , TO_DATE('1970-01-01'))))
+         | AND ( "SUBQUERY_0"."D" < DATEADD(day, 18180 , TO_DATE('1970-01-01'))))
+         | AND ( "SUBQUERY_0"."TS" < to_timestamp_ntz( 1570709533124000 , 6)))
+         | AND ( "SUBQUERY_0"."TS" > to_timestamp_ntz( 1570709533122000 , 6)))
+         |""".stripMargin,
+      // query for Spark 3.1: ("D IS NOT NULL" first)
       s"""SELECT * FROM ( SELECT * FROM ( $test_table_date ) AS
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( ( ( ( ( (
          | "SUBQUERY_0"."D" IS NOT NULL ) AND ( "SUBQUERY_0"."TS" IS NOT NULL))
