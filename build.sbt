@@ -53,7 +53,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
       "net.snowflake" % "snowflake-jdbc" % "3.13.14",
-      "com.google.guava" % "guava" % "14.0.1" % Test,
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
