@@ -97,9 +97,6 @@ else
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
 fi
 
-echo "Run White Source scan"
-whitesource/run_whitesource.sh
-
 echo publishing previous_spark_version branch...
 git checkout tags/$GITHUB_TAG_2
 if [ "$PUBLISH" = true ]; then
