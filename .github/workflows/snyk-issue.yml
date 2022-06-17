@@ -23,7 +23,7 @@ jobs:
       with:
         snyk_org: ${{ secrets.SNYK_ORG_ID_PUBLIC_REPO }}
         snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN }}
-        jira_token: ${{ secrets.JIRA_TOKEN }}
+        jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
