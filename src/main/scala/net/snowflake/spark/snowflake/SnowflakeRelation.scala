@@ -57,12 +57,16 @@ private[snowflake] case class SnowflakeRelation(
     userSchema.getOrElse {
       val tableNameOrSubquery =
         params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
+      log.warn("private log2: begin resolving schema: " + tableNameOrSubquery)
       val conn = jdbcWrapper.getConnector(params)
-      try {
+      val result = try {
         jdbcWrapper.resolveTable(conn, tableNameOrSubquery, params)
       } finally {
-        conn.close()
+        log.warn("private log2: begin to close the connection which is used for schema resolving")
+//        conn.close()
       }
+      log.warn("private log2: finish resolving schema")
+      result
     }
   }
 
@@ -100,7 +104,7 @@ private[snowflake] case class SnowflakeRelation(
       try {
         conn.tableSchema(statement, params)
       } finally {
-        conn.close()
+//        conn.close()
       })
     getRDD[T](statement, resultSchema)
   }
@@ -136,7 +140,7 @@ private[snowflake] case class SnowflakeRelation(
           throw new IllegalStateException("Could not read count from Snowflake")
         }
       } finally {
-        conn.close()
+//        conn.close()
       }
     } else {
       // Unload data from Snowflake into a temporary directory in S3:
@@ -180,8 +184,11 @@ private[snowflake] case class SnowflakeRelation(
     statement: SnowflakeSQLStatement,
     resultSchema: StructType
   ): RDD[T] = {
+    log.warn("private log2: begin to create the connection to execute query")
     val conn = DefaultJDBCWrapper.getConnector(params)
+    log.warn("private log2: begin to execute Prologue query")
     Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
+    log.warn("private log2: begin to execute PreActions query")
     Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
     Utils.setLastSelect(statement.toString)
     log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
@@ -189,6 +196,7 @@ private[snowflake] case class SnowflakeRelation(
     val startTime = System.currentTimeMillis()
     val (resultSet, queryID, serializables) = try {
       if (params.isExecuteQueryWithSyncMode) {
+        log.warn("private log2: begin to execute query in sync mode")
         val rs = statement.execute(bindVariableEnabled = false)(conn)
         val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
         log.info(s"The query ID for reading from snowflake is: $queryID; " +
@@ -196,8 +204,10 @@ private[snowflake] case class SnowflakeRelation(
         val objects = rs
           .asInstanceOf[SnowflakeResultSet]
           .getResultSetSerializables(params.expectedPartitionSize)
+        log.warn("private log2: after getResultSetSerializables in sync mode")
         (rs, queryID, objects)
       } else {
+        log.warn("private log2: begin to execute query in async mode")
         val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
         val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
         log.info(s"The query ID for async reading from snowflake is: $queryID; " +
@@ -208,6 +218,7 @@ private[snowflake] case class SnowflakeRelation(
         val objects = asyncRs
           .asInstanceOf[SnowflakeResultSet]
           .getResultSetSerializables(params.expectedPartitionSize)
+        log.warn("private log2: after getResultSetSerializables in async mode: getResultSetSerializables() wait for the async query to be done")
         SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
         (asyncRs, queryID, objects)
       }
@@ -247,7 +258,7 @@ private[snowflake] case class SnowflakeRelation(
     // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
     // So JavaConversions.asScalaBuffer is used so far.
     val resultSetSerializables = JavaConversions.asScalaBuffer(serializables).toArray
-
+    log.warn("private log2: begin to close the JDBC ResultSet")
     // The result set can be closed on master side, since is it not necessary.
     try {
       resultSet.close()
@@ -270,18 +281,22 @@ private[snowflake] case class SnowflakeRelation(
         )
       }
     }
-
+    log.warn("private log2: finish closing the JDBC ResultSet")
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
+    log.warn("private log2: finish executing PostActions")
 
     val endTime = System.currentTimeMillis()
     val dataSize = printStatForSnowflakeResultSetRDD(
       resultSetSerializables, endTime - startTime, queryID)
 
+    log.warn("private log2: begin send Egress telemetry message")
     StageReader.sendEgressUsage(dataSize, conn)
     SnowflakeTelemetry.send(conn.getTelemetry)
-    conn.close()
+    log.warn("private log2: begin to close the connection")
+//    conn.close()
+    log.warn("private log2: finish closing the connection")
 
-    new SnowflakeResultSetRDD[T](
+    val resultRDD = new SnowflakeResultSetRDD[T](
       resultSchema,
       sqlContext.sparkContext,
       resultSetSerializables,
@@ -289,6 +304,8 @@ private[snowflake] case class SnowflakeRelation(
       queryID,
       params.sfFullURL
     )
+    log.warn("private log2: result RDD has been created")
+    resultRDD
   }
 
   // Print result set statistic information

@@ -430,7 +430,7 @@ object Utils {
         .executeQuery(query)
         .asInstanceOf[SnowflakeResultSet]
         .getResultSetSerializables(Long.MaxValue)
-    conn.close()
+    // conn.close()
     // Long.MaxValue is passed to getResultSetSerializables(),
     // so it is sure there is only one object in resultSerializables
     val mergedParams = getMergedParameters(params)

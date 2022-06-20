@@ -116,6 +116,24 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+//  test("mohit") {
+//    val query1 =
+//      """SELECT "KSCORE", "NAME", "UNIQUEID", "EVENTTIMESTAMPSYS", "COMPANYID",
+//        | "MANAGERIDS", "LEARNEREMAILID", "USERID", "LEARNERIMAGE", "GROUPADDEDONS",
+//        |  "PROFILEFIELDS", "STATE", "FIELDVALS", "MANAGERKEYS", "ADDEDON",
+//        |   "EVENTTIMESTAMP", "GROUPIDS", "ROLES", "FIELDNAMES", "ISPRIMARYS",
+//        |    "MANAGERACTIVES", "EMAILTYPES", "LEARNERUSERNAME", "MANAGERFIELDS",
+//        |     "EMAILIDS" FROM (select * from learners limit 100039)""".stripMargin
+//
+//    val df = sparkSession.read
+//      .format(SNOWFLAKE_SOURCE_NAME)
+//      .options(thisConnectorOptionsNoTable)
+//      .option("query", query1)
+//      .load()
+//
+//    df.collect()
+//  }
+
   test("test pushdown boolean functions: NOT/Contains/EndsWith/StartsWith") {
     jdbcUpdate(s"create or replace table $test_table_basic(name String, value1 Integer, value2 Integer)")
     jdbcUpdate(s"insert into $test_table_basic values ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")

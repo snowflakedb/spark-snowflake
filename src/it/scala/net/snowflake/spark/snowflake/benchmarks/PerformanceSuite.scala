@@ -138,7 +138,7 @@ trait PerformanceSuite extends IntegrationSuiteBase {
       case Some(_) =>
         jdbcProperties.put("privateKey", params.privateKey)
       case None =>
-        jdbcProperties.put("password", params.sfPassword)
+        jdbcProperties.put("password", params.sfPassword.get)
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
 

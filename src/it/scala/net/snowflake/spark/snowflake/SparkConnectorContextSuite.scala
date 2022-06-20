@@ -80,8 +80,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     assert(runningQueries.size == 1)
     assert(runningQueries(appId).isEmpty)
 
-    conn.close()
-    conn2.close()
+//    conn.close()
+//    conn2.close()
   }
 
   test("SparkConnectorContext: add running query and cancel query unit test") {
@@ -123,8 +123,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     runningQueries = SparkConnectorContext.getRunningQueries
     assert(runningQueries.isEmpty)
 
-    conn.close()
-    conn2.close()
+//    conn.close()
+//    conn2.close()
   }
 
   test("SparkConnectorContext: test a running query is canceled by Application End") {
@@ -167,7 +167,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     }
     assert("SQL execution canceled".equals(message))
 
-    conn.close()
+//    conn.close()
 
     // Recreate spark session to avoid affect following test cases
     sparkSession = SparkSession.builder
@@ -261,7 +261,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       assert(queryText.contains(query))
 
       // Clean up
-      conn.close()
+//      conn.close()
       // Recreate spark session to avoid affect following test cases
       sparkSession = SparkSession.builder
         .master("local")

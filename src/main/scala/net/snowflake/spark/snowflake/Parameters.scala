@@ -541,7 +541,7 @@ object Parameters {
       * URL pointing to the snowflake database including protocol.
       * for example, https://host:port
       */
-    def sfFullURL: String = s"${if (isSslON) "https://" else "http://"}$sfURL"
+    def sfFullURL: String = s"${if (isSslON) "https:/" + "/" else "http:/" + "/"}$sfURL"
 
     /**
       * Snowflake database name
@@ -568,7 +568,7 @@ object Parameters {
     /**
       * Snowflake password
       */
-    def sfPassword: String = parameters(PARAM_SF_PASSWORD)
+    def sfPassword: Option[String] = parameters.get(PARAM_SF_PASSWORD)
 
     /**
       * Snowflake account - optional

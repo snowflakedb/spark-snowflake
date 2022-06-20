@@ -40,7 +40,7 @@ class ParametersSuite extends FunSuite with Matchers {
     mergedParams.createPerQueryTempDir() should startWith(minParams("tempdir"))
     mergedParams.sfURL shouldBe minParams("sfurl")
     mergedParams.sfUser shouldBe minParams("sfuser")
-    mergedParams.sfPassword shouldBe minParams("sfpassword")
+    mergedParams.sfPassword.get shouldBe minParams("sfpassword")
     mergedParams.table shouldBe Some(TableName(minParams("dbtable")))
 
     // Check that the defaults have been added
@@ -133,4 +133,38 @@ class ParametersSuite extends FunSuite with Matchers {
       include("authenticator")  )
   }
 
+  test("ConnectionKeys") {
+    val minParams2: Map[String, String] = Map(
+      "tempdir" -> "s3://foo/bar",
+      "dbtable" -> "test_table",
+      "sfurl" -> "account.snowflakecomputing.com:443",
+      "sfuser" -> "username",
+      "sfpassword" -> "password",
+      "sfdatabase"-> "myDatabase",
+      "sfschema"-> "mySchema",
+    )
+
+    val ck1 = ConnectionKeys.getConnectionKeys(Parameters.MergedParameters(minParams2))
+    val ck2 = ConnectionKeys.getConnectionKeys(Parameters.MergedParameters(minParams2))
+    assert(ck1.equals(ck2))
+
+    // add one key
+    val params = collection.mutable.Map() ++= minParams2
+    params += "sftoken" -> "mytoken"
+    val ck3 = ConnectionKeys.getConnectionKeys(Parameters.MergedParameters(params.toMap))
+    assert(!ck1.equals(ck3))
+
+    // remove one key
+    val params2 = collection.mutable.Map() ++= minParams2
+    params2.remove("sfpassword")
+    val ck4 = ConnectionKeys.getConnectionKeys(Parameters.MergedParameters(params2.toMap))
+    assert(!ck1.equals(ck4))
+
+    // change one key
+    val params3 = collection.mutable.Map() ++= minParams2
+    params3.remove("sfpassword")
+    params3 += "sfpassword" -> "new_sfpassword"
+    val ck5 = ConnectionKeys.getConnectionKeys(Parameters.MergedParameters(params2.toMap))
+    assert(!ck1.equals(ck5))
+  }
 }

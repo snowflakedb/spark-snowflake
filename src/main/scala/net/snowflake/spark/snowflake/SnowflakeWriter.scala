@@ -66,7 +66,9 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           )
         )
         params.setColumnMap(Option(data.schema), toSchema)
-      } finally conn.close()
+      } finally {
+//        conn.close()
+      }
     }
 
     val output: DataFrame = removeUselessColumns(data, params)

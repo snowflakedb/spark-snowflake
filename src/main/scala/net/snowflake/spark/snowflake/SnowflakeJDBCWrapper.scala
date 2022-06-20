@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Try
 
 /**
@@ -125,6 +126,12 @@ private[snowflake] class JDBCWrapper {
         )
     }
 
+    val cachedConnection = ConnectionKeys.getConnection(ConnectionKeys.getConnectionKeys(params))
+    if (cachedConnection.nonEmpty) {
+      log.warn("private log2: reuse cached connection to: " + params.sfURL)
+      return cachedConnection.get
+    }
+
     val sfURL = params.sfURL
     val jdbcURL = s"""jdbc:snowflake://$sfURL"""
 
@@ -143,7 +150,7 @@ private[snowflake] class JDBCWrapper {
         params.sfToken match {
           case Some(value) =>
             jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
+          case None => jdbcProperties.put("password", params.sfPassword.get)
         }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
@@ -232,6 +239,9 @@ private[snowflake] class JDBCWrapper {
     val extraValues = Map(TelemetryClientInfoFields.SFURL -> sfURL)
     SnowflakeTelemetry.sendClientInfoTelemetry(extraValues, conn)
 
+    log.warn("private log2: cached connection for later reuse to: " + params.sfURL)
+    ConnectionKeys.setConnection(ConnectionKeys.getConnectionKeys(params), conn)
+
     conn
   }
 
@@ -304,7 +314,7 @@ private[snowflake] class JDBCWrapper {
       }
       conn.tableExists(table)
     } finally {
-      conn.close()
+//      conn.close()
     }
   }
 
@@ -460,6 +470,7 @@ private[snowflake] class JDBCWrapper {
       case java.sql.Types.STRUCT    => StringType // Snowflake-todo: ?
       case java.sql.Types.TIME      => StringType
       case java.sql.Types.TIMESTAMP => TimestampType
+      case java.sql.Types.TIMESTAMP_WITH_TIMEZONE => TimestampType
       case java.sql.Types.TINYINT   => IntegerType
       //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType

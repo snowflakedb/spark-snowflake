@@ -117,7 +117,7 @@ private[snowflake] object StageReader {
 
     // The connection can't be closed before download because the spark driver
     // needs the connection to acquire the credential for distributed download.
-    conn.close()
+//    conn.close()
 
     resultRDD
   }

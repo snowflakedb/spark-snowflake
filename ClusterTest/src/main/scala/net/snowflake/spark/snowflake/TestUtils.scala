@@ -185,7 +185,7 @@ object TestUtils {
         params.sfToken match {
           case Some(value) =>
             jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
+          case None => jdbcProperties.put("password", params.sfPassword.get)
         }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default

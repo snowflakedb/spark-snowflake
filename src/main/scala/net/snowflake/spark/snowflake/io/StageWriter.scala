@@ -264,7 +264,7 @@ private[io] object StageWriter {
              |""".stripMargin.filter(_ >= ' '))
     } finally {
       SnowflakeTelemetry.send(conn.getTelemetry)
-      conn.close()
+//      conn.close()
     }
 
   }
