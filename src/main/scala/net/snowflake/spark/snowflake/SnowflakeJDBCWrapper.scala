@@ -519,6 +519,22 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         .execute(bindVariableEnabled)(connection)
     }
 
+    def mergeIntoTable(tempTable: String,
+                        targetTable: String,
+                        keys: Array[String],
+                        insertedColumns: Array[String],
+                        bindVariableEnabled: Boolean = true): Unit = {
+      val joinExpr = keys.map(key => s"$targetTable.$key=$tempTable.$key").mkString(" and ")
+      val updateExpr = insertedColumns.map(c => s"$targetTable.$c=$tempTable.$c").mkString(",")
+      val matchExpr = s"when matched then update set $updateExpr"
+      val insertedColumnStr = insertedColumns.mkString(",")
+      val insertExpr = insertedColumns.map(key => s"$tempTable.$key").mkString(",")
+      val notMatchExpr = s"when not matched then insert($insertedColumnStr)values($insertExpr)"
+      (ConstantString("merge into") + Identifier(targetTable) + "using" +
+        Identifier(tempTable) + "on" + joinExpr + matchExpr + notMatchExpr)
+        .execute(bindVariableEnabled)(connection)
+    }
+
     def truncateTable(table: String,
                       bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("truncate") + table)

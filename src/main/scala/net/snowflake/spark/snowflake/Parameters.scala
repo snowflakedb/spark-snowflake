@@ -190,6 +190,13 @@ object Parameters {
     "internal_use_aws_region_url"
   )
 
+  val PARAM_UNIQUE_KEYS: String = knownParam(
+    "unique.keys"
+  )
+  val PARAM_INSERTED_COLUMNS: String = knownParam(
+    "inserted.columns"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -577,6 +584,10 @@ object Parameters {
       parameters.get(PARAM_SF_ACCOUNT)
     }
 
+    def uniqueKeys: String = parameters.getOrElse(PARAM_UNIQUE_KEYS, "")
+
+    def  insertedColumns: String = parameters.getOrElse(PARAM_INSERTED_COLUMNS, "")
+
     /**
       * Snowflake SSL on/off - "on" by default
       */
@@ -625,7 +636,6 @@ object Parameters {
     def nonProxyHosts: Option[String] = {
       parameters.get(PARAM_NON_PROXY_HOSTS)
     }
-
     /**
       *  Mapping OAuth and authenticator values
       */
