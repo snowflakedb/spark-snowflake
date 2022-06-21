@@ -418,18 +418,44 @@ private[io] object StageWriter {
       )
 
       // Execute COPY INTO TABLE to load data
-      StageWriter.executeCopyIntoTable(
-        sqlContext,
-        conn,
-        schema,
-        saveMode,
-        params,
-        targetTable,
-        file,
-        tempStage,
-        format,
-        fileUploadResults)
-
+      // update data by merging syntax
+      val keyStr: String = sqlContext.getConf("spark.sql.unique.keys", params.uniqueKeys)
+      val insertedColumnStr: String = sqlContext.getConf("spark.sql.inserted.columns", params.insertedColumns)
+      if(!tempTable.equals(targetTable) && !keyStr.isEmpty  && !insertedColumnStr.isEmpty){
+        conn.createTable(tempTable.name, schema, params,
+          overwrite = true, temporary = true)
+        StageWriter.executeCopyIntoTable(
+          sqlContext,
+          conn,
+          schema,
+          saveMode,
+          params,
+          tempTable,
+          file,
+          tempStage,
+          format,
+          fileUploadResults
+        )
+        val keys = keyStr.split(',')
+        val insertedColumns = insertedColumnStr.split(',')
+        conn.mergeIntoTable(tempTable.name,
+          targetTable.name,
+          keys,
+          insertedColumns)
+      } else {
+        StageWriter.executeCopyIntoTable(
+          sqlContext,
+          conn,
+          schema,
+          saveMode,
+          params,
+          targetTable,
+          file,
+          tempStage,
+          format,
+          fileUploadResults
+        )
+      }
       // post actions
       Utils.executePostActions(
         DefaultJDBCWrapper,
