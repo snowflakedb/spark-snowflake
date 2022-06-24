@@ -22,7 +22,7 @@ jobs:
       uses: ./whitesource-actions/snyk-issue
       with:
         snyk_org: ${{ secrets.SNYK_ORG_ID_PUBLIC_REPO }}
-        snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN }}
+        snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN_PUBLIC_REPO }}
         jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
