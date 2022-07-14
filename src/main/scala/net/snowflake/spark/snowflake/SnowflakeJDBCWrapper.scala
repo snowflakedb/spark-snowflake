@@ -297,13 +297,22 @@ private[snowflake] class JDBCWrapper {
     * search path, the caller needs to set 'internal_check_table_existence_in_current_schema_only'
     * as false explicitly.
     */
+  private[snowflake] def tableExistsWithConnection(
+       conn: Connection, params: MergedParameters, table: String): Boolean = {
+    if (params.checkTableExistenceInCurrentSchemaOnly) {
+      conn.createStatement().execute("alter session set search_path='$current'")
+    }
+    val result = conn.tableExists(table)
+    if (params.checkTableExistenceInCurrentSchemaOnly) {
+      conn.createStatement().execute("alter session unset search_path")
+    }
+    result
+  }
+
   private[snowflake] def tableExists(params: MergedParameters, table: String): Boolean = {
     val conn = getConnector(params)
     try {
-      if (params.checkTableExistenceInCurrentSchemaOnly){
-        conn.createStatement().execute("alter session set search_path='$current'")
-      }
-      conn.tableExists(table)
+      tableExistsWithConnection(conn, params, table)
     } finally {
       conn.close()
     }
