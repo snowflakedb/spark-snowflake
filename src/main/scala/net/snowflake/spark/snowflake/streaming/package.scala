@@ -106,7 +106,8 @@ package object streaming {
           if (list.isEmpty || list.get.isEmpty) {
             s"(${schema.fields.map(x => Utils.quotedNameIgnoreCase(x.name)).mkString(",")})"
           } else {
-            s"(${list.get.map(x => Utils.quotedNameIgnoreCase(tableSchema(x._1).name)).mkString(", ")})"
+            s"(${list.get.map(x =>
+              Utils.quotedNameIgnoreCase(tableSchema(x._1).name)).mkString(", ")})"
           }
         case SupportedFormat.CSV =>
           if (list.isEmpty || list.get.isEmpty) {

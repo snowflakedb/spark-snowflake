@@ -20,7 +20,8 @@ val sparkVersionMajor = "3.2"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
-unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
+unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/" +
+  s"spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
 
 lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(

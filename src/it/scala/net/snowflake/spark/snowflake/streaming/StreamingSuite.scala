@@ -166,7 +166,9 @@ class StreamingSuite extends IntegrationSuiteBase {
         query = s"select count(*) from $tableName")
       rs.next()
       val rowCount = rs.getLong(1)
+      // scalastyle:off println
       println(s"Get row count: $rowCount : retry ${sleepTime/intervalInMs}")
+      // scalastyle:off println
       if (rowCount >= expectedRowCount) {
         // Sleep done.
         result = true
@@ -231,9 +233,11 @@ class StreamingSuite extends IntegrationSuiteBase {
 
     // Max wait time: 5 minutes, retry interval: 30 seconds.
     if (!waitForWriteDone(streamingTable, 20, 300000, 30000)) {
+      // scalastyle:off println
       println(s"Don't find expected row count in target table. " +
         s"The root cause could be the snow pipe is too slow. " +
         "It is a SC issue, only if it is reproduced consistently.")
+      // scalastyle:on println
     }
     query.stop()
     query.awaitTermination(10000)

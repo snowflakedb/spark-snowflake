@@ -33,7 +33,7 @@ class IOSuite extends FunSuite with Matchers {
       ("My_DB.My_Schema.Table_1", false),
       // normal table name with abnormal schema or database name
       ("\"My.Schema\".Table_1", false),
-      ("\"My.DB\".\"My.Schema\".Table_1",false),
+      ("\"My.DB\".\"My.Schema\".Table_1", false),
       // abnormal table name with abnormal schema or database name
       ("\"test_table_.'!@#$%^&* 2611611920364743726\" ", true),
       ("\"Table.1\"", true),
@@ -67,7 +67,9 @@ class IOSuite extends FunSuite with Matchers {
           assert(!stageTableName.endsWith("\""))
         }
         if (debugPrint) {
+          // scalastyle:off println
           println(s"${pair._1}  --->  $stageTableName")
+          // scalastyle:on println
         }
       }
     )

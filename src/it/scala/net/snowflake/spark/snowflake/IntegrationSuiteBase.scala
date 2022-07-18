@@ -64,7 +64,9 @@ trait IntegrationSuiteBase
 
     // It is used to retrieve expected query text.
     if (printSqlText) {
+      // scalastyle:off println
       println(Utils.getLastSelect)
+      // scalastyle:on println
     }
 
     if (!bypass) {
@@ -116,7 +118,9 @@ trait IntegrationSuiteBase
           bypass = true, printSqlText)
       } catch {
         case th: Throwable => {
+          // scalastyle:off println
           println(s"Fail to read DataFrame with pushdown disabled. ${th.getMessage}")
+          // scalastyle:on println
           throw th
         }
       } finally {

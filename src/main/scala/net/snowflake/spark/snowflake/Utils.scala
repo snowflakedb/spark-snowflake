@@ -703,6 +703,7 @@ object Utils {
     * Print JDBC ResultSet for debugging purpose
     */
   private[snowflake] def printResultSet(rs: ResultSet): Unit = {
+    // scalastyle:off println
     try {
       val columnCount = rs.getMetaData.getColumnCount
       val sb = new StringBuilder
@@ -721,5 +722,6 @@ object Utils {
       case th: Throwable =>
         println(s"Fail to print result set: ${th.getMessage}")
     }
+    // scalastyle:off println
   }
 }

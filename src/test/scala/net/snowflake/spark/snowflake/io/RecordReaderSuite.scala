@@ -118,7 +118,9 @@ class RecordReaderSuite extends FunSuite {
         val value = recordReader.getCurrentValue
         val progress = recordReader.getProgress
         rowCount += 1
+        // scalastyle:off println
         println(s"$rowCount $key $progress $value")
+        // scalastyle:on println
       }
       assert(rowCount == 3)
       recordReader.close()

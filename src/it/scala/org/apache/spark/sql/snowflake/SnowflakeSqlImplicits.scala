@@ -24,7 +24,8 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 /**
- * A collection of implicit methods for converting common Scala objects into [[org.apache.spark.sql.Dataset]]s.
+ * A collection of implicit methods for converting common Scala objects into
+ * [[org.apache.spark.sql.Dataset]]s.
  *
  * @since 1.6.0
  */

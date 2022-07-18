@@ -112,13 +112,17 @@ trait IntegrationEnv
     val today = Timestamp.valueOf(LocalDateTime.now())
     val expireTs = Timestamp.valueOf(
       LocalDateTime.now().minusHours(hoursAgo))
+    // scalastyle:off println
     println(s"Start clean up on $today. Drop test stages created before $expireTs")
+    // scalastyle:on println
 
     while (rs.next()) {
       val createTs = rs.getTimestamp("created_on")
       val name = rs.getString("name")
       if (expireTs.compareTo(createTs) > 0) {
+        // scalastyle:off println
         println(s"On $today, drop stage $name created_on: $createTs")
+        // scalastyle:on println
         conn.createStatement().executeQuery(s"drop stage if exists $name")
       }
     }

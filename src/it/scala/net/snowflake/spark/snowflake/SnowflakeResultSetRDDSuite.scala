@@ -638,7 +638,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("query", "select seq4() as INT_C, 'test123' as C_STRING from table(generator(rowcount => 5))")
+      .option("query", "select seq4() as INT_C, 'test123' as C_STRING from" +
+        " table(generator(rowcount => 5))")
       .load()
     df1.write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -1511,7 +1512,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val partitionCount = 1
     val rowCountPerPartition = 1024 * 50
     // It is enough to run this test on AWS for Arrow
-    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") &&
+      !params.useCopyUnload) {
       val thisSparkSession = SparkSession
         .builder()
         .appName("Spark SQL basic example")
@@ -1589,7 +1591,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val partitionCount = 1
     val rowCountPerPartition = 1024 * 300
     // It is enough to run this test on AWS for Arrow
-    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") &&
+      !params.useCopyUnload) {
       val thisSparkSession = SparkSession
         .builder()
         .appName("Spark SQL basic example")
@@ -1734,7 +1737,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       // output perf result
       if (maxRunTime > 0) {
         def getPerfReport(results: Array[Long]): String = {
-          val buf = new StringBuilder(s"Average ${Utils.getTimeString(results.sum / results.size)}: ")
+          val buf = new StringBuilder(
+            s"Average ${Utils.getTimeString(results.sum / results.size)}: ")
           results.foreach(x => buf.append(Utils.getTimeString(x)).append(", "))
           buf.toString()
         }
@@ -1863,8 +1867,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
     )
     val expectedResult = if (params.useCopyUnload) {
-      // The returned format is different for USE_COPY_UNLOAD=true.
-      def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+      // The returned format is different for USE_COPY_UNLOAD = true
+      def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
       expectedResultArrow.map(r => Row(
         r.getString(0),
         replaceSpace(r.getString(1)),
@@ -1920,8 +1924,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
       )
       val expectedResult = if (params.useCopyUnload) {
-        // The returned format is different for USE_COPY_UNLOAD=true.
-        def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+        // The returned format is different for USE_COPY_UNLOAD = true
+        def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
         expectedResultArrow.map(r => Row(
           r.getString(0),
           replaceSpace(r.getString(1)),
@@ -2071,7 +2075,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           .save()
       })
 
-      // Without staging table with check_table_existence_in_current_schema = "true", table doesn't exist
+      // Without staging table with check_table_existence_in_current_schema = "true",
+      // table doesn't exist
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)

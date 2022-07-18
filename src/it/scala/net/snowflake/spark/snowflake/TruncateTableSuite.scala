@@ -366,10 +366,12 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
   // This test case is used to reproduce/test SNOW-222104
   // The reproducing conditions are:
-  // 1. Write data frame to a table with OVERWRITE and (usestagingtable=on truncate_table=off (they are default)).
+  // 1. Write data frame to a table with OVERWRITE and
+  //    (usestagingtable=on truncate_table=off (they are default)).
   // 2. table name includes database name and schema name.
   // 3. sfSchema is configured to a different schema
-  // 4. The user has privilege to create stage but doesn't have privilege to create table on sfSchema
+  // 4. The user has privilege to create stage but doesn't have privilege to
+  //    create table on sfSchema
   //
   // Below is how to create the env to reproduce it and test
   // 1. create a new role TESTROLE_SPARK_2 with ADMIN.

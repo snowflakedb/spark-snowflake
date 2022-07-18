@@ -541,7 +541,7 @@ object Parameters {
       * URL pointing to the snowflake database including protocol.
       * for example, https://host:port
       */
-    def sfFullURL: String = s"${if (isSslON) "https://" else "http://"}$sfURL"
+    def sfFullURL: String = if (isSslON) s"""https://$sfURL""" else s"""http://$sfURL"""
 
     /**
       * Snowflake database name
@@ -661,7 +661,8 @@ object Parameters {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "true"))
     }
     def checkTableExistenceInCurrentSchemaOnly: Boolean = {
-      isTrue(parameters.getOrElse(PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
+      isTrue(parameters.getOrElse(
+        PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
     }
     def skipWriteWhenWritingEmptyDataFrame: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "false"))
@@ -916,7 +917,7 @@ object Parameters {
 
     def columnMapping: String = {
       parameters(PARAM_COLUMN_MAPPING).toLowerCase match {
-        case "name"  => "name"
+        case "name" => "name"
         case "order" => "order"
         case value =>
           log.error(s"""
@@ -930,7 +931,7 @@ object Parameters {
 
     def columnMismatchBehavior: String = {
       parameters(PARAM_COLUMN_MISMATCH_BEHAVIOR).toLowerCase() match {
-        case "error"  => "error"
+        case "error" => "error"
         case "ignore" => "ignore"
         case value =>
           log.error(s"""

@@ -36,8 +36,10 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_union_2: String = s"test_union_2_$randomSuffix"
   private val test_table_case_when_1: String = s"test_case_when_1_$randomSuffix"
   private val test_table_case_when_2: String = s"test_case_when_2_$randomSuffix"
-  private val test_table_left_semi_join_left: String = s"test_table_left_semi_join_left_$randomSuffix"
-  private val test_table_left_semi_join_right: String = s"test_table_left_semi_join_right_$randomSuffix"
+  private val test_table_left_semi_join_left: String =
+    s"test_table_left_semi_join_left_$randomSuffix"
+  private val test_table_left_semi_join_right: String =
+    s"test_table_left_semi_join_right_$randomSuffix"
   private val test_table_shift_left: String = s"test_table_shift_left_$randomSuffix"
   private val test_table_shift_right: String = s"test_table_shift_right_$randomSuffix"
   private val test_table_in: String = s"test_table_in_$randomSuffix"
@@ -110,7 +112,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test pushdown length() function") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('', 'abc', null)")
 
     val tmpDF = sparkSession.read
@@ -138,7 +141,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test/reproduce SNOW-304320: call DataFrame.dropDuplicates(c1)") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
 
     val tmpDF = sparkSession.read
@@ -162,7 +166,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test SNOW-304320") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
 
     val tmpDF = sparkSession.read
@@ -300,8 +305,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_decimal")
 
-    val result = sparkSession.sql(
-      "SELECT sum(cast(c1 AS DECIMAL(5, 0))), sum(cast(c2 AS DECIMAL(5, 0))) FROM test_table_decimal")
+    val result = sparkSession.sql("SELECT sum(cast(c1 AS DECIMAL(5, 0)))," +
+      " sum(cast(c2 AS DECIMAL(5, 0))) FROM test_table_decimal")
     val expectedResult = Seq(Row(123, null))
 
     testPushdown(
@@ -439,10 +444,12 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown left semi join and left anti join function") {
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_left(id int, gender string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (1, null), (2, 'M'), (2, 'F'), (4, 'MMM')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values" +
+      s" (1, null), (2, 'M'), (2, 'F'), (4, 'MMM')")
 
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_right(id int, name string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (1, 'test'), (2, 'allen'), (3, 'apple'), (3, 'join')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values" +
+      s" (1, 'test'), (2, 'allen'), (3, 'apple'), (3, 'join')")
 
     val tmpDFLeft = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -537,7 +544,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftleft( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+      s"""select( bitshiftleft( cast("subquery_0"."value" as number), 1))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_left) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       result,
@@ -571,7 +579,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftright( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 1))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       result,
@@ -592,7 +601,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftright( cast("subquery_0"."value" as number), 2)) as "subquery_1_col_0" from (
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 2))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       resultShift2,
@@ -735,7 +745,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     val expectedQueries = Seq(
       // Query for spark 3.1 and 3.0
-      s"""select * from (select * from ($test_table_in_set) as "sf_connector_query_alias") as "subquery_0"
+      s"""select * from (select * from ($test_table_in_set) as
+         | "sf_connector_query_alias") as "subquery_0"
          |where( "subquery_0"."value" in
          |  (12.0,14.14,3.0,4.0,13.0,1.1,7.0,5.0,11.0,8.0,-5.1,2.0,6.0,9.0,10.0) and cast
          |  ("subquery_0"."cur_time"as varchar) in
@@ -793,9 +804,10 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     tmpDF.createOrReplaceTempView("test_table_coalesce")
 
     val result = sparkSession.sql(
-      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
+      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2)" +
+        " from test_table_coalesce")
 
-    result.show(truncate=false)
+    result.show(truncate = false)
 
     val expectedResult = Seq(
       Row(1, 2, 3, 1, 1, -6),
@@ -831,7 +843,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("dbtable",test_table_equal_null)
+      .option("dbtable", test_table_equal_null)
       .load()
 
     tmpDF.createOrReplaceTempView("test_table_equal_null")
@@ -849,7 +861,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
         .select(col("c1").as("alias_c1"), col("c2").as("alias_c2"))
         .filter(col("alias_c1").eqNullSafe(col("alias_c2")))
     testPushdown(
-      s"""SELECT ( "SUBQUERY_1"."C1" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."C2" ) AS "SUBQUERY_2_COL_1"
+      s"""SELECT ( "SUBQUERY_1"."C1" ) AS "SUBQUERY_2_COL_0" ,
+         | ( "SUBQUERY_1"."C2" ) AS "SUBQUERY_2_COL_1"
          |FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_equal_null ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE EQUAL_NULL ( "SUBQUERY_0"."C1" ,
          |"SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1"
