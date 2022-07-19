@@ -253,8 +253,11 @@ class StageSuite extends IntegrationSuiteBase {
     setupLargeResultTable(sfOptionsNoTable)
 
     // Set test external key, the dataframe reading should fail.
-    sfOptionsNoTable += ("tempdir" -> s"wasb://test_container_name@test_account.blob.core.windows.net/")
-    sfOptionsNoTable += ("temporary_azure_sas_token" -> s"?sig=test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_fak&spr=https&sp=rwdl&sr=c")
+    sfOptionsNoTable += ("tempdir" ->
+      s"wasb://test_container_name@test_account.blob.core.windows.net/")
+    sfOptionsNoTable += ("temporary_azure_sas_token" ->
+      (s"?sig=test_test_test_test_test_test_test_test_test_test_test" +
+      s"_test_test_test_test_test_test_fak&spr=https&sp=rwdl&sr=c"))
 
     // Use copy unload for read, the read will fail
     sfOptionsNoTable =
@@ -312,7 +315,8 @@ class StageSuite extends IntegrationSuiteBase {
         azureAccount = "test_fake_account",
         azureEndpoint = "blob.core.windows.net",
         azureSAS =
-          "?sig=test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_test_fak&spr=https&sp=rwdl&sr=c",
+          "?sig=test_test_test_test_test_test_test_test_test_test_test_test" +
+            "_test_test_test_test_test_fak&spr=https&sp=rwdl&sr=c",
         param.proxyInfo,
         param.maxRetryCount,
         param.sfURL,

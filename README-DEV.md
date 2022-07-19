@@ -8,6 +8,11 @@ To build your own .jar, simply issue (adapt your Scala version if needd)
      
 This will create spark-snowflakedb*.jar that you can use with Spark.
 
+## Code Style
+Check scala code style
+
+    $ sbt scalastyle # for production code
+    $ sbt it:scalastyle # for test code
 
 ## Testing
 

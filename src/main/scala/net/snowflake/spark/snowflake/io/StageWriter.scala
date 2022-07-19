@@ -646,7 +646,8 @@ private[io] object StageWriter {
     } catch {
       case th: Throwable => {
         val end = System.currentTimeMillis()
-        val message = s"Fail to write in ${Utils.getTimeString(end - start)} at ${LocalDateTime.now()}"
+        val message = s"Fail to write in ${Utils.getTimeString(end - start)} at" +
+          s" ${LocalDateTime.now()}"
         logger.error(message)
         progress.append(message)
         // send telemetry message
