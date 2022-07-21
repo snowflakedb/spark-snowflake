@@ -724,4 +724,64 @@ object Utils {
     }
     // scalastyle:off println
   }
+
+  // Find the first un-quoted char '.', return -1 if not found
+  private def findFirstUnquotedDotIndex(data: String): Int = {
+    var quoteCount = 0
+    for (i <- 0 until data.length) {
+      if (data(i) == '"') {
+        quoteCount = quoteCount + 1
+      } else if (data(i) == '.') {
+        if (quoteCount % 2 == 0) {
+          return i
+        }
+      }
+    }
+    -1
+  }
+
+  // Split object name with unquoted dot.
+  private[snowflake] def splitNameByDot(name: String): Seq[String] = {
+    val result = new mutable.ArrayBuffer[String]
+    var data = name
+    var done = false
+    while (!done) {
+      val dotIndex = findFirstUnquotedDotIndex(data)
+      if (dotIndex == -1) {
+        result.append(data)
+        done = true
+      } else {
+        result.append(data.substring(0, dotIndex))
+        data = data.substring(dotIndex + 1)
+      }
+    }
+    result.toSeq
+  }
+
+  // Adjust table name by adding database or schema name for table existence check.
+  private[snowflake] def getTableNameForExistenceCheck(database: String,
+                                                       schema: String,
+                                                       name: String): String = {
+    val unQuotedIdPattern = """([a-zA-Z_][\w$]*)"""
+    val quotedIdPattern = """("([^"]|"")+")"""
+    val idPattern = s"($unQuotedIdPattern|$quotedIdPattern)"
+
+    val nameParts = splitNameByDot(name)
+    //     identifier
+    //     identifier.identifier
+    //     identifier.identifier.identifier
+    //     identifier..identifier // It's equals to identifier.PUBLIC.identifier
+    if (nameParts.length == 1 && name.matches(idPattern)) {
+      // Add database and schema name
+      s"${ensureQuoted(database)}.${ensureQuoted(schema)}.$name"
+    } else if (nameParts.length == 2 && nameParts.head.matches(idPattern)
+      && nameParts.last.matches(idPattern)) {
+      // Add database name
+      s"${ensureQuoted(database)}.$name"
+    } else {
+      // For all the other cases, don't adjust it
+      name
+    }
+  }
+
 }

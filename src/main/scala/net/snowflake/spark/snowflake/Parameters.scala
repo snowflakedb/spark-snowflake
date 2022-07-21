@@ -166,6 +166,16 @@ object Parameters {
   val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY: String = knownParam(
     "internal_check_table_existence_in_current_schema_only"
   )
+  // Internal option to check table existence with fully qualified name when writing
+  // a DataFrame to a snowflake table. Its' true by default. For example,
+  // 1. For table1, the fully qualified name is {sfDatabase}.{sfSchema}.table1
+  // 2. For schema1.table1, the fully qualified name is {sfDatabase}.schema1.table1
+  // NOTE: For writing a DataFrame to a snowflake table, if this option is true,
+  // "internal_check_table_existence_in_current_schema_only" is not used any more.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME: String = knownParam(
+    "internal_check_table_existence_with_fully_qualified_name"
+  )
   // Internal option to skip write operation when writing a DataFrame
   // without any partitions. By default, it it is 'false'.
   // This option may be removed without any notice in any time.
@@ -663,6 +673,10 @@ object Parameters {
     def checkTableExistenceInCurrentSchemaOnly: Boolean = {
       isTrue(parameters.getOrElse(
         PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
+    }
+    def checkTableExistenceWithFullyQualifiedName: Boolean = {
+      isTrue(parameters.getOrElse(
+        PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true"))
     }
     def skipWriteWhenWritingEmptyDataFrame: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "false"))

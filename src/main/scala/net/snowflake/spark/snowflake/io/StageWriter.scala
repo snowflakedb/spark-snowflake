@@ -307,7 +307,15 @@ private[io] object StageWriter {
     val writeTableState = new WriteTableState(conn)
 
     try {
-      val tableExists = DefaultJDBCWrapper.tableExists(params, tableName)
+      val tableExists = if (params.checkTableExistenceWithFullyQualifiedName) {
+        val adjustedName = Utils.getTableNameForExistenceCheck(
+          params.sfDatabase, params.sfSchema, tableName)
+        log.info(s"writeToTableWithoutStagingTable: check table existence" +
+          s" with $adjustedName for $tableName")
+        conn.tableExists(adjustedName)
+      } else {
+        DefaultJDBCWrapper.tableExists(params, tableName)
+      }
       // Drop table only if necessary.
       if (saveMode == SaveMode.Overwrite && tableExists && !params.truncateTable)
       {
@@ -389,7 +397,15 @@ private[io] object StageWriter {
       }
 
     try {
-      val tableExists = DefaultJDBCWrapper.tableExists(params, table.toString)
+      val tableExists = if (params.checkTableExistenceWithFullyQualifiedName) {
+        val adjustedName = Utils.getTableNameForExistenceCheck(
+          params.sfDatabase, params.sfSchema, table.toString)
+        log.info(s"writeToTableWithStagingTable: check table existence" +
+          s" with $adjustedName for ${table.toString}")
+        conn.tableExists(adjustedName)
+      } else {
+        DefaultJDBCWrapper.tableExists(params, table.toString)
+      }
       // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite && tableExists) {
         if (params.useStagingTable) {
