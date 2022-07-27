@@ -374,6 +374,155 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     testPushdownMultiplefQueries(expectedQueries, resultUnionAll, expectedResult)
   }
 
+  // Spark has optimized Union-By-Name as normal Union.
+  // So SC doesn't need to handle union all separately.
+  test("union by name") {
+    jdbcUpdate(s"create or replace table $test_table_union_1 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('v1', 'v2')")
+    jdbcUpdate(s"create or replace table $test_table_union_2 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('v1', 'v2')")
+
+    val dfLeftC1C2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c2 from $test_table_union_1")
+      .load()
+    dfLeftC1C2.createOrReplaceTempView("left_view_c1_c2")
+    val leftDfView = sparkSession.table("left_view_c1_c2")
+
+    val dfRightC2C1 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c2, c1 from $test_table_union_2")
+      .load()
+    dfRightC2C1.createOrReplaceTempView("right_view_c2_c1")
+    val rightDfView = sparkSession.table("right_view_c2_c1")
+
+    // case 1: left and right children have the same columns but different order.
+    testPushdown(
+      s""" ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |   AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) ) AS
+         |    "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.unionByName(dfRightC2C1),
+      Seq(Row("v1", "v2"), Row("v1", "v2"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |   AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) ) AS
+         |    "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.unionByName(rightDfView),
+      Seq(Row("v1", "v2"), Row("v1", "v2"))
+    )
+
+    // case 2: left and right children have generated column names
+    testPushdown(
+      s""" ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |          ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |  UNION ALL
+         |   ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |            ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |     FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) )
+         |          AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.select(length(dfLeftC1C2("c1")), concat(col("c1"), col("c2")))
+        .unionByName(dfRightC2C1.select(concat(col("c1"), col("c2")), length(dfRightC2C1("c1")))),
+      Seq(Row(2, "v1v2"), Row(2, "v1v2"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |          ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |  UNION ALL
+         |   ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |            ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |     FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) )
+         |          AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.select(length(leftDfView("c1")), concat(col("c1"), col("c2")))
+        .unionByName(rightDfView.select(concat(col("c1"), col("c2")), length(rightDfView("c1")))),
+      Seq(Row(2, "v1v2"), Row(2, "v1v2"))
+    )
+  }
+
+  // Spark has optimized Union-By-Name as normal Union.
+  // So SC doesn't need to handle union all separately.
+  test("union by name with allowMissingCol") {
+    jdbcUpdate(s"create or replace table $test_table_union_1 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('v1', 'v2')")
+    jdbcUpdate(s"create or replace table $test_table_union_2 (c1 String, c3 String)")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('v1', 'v3')")
+
+    val dfLeftC1C2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c2 from $test_table_union_1")
+      .load()
+    dfLeftC1C2.createOrReplaceTempView("left_view_c1_c2")
+    val leftDfView = sparkSession.table("left_view_c1_c2")
+
+    val dfRightC1C3 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c3 from $test_table_union_2")
+      .load()
+    dfRightC1C3.createOrReplaceTempView("right_view_c2_c1")
+    val rightDfView = sparkSession.table("right_view_c2_c1")
+
+    assertThrows[Exception] {
+      dfLeftC1C2.unionByName(dfRightC1C3).collect()
+    }
+
+    // left and right children have different columns.
+    testPushdown(
+      s""" ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |           ( NULL ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |        AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |          ( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c3 from $test_table_union_2 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.unionByName(dfRightC1C3, true),
+      Seq(Row("v1", "v2", null), Row("v1", null, "v3"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |           ( NULL ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |        AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |          ( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c3 from $test_table_union_2 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.unionByName(rightDfView, true),
+      Seq(Row("v1", "v2", null), Row("v1", null, "v3"))
+    )
+  }
+
   test("test pushdown casewhen() function with other") {
     jdbcUpdate(s"create or replace table $test_table_case_when_1(gender string)")
     jdbcUpdate(s"insert into $test_table_case_when_1 values (null), ('M'), ('F'), ('MMM')")
