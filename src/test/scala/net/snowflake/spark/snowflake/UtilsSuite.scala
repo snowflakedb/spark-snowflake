@@ -127,4 +127,55 @@ class UtilsSuite extends FunSuite with Matchers {
     assert(Utils.getLastPutCommand == null)
     assert(Utils.getLastGetCommand == null)
   }
+
+  test("Utils.getTableNameForExistenceCheck") {
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "t1")
+      .equals(""""DB"."SCHEMA".t1"""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "s1.t1")
+      .equals(""""DB".s1.t1"""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "d1.s1.t1")
+      .equals("""d1.s1.t1"""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "d1..t1")
+      .equals("""d1..t1"""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"s1\".t1")
+      .equals(""""DB"."s1".t1"""))
+
+    // Db and schema has special character
+    assert(Utils.getTableNameForExistenceCheck("db.1", "schema!1", "\"t1\"")
+      .equals(""""db.1"."schema!1"."t1""""))
+    assert(Utils.getTableNameForExistenceCheck("db.1", "schema!1", "\"s1\".\"t1\"")
+      .equals(""""db.1"."s1"."t1""""))
+    assert(Utils.getTableNameForExistenceCheck("db.1", "schema!1", "\"d1\".\"s1\".\"t1\"")
+      .equals(""""d1"."s1"."t1""""))
+    assert(Utils.getTableNameForExistenceCheck("db.1", "schema!1", "\"d1\"..\"t1\"")
+      .equals(""""d1".."t1""""))
+
+    // Table name or schema name have quoted dot.
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"table1.\"")
+      .equals(""""DB"."SCHEMA"."table1.""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"table.1\"")
+      .equals(""""DB"."SCHEMA"."table.1""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\".table1\"")
+      .equals(""""DB"."SCHEMA".".table1""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"sc1.\".\"table1.\"")
+      .equals(""""DB"."sc1."."table1.""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"sc.1\".\"table1.\"")
+      .equals(""""DB"."sc.1"."table1.""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\".sc1\".\"table1.\"")
+      .equals(""""DB".".sc1"."table1.""""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"d1.\".\"sc1.\".\"table1.\"")
+      .equals("\"d1.\".\"sc1.\".\"table1.\""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\"d.1\".\"sc.1\".\"table1.\"")
+      .equals("\"d.1\".\"sc.1\".\"table1.\""))
+    assert(Utils.getTableNameForExistenceCheck("db", "schema", "\".d1\".\".sc1\".\"table1.\"")
+      .equals("\".d1\".\".sc1\".\"table1.\""))
+
+    // If the name is invalid, just get the original name.
+    val invalidNames =
+      Seq(".t1", "t1.", ".", "..", "...", ".s1.t1", ".d1.s1.t1", "d1.s1.t1.", "d1...t1")
+    invalidNames.foreach { s =>
+      assert(Utils.getTableNameForExistenceCheck("sfDb", "sfSchema", s).equals(s))
+    }
+  }
+
 }

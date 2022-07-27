@@ -724,4 +724,31 @@ object Utils {
     }
     // scalastyle:off println
   }
+
+  // Adjust table name by adding database or schema name for table existence check.
+  private[snowflake] def getTableNameForExistenceCheck(database: String,
+                                                       schema: String,
+                                                       name: String): String = {
+    val unQuotedIdPattern = """([a-zA-Z_][\w$]*)"""
+    val quotedIdPattern = """("([^"]|"")+")"""
+    val idPattern = s"($unQuotedIdPattern|$quotedIdPattern)"
+
+    // scalastyle:off
+    // Only add the database/schema name for <id> and <id>.<id>
+    // If the name is fully qualified name or invalid name, don't need to adjust it.
+    // NOTE: <id>..<id> is equals to <id>.PUBLIC.<id> which is a fully qualified name.
+    // refer to https://docs.snowflake.com/en/sql-reference/name-resolution.html#resolution-when-schema-omitted-double-dot-notation
+    // scalastyle:off
+    if (name.matches(idPattern)) {
+      // Add database and schema name
+      s"${ensureQuoted(database)}.${ensureQuoted(schema)}.$name"
+    } else if (name.matches(s"$idPattern\\.$idPattern")) {
+      // Add database name
+      s"${ensureQuoted(database)}.$name"
+    } else {
+      // For all the other cases, don't adjust it
+      name
+    }
+  }
+
 }
