@@ -121,17 +121,18 @@ package object streaming {
                              from: String): String =
       format match {
         case SupportedFormat.JSON =>
+          val columnPrefix = if (param.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
             val names =
               tableSchema.fields
                 .map(
                   x =>
-                    "parse_json($1):".concat(Utils.quotedNameIgnoreCase(x.name))
+                    columnPrefix.concat(Utils.quotedNameIgnoreCase(x.name))
                 )
                 .mkString(",")
             s"from (select $names $from tmp)"
           } else {
-            s"from (select ${list.get.map(x => "parse_json($1):".concat(
+            s"from (select ${list.get.map(x => columnPrefix.concat(
               Utils.quotedNameIgnoreCase(x._2))).mkString(", ")} $from tmp)"
           }
         case SupportedFormat.CSV =>
