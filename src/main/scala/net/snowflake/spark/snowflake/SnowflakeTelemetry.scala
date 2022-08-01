@@ -13,7 +13,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 
 object SnowflakeTelemetry {
 
@@ -33,6 +33,15 @@ object SnowflakeTelemetry {
   private[snowflake] val MB = 1024 * 1024
 
   private[snowflake] var output: ObjectNode = _
+
+  private lazy val sparkApplicationId: String =
+    if (SparkEnv.get != null
+      && SparkEnv.get.conf != null
+      && SparkEnv.get.conf.contains("spark.app.id")) {
+      SparkEnv.get.conf.get("spark.app.id")
+    } else {
+      s"spark.app.id not set ${System.currentTimeMillis()}}"
+    }
 
   // Enable OOB (out-of-band) telemetry message service
   TelemetryService.enable()
@@ -100,6 +109,7 @@ object SnowflakeTelemetry {
     metric.put(TelemetryOOBFields.SUCCESS, success)
     metric.put(TelemetryOOBFields.USE_PROXY, useProxy)
     metric.put(TelemetryOOBFields.QUERY_ID, queryID.getOrElse("NA"))
+    SnowflakeTelemetry.addCommonFields(metric)
     if (throwable.isDefined) {
       addThrowable(metric, throwable.get)
     } else {
@@ -183,6 +193,7 @@ object SnowflakeTelemetry {
     metric.put(TelemetryPushdownFailFields.UNSUPPORTED_OPERATION, exception.unsupportedOperation)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_MESSAGE, exception.getMessage)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_DETAILS, exception.details)
+    SnowflakeTelemetry.addCommonFields(metric)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_PUSHDOWN_FAIL, metric),
@@ -240,6 +251,7 @@ object SnowflakeTelemetry {
         addThrowable(metric, throwable.get)
       }
       metric.put(TelemetryQueryStatusFields.DETAILS, details)
+      SnowflakeTelemetry.addCommonFields(metric)
 
       SnowflakeTelemetry.addLog(
         (TelemetryTypes.SPARK_QUERY_STATUS, metric),
@@ -273,18 +285,19 @@ object SnowflakeTelemetry {
 
       // Add Spark configuration
       val sparkConf = SparkEnv.get.conf
-      metric.put(TelemetryClientInfoFields.SPARK_APPLICATION_ID,
-        sparkConf.get("spark.app.id", "spark.app.id not set"))
+      SnowflakeTelemetry.addCommonFields(metric)
+      metric.put(TelemetryFieldNames.SPARK_LANGUAGE, detectSparkLanguage(sparkConf))
       metric.put(TelemetryClientInfoFields.IS_PYSPARK,
         sparkConf.contains("spark.pyspark.python"))
       val sparkMetric: ObjectNode = mapper.createObjectNode()
-      sparkOptions.foreach(
-        optionName => {
-          if (sparkConf.contains(optionName)) {
-            sparkMetric.put(optionName, sparkConf.get(optionName))
+      sparkConf.getAll.foreach {
+        case (key, value) =>
+          if (sparkOptions.contains(key)) {
+            sparkMetric.put(key, value)
+          } else {
+            sparkMetric.put(key, "N/A")
           }
-        }
-      )
+      }
       if (!sparkMetric.isEmpty) {
         metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
       }
@@ -366,6 +379,22 @@ object SnowflakeTelemetry {
     }
     metric
   }
+
+  private def detectSparkLanguage(sparkConf: SparkConf): String = {
+    if (sparkConf.contains("spark.r.command")
+      || sparkConf.contains("spark.r.driver.command")
+      || sparkConf.contains("spark.r.shell.command")) {
+      "R"
+    } else if (sparkConf.contains("spark.pyspark.python")) {
+      sparkConf.get("spark.pyspark.python").split("/").last
+    } else {
+      "Scala"
+    }
+  }
+
+  private[snowflake] def addCommonFields(metric: ObjectNode): ObjectNode = {
+    metric.put(TelemetryFieldNames.SPARK_APPLICATION_ID, sparkApplicationId)
+  }
 }
 
 object TelemetryTypes extends Enumeration {
@@ -427,6 +456,7 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_CONFIG = "spark_config"
   val SPARK_APPLICATION_ID = "spark_application_id"
   val IS_PYSPARK = "is_pyspark"
+  val SPARK_LANGUAGE = "spark_language"
 }
 
 private[snowflake] object TelemetryConstValues {

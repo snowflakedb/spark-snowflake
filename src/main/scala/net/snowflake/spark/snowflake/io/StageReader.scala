@@ -172,6 +172,7 @@ private[snowflake] object StageReader {
   private[snowflake] def sendEgressUsage(bytes: Long, conn: Connection): Unit = {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(OUTPUT_BYTES, bytes)
+    SnowflakeTelemetry.addCommonFields(metric)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_EGRESS, metric),
