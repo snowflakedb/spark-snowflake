@@ -33,10 +33,10 @@ object SnowflakeTelemetry {
 
   private[snowflake] var output: ObjectNode = _
 
-  private var telemetryMessageSender: TelemetryMessageSender = new RealTelemetryMessageSender
+  private var telemetryMessageSender: TelemetryMessageSender = new SnowflakeTelemetryMessageSender
 
-  private[snowflake]
-  def setTelemetryMessageSenderForTest(sender: TelemetryMessageSender): TelemetryMessageSender = {
+  private[snowflake] def setTelemetryMessageSenderForTest(sender: TelemetryMessageSender)
+  : TelemetryMessageSender = {
     val oldSender = telemetryMessageSender
     telemetryMessageSender = sender
     oldSender
@@ -385,7 +385,7 @@ object SnowflakeTelemetry {
       || sparkConf.contains("spark.r.shell.command")) {
       "R"
     } else if (sparkConf.contains("spark.pyspark.python")) {
-      sparkConf.get("spark.pyspark.python").split("/").last
+      "Python"
     } else {
       "Scala"
     }
@@ -584,7 +584,7 @@ private[snowflake] trait TelemetryMessageSender {
   def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit
 }
 
-private final class RealTelemetryMessageSender extends TelemetryMessageSender {
+private final class SnowflakeTelemetryMessageSender extends TelemetryMessageSender {
   private val logger = LoggerFactory.getLogger(getClass)
 
   override def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit = {
