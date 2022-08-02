@@ -3,7 +3,6 @@ package net.snowflake.spark.snowflake
 import java.io.{PrintWriter, StringWriter}
 import java.sql.Connection
 import java.util.regex.Pattern
-
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -14,6 +13,8 @@ import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
+
+import scala.collection.mutable
 
 object SnowflakeTelemetry {
 
@@ -33,6 +34,11 @@ object SnowflakeTelemetry {
   private[snowflake] val MB = 1024 * 1024
 
   private[snowflake] var output: ObjectNode = _
+
+  private var testFakeMessagesSender: Option[mutable.ArrayBuffer[ObjectNode]] = None
+
+  private[snowflake] def setFakeMessageSender(fakeSender: mutable.ArrayBuffer[ObjectNode]): Unit =
+    testFakeMessagesSender = Option(fakeSender)
 
   private lazy val sparkApplicationId: String =
     if (SparkEnv.get != null
@@ -155,16 +161,23 @@ object SnowflakeTelemetry {
       curLogs = logs
       logs = Nil
     }
-    curLogs.foreach {
-      case (log, timestamp) =>
-        logger.debug(s"""
-             |Send Telemetry
-             |timestamp:$timestamp
-             |log:${log.toString}"
+    if (testFakeMessagesSender.isEmpty) {
+      curLogs.foreach {
+        case (log, timestamp) =>
+          logger.debug(s"""
+                          |Send Telemetry
+                          |timestamp:$timestamp
+                          |log:${log.toString}"
            """.stripMargin)
-        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
+          telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
+      }
+      telemetry.sendBatchAsync()
+    } else {
+      // This is for test only
+      curLogs.foreach {
+        case (log, _) => testFakeMessagesSender.get.append(log)
+      }
     }
-    telemetry.sendBatchAsync()
   }
 
   /**
@@ -380,7 +393,7 @@ object SnowflakeTelemetry {
     metric
   }
 
-  private def detectSparkLanguage(sparkConf: SparkConf): String = {
+  private[snowflake] def detectSparkLanguage(sparkConf: SparkConf): String = {
     if (sparkConf.contains("spark.r.command")
       || sparkConf.contains("spark.r.driver.command")
       || sparkConf.contains("spark.r.shell.command")) {
