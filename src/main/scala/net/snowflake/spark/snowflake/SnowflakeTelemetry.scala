@@ -14,8 +14,6 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 
-import scala.collection.mutable
-
 object SnowflakeTelemetry {
 
   // type/source/data are first level field names for spark telemetry message.
@@ -35,10 +33,14 @@ object SnowflakeTelemetry {
 
   private[snowflake] var output: ObjectNode = _
 
-  private var testFakeMessagesSender: Option[mutable.ArrayBuffer[ObjectNode]] = None
+  private var telemetryMessageSender: TelemetryMessageSender = new RealTelemetryMessageSender
 
-  private[snowflake] def setFakeMessageSender(fakeSender: mutable.ArrayBuffer[ObjectNode]): Unit =
-    testFakeMessagesSender = Option(fakeSender)
+  private[snowflake]
+  def setTelemetryMessageSenderForTest(sender: TelemetryMessageSender): TelemetryMessageSender = {
+    val oldSender = telemetryMessageSender
+    telemetryMessageSender = sender
+    oldSender
+  }
 
   private lazy val sparkApplicationId: String =
     if (SparkEnv.get != null
@@ -161,23 +163,7 @@ object SnowflakeTelemetry {
       curLogs = logs
       logs = Nil
     }
-    if (testFakeMessagesSender.isEmpty) {
-      curLogs.foreach {
-        case (log, timestamp) =>
-          logger.debug(s"""
-                          |Send Telemetry
-                          |timestamp:$timestamp
-                          |log:${log.toString}"
-           """.stripMargin)
-          telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
-      }
-      telemetry.sendBatchAsync()
-    } else {
-      // This is for test only
-      curLogs.foreach {
-        case (log, _) => testFakeMessagesSender.get.append(log)
-      }
-    }
+    telemetryMessageSender.send(telemetry, curLogs)
   }
 
   /**
@@ -592,4 +578,26 @@ object TelemetryOOBTags {
   val CTX_PORT = "ctx_port"
   val CTX_PROTOCAL = "ctx_protocol"
   val CTX_USER = "ctx_user"
+}
+
+private[snowflake] trait TelemetryMessageSender {
+  def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit
+}
+
+private final class RealTelemetryMessageSender extends TelemetryMessageSender {
+  private val logger = LoggerFactory.getLogger(getClass)
+
+  override def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit = {
+    logs.foreach {
+      case (log, timestamp) =>
+        logger.debug(
+          s"""
+             |Send Telemetry
+             |timestamp:$timestamp
+             |log:${log.toString}"
+           """.stripMargin)
+        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
+    }
+    telemetry.sendBatchAsync()
+  }
 }

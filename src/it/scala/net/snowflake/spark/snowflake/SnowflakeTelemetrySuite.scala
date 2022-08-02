@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
-import net.snowflake.spark.snowflake.SnowflakeTelemetry.mapper
+import net.snowflake.client.jdbc.telemetry.Telemetry
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Row, SaveMode}
@@ -10,6 +10,15 @@ import org.apache.spark.sql.types._
 
 import scala.collection.mutable
 import scala.util.Random
+
+private[snowflake] class FakeTelemetryMessageSender(buffer: mutable.ArrayBuffer[ObjectNode])
+  extends TelemetryMessageSender {
+  override def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit = {
+    logs.foreach {
+      case (log, _) => buffer.append(log)
+    }
+  }
+}
 
 class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
@@ -43,11 +52,11 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
   }
 
   test("IT test: common fields are added") {
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new FakeTelemetryMessageSender(messageBuffer))
     try {
-      // Enable dummy sending telemetry message.
-      val fakeMessageSender = mutable.ArrayBuffer[ObjectNode]()
-      SnowflakeTelemetry.setFakeMessageSender(fakeMessageSender)
-
       // A basis dataframe read
       val df1 = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -56,7 +65,7 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         .load()
       df1.collect()
 
-      fakeMessageSender.foreach { x =>
+      messageBuffer.foreach { x =>
         val typeName = x.get("type").asText()
         val source = x.get("source").asText()
         assert(source.equals("spark_connector"))
@@ -68,8 +77,8 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         }
       }
     } finally {
-      // Reset to send telemetry normally
-      SnowflakeTelemetry.setFakeMessageSender(null)
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
     }
   }
 
