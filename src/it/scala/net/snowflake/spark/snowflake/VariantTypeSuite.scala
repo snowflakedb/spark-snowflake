@@ -131,6 +131,59 @@ class VariantTypeSuite extends IntegrationSuiteBase {
 
   }
 
+  // This test case can be removed when removing PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE
+  // because above test "load variant data" has covered it.
+  test("load variant data with parse_json()") {
+
+    val data = sc.parallelize(
+      Seq(
+        Row(123, Array(1, 2, 3), Map("a" -> 1), Row("abc")),
+        Row(456, Array(4, 5, 6), Map("b" -> 2), Row("def")),
+        Row(789, Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
+      )
+    )
+
+    val schema1 = new StructType(
+      Array(
+        StructField("NUM", IntegerType, nullable = false),
+        StructField("ARR", ArrayType(IntegerType), nullable = false),
+        StructField("MAP", MapType(StringType, IntegerType), nullable = false),
+        StructField(
+          "OBJ",
+          StructType(Array(StructField("STR", StringType, nullable = false)))
+        )
+      )
+    )
+
+    val df = sparkSession.createDataFrame(data, schema1)
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableName2)
+      .option(Parameters.PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val out = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableName2)
+      .schema(schema1)
+      .load()
+
+    val result = out.collect()
+    assert(result.length == 3)
+
+    assert(result(0).getInt(0) == 123)
+    assert(result(0).getList[Int](1).get(0) == 1)
+    assert(result(1).getList[Int](1).get(1) == 5)
+    assert(result(2).getList[Int](1).get(2) == 9)
+    assert(result(1).getMap[String, Int](2)("b") == 2)
+    assert(result(2).getStruct(3).getString(0) == "ghi")
+
+  }
+
   test("unload object and array") {
     jdbcUpdate(s"create or replace table $tableName3(o object, a array)")
     jdbcUpdate(

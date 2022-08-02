@@ -825,9 +825,10 @@ private[io] object StageWriter {
     ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.JSON =>
+          val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
             val names = schema.fields
-              .map(x => "parse_json($1):".concat(
+              .map(x => columnPrefix.concat(
                 if (params.quoteJsonFieldName) {
                   "\"" + x.name + "\""
                 } else {
@@ -839,7 +840,7 @@ private[io] object StageWriter {
           } else {
             ConstantString("from (select") +
               list.get
-                .map(x => "parse_json($1):".concat(
+                .map(x => columnPrefix.concat(
                   if (params.quoteJsonFieldName) {
                     "\"" + schema(x._1 - 1).name + "\""
                   } else {

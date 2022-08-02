@@ -193,6 +193,14 @@ object Parameters {
     "internal_execute_query_in_sync_mode"
   )
 
+  // Internal option to use parse_json($1) when writing a DataFrame with complex types:
+  // StructType, ArrayType, MapType. By default, it is 'false'.
+  // This option may be removed without any notice in any time.
+  // Introduced since Spark Connector 2.10.1
+  val PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE: String = knownParam(
+    "internal_use_parse_json_for_write"
+  )
+
   // Internal option to use AWS region URL. By default, it is 'true'.
   // This option may be removed without any notice in any time.
   // Introduced since Spark Connector 2.9.3
@@ -683,6 +691,9 @@ object Parameters {
     }
     def isExecuteQueryWithSyncMode: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE, "false"))
+    }
+    def useParseJsonForWrite: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE, "false"))
     }
     def getQueryIDUrl(queryID: String): String = {
       val patternWithPort = "(.*)(.snowflakecomputing.com)(:\\d*)(.*)".r
