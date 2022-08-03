@@ -11,8 +11,10 @@ import org.apache.spark.sql.types._
 import scala.collection.mutable
 import scala.util.Random
 
-private[snowflake] class FakeTelemetryMessageSender(buffer: mutable.ArrayBuffer[ObjectNode])
+private[snowflake] class MockTelemetryMessageSender(buffer: mutable.ArrayBuffer[ObjectNode])
   extends TelemetryMessageSender {
+  // the telemetry messages are appended into the buffer instead of sending to snowflake,
+  // So that the test case can check the message to be sent.
   override def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit = {
     logs.foreach {
       case (log, _) => buffer.append(log)
@@ -55,7 +57,7 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     // Enable dummy sending telemetry message.
     val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
     val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new FakeTelemetryMessageSender(messageBuffer))
+      new MockTelemetryMessageSender(messageBuffer))
     try {
       // A basis dataframe read
       val df1 = sparkSession.read
