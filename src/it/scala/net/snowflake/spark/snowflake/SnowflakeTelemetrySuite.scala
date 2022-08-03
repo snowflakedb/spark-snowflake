@@ -38,7 +38,7 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     assert(SnowflakeTelemetry.detectSparkLanguage(sparkConf).equals("Scala"))
     // Manually set pyspark
     sparkConf.set("spark.pyspark.python", "/usr/bin/python3")
-    assert(SnowflakeTelemetry.detectSparkLanguage(sparkConf).equals("python3"))
+    assert(SnowflakeTelemetry.detectSparkLanguage(sparkConf).equals("Python"))
     // Manually set R language
     sparkConf.set("spark.r.command", "R")
     assert(SnowflakeTelemetry.detectSparkLanguage(sparkConf).equals("R"))

@@ -42,14 +42,22 @@ object SnowflakeTelemetry {
     oldSender
   }
 
-  private lazy val sparkApplicationId: String =
-    if (SparkEnv.get != null
-      && SparkEnv.get.conf != null
-      && SparkEnv.get.conf.contains("spark.app.id")) {
-      SparkEnv.get.conf.get("spark.app.id")
+  private var cachedSparkApplicationId: Option[String] = None
+
+  private def getSparkApplicationId: String = {
+    if (cachedSparkApplicationId.isEmpty) {
+      if (SparkEnv.get != null
+        && SparkEnv.get.conf != null
+        && SparkEnv.get.conf.contains("spark.app.id")) {
+        cachedSparkApplicationId = Some(SparkEnv.get.conf.get("spark.app.id"))
+        cachedSparkApplicationId.get
+      } else {
+        s"spark.app.id not set ${System.currentTimeMillis()}}"
+      }
     } else {
-      s"spark.app.id not set ${System.currentTimeMillis()}}"
+      cachedSparkApplicationId.get
     }
+  }
 
   // Enable OOB (out-of-band) telemetry message service
   TelemetryService.enable()
@@ -392,7 +400,7 @@ object SnowflakeTelemetry {
   }
 
   private[snowflake] def addCommonFields(metric: ObjectNode): ObjectNode = {
-    metric.put(TelemetryFieldNames.SPARK_APPLICATION_ID, sparkApplicationId)
+    metric.put(TelemetryFieldNames.SPARK_APPLICATION_ID, getSparkApplicationId)
   }
 }
 
