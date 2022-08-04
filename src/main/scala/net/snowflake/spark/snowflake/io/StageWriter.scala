@@ -504,16 +504,19 @@ private[io] object StageWriter {
 
     // If a file is empty, there is no file are upload.
     // So the expected files are non empty files.
+    var totalRowCount: Long = 0
     var totalSize: Long = 0
     val expectedFileSet = mutable.Set[String]()
     fileUploadResults.foreach(fileUploadResult =>
       if (fileUploadResult.fileSize > 0) {
         expectedFileSet += fileUploadResult.fileName
         totalSize += fileUploadResult.fileSize
+        totalRowCount += fileUploadResult.rowCount
       })
     logAndAppend(progress, s"Total file count is ${fileUploadResults.size}, " +
       s"non-empty files count is ${expectedFileSet.size}, " +
-      s"total file size is ${Utils.getSizeString(totalSize)}.")
+      s"total file size is ${Utils.getSizeString(totalSize)}, " +
+      s"total row count is ${Utils.getSizeString(totalRowCount)}.")
 
     // Indicate whether to use FILES clause in the copy command
     var useFilesClause = false
@@ -659,6 +662,10 @@ private[io] object StageWriter {
       logAndAppend(progress,
         s"Succeed to write in ${Utils.getTimeString(end - start)}" +
           s" at ${LocalDateTime.now()}")
+
+      // Send egress telemetry message
+      SnowflakeTelemetry.sendIngressMessage(conn, lastStatement.getLastQueryID(),
+        totalRowCount, totalSize)
     } catch {
       case th: Throwable => {
         val end = System.currentTimeMillis()

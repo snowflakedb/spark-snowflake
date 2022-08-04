@@ -84,6 +84,46 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     }
   }
 
+  test("IT test: egress and ingress message") {
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new MockTelemetryMessageSender(messageBuffer))
+    try {
+      // A basis dataframe read
+      val df1 = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", "select seq4(), 'test_data' from table(generator(rowcount => 100))")
+        .load()
+
+      df1.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table)
+        .save()
+
+      // Check SPARK_EGRESS to be sent
+      assert(messageBuffer.count(_.get("type").asText().equals("spark_egress")) == 1)
+      val egressMessage = messageBuffer.filter(_.get("type").asText().equals("spark_egress")).head
+      assert(egressMessage.get("data").get("row_count").asLong() == 100)
+      assert(egressMessage.get("data").get("output_bytes").asLong() > 0)
+      assert(egressMessage.get("data").get("query_id").asText().nonEmpty)
+      assert(egressMessage.get("data").get("spark_application_id").asText().nonEmpty)
+
+      // Check SPARK_INGRESS to be sent
+      assert(messageBuffer.count(_.get("type").asText().equals("spark_ingress")) == 1)
+      val ingressMessage = messageBuffer.filter(_.get("type").asText().equals("spark_ingress")).head
+      assert(ingressMessage.get("data").get("row_count").asLong() == 100)
+      assert(ingressMessage.get("data").get("input_bytes").asLong() > 0)
+      assert(ingressMessage.get("data").get("query_id").asText().nonEmpty)
+      assert(ingressMessage.get("data").get("spark_application_id").asText().nonEmpty)
+    } finally {
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
+    }
+  }
+
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table")
