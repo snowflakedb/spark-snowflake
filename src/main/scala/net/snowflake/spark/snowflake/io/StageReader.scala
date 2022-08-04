@@ -77,6 +77,8 @@ private[snowflake] object StageReader {
         throw th
       }
     }
+    val queryID = res.asInstanceOf[SnowflakeResultSet].getQueryID
+    Utils.setLastSelectQueryId(queryID)
 
     // Verify it's the expected format
     val sch = res.getMetaData

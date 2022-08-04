@@ -243,6 +243,7 @@ private[snowflake] case class SnowflakeRelation(
         // Re-throw the exception
         throw th
     }
+    Utils.setLastSelectQueryId(queryID)
 
     // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
     // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
