@@ -125,6 +125,7 @@ class SnowflakeSink(sqlContext: SQLContext,
         val time = System.currentTimeMillis()
         metric.put(END_TIME, time)
         metric.get(LOAD_RATE).asInstanceOf[ObjectNode].put(END_TIME, time)
+        SnowflakeTelemetry.addCommonFields(metric)
 
         SnowflakeTelemetry.addLog(
           ((TelemetryTypes.SPARK_STREAMING, metric), time)
@@ -172,6 +173,7 @@ class SnowflakeSink(sqlContext: SQLContext,
 
       if (time - lastMetricSendTime > telemetrySendTime) {
         rate.put(END_TIME, time)
+        SnowflakeTelemetry.addCommonFields(rate)
         SnowflakeTelemetry.addLog(
           ((TelemetryTypes.SPARK_STREAMING, metric.deepCopy()), time)
         )
@@ -210,6 +212,7 @@ class SnowflakeSink(sqlContext: SQLContext,
       (sqlContext.sparkSession.sparkContext.appName + streamingStartTime.toString).hashCode
     )
     message.put(START_TIME, streamingStartTime)
+    SnowflakeTelemetry.addCommonFields(message)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_STREAMING_START, message),
@@ -230,6 +233,7 @@ class SnowflakeSink(sqlContext: SQLContext,
     )
     message.put(START_TIME, streamingStartTime)
     message.put(END_TIME, endTime)
+    SnowflakeTelemetry.addCommonFields(message)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_STREAMING_END, message),
