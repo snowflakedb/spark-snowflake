@@ -59,6 +59,41 @@ object SnowflakeTelemetry {
     }
   }
 
+  private var cachedSparkLibraries: Seq[String] = Seq.empty
+
+  private[snowflake] def getSparkLibraries: Seq[String] = {
+    if (cachedSparkLibraries.isEmpty) {
+      try {
+        val classNames = Thread.currentThread()
+          .getStackTrace
+          .reverse // reverse to make caller on the head
+          .map(_.getClassName)
+          .map(_.replaceAll("\\$", "")) // Replace $ for Scala object class
+
+        // Skip known libraries and user's application package
+        val knownLibraries = Seq("java.", "scala.", "net.snowflake.spark.snowflake.") ++
+          Seq(classNames.head.split("\\.").dropRight(1).mkString("", ".", "."))
+
+        val result = classNames
+          .filterNot(name => knownLibraries.exists(name.startsWith)) // Remove known libraries
+          .map(_.split("\\.").dropRight(1).mkString(".")) // Remove class name to get package names
+          .distinct
+
+        // Cache the spark libraries result
+        if (result.exists(_.startsWith("org.apache.spark.sql"))) {
+          cachedSparkLibraries = result
+        }
+        result
+      } catch {
+        case th: Throwable =>
+          logger.warn(s"Fail to retrieve spark libraries. reason: ${th.getMessage}")
+          Seq.empty
+      }
+    } else {
+      cachedSparkLibraries
+    }
+  }
+
   // Enable OOB (out-of-band) telemetry message service
   TelemetryService.enable()
 
@@ -329,6 +364,8 @@ object SnowflakeTelemetry {
       if (!sparkMetric.isEmpty) {
         metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
       }
+      val sparkLibrariesArray = metric.putArray(TelemetryFieldNames.LIBRARIES)
+      SnowflakeTelemetry.getSparkLibraries.foreach(sparkLibrariesArray.add)
 
       // Add task info if available
       addTaskInfo(metric)
@@ -488,6 +525,7 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_APPLICATION_ID = "spark_application_id"
   val IS_PYSPARK = "is_pyspark"
   val SPARK_LANGUAGE = "spark_language"
+  val LIBRARIES = "libraries"
 }
 
 private[snowflake] object TelemetryConstValues {
