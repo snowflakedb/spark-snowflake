@@ -70,13 +70,24 @@ object SnowflakeTelemetry {
           .map(_.getClassName)
           .map(_.replaceAll("\\$", "")) // Replace $ for Scala object class
 
+        val userApplicationPackage = if (classNames.head.contains(".")) {
+          classNames.head.split("\\.").dropRight(1).mkString("", ".", ".")
+        } else {
+          classNames.head
+        }
         // Skip known libraries and user's application package
-        val knownLibraries = Seq("java.", "scala.", "net.snowflake.spark.snowflake.") ++
-          Seq(classNames.head.split("\\.").dropRight(1).mkString("", ".", "."))
+        val knownLibraries =
+          Seq("java.", "scala.", "net.snowflake.spark.snowflake.", userApplicationPackage)
 
         val result = classNames
           .filterNot(name => knownLibraries.exists(name.startsWith)) // Remove known libraries
-          .map(_.split("\\.").dropRight(1).mkString(".")) // Remove class name to get package names
+          .map { name => // Get package names
+            if (name.contains(".")) {
+              name.split("\\.").dropRight(1).mkString(".")
+            } else {
+              name
+            }
+          }
           .distinct
 
         // Cache the spark libraries result
