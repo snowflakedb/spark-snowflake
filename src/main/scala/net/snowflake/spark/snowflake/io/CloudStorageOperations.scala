@@ -479,7 +479,8 @@ object CloudStorageOperations {
 }
 
 class FileUploadResult(val fileName: String,
-                       val fileSize: Long) extends Serializable {
+                       val fileSize: Long,
+                       val rowCount: Long) extends Serializable {
 }
 
 private[io] class SingleElementIterator(fileUploadResult: FileUploadResult)
@@ -759,7 +760,7 @@ sealed trait CloudStorage {
          | $processTimeInfo
          |""".stripMargin.filter(_ >= ' '))
 
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize))
+    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
   }
 
   protected def uploadRDD(data: RDD[String],

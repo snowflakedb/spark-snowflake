@@ -266,9 +266,30 @@ object SnowflakeTelemetry {
       )
       SnowflakeTelemetry.send(conn.getTelemetry)
     } catch {
-      case th: Throwable => {
+      case th: Throwable =>
         logger.warn(s"Fail to send spark_query_status. reason: ${th.getMessage}")
-      }
+    }
+  }
+
+  private[snowflake] def sendIngressMessage(conn: Connection,
+                                            queryId: String,
+                                            rowCount: Long,
+                                            bytes: Long): Unit = {
+    try {
+      val metric: ObjectNode = mapper.createObjectNode()
+      metric.put(TelemetryFieldNames.QUERY_ID, queryId)
+      metric.put(TelemetryFieldNames.INPUT_BYTES, bytes)
+      metric.put(TelemetryFieldNames.ROW_COUNT, rowCount)
+      SnowflakeTelemetry.addCommonFields(metric)
+
+      SnowflakeTelemetry.addLog(
+        (TelemetryTypes.SPARK_INGRESS, metric),
+        System.currentTimeMillis()
+      )
+      SnowflakeTelemetry.send(conn.getTelemetry)
+    } catch {
+      case th: Throwable =>
+        logger.warn(s"Fail to send spark_ingress. reason: ${th.getMessage}")
     }
   }
 
@@ -411,6 +432,7 @@ object TelemetryTypes extends Enumeration {
   val SPARK_STREAMING_START: Value = Value("spark_streaming_start")
   val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
   val SPARK_EGRESS: Value = Value("spark_egress")
+  val SPARK_INGRESS: Value = Value("spark_ingress")
   val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
   val SPARK_QUERY_STATUS: Value = Value("spark_query_status")
   val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
@@ -449,6 +471,8 @@ private[snowflake] object TelemetryFieldNames {
   val LOAD_RATE = "load_rate"
   val DATA_BATCH = "data_batch"
   val OUTPUT_BYTES = "output_bytes"
+  val ROW_COUNT = "row_count"
+  val INPUT_BYTES = "input_bytes"
   val OS_NAME = "os_name"
   val MAX_MEMORY_IN_MB = "max_memory_in_mb"
   val TOTAL_MEMORY_IN_MB = "total_memory_in_mb"

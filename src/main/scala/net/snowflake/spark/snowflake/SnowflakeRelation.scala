@@ -275,10 +275,10 @@ private[snowflake] case class SnowflakeRelation(
     Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
 
     val endTime = System.currentTimeMillis()
-    val dataSize = printStatForSnowflakeResultSetRDD(
+    val (rowCount, dataSize) = printStatForSnowflakeResultSetRDD(
       resultSetSerializables, endTime - startTime, queryID)
 
-    StageReader.sendEgressUsage(dataSize, conn)
+    StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
     SnowflakeTelemetry.send(conn.getTelemetry)
     conn.close()
 
@@ -297,7 +297,7 @@ private[snowflake] case class SnowflakeRelation(
     resultSetSerializables: Array[SnowflakeResultSetSerializable],
     queryTimeInMs: Long,
     queryID: String
-  ): Long = {
+  ): (Long, Long) = {
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
     var totalUnCompressedSize: Long = 0
@@ -328,7 +328,7 @@ private[snowflake] case class SnowflakeRelation(
          | unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
          |""".stripMargin.filter(_ >= ' ')
     )
-    totalCompressedSize
+    (totalRowCount, totalCompressedSize)
   }
 
   // Build a query out of required columns and filters. (Used by buildScan)
