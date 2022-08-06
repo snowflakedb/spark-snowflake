@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.telemetry.Telemetry
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
@@ -51,6 +51,15 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     SnowflakeTelemetry.addCommonFields(metric)
     assert(metric.size() == 1 &&
       metric.get(TelemetryFieldNames.SPARK_APPLICATION_ID).asText().startsWith("local-"))
+  }
+
+  test("unit test: SnowflakeTelemetry.getSparkLibraries") {
+    val metric: ObjectNode = mapper.createObjectNode()
+    val arrayNode = metric.putArray("spark_libraries")
+    val libraries = SnowflakeTelemetry.getSparkLibraries
+    assert(libraries.nonEmpty)
+    libraries.foreach(arrayNode.add)
+    assert(arrayNode.size() == libraries.size)
   }
 
   test("IT test: common fields are added") {
@@ -122,6 +131,43 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       // Reset to the real Telemetry message sender
       SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
     }
+  }
+
+  test("IT test: add spark libraries to SPARK_CLIENT_INFO") {
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new MockTelemetryMessageSender(messageBuffer))
+    try {
+      // A basis dataframe read
+      val df1 = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", "select current_timestamp()")
+        .load()
+      df1.collect()
+
+      val clientInfoMessages = messageBuffer
+        .filter(_.get("type").asText().equals("spark_client_info"))
+      assert(clientInfoMessages.nonEmpty)
+      clientInfoMessages.foreach { x =>
+        val sparkLibraries = x.get("data").get(TelemetryFieldNames.LIBRARIES)
+        assert(sparkLibraries.isArray && sparkLibraries.size() > 0)
+        assert(nodeContains(sparkLibraries, "org.scalatest"))
+        assert(nodeContains(sparkLibraries, "org.apache.spark.sql"))
+      }
+    } finally {
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
+    }
+  }
+
+  private def nodeContains(node: JsonNode, value: String): Boolean = {
+    val iterator = node.iterator()
+    while (iterator.hasNext) {
+      if (iterator.next().asText().equals(value)) return true
+    }
+    false
   }
 
   override def afterAll(): Unit = {
