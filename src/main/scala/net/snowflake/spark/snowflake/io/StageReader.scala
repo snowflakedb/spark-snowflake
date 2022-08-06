@@ -82,7 +82,6 @@ private[snowflake] object StageReader {
 
     // Verify it's the expected format
     val sch = res.getMetaData
-    val queryID = res.asInstanceOf[SnowflakeResultSet].getQueryID
     if (sch.getColumnCount >= 3) {
       // Format V1 for COPY INTO LOCATION. The result format is:
       // rows_unloaded    input_bytes    output_bytes
