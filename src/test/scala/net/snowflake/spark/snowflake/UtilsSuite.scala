@@ -126,6 +126,8 @@ class UtilsSuite extends FunSuite with Matchers {
     assert(Utils.getLastCopyUnload == null)
     assert(Utils.getLastPutCommand == null)
     assert(Utils.getLastGetCommand == null)
+    assert(Utils.getLastSelectQueryId == null)
+    assert(Utils.getLastCopyLoadQueryId == null)
   }
 
   test("Utils.getTableNameForExistenceCheck") {

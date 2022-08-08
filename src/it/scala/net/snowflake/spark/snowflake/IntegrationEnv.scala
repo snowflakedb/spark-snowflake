@@ -197,6 +197,17 @@ trait IntegrationEnv
     val _ = conn.createStatement.executeQuery(query)
   }
 
+  def getQueryTextFromHistory(queryId: String): String = {
+    val rs = Utils.runQuery(connectorOptionsNoTable,
+      s"select query_text from table(information_schema.QUERY_HISTORY_BY_USER()) " +
+        s"where QUERY_ID = '$queryId' limit 1")
+    if (rs.next()) {
+      rs.getString(1)
+    } else {
+      throw new Exception(s"Cannot find query text for this user: $queryId")
+    }
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 

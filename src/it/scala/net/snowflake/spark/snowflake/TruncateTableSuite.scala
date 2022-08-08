@@ -664,6 +664,40 @@ class TruncateTableSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("test Utils.getLastSelectQueryId & Utils.lastCopyLoadQueryId") {
+    jdbcUpdate(s"create or replace table $targetTable (c1 int)")
+
+    val readQuery = "select seq8() from table(generator(rowcount => 100))"
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", readQuery)
+      .load()
+
+    // Write empty DataFrame with Append mode
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
+
+    // Check Utils.getLastSelectQueryId
+    assert(Utils.getLastSelect.contains(readQuery))
+    if (params.useCopyUnload) {
+      assert(getQueryTextFromHistory(Utils.getLastSelectQueryId).replaceAll("\\s+", "")
+        .contains(Utils.getLastSelect.replaceAll("\\s+", "")))
+    } else {
+      assert(getQueryTextFromHistory(Utils.getLastSelectQueryId).replaceAll("\\s+", "")
+        == Utils.getLastSelect.replaceAll("\\s+", ""))
+    }
+
+    // Check Utils.getLastCopyLoadQueryId
+    assert(Utils.getLastCopyLoad.contains(targetTable))
+    assert(getQueryTextFromHistory(Utils.getLastCopyLoadQueryId).replaceAll("\\s+", "")
+      == Utils.getLastCopyLoad.replaceAll("\\s+", ""))
+  }
+
   def checkSchema1(tableName: String): Boolean = {
     val st = DefaultJDBCWrapper.resolveTable(conn, tableName, params)
     val st1 = new StructType(

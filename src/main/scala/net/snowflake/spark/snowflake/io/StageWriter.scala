@@ -578,6 +578,7 @@ private[io] object StageWriter {
 
       // Save the original COPY command even if additional COPY is run.
       Utils.setLastCopyLoad(copyStatement.toString)
+      Utils.setLastCopyLoadQueryId(lastStatement.getLastQueryID())
 
       // Get missed files if there are any.
       var missedFileSet = getCopyMissedFiles(params, resultSet, expectedFileSet)

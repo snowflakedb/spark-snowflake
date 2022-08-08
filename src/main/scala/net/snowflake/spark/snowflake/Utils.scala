@@ -285,7 +285,9 @@ object Utils {
   // Stores the last generated Select query
   private var lastCopyUnload: String = _
   private var lastCopyLoad: String = _
+  private var lastCopyLoadQueryId: String = _
   private var lastSelect: String = _
+  private var lastSelectQueryId: String = _
   private var lastPutCommand: String = _
   private var lastGetCommand: String = _
 
@@ -303,6 +305,12 @@ object Utils {
 
   def getLastSelect: String = lastSelect
 
+  private[snowflake] def setLastSelectQueryId(queryId: String): Unit =
+    lastSelectQueryId = queryId
+
+  /** Get the query ID for the last query. */
+  def getLastSelectQueryId: String = lastSelectQueryId
+
   private[snowflake] def setLastCopyLoad(select: String): Unit = {
     lastCopyLoad = select
   }
@@ -310,6 +318,12 @@ object Utils {
   def getLastCopyLoad: String = {
     lastCopyLoad
   }
+
+  private[snowflake] def setLastCopyLoadQueryId(queryId: String): Unit =
+    lastCopyLoadQueryId = queryId
+
+  /** Get the query ID for the last Copy Into Table command. */
+  def getLastCopyLoadQueryId: String = lastCopyLoadQueryId
 
   private[snowflake] def setLastPutCommand(set: String): Unit = {
     lastPutCommand = set
