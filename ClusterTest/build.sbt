@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.10.0"
+val sparkConnectorVersion = "2.10.1"
 val scalaVersionMajor = "2.12"
 val sparkVersionMajor = "3.2"
 val sparkVersion = s"${sparkVersionMajor}.0"
