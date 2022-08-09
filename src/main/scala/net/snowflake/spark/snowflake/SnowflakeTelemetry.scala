@@ -105,6 +105,28 @@ object SnowflakeTelemetry {
     }
   }
 
+  private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000
+
+  private[snowflake] def addSparkPlanStatistic(statistic: Set[String]): Unit = {
+    if (statistic.nonEmpty) {
+      this.synchronized {
+        if (logs.length >= MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT) {
+          return
+        }
+      }
+
+      val metric: ObjectNode = mapper.createObjectNode()
+      val arrayNode = metric.putArray(TelemetryFieldNames.STATISTIC_INFO)
+      statistic.foreach(arrayNode.add)
+      SnowflakeTelemetry.addCommonFields(metric)
+
+      SnowflakeTelemetry.addLog(
+        (TelemetryTypes.SPARK_PLAN_STATISTIC, metric),
+        System.currentTimeMillis()
+      )
+    }
+  }
+
   // Enable OOB (out-of-band) telemetry message service
   TelemetryService.enable()
 
@@ -484,6 +506,7 @@ object TelemetryTypes extends Enumeration {
   val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
   val SPARK_QUERY_STATUS: Value = Value("spark_query_status")
   val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
+  val SPARK_PLAN_STATISTIC: Value = Value("spark_plan_statistic")
 }
 
 // All telemetry message field names have to be defined here
@@ -537,6 +560,7 @@ private[snowflake] object TelemetryFieldNames {
   val IS_PYSPARK = "is_pyspark"
   val SPARK_LANGUAGE = "spark_language"
   val LIBRARIES = "libraries"
+  val STATISTIC_INFO = "statistic_info"
 }
 
 private[snowflake] object TelemetryConstValues {

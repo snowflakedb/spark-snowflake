@@ -4,26 +4,23 @@ import java.io.{PrintWriter, StringWriter}
 import java.util.NoSuchElementException
 
 import net.snowflake.spark.snowflake.{
+  SnowflakeFailMessage,
   SnowflakePushdownException,
   SnowflakePushdownUnsupportedException,
   SnowflakeRelation,
   SnowflakeSQLStatement,
-  SnowflakeTelemetry,
-  SnowflakeFailMessage
+  SnowflakeTelemetry
 }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Expression,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.snowflake.SnowflakeSparkUtils
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 /** This class takes a Spark LogicalPlan and attempts to generate
@@ -83,6 +80,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   private[snowflake] lazy val treeRoot: SnowflakeQuery = {
     try {
       log.debug("Begin query generation.")
+      analyzeSparkPlan(plan)
       generateQueries(plan).get
     } catch {
       // A telemetry message about push-down failure is sent if there are
@@ -129,6 +127,40 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         "QueryBuilder's tree accessed without generation."
       )
     }
+  }
+
+  def analyzeSparkPlan(plan: LogicalPlan): Unit = try {
+    plan match {
+      case _: ReturnAnswer =>
+        val statisticSet = mutable.HashSet[String]()
+        processLogicalPlan(plan, statisticSet)
+        SnowflakeTelemetry.addSparkPlanStatistic(statisticSet.toSet)
+      case _ =>
+    }
+  } catch {
+    case th: Throwable => log.warn("Fail to analyze the plan: " + th.getMessage)
+  }
+
+  private def processLogicalPlan(plan: LogicalPlan,
+                                 statisticSet: mutable.HashSet[String]): Unit = {
+    statisticSet.add(SnowflakeSparkUtils.getNameForLogicalPlanOrExpression(plan))
+    // process LogicalPlan nodes
+    plan match {
+      case SaveIntoDataSourceCommand(queryLogicalPlan, _, _, _) =>
+        // For SaveIntoDataSourceCommand, analyze the query plan.
+        // Note: it's children is empty
+        processLogicalPlan(queryLogicalPlan, statisticSet)
+      case _ =>
+        plan.children.foreach(processLogicalPlan(_, statisticSet))
+    }
+    // process Expression
+    plan.expressions.foreach(processExpression(_, statisticSet))
+  }
+
+  private def processExpression(expression: Expression,
+                                statisticSet: mutable.HashSet[String]): Unit = {
+    statisticSet.add(SnowflakeSparkUtils.getNameForLogicalPlanOrExpression(expression))
+    expression.children.foreach(processExpression(_, statisticSet))
   }
 
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
