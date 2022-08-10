@@ -408,13 +408,11 @@ object SnowflakeTelemetry {
     // Driver related
     "spark.driver.host",
     "spark.driver.extraJavaOptions",
-    "spark.driver.extraClassPath",
     "spark.driver.cores",
     // Executor related
     "spark.executor.cores",
     "spark.executor.instances",
     "spark.executor.extraJavaOptions",
-    "spark.executor.extraClassPath",
     "spark.executor.id",
     // Memory related
     "spark.driver.memory",
