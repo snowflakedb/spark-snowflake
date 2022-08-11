@@ -454,7 +454,12 @@ object SnowflakeTelemetry {
     "spark.sql.ansi.enabled",
     "spark.pyspark.driver.python",
     "spark.pyspark.python",
-    "spark.sql.session.timeZone"
+    "spark.sql.session.timeZone",
+    // If the users need to use Pandas DataFrame with Spark DataFrame,
+    // spark.sql.execution.arrow.pyspark.enabled needs to be set to "true"
+    "spark.sql.execution.arrow.enabled", // From spark 2.3, depreciated since spark 3.0
+    "spark.sql.execution.arrow.pyspark.enabled", // For PySpark, from spark 3.0
+    "spark.sql.execution.arrow.sparkr.enabled" // For R, from spark 3.0
   )
 
   // Configuration retrieving is optional for for diagnostic purpose,
