@@ -12,6 +12,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 
 object SnowflakeTelemetry {
@@ -89,6 +90,22 @@ object SnowflakeTelemetry {
     } catch {
       case th: Throwable =>
         logger.warn(s"Fail to retrieve spark libraries. reason: ${th.getMessage}")
+        Seq.empty
+    }
+  }
+
+  private[snowflake] def getSparkDependencies: Seq[String] = {
+    try {
+      val activeSparkSession = SparkSession.getActiveSession
+      if (activeSparkSession.nonEmpty) {
+        val sparkContext = activeSparkSession.get.sparkContext
+        (sparkContext.files ++ sparkContext.archives).distinct
+      } else {
+        Seq.empty
+      }
+    } catch {
+      case th: Throwable =>
+        logger.warn(s"Fail to retrieve spark dependencies. reason: ${th.getMessage}")
         Seq.empty
     }
   }
@@ -387,6 +404,8 @@ object SnowflakeTelemetry {
       }
       val sparkLibrariesArray = metric.putArray(TelemetryFieldNames.LIBRARIES)
       SnowflakeTelemetry.getSparkLibraries.foreach(sparkLibrariesArray.add)
+      val sparkDependenciesArray = metric.putArray(TelemetryFieldNames.DEPENDENCIES)
+      SnowflakeTelemetry.getSparkDependencies.foreach(sparkDependenciesArray.add)
 
       // Add task info if available
       addTaskInfo(metric)
@@ -547,6 +566,7 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_LANGUAGE = "spark_language"
   val LIBRARIES = "libraries"
   val STATISTIC_INFO = "statistic_info"
+  val DEPENDENCIES = "dependencies"
 }
 
 private[snowflake] object TelemetryConstValues {
