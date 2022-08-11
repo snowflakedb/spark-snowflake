@@ -59,49 +59,37 @@ object SnowflakeTelemetry {
     }
   }
 
-  private var cachedSparkLibraries: Seq[String] = Seq.empty
-
   private[snowflake] def getSparkLibraries: Seq[String] = {
-    if (cachedSparkLibraries.isEmpty) {
-      try {
-        val classNames = Thread.currentThread()
-          .getStackTrace
-          .reverse // reverse to make caller on the head
-          .map(_.getClassName)
-          .map(_.replaceAll("\\$", "")) // Replace $ for Scala object class
+    try {
+      val classNames = Thread.currentThread()
+        .getStackTrace
+        .reverse // reverse to make caller on the head
+        .map(_.getClassName)
+        .map(_.replaceAll("\\$", "")) // Replace $ for Scala object class
 
-        val userApplicationPackage = if (classNames.head.contains(".")) {
-          classNames.head.split("\\.").dropRight(1).mkString("", ".", ".")
-        } else {
-          classNames.head
-        }
-        // Skip known libraries and user's application package
-        val knownLibraries =
-          Seq("java.", "scala.", "net.snowflake.spark.snowflake.", userApplicationPackage)
-
-        val result = classNames
-          .filterNot(name => knownLibraries.exists(name.startsWith)) // Remove known libraries
-          .map { name => // Get package names
-            if (name.contains(".")) {
-              name.split("\\.").dropRight(1).mkString(".")
-            } else {
-              name
-            }
-          }
-          .distinct
-
-        // Cache the spark libraries result
-        if (result.exists(_.startsWith("org.apache.spark.sql"))) {
-          cachedSparkLibraries = result
-        }
-        result
-      } catch {
-        case th: Throwable =>
-          logger.warn(s"Fail to retrieve spark libraries. reason: ${th.getMessage}")
-          Seq.empty
+      val userApplicationPackage = if (classNames.head.contains(".")) {
+        classNames.head.split("\\.").dropRight(1).mkString("", ".", ".")
+      } else {
+        classNames.head
       }
-    } else {
-      cachedSparkLibraries
+      // Skip known libraries and user's application package
+      val knownLibraries = Seq("java.", "jdk.internal.", "scala.",
+        "net.snowflake.spark.snowflake.", "org.apache.spark.sql.", userApplicationPackage)
+
+      classNames
+        .filterNot(name => knownLibraries.exists(name.startsWith)) // Remove known libraries
+        .map { name => // Get package names
+          if (name.contains(".")) {
+            name.split("\\.").dropRight(1).mkString(".")
+          } else {
+            name
+          }
+        }
+        .distinct
+    } catch {
+      case th: Throwable =>
+        logger.warn(s"Fail to retrieve spark libraries. reason: ${th.getMessage}")
+        Seq.empty
     }
   }
 
@@ -420,13 +408,11 @@ object SnowflakeTelemetry {
     // Driver related
     "spark.driver.host",
     "spark.driver.extraJavaOptions",
-    "spark.driver.extraClassPath",
     "spark.driver.cores",
     // Executor related
     "spark.executor.cores",
     "spark.executor.instances",
     "spark.executor.extraJavaOptions",
-    "spark.executor.extraClassPath",
     "spark.executor.id",
     // Memory related
     "spark.driver.memory",

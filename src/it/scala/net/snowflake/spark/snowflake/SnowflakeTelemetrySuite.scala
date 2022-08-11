@@ -7,6 +7,8 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetry.Telemetry
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.SparkEnv
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.stat.ChiSquareTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SaveMode
 
@@ -165,9 +167,67 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         val sparkLibraries = x.get("data").get(TelemetryFieldNames.LIBRARIES)
         assert(sparkLibraries.isArray && sparkLibraries.size() > 0)
         assert(nodeContains(sparkLibraries, "org.scalatest"))
-        assert(nodeContains(sparkLibraries, "org.apache.spark.sql"))
       }
     } finally {
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
+    }
+  }
+
+  // Create this test case from a simple Spark ML example
+  // https://spark.apache.org/docs/latest/ml-statistics.html
+  test("IT test: add spark libraries to SPARK_CLIENT_INFO (Spark ML)") {
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new MockTelemetryMessageSender(messageBuffer))
+    try {
+      jdbcUpdate(s"create or replace table $test_table (c1 double, c2 double, c3 double)")
+      jdbcUpdate(
+        s"""insert into $test_table values
+           | (0.0, 0.5, 10.0),
+           | (0.0, 1.5, 20.0),
+           | (1.0, 1.5, 30.0),
+           | (0.0, 3.5, 30.0),
+           | (0.0, 3.5, 40.0),
+           | (1.0, 3.5, 40.0) """.stripMargin)
+      val dfTable = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table)
+        .load()
+
+      // Using with scala udf DataFrame
+      val toVector = (firstValue: Double, otherValues: Double) =>
+        Vectors.dense(firstValue, otherValues)
+      val toVectorUDF = udf(toVector)
+
+      val df = dfTable.select(col("c1").as("label"),
+        toVectorUDF(col("c2"), col("c3")).as("features"))
+
+      val chi = ChiSquareTest.test(df, "features", "label").head
+      // scalastyle:off println
+      println(s"pValues = ${chi.getAs[Vector](0)}")
+      println(s"degreesOfFreedom ${chi.getSeq[Int](1).mkString("[", ",", "]")}")
+      println(s"statistics ${chi.getAs[Vector](2)}")
+      // scalastyle:on println
+
+      val planStatisticMessages = messageBuffer
+        .filter(_.get("type").asText().equals("spark_client_info"))
+        .filter { x =>
+          val planStatistics = x.get("data").get(TelemetryFieldNames.LIBRARIES)
+          nodeContains(planStatistics, "org.apache.spark.ml.stat")
+        }
+      assert(planStatisticMessages.nonEmpty)
+    } finally {
+      // Some spark plans are cached in SnowflakeTelemetry.logs, but not sent yet.
+      // Perform a DataFrame read to clear them to avoid affecting next test case.
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table)
+        .load()
+        .count()
       // Reset to the real Telemetry message sender
       SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
     }
