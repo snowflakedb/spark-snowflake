@@ -94,21 +94,11 @@ object SnowflakeTelemetry {
     }
   }
 
-  private[snowflake] def getSparkDependencies: Seq[String] = {
-    try {
-      val activeSparkSession = SparkSession.getActiveSession
-      if (activeSparkSession.nonEmpty) {
-        val sparkContext = activeSparkSession.get.sparkContext
-        (sparkContext.files ++ sparkContext.archives).distinct
-      } else {
-        Seq.empty
-      }
-    } catch {
-      case th: Throwable =>
-        logger.warn(s"Fail to retrieve spark dependencies. reason: ${th.getMessage}")
-        Seq.empty
-    }
-  }
+  private[snowflake] def getSparkDependencies: Seq[String] =
+    SparkSession.getActiveSession
+      .map(_.sparkContext)
+      .map(context => (context.files ++ context.archives).distinct)
+      .getOrElse(Seq.empty)
 
   private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000
 
