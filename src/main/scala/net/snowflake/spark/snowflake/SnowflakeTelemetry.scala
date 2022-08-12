@@ -97,7 +97,10 @@ object SnowflakeTelemetry {
   private[snowflake] def getSparkDependencies: Seq[String] =
     SparkSession.getActiveSession
       .map(_.sparkContext)
-      .map(context => (context.files ++ context.archives).distinct)
+      // spark.archives is a new feature since spark 3.1
+      // so only collect addedFiles.
+      // .map(context => (context.files ++ context.archives).distinct)
+      .map(context => context.files.distinct)
       .getOrElse(Seq.empty)
 
   private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000

@@ -459,6 +459,9 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
   }
 
+  // "def unionByName(other: Dataset[T], allowMissingColumns: Boolean)"
+  // is a new function since spark 3.1, so disable this test case for spark 3.0
+  /*
   // Spark has optimized Union-By-Name as normal Union.
   // So SC doesn't need to handle union all separately.
   test("union by name with allowMissingCol") {
@@ -522,6 +525,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Seq(Row("v1", "v2", null), Row("v1", null, "v3"))
     )
   }
+  */
 
   test("test pushdown casewhen() function with other") {
     jdbcUpdate(s"create or replace table $test_table_case_when_1(gender string)")

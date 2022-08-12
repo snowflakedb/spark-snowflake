@@ -85,8 +85,10 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       sparkSession.stop()
 
       val pythonTestFile = System.getProperty("user.dir") + "/src/test/python/unittest.py"
-      val dummyArchiveFile = System.getProperty("user.dir") +
-        "/ClusterTest/src/main/python/ClusterTest.py#environment"
+      // spark.archives is a new feature since spark 3.1
+      // so only check sparkFiles.
+      // val dummyArchiveFile = System.getProperty("user.dir") +
+      //  "/ClusterTest/src/main/python/ClusterTest.py#environment"
 
       sparkSession = SparkSession.builder
         .master("local")
@@ -97,16 +99,16 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         // It may not be necessary for spark 2.X.
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
         .config("spark.files", pythonTestFile)
-        .config("spark.archives", dummyArchiveFile)
+        // .config("spark.archives", dummyArchiveFile)
         .getOrCreate()
 
       // unit test
       val metric: ObjectNode = mapper.createObjectNode()
       val arrayNode = metric.putArray("dependencies")
       val dependencies = SnowflakeTelemetry.getSparkDependencies
-      assert(dependencies.length == 2)
+      assert(dependencies.length == 1)
       assert(dependencies.contains(pythonTestFile))
-      assert(dependencies.contains(dummyArchiveFile))
+      // assert(dependencies.contains(dummyArchiveFile))
 
       // Integration test
       // A basis dataframe read
@@ -122,9 +124,9 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       assert(clientInfoMessages.nonEmpty)
       clientInfoMessages.foreach { x =>
         val sparkDependencies = x.get("data").get(TelemetryFieldNames.DEPENDENCIES)
-        assert(sparkDependencies.isArray && sparkDependencies.size() == 2)
+        assert(sparkDependencies.isArray && sparkDependencies.size() == 1)
         assert(nodeContains(sparkDependencies, pythonTestFile))
-        assert(nodeContains(sparkDependencies, dummyArchiveFile))
+        // assert(nodeContains(sparkDependencies, dummyArchiveFile))
       }
     } finally {
       // reset default SparkSession
