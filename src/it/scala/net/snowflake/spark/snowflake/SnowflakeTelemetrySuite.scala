@@ -10,7 +10,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.stat.ChiSquareTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 import scala.collection.mutable
 import scala.reflect.io.Directory
@@ -67,11 +67,72 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
   test("unit test: SnowflakeTelemetry.getSparkLibraries") {
     val metric: ObjectNode = mapper.createObjectNode()
-    val arrayNode = metric.putArray("spark_libraries")
+    val arrayNode = metric.putArray("libraries")
     val libraries = SnowflakeTelemetry.getSparkLibraries
     assert(libraries.nonEmpty)
     libraries.foreach(arrayNode.add)
     assert(arrayNode.size() == libraries.size)
+  }
+
+  test("SnowflakeTelemetry.getSparkDependencies") {
+    // by default, dependencies is empty
+    assert(SnowflakeTelemetry.getSparkDependencies.isEmpty)
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new MockTelemetryMessageSender(messageBuffer))
+    try {
+      sparkSession.stop()
+
+      val pythonTestFile = System.getProperty("user.dir") + "/src/test/python/unittest.py"
+      val dummyArchiveFile = System.getProperty("user.dir") +
+        "/ClusterTest/src/main/python/ClusterTest.py#environment"
+
+      sparkSession = SparkSession.builder
+        .master("local")
+        .appName("SnowflakeSourceSuite")
+        .config("spark.sql.shuffle.partitions", "6")
+        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+        // spark 3.0 to support legacy conversion for unix_timestamp().
+        // It may not be necessary for spark 2.X.
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+        .config("spark.files", pythonTestFile)
+        .config("spark.archives", dummyArchiveFile)
+        .getOrCreate()
+
+      // unit test
+      val metric: ObjectNode = mapper.createObjectNode()
+      val arrayNode = metric.putArray("dependencies")
+      val dependencies = SnowflakeTelemetry.getSparkDependencies
+      assert(dependencies.length == 2)
+      assert(dependencies.contains(pythonTestFile))
+      assert(dependencies.contains(dummyArchiveFile))
+
+      // Integration test
+      // A basis dataframe read
+      val df1 = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", "select current_timestamp()")
+        .load()
+      df1.collect()
+
+      val clientInfoMessages = messageBuffer
+        .filter(_.get("type").asText().equals("spark_client_info"))
+      assert(clientInfoMessages.nonEmpty)
+      clientInfoMessages.foreach { x =>
+        val sparkDependencies = x.get("data").get(TelemetryFieldNames.DEPENDENCIES)
+        assert(sparkDependencies.isArray && sparkDependencies.size() == 2)
+        assert(nodeContains(sparkDependencies, pythonTestFile))
+        assert(nodeContains(sparkDependencies, dummyArchiveFile))
+      }
+    } finally {
+      // reset default SparkSession
+      sparkSession.stop()
+      sparkSession = createDefaultSparkSession
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
+    }
   }
 
   test("IT test: common fields are added") {

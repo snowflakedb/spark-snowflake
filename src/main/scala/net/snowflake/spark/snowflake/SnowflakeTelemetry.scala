@@ -12,6 +12,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 
 object SnowflakeTelemetry {
@@ -92,6 +93,12 @@ object SnowflakeTelemetry {
         Seq.empty
     }
   }
+
+  private[snowflake] def getSparkDependencies: Seq[String] =
+    SparkSession.getActiveSession
+      .map(_.sparkContext)
+      .map(context => (context.files ++ context.archives).distinct)
+      .getOrElse(Seq.empty)
 
   private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000
 
@@ -387,6 +394,8 @@ object SnowflakeTelemetry {
       }
       val sparkLibrariesArray = metric.putArray(TelemetryFieldNames.LIBRARIES)
       SnowflakeTelemetry.getSparkLibraries.foreach(sparkLibrariesArray.add)
+      val sparkDependenciesArray = metric.putArray(TelemetryFieldNames.DEPENDENCIES)
+      SnowflakeTelemetry.getSparkDependencies.foreach(sparkDependenciesArray.add)
 
       // Add task info if available
       addTaskInfo(metric)
@@ -435,7 +444,12 @@ object SnowflakeTelemetry {
     "spark.sql.ansi.enabled",
     "spark.pyspark.driver.python",
     "spark.pyspark.python",
-    "spark.sql.session.timeZone"
+    "spark.sql.session.timeZone",
+    // If the users need to use Pandas DataFrame with Spark DataFrame,
+    // spark.sql.execution.arrow.pyspark.enabled needs to be set to "true"
+    "spark.sql.execution.arrow.enabled", // From spark 2.3, depreciated since spark 3.0
+    "spark.sql.execution.arrow.pyspark.enabled", // For PySpark, from spark 3.0
+    "spark.sql.execution.arrow.sparkr.enabled" // For R, from spark 3.0
   )
 
   // Configuration retrieving is optional for for diagnostic purpose,
@@ -547,6 +561,7 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_LANGUAGE = "spark_language"
   val LIBRARIES = "libraries"
   val STATISTIC_INFO = "statistic_info"
+  val DEPENDENCIES = "dependencies"
 }
 
 private[snowflake] object TelemetryConstValues {
