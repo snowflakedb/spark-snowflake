@@ -176,8 +176,7 @@ object SnowflakeTelemetry {
                        success: Boolean,
                        useProxy: Boolean,
                        queryID: Option[String],
-                       throwable: Option[Throwable]): Unit =
-  {
+                       throwable: Option[Throwable]): Unit = try {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
     metric.put(TelemetryOOBFields.SFURL, sfurl)
@@ -226,6 +225,9 @@ object SnowflakeTelemetry {
 
     // Send OOB telemetry message.
     oobTelemetryService.report(log)
+  } catch {
+    case th: Throwable =>
+      logger.warn(s"Fail to send OOB Telemetry message: ${th.getMessage}")
   }
 
   def send(telemetry: Telemetry): Unit = {

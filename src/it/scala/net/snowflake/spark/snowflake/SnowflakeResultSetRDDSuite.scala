@@ -419,7 +419,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
                   | int_c int, c_string string(1024) )""".stripMargin)
 
     jdbcUpdate(s"""insert into $test_table_large_result select
-                  | seq4(), '$largeStringValue'
+                  | row_number() over (order by seq4()) - 1, '$largeStringValue'
                   | from table(generator(rowcount => $LARGE_TABLE_ROW_COUNT))""".stripMargin)
 
     val tmpdf = sparkSession.read
