@@ -34,7 +34,7 @@ object SnowflakeConnectorUtils {
     * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
     * otherwise disable it.
     */
-  val SUPPORT_SPARK_VERSION = "3.2"
+  val SUPPORT_SPARK_VERSION = "3.3"
 
   def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
     if (session.version.startsWith(SUPPORT_SPARK_VERSION)) {

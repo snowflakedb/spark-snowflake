@@ -98,7 +98,9 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       Row("Emily", 5, 5, 5, 5, 0, -6)
     )
 
-    testPushdown(
+    // Spark 3.3 change the plan
+    val expectedQueries = Seq(
+      // Query for spark 3.2 and previous
       s"""SELECT ( "SUBQUERY_1"."NAME" ) AS "SUBQUERY_2_COL_0" ,
          |( CAST ( "SUBQUERY_1"."VALUE1" AS NUMBER ) ) AS "SUBQUERY_2_COL_1" ,
          |( CAST ( "SUBQUERY_1"."VALUE2" AS NUMBER ) ) AS "SUBQUERY_2_COL_2" ,
@@ -114,9 +116,27 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |AS "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."NAME" = 'Ray' ) OR
          |( "SUBQUERY_0"."NAME" = 'Emily' ) ) ) AS "SUBQUERY_1"
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      // Query for spark 3.3 and after
+      s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) AS "SUBQUERY_3_COL_1" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_2" ) AS "SUBQUERY_3_COL_2" ,
+         | ( BITAND ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_3" ,
+         | ( BITOR ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_4" ,
+         | ( BITXOR ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_5" ,
+         | ( BITNOT ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) ) AS "SUBQUERY_3_COL_6"
+         |FROM ( SELECT ( "SUBQUERY_1"."NAME" ) AS "SUBQUERY_2_COL_0" ,
+         | ( CAST ( "SUBQUERY_1"."VALUE1" AS NUMBER ) ) AS "SUBQUERY_2_COL_1" ,
+         |  ( CAST ( "SUBQUERY_1"."VALUE2" AS NUMBER ) ) AS "SUBQUERY_2_COL_2"
+         |FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_basic )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |  ( ( "SUBQUERY_0"."NAME" = 'Ray' ) OR ( "SUBQUERY_0"."NAME" = 'Emily' )
+         |   ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
+         |""".stripMargin,
     )
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
   }
 
   test("test pushdown boolean functions: NOT/Contains/EndsWith/StartsWith") {

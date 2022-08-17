@@ -952,11 +952,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_coalesce")
 
-    val result = sparkSession.sql(
-      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2)" +
-        " from test_table_coalesce")
-
-    result.show(truncate = false)
+    val result = sparkSession.sql("SELECT c1, c2, c3, COALESCE(c1, c2, c3)," +
+      " COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
 
     val expectedResult = Seq(
       Row(1, 2, 3, 1, 1, -6),
@@ -968,7 +965,11 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(1, 2, null, 1, 1, -6)
     )
 
-    testPushdown(
+    // Spark 3.3 optimize the plan
+    // from:  ( COALESCE ( -6 , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_5"
+    // to:    ( -6 ) AS "SUBQUERY_1_COL_5"
+    val expectedQueries = Seq(
+      // Query for spark 3.2 and previous
       s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
          |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
@@ -980,9 +981,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
-      result,
-      expectedResult
+      // Query for spark 3.3 and after
+      s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
+         |( COALESCE( "SUBQUERY_0"."C1" ,
+         |            "SUBQUERY_0"."C2" ,
+         |            "SUBQUERY_0"."C3" ) ) AS "SUBQUERY_1_COL_3" ,
+         | ( COALESCE ( "SUBQUERY_0"."C1" , 6 ) ) AS "SUBQUERY_1_COL_4" ,
+         | ( -6 ) AS "SUBQUERY_1_COL_5"
+         | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin,
     )
+    testPushdownMultiplefQueries(expectedQueries, result, expectedResult)
   }
 
   test("pushdown EqualNullSafe: operator <=>") {
