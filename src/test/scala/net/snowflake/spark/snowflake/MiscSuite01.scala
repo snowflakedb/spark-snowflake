@@ -222,9 +222,9 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(sparkConfNode.get("spark.driver.memory").asText().equals("2G"))
     assert(sparkConfNode.get("spark.executor.memory").asText().equals("888M"))
     assert(sparkConfNode.get("spark.driver.extraJavaOptions")
-      .asText().equals("-Duser.timezone=GMT"))
+      .asText().contains("-Duser.timezone=GMT"))
     assert(sparkConfNode.get("spark.executor.extraJavaOptions")
-      .asText().equals("-Duser.timezone=UTC"))
+      .asText().contains("-Duser.timezone=UTC"))
     assert(sparkConfNode.get("spark.sql.session.timeZone").asText().equals("America/Los_Angeles"))
   }
 

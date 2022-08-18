@@ -2,6 +2,7 @@ package org.apache.spark.sql.snowflake
 
 import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters}
 import org.apache.spark.sql.SparkSession
+import org.apache.logging.log4j.Level
 
 import scala.language.implicitConversions
 import scala.util.Random
@@ -33,7 +34,11 @@ trait SFTestSessionBase extends IntegrationEnv {
   override def beforeAll(): Unit = {
     super.beforeAll()
     // Run ported test in WARN level to avoid large log volume
-    reconfigureLogFile(PORTED_TEST_LOG4J_PROPERTY)
+    if (USE_LOG4J2_PROPERTIES) {
+      reconfigureLog4j2LogLevel(Level.WARN)
+    } else {
+      reconfigureLogFile(PORTED_TEST_LOG4J_PROPERTY)
+    }
     // connectorOptionsTestTempSchema should have the temp schema replacing
     // sfSchema
     tempSchema = s"testTempSchema_${Math.abs(Random.nextLong()).toString}"
@@ -50,7 +55,11 @@ trait SFTestSessionBase extends IntegrationEnv {
   override def afterAll(): Unit = {
     try {
       // Reset test log level to default.
-      reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
+      if (USE_LOG4J2_PROPERTIES) {
+        reconfigureLog4j2LogLevel(Level.INFO)
+      } else {
+        reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
+      }
       if (_spark != null) {
         try {
           _spark.sessionState.catalog.reset()
