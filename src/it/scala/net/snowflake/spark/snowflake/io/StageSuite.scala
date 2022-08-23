@@ -378,7 +378,8 @@ class StageSuite extends IntegrationSuiteBase {
         pref = "test_dir",
         connection = connection,
         useRegionUrl = None,
-        regionName = None
+        regionName = None,
+        stageEndPoint = None
       )
 
       assertThrows[Exception]({
@@ -497,7 +498,8 @@ class StageSuite extends IntegrationSuiteBase {
         pref = "test_dir",
         connection = connection,
         useRegionUrl = None,
-        regionName = None
+        regionName = None,
+        stageEndPoint = None
       )
 
       val storageInfo: Map[String, String] = Map()
