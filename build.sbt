@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.3.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.10.1"
+val sparkConnectorVersion = "2.11.0"
 
 lazy val ItTest = config("it") extend Test
 
@@ -51,13 +51,13 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.14",
+      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
+      "net.snowflake" % "snowflake-jdbc" % "3.13.22",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
       // For test to read/write from postgresql
-      "org.postgresql" % "postgresql" % "42.3.6" % Test,
+      "org.postgresql" % "postgresql" % "42.4.1" % Test,
       // Below is for Spark Streaming from Kafka test only
       // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
