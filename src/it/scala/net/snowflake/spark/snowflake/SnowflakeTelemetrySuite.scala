@@ -74,6 +74,14 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     assert(arrayNode.size() == libraries.size)
   }
 
+  test("unit test: SnowflakeTelemetry.addSparkClusterStatistics") {
+    val metric: ObjectNode = mapper.createObjectNode()
+    SnowflakeTelemetry.addSparkClusterStatistics(metric)
+    assert(metric.get("cluster_executor_count").asInt() == 1)
+    assert(metric.get("cluster_node_count").asInt() == 1)
+    assert(metric.get("deploy_mode").asText().equals("client"))
+  }
+
   test("SnowflakeTelemetry.getSparkDependencies") {
     // by default, dependencies is empty
     assert(SnowflakeTelemetry.getSparkDependencies.isEmpty)
@@ -158,6 +166,10 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         if (typeName.equals("spark_client_info")) {
           // Spark language is added for spark_client_info
           assert(data.get(TelemetryFieldNames.SPARK_LANGUAGE).asText().equals("Scala"))
+          // Spark cluster node/executor count and deployMode are added
+          assert(data.get("cluster_executor_count").asInt() == 1)
+          assert(data.get("cluster_node_count").asInt() == 1)
+          assert(data.get("deploy_mode").asText().equals("client"))
         }
       }
     } finally {
