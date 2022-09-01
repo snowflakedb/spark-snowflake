@@ -100,6 +100,21 @@ object SnowflakeTelemetry {
       .map(context => (context.files ++ context.archives).distinct)
       .getOrElse(Seq.empty)
 
+  private[snowflake] def addSparkClusterStatistics(metric: ObjectNode) = try {
+    metric.put(TelemetryFieldNames.CLUSTER_NODE_COUNT,
+      SparkEnv.get.blockManager.master.getStorageStatus.length)
+
+    SparkSession.getActiveSession
+      .map(_.sparkContext)
+      .map { sc =>
+        metric.put(TelemetryFieldNames.SPARK_DEFAULT_PARALLELISM, sc.defaultParallelism)
+        metric.put(TelemetryFieldNames.DEPLOY_MODE, sc.deployMode)
+      }
+  } catch {
+    case th: Throwable =>
+      logger.warn(s"Fail to get cluster statistic. reason: ${th.getMessage}")
+  }
+
   private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000
 
   private[snowflake] def addSparkPlanStatistic(statistic: Set[String]): Unit = {
@@ -398,6 +413,7 @@ object SnowflakeTelemetry {
       SnowflakeTelemetry.getSparkLibraries.foreach(sparkLibrariesArray.add)
       val sparkDependenciesArray = metric.putArray(TelemetryFieldNames.DEPENDENCIES)
       SnowflakeTelemetry.getSparkDependencies.foreach(sparkDependenciesArray.add)
+      SnowflakeTelemetry.addSparkClusterStatistics(metric)
 
       // Add task info if available
       addTaskInfo(metric)
@@ -564,6 +580,9 @@ private[snowflake] object TelemetryFieldNames {
   val LIBRARIES = "libraries"
   val STATISTIC_INFO = "statistic_info"
   val DEPENDENCIES = "dependencies"
+  val SPARK_DEFAULT_PARALLELISM = "spark_default_parallelism"
+  val CLUSTER_NODE_COUNT = "cluster_node_count"
+  val DEPLOY_MODE = "deploy_mode"
 }
 
 private[snowflake] object TelemetryConstValues {
