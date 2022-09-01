@@ -43,7 +43,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     organization := "net.snowflake",
     version := s"${sparkConnectorVersion}-spark_3.3",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    // Spark 3.2 supports scala 2.12 and 2.13
+    // Spark 3.2/3.3 supports scala 2.12 and 2.13
     crossScalaVersions := Seq("2.12.11", "2.13.7"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
