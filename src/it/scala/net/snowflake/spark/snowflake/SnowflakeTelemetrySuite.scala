@@ -77,7 +77,7 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
   test("unit test: SnowflakeTelemetry.addSparkClusterStatistics") {
     val metric: ObjectNode = mapper.createObjectNode()
     SnowflakeTelemetry.addSparkClusterStatistics(metric)
-    assert(metric.get("cluster_executor_count").asInt() == 1)
+    assert(metric.get("spark_default_parallelism").asInt() == 1)
     assert(metric.get("cluster_node_count").asInt() == 1)
     assert(metric.get("deploy_mode").asText().equals("client"))
   }
@@ -167,7 +167,7 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
           // Spark language is added for spark_client_info
           assert(data.get(TelemetryFieldNames.SPARK_LANGUAGE).asText().equals("Scala"))
           // Spark cluster node/executor count and deployMode are added
-          assert(data.get("cluster_executor_count").asInt() == 1)
+          assert(data.get("spark_default_parallelism").asInt() == 1)
           assert(data.get("cluster_node_count").asInt() == 1)
           assert(data.get("deploy_mode").asText().equals("client"))
         }

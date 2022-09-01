@@ -107,7 +107,7 @@ object SnowflakeTelemetry {
     SparkSession.getActiveSession
       .map(_.sparkContext)
       .map { sc =>
-        metric.put(TelemetryFieldNames.CLUSTER_EXECUTOR_COUNT, sc.defaultParallelism)
+        metric.put(TelemetryFieldNames.SPARK_DEFAULT_PARALLELISM, sc.defaultParallelism)
         metric.put(TelemetryFieldNames.DEPLOY_MODE, sc.deployMode)
       }
   } catch {
@@ -580,7 +580,7 @@ private[snowflake] object TelemetryFieldNames {
   val LIBRARIES = "libraries"
   val STATISTIC_INFO = "statistic_info"
   val DEPENDENCIES = "dependencies"
-  val CLUSTER_EXECUTOR_COUNT = "cluster_executor_count"
+  val SPARK_DEFAULT_PARALLELISM = "spark_default_parallelism"
   val CLUSTER_NODE_COUNT = "cluster_node_count"
   val DEPLOY_MODE = "deploy_mode"
 }
