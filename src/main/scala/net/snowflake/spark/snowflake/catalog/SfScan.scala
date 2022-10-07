@@ -8,13 +8,16 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 
 case class SfScan(
-                   relation: SnowflakeRelation,
-                   prunedSchema: StructType,
-                   pushedFilters: Array[Filter]) extends V1Scan {
+    relation: SnowflakeRelation,
+    prunedSchema: StructType,
+    pushedFilters: Array[Filter]
+) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
-  override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
+  override def toV1TableScan[T <: BaseRelation with TableScan](
+      context: SQLContext
+  ): T = {
     new BaseRelation with TableScan {
       override def sqlContext: SQLContext = context
       override def schema: StructType = prunedSchema
@@ -27,7 +30,7 @@ case class SfScan(
   }
 
   override def description(): String = {
-    super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
+    super.description() + ", prunedSchema: " + seqToString(prunedSchema) +
       ", PushedFilters: " + seqToString(pushedFilters)
   }
 

@@ -6,8 +6,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.InsertableRelation
 
-case class SfWriterBuilder(jdbcWrapper: JDBCWrapper, params: MergedParameters) extends WriteBuilder
-  with SupportsTruncate {
+case class SfWriterBuilder(jdbcWrapper: JDBCWrapper, params: MergedParameters)
+    extends WriteBuilder
+    with SupportsTruncate {
   private var isTruncate = false
 
   override def truncate(): WriteBuilder = {
@@ -16,14 +17,16 @@ case class SfWriterBuilder(jdbcWrapper: JDBCWrapper, params: MergedParameters) e
   }
 
   override def build(): V1Write = new V1Write {
-    override def toInsertableRelation: InsertableRelation = (data: DataFrame, _: Boolean) => {
-      val saveMode = if (isTruncate) {
-        SaveMode.Overwrite
-      } else {
-        SaveMode.Append
+    override def toInsertableRelation: InsertableRelation =
+      (data: DataFrame, _: Boolean) => {
+        val saveMode = if (isTruncate) {
+          SaveMode.Overwrite
+        } else {
+          SaveMode.Append
+        }
+        val writer =
+          new net.snowflake.spark.snowflake.SnowflakeWriter(jdbcWrapper)
+        writer.save(data.sqlContext, data, saveMode, params)
       }
-      val writer = new net.snowflake.spark.snowflake.SnowflakeWriter(jdbcWrapper)
-      writer.save(data.sqlContext, data, saveMode, params)
-    }
   }
 }
