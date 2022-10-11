@@ -2,12 +2,12 @@ name: Snyk Issue
 
 on:
   schedule:
-    - cron: '* */12 * * *'
+    - cron: '0 0 * * *'
 
 concurrency: snyk-issue
 
 jobs:
-  whitesource:
+  snyk:
     runs-on: ubuntu-latest
     steps:
     - name: checkout action
