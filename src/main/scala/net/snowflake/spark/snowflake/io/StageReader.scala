@@ -19,7 +19,6 @@ private[snowflake] object StageReader {
 
   private val mapper: ObjectMapper = new ObjectMapper()
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
-  private val OUTPUT_BYTES = TelemetryFieldNames.OUTPUT_BYTES
 
   def readFromStage(sqlContext: SQLContext,
                     params: MergedParameters,
@@ -78,6 +77,8 @@ private[snowflake] object StageReader {
         throw th
       }
     }
+    val queryID = res.asInstanceOf[SnowflakeResultSet].getQueryID
+    Utils.setLastSelectQueryId(queryID)
 
     // Verify it's the expected format
     val sch = res.getMetaData
@@ -92,11 +93,13 @@ private[snowflake] object StageReader {
         || "FILE_SIZE".equalsIgnoreCase(thirdColumnName))
         && "number".equalsIgnoreCase(thirdColumnType))
       {
+        var rowCount: Long = 0
         var dataSize: Long = 0
         while (res.next) {
+          rowCount += res.getLong(1)
           dataSize += res.getLong(3)
         }
-        sendEgressUsage(dataSize, conn)
+        sendEgressUsage(conn, queryID, rowCount, dataSize)
       } else {
         logger.warn(
           s"""The result format of COPY INTO LOCATION is not recognized.
@@ -169,15 +172,21 @@ private[snowflake] object StageReader {
 
   }
 
-  private[snowflake] def sendEgressUsage(bytes: Long, conn: Connection): Unit = {
+  private[snowflake] def sendEgressUsage(conn: Connection,
+                                         queryId: String,
+                                         rowCount: Long,
+                                         bytes: Long): Unit = {
     val metric: ObjectNode = mapper.createObjectNode()
-    metric.put(OUTPUT_BYTES, bytes)
+    metric.put(TelemetryFieldNames.OUTPUT_BYTES, bytes)
+    metric.put(TelemetryFieldNames.ROW_COUNT, rowCount)
+    metric.put(TelemetryFieldNames.QUERY_ID, queryId)
+    SnowflakeTelemetry.addCommonFields(metric)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_EGRESS, metric),
       System.currentTimeMillis()
     )
     SnowflakeTelemetry.send(conn.getTelemetry)
-    logger.debug(s"Data Egress Usage: $bytes bytes".stripMargin)
+    logger.debug(s"Data Egress Usage: $bytes bytes, $rowCount rows".stripMargin)
   }
 }

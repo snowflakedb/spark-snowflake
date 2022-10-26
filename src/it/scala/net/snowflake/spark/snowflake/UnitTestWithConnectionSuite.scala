@@ -69,7 +69,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
   }
 
   lazy private val javaSfOptionsNoTable: java.util.Map[String, String] = {
-    val javaMap  = new java.util.HashMap[String, String]()
+    val javaMap = new java.util.HashMap[String, String]()
     connectorOptionsNoTable.foreach(tup => {javaMap.put(tup._1, tup._2)})
     javaMap
   }

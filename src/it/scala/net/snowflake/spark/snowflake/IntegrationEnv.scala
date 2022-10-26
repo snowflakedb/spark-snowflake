@@ -25,6 +25,11 @@ import java.util.TimeZone
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.log4j.PropertyConfigurator
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.{Appender, LoggerContext}
+import org.apache.logging.log4j.core.appender.FileAppender
+import org.apache.logging.log4j.core.config.AbstractConfiguration
+import org.apache.logging.log4j.core.layout.PatternLayout
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
@@ -54,10 +59,55 @@ trait IntegrationEnv
 
   protected val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
 
+  // From spark 3.3, log4j2 is used. For spark 3.2 and older versions, log4j is used.
+  protected val USE_LOG4J2_PROPERTIES = true
+
+  // Reconfigure log4j logging for the test of spark 3.2 and older versions
   protected def reconfigureLogFile(propertyFileName: String): Unit = {
     // Load the log properties for the security test to output more info
     val log4jfile = new File(propertyFileName)
     PropertyConfigurator.configure(log4jfile.getAbsolutePath)
+  }
+
+  // Reconfigure log4j2 log level for the test of spark 3.3 and newer versions
+  protected def reconfigureLog4j2LogLevel(logLevel: Level): Unit = {
+    import org.apache.logging.log4j.LogManager
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    val config = ctx.getConfiguration
+    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    log.warn(s"reconfigure log level as $logLevel")
+    loggerConfig.setLevel(logLevel)
+    ctx.updateLoggers()
+  }
+
+  // Add a log4j2 FileAppender for the test of spark 3.3 and newer versions
+  protected def addLog4j2FileAppender(filePath: String, appenderName: String): Unit = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    val config = ctx.getConfiguration
+    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+
+    val layout = PatternLayout.createDefaultLayout(config)
+
+    val appender: Appender = FileAppender.createAppender(
+      filePath, "false", "false", appenderName,
+      "true", "false", "false", "4000",
+      layout, null, "false", null, config)
+
+    appender.start()
+    config.addAppender(appender)
+    loggerConfig.addAppender(appender, null, null)
+    config.addLogger("org.apache.logging.log4j", loggerConfig)
+    ctx.updateLoggers()
+  }
+
+  // Drop a log4j2 FileAppender for the test of spark 3.3 and newer versions
+  protected def dropLog4j2FileAppender(appenderName: String): Unit = {
+    val ctx = LogManager.getContext(false).asInstanceOf[org.apache.logging.log4j.core.LoggerContext]
+    val config = ctx.getConfiguration.asInstanceOf[AbstractConfiguration]
+    val appender = config.getAppender(appenderName).asInstanceOf[FileAppender]
+    config.removeAppender(appenderName: String)
+    appender.stop()
+    ctx.updateLoggers()
   }
 
   // Some integration tests are for large Data, it needs long time to run.
@@ -112,13 +162,17 @@ trait IntegrationEnv
     val today = Timestamp.valueOf(LocalDateTime.now())
     val expireTs = Timestamp.valueOf(
       LocalDateTime.now().minusHours(hoursAgo))
+    // scalastyle:off println
     println(s"Start clean up on $today. Drop test stages created before $expireTs")
+    // scalastyle:on println
 
     while (rs.next()) {
       val createTs = rs.getTimestamp("created_on")
       val name = rs.getString("name")
       if (expireTs.compareTo(createTs) > 0) {
+        // scalastyle:off println
         println(s"On $today, drop stage $name created_on: $createTs")
+        // scalastyle:on println
         conn.createStatement().executeQuery(s"drop stage if exists $name")
       }
     }
@@ -193,6 +247,17 @@ trait IntegrationEnv
     val _ = conn.createStatement.executeQuery(query)
   }
 
+  def getQueryTextFromHistory(queryId: String): String = {
+    val rs = Utils.runQuery(connectorOptionsNoTable,
+      s"select query_text from table(information_schema.QUERY_HISTORY_BY_USER()) " +
+        s"where QUERY_ID = '$queryId' limit 1")
+    if (rs.next()) {
+      rs.getString(1)
+    } else {
+      throw new Exception(s"Cannot find query text for this user: $queryId")
+    }
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -225,16 +290,18 @@ trait IntegrationEnv
     jdbcUpdate("alter session set timezone='UTC'")
 
     // Use fewer partitions to make tests faster
-    sparkSession = SparkSession.builder
-      .master("local")
-      .appName("SnowflakeSourceSuite")
-      .config("spark.sql.shuffle.partitions", "6")
-      // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-      // spark 3.0 to support legacy conversion for unix_timestamp().
-      // It may not be necessary for spark 2.X.
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .getOrCreate()
+    sparkSession = createDefaultSparkSession
   }
+
+  protected def createDefaultSparkSession = SparkSession.builder
+    .master("local")
+    .appName("SnowflakeSourceSuite")
+    .config("spark.sql.shuffle.partitions", "6")
+    // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+    // spark 3.0 to support legacy conversion for unix_timestamp().
+    // It may not be necessary for spark 2.X.
+    .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+    .getOrCreate()
 
   override def afterAll(): Unit = {
     try {

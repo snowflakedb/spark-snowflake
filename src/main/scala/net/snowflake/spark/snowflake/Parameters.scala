@@ -166,6 +166,16 @@ object Parameters {
   val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY: String = knownParam(
     "internal_check_table_existence_in_current_schema_only"
   )
+  // Internal option to check table existence with fully qualified name when writing
+  // a DataFrame to a snowflake table. Its' true by default. For example,
+  // 1. For table1, the fully qualified name is {sfDatabase}.{sfSchema}.table1
+  // 2. For schema1.table1, the fully qualified name is {sfDatabase}.schema1.table1
+  // NOTE: For writing a DataFrame to a snowflake table, if this option is true,
+  // "internal_check_table_existence_in_current_schema_only" is not used any more.
+  // This option may be removed without any notice in any time.
+  val PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME: String = knownParam(
+    "internal_check_table_existence_with_fully_qualified_name"
+  )
   // Internal option to skip write operation when writing a DataFrame
   // without any partitions. By default, it it is 'false'.
   // This option may be removed without any notice in any time.
@@ -181,6 +191,14 @@ object Parameters {
   // This option may be removed without any notice in any time.
   val PARAM_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: String = knownParam(
     "internal_execute_query_in_sync_mode"
+  )
+
+  // Internal option to use parse_json($1) when writing a DataFrame with complex types:
+  // StructType, ArrayType, MapType. By default, it is 'false'.
+  // This option may be removed without any notice in any time.
+  // Introduced since Spark Connector 2.10.1
+  val PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE: String = knownParam(
+    "internal_use_parse_json_for_write"
   )
 
   // Internal option to use AWS region URL. By default, it is 'true'.
@@ -541,7 +559,7 @@ object Parameters {
       * URL pointing to the snowflake database including protocol.
       * for example, https://host:port
       */
-    def sfFullURL: String = s"${if (isSslON) "https://" else "http://"}$sfURL"
+    def sfFullURL: String = if (isSslON) s"""https://$sfURL""" else s"""http://$sfURL"""
 
     /**
       * Snowflake database name
@@ -661,13 +679,21 @@ object Parameters {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_QUOTE_JSON_FIELD_NAME, "true"))
     }
     def checkTableExistenceInCurrentSchemaOnly: Boolean = {
-      isTrue(parameters.getOrElse(PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
+      isTrue(parameters.getOrElse(
+        PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY, "true"))
+    }
+    def checkTableExistenceWithFullyQualifiedName: Boolean = {
+      isTrue(parameters.getOrElse(
+        PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true"))
     }
     def skipWriteWhenWritingEmptyDataFrame: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SKIP_WRITE_WHEN_WRITING_EMPTY_DATAFRAME, "false"))
     }
     def isExecuteQueryWithSyncMode: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE, "false"))
+    }
+    def useParseJsonForWrite: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE, "false"))
     }
     def getQueryIDUrl(queryID: String): String = {
       val patternWithPort = "(.*)(.snowflakecomputing.com)(:\\d*)(.*)".r
@@ -916,7 +942,7 @@ object Parameters {
 
     def columnMapping: String = {
       parameters(PARAM_COLUMN_MAPPING).toLowerCase match {
-        case "name"  => "name"
+        case "name" => "name"
         case "order" => "order"
         case value =>
           log.error(s"""
@@ -930,7 +956,7 @@ object Parameters {
 
     def columnMismatchBehavior: String = {
       parameters(PARAM_COLUMN_MISMATCH_BEHAVIOR).toLowerCase() match {
-        case "error"  => "error"
+        case "error" => "error"
         case "ignore" => "ignore"
         case value =>
           log.error(s"""

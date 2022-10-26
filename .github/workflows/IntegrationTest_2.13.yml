@@ -13,7 +13,7 @@ jobs:
     strategy:
      matrix:
        scala_version: [ '2.13.7' ]
-       spark_version: [ '3.2.0' ]
+       spark_version: [ '3.3.0' ]
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure' ]
        # run_query_in_async can be removed after async mode is stable

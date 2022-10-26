@@ -184,11 +184,13 @@ class MiscSuite01 extends FunSuite with Matchers {
   }
 
   test("test SnowflakeFailMessage") {
+    // scalastyle:off println
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_AGGREGATE_EXPRESSION)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_GENERATE_QUERY)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_SET_TO_EXPR)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT)
     println(SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION)
+    // scalastyle:on println
   }
 
   test("unit test for SnowflakeTelemetry.getClientConfig") {
@@ -206,7 +208,8 @@ class MiscSuite01 extends FunSuite with Matchers {
 
     val metric = SnowflakeTelemetry.getClientConfig()
     // Check one version
-    assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION).asText().equals(Utils.VERSION))
+    assert(metric.get(TelemetryClientInfoFields.SPARK_CONNECTOR_VERSION)
+      .asText().equals(Utils.VERSION))
     // check one JVM option
     assert(metric.get(TelemetryClientInfoFields.MAX_MEMORY_IN_MB).asLong() > 0)
     assert(metric.get(TelemetryClientInfoFields.SPARK_APPLICATION_ID).asText().equals(
@@ -218,8 +221,10 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(sparkConfNode.get("spark.app.name").asText().equals("test config info sent"))
     assert(sparkConfNode.get("spark.driver.memory").asText().equals("2G"))
     assert(sparkConfNode.get("spark.executor.memory").asText().equals("888M"))
-    assert(sparkConfNode.get("spark.driver.extraJavaOptions").asText().equals("-Duser.timezone=GMT"))
-    assert(sparkConfNode.get("spark.executor.extraJavaOptions").asText().equals("-Duser.timezone=UTC"))
+    assert(sparkConfNode.get("spark.driver.extraJavaOptions")
+      .asText().contains("-Duser.timezone=GMT"))
+    assert(sparkConfNode.get("spark.executor.extraJavaOptions")
+      .asText().contains("-Duser.timezone=UTC"))
     assert(sparkConfNode.get("spark.sql.session.timeZone").asText().equals("America/Los_Angeles"))
   }
 
@@ -231,11 +236,14 @@ class MiscSuite01 extends FunSuite with Matchers {
 
     // Test a SnowflakeSQLException Exception
     var metric: ObjectNode = mapper.createObjectNode()
-    SnowflakeTelemetry.addThrowable(metric, new SnowflakeSQLException(queryId, errorMessage, sqlState, errorCode))
+    SnowflakeTelemetry.addThrowable(metric,
+      new SnowflakeSQLException(queryId, errorMessage, sqlState, errorCode))
     assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
       .equals("class net.snowflake.client.jdbc.SnowflakeSQLException"))
-    var expectedMessage = s"SnowflakeSQLException: ErrorCode=$errorCode SQLState=$sqlState QueryId=$queryId"
-    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE).asText().equals(expectedMessage))
+    var expectedMessage = s"SnowflakeSQLException: ErrorCode=$errorCode" +
+      s" SQLState=$sqlState QueryId=$queryId"
+    assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE)
+      .asText().equals(expectedMessage))
     assert(metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(expectedMessage))
     assert(!metric.get(TelemetryQueryStatusFields.STACKTRACE).asText().contains(errorMessage))
 

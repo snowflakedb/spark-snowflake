@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.2"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.2.0")
+val sparkVersion = "3.3"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.3.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.2.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.10.0"
+val sparkConnectorVersion = "2.11.0"
 
 lazy val ItTest = config("it") extend Test
 
@@ -41,7 +41,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.2",
+    version := s"${sparkConnectorVersion}-spark_3.3",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.2 supports scala 2.12 and 2.13
     crossScalaVersions := Seq("2.12.11", "2.13.7"),
@@ -51,23 +51,29 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.14",
-      "com.google.guava" % "guava" % "14.0.1" % Test,
+      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
+      "net.snowflake" % "snowflake-jdbc" % "3.13.22",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
+      // For test to read/write from postgresql
+      "org.postgresql" % "postgresql" % "42.4.1" % Test,
       // Below is for Spark Streaming from Kafka test only
       // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
       "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test",
+      "org.apache.spark" %% "spark-mllib" % testSparkVersion % "test",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "tests",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "test-sources",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "test-sources",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "test-sources"
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion %
+        "provided, test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test"
+        classifier "test-sources",
+      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test"
+        classifier "test-sources",
+      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test"
+        classifier "test-sources"
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
     ),
 
@@ -114,10 +120,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
         </developers>,
 
     publishTo := Some(
-      if (isSnapshot.value)
+      if (isSnapshot.value) {
         Opts.resolver.sonatypeSnapshots
-      else
+      } else {
         Opts.resolver.sonatypeStaging
+      }
     )
 
   )

@@ -36,8 +36,10 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   private val test_table_union_2: String = s"test_union_2_$randomSuffix"
   private val test_table_case_when_1: String = s"test_case_when_1_$randomSuffix"
   private val test_table_case_when_2: String = s"test_case_when_2_$randomSuffix"
-  private val test_table_left_semi_join_left: String = s"test_table_left_semi_join_left_$randomSuffix"
-  private val test_table_left_semi_join_right: String = s"test_table_left_semi_join_right_$randomSuffix"
+  private val test_table_left_semi_join_left: String =
+    s"test_table_left_semi_join_left_$randomSuffix"
+  private val test_table_left_semi_join_right: String =
+    s"test_table_left_semi_join_right_$randomSuffix"
   private val test_table_shift_left: String = s"test_table_shift_left_$randomSuffix"
   private val test_table_shift_right: String = s"test_table_shift_right_$randomSuffix"
   private val test_table_in: String = s"test_table_in_$randomSuffix"
@@ -110,7 +112,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test pushdown length() function") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('', 'abc', null)")
 
     val tmpDF = sparkSession.read
@@ -138,7 +141,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test/reproduce SNOW-304320: call DataFrame.dropDuplicates(c1)") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
 
     val tmpDF = sparkSession.read
@@ -162,7 +166,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
   }
 
   test("test SNOW-304320") {
-    jdbcUpdate(s"create or replace table $test_table_length(c1 char(10), c2 varchar(10), c3 string)")
+    jdbcUpdate(s"create or replace table $test_table_length" +
+      s"(c1 char(10), c2 varchar(10), c3 string)")
     jdbcUpdate(s"insert into $test_table_length values ('a', 'b1', 'c1'), ('a', 'b2', 'c2')")
 
     val tmpDF = sparkSession.read
@@ -300,8 +305,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_decimal")
 
-    val result = sparkSession.sql(
-      "SELECT sum(cast(c1 AS DECIMAL(5, 0))), sum(cast(c2 AS DECIMAL(5, 0))) FROM test_table_decimal")
+    val result = sparkSession.sql("SELECT sum(cast(c1 AS DECIMAL(5, 0)))," +
+      " sum(cast(c2 AS DECIMAL(5, 0))) FROM test_table_decimal")
     val expectedResult = Seq(Row(123, null))
 
     testPushdown(
@@ -367,6 +372,155 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     val resultUnionAll = df1.unionAll(df2)
     testPushdownMultiplefQueries(expectedQueries, resultUnionAll, expectedResult)
+  }
+
+  // Spark has optimized Union-By-Name as normal Union.
+  // So SC doesn't need to handle union all separately.
+  test("union by name") {
+    jdbcUpdate(s"create or replace table $test_table_union_1 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('v1', 'v2')")
+    jdbcUpdate(s"create or replace table $test_table_union_2 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('v1', 'v2')")
+
+    val dfLeftC1C2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c2 from $test_table_union_1")
+      .load()
+    dfLeftC1C2.createOrReplaceTempView("left_view_c1_c2")
+    val leftDfView = sparkSession.table("left_view_c1_c2")
+
+    val dfRightC2C1 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c2, c1 from $test_table_union_2")
+      .load()
+    dfRightC2C1.createOrReplaceTempView("right_view_c2_c1")
+    val rightDfView = sparkSession.table("right_view_c2_c1")
+
+    // case 1: left and right children have the same columns but different order.
+    testPushdown(
+      s""" ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |   AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) ) AS
+         |    "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.unionByName(dfRightC2C1),
+      Seq(Row("v1", "v2"), Row("v1", "v2"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |   AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |  ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) ) AS
+         |    "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.unionByName(rightDfView),
+      Seq(Row("v1", "v2"), Row("v1", "v2"))
+    )
+
+    // case 2: left and right children have generated column names
+    testPushdown(
+      s""" ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |          ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |  UNION ALL
+         |   ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |            ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |     FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) )
+         |          AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.select(length(dfLeftC1C2("c1")), concat(col("c1"), col("c2")))
+        .unionByName(dfRightC2C1.select(concat(col("c1"), col("c2")), length(dfRightC2C1("c1")))),
+      Seq(Row(2, "v1v2"), Row(2, "v1v2"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |          ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |  UNION ALL
+         |   ( SELECT ( LENGTH ( "SUBQUERY_0"."C1" ) ) AS "SUBQUERY_1_COL_0" ,
+         |            ( CONCAT ( "SUBQUERY_0"."C1" , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_1"
+         |     FROM ( SELECT * FROM ( ( select c2, c1 from $test_table_union_2 ) )
+         |          AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.select(length(leftDfView("c1")), concat(col("c1"), col("c2")))
+        .unionByName(rightDfView.select(concat(col("c1"), col("c2")), length(rightDfView("c1")))),
+      Seq(Row(2, "v1v2"), Row(2, "v1v2"))
+    )
+  }
+
+  // Spark has optimized Union-By-Name as normal Union.
+  // So SC doesn't need to handle union all separately.
+  test("union by name with allowMissingCol") {
+    jdbcUpdate(s"create or replace table $test_table_union_1 (c1 String, c2 String)")
+    jdbcUpdate(s"insert into $test_table_union_1 values ('v1', 'v2')")
+    jdbcUpdate(s"create or replace table $test_table_union_2 (c1 String, c3 String)")
+    jdbcUpdate(s"insert into $test_table_union_2 values ('v1', 'v3')")
+
+    val dfLeftC1C2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c2 from $test_table_union_1")
+      .load()
+    dfLeftC1C2.createOrReplaceTempView("left_view_c1_c2")
+    val leftDfView = sparkSession.table("left_view_c1_c2")
+
+    val dfRightC1C3 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", s"select c1, c3 from $test_table_union_2")
+      .load()
+    dfRightC1C3.createOrReplaceTempView("right_view_c2_c1")
+    val rightDfView = sparkSession.table("right_view_c2_c1")
+
+    assertThrows[Exception] {
+      dfLeftC1C2.unionByName(dfRightC1C3).collect()
+    }
+
+    // left and right children have different columns.
+    testPushdown(
+      s""" ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |           ( NULL ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |        AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |          ( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c3 from $test_table_union_2 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      dfLeftC1C2.unionByName(dfRightC1C3, true),
+      Seq(Row("v1", "v2", null), Row("v1", null, "v3"))
+    )
+    // test pushdown with view names
+    testPushdown(
+      s""" ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |           ( NULL ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c2 from $test_table_union_1 ) )
+         |        AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         | UNION ALL
+         | ( SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |          ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |          ( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2"
+         |   FROM ( SELECT * FROM ( ( select c1, c3 from $test_table_union_2 ) )
+         |         AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" )
+         |""".stripMargin,
+      leftDfView.unionByName(rightDfView, true),
+      Seq(Row("v1", "v2", null), Row("v1", null, "v3"))
+    )
   }
 
   test("test pushdown casewhen() function with other") {
@@ -439,10 +593,12 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
   test("test pushdown left semi join and left anti join function") {
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_left(id int, gender string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_left values (1, null), (2, 'M'), (2, 'F'), (4, 'MMM')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_left values" +
+      s" (1, null), (2, 'M'), (2, 'F'), (4, 'MMM')")
 
     jdbcUpdate(s"create or replace table $test_table_left_semi_join_right(id int, name string)")
-    jdbcUpdate(s"insert into $test_table_left_semi_join_right values (1, 'test'), (2, 'allen'), (3, 'apple'), (3, 'join')")
+    jdbcUpdate(s"insert into $test_table_left_semi_join_right values" +
+      s" (1, 'test'), (2, 'allen'), (3, 'apple'), (3, 'join')")
 
     val tmpDFLeft = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -537,7 +693,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftleft( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+      s"""select( bitshiftleft( cast("subquery_0"."value" as number), 1))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_left) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       result,
@@ -571,7 +728,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftright( cast("subquery_0"."value" as number), 1)) as "subquery_1_col_0" from (
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 1))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       result,
@@ -592,7 +750,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     )
 
     testPushdown(
-      s"""select( bitshiftright( cast("subquery_0"."value" as number), 2)) as "subquery_1_col_0" from (
+      s"""select( bitshiftright( cast("subquery_0"."value" as number), 2))
+         | as "subquery_1_col_0" from (
          |  select * from ($test_table_shift_right) as "sf_connector_query_alias"
          |  ) as "subquery_0" """.stripMargin,
       resultShift2,
@@ -735,7 +894,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     val expectedQueries = Seq(
       // Query for spark 3.1 and 3.0
-      s"""select * from (select * from ($test_table_in_set) as "sf_connector_query_alias") as "subquery_0"
+      s"""select * from (select * from ($test_table_in_set) as
+         | "sf_connector_query_alias") as "subquery_0"
          |where( "subquery_0"."value" in
          |  (12.0,14.14,3.0,4.0,13.0,1.1,7.0,5.0,11.0,8.0,-5.1,2.0,6.0,9.0,10.0) and cast
          |  ("subquery_0"."cur_time"as varchar) in
@@ -792,10 +952,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
 
     tmpDF.createOrReplaceTempView("test_table_coalesce")
 
-    val result = sparkSession.sql(
-      "SELECT c1, c2, c3, COALESCE(c1, c2, c3), COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
-
-    result.show(truncate=false)
+    val result = sparkSession.sql("SELECT c1, c2, c3, COALESCE(c1, c2, c3)," +
+      " COALESCE(c1, 6), COALESCE(-6, c2) from test_table_coalesce")
 
     val expectedResult = Seq(
       Row(1, 2, 3, 1, 1, -6),
@@ -807,7 +965,11 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
       Row(1, 2, null, 1, 1, -6)
     )
 
-    testPushdown(
+    // Spark 3.3 optimize the plan
+    // from:  ( COALESCE ( -6 , "SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1_COL_5"
+    // to:    ( -6 ) AS "SUBQUERY_1_COL_5"
+    val expectedQueries = Seq(
+      // Query for spark 3.2 and previous
       s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
          |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
          |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
@@ -819,9 +981,20 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
          | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
          | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin,
-      result,
-      expectedResult
+      // Query for spark 3.3 and after
+      s"""SELECT ( "SUBQUERY_0"."C1" ) AS "SUBQUERY_1_COL_0" ,
+         |( "SUBQUERY_0"."C2" ) AS "SUBQUERY_1_COL_1" ,
+         |( "SUBQUERY_0"."C3" ) AS "SUBQUERY_1_COL_2" ,
+         |( COALESCE( "SUBQUERY_0"."C1" ,
+         |            "SUBQUERY_0"."C2" ,
+         |            "SUBQUERY_0"."C3" ) ) AS "SUBQUERY_1_COL_3" ,
+         | ( COALESCE ( "SUBQUERY_0"."C1" , 6 ) ) AS "SUBQUERY_1_COL_4" ,
+         | ( -6 ) AS "SUBQUERY_1_COL_5"
+         | FROM ( SELECT * FROM ( $test_table_coalesce ) AS
+         | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin,
     )
+    testPushdownMultiplefQueries(expectedQueries, result, expectedResult)
   }
 
   test("pushdown EqualNullSafe: operator <=>") {
@@ -831,7 +1004,7 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("dbtable",test_table_equal_null)
+      .option("dbtable", test_table_equal_null)
       .load()
 
     tmpDF.createOrReplaceTempView("test_table_equal_null")
@@ -849,7 +1022,8 @@ class PushdownEnhancement01 extends IntegrationSuiteBase {
         .select(col("c1").as("alias_c1"), col("c2").as("alias_c2"))
         .filter(col("alias_c1").eqNullSafe(col("alias_c2")))
     testPushdown(
-      s"""SELECT ( "SUBQUERY_1"."C1" ) AS "SUBQUERY_2_COL_0" , ( "SUBQUERY_1"."C2" ) AS "SUBQUERY_2_COL_1"
+      s"""SELECT ( "SUBQUERY_1"."C1" ) AS "SUBQUERY_2_COL_0" ,
+         | ( "SUBQUERY_1"."C2" ) AS "SUBQUERY_2_COL_1"
          |FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_equal_null ) AS
          |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE EQUAL_NULL ( "SUBQUERY_0"."C1" ,
          |"SUBQUERY_0"."C2" ) ) AS "SUBQUERY_1"

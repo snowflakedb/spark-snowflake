@@ -1,13 +1,11 @@
 package net.snowflake.spark.snowflake
 
 import java.io.File
-import org.apache.log4j.PropertyConfigurator
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.SaveMode
 import org.slf4j.LoggerFactory
 import scala.io.Source
-import scala.util.matching.Regex
 
 class SecuritySuite extends IntegrationSuiteBase {
 
@@ -51,6 +49,9 @@ class SecuritySuite extends IntegrationSuiteBase {
     tmpdf.createOrReplaceTempView("test_table_large_result")
   }
 
+  private val fileAppenderName: String = s"spark_connector_log_file_appender_$randomSuffix"
+  private val loggingFilePath = "spark_connector.log"
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -68,32 +69,50 @@ class SecuritySuite extends IntegrationSuiteBase {
     FileUtils.deleteQuietly(new File(TEST_LOG_FILE_NAME))
   }
 
+  ignore("manual test for addLog4j2FileAppender()/dropLog4j2FileAppender()") {
+    logger.info("Before adding file appender")
+    addLog4j2FileAppender(loggingFilePath, fileAppenderName)
+    logger.info("After adding file appender")
+    dropLog4j2FileAppender(fileAppenderName)
+    logger.info("After dropping file appender")
+  }
+
   test("verify pre-signed URL are not logged for read & write") {
     logger.info("Reconfigure to log into file")
     // Reconfigure log file to output all logging entries.
-    reconfigureLogFile(TEST_LOG4J_PROPERTY)
+    if (USE_LOG4J2_PROPERTIES) {
+      addLog4j2FileAppender(loggingFilePath, fileAppenderName)
+    } else {
+      reconfigureLogFile(TEST_LOG4J_PROPERTY)
+    }
 
-    // Read from one snowflake table and write to another snowflake table
-    sparkSession
-      .sql("select * from test_table_large_result order by int_c")
-      .write
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_write)
-      .mode(SaveMode.Overwrite)
-      .save()
+    try {
+      // Read from one snowflake table and write to another snowflake table
+      sparkSession
+        .sql("select * from test_table_large_result order by int_c")
+        .write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
 
-    // Check pre-signed is used for the test
-    assert(searchInLogFile(".*Spark Connector.*"))
+      // Check pre-signed is used for the test
+      assert(searchInLogFile(".*Spark Connector.*"))
 
-    // Check pre-signed URL are NOT printed in the log
-    // by searching the pre-signed URL domain name.
-    assert(!searchInLogFile(".*https?://.*amazonaws.com.*"))
-    assert(!searchInLogFile(".*https?://.*core.windows.net.*"))
-    assert(!searchInLogFile(".*https?://.*googleapis.com.*"))
-
-    // Reconfigure back to the default log file.
-    reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
+      // Check pre-signed URL are NOT printed in the log
+      // by searching the pre-signed URL domain name.
+      assert(!searchInLogFile(".*https?://.*amazonaws.com.*"))
+      assert(!searchInLogFile(".*https?://.*core.windows.net.*"))
+      assert(!searchInLogFile(".*https?://.*googleapis.com.*"))
+    } finally {
+      // Reconfigure back to the default log file.
+      if (USE_LOG4J2_PROPERTIES) {
+        dropLog4j2FileAppender(fileAppenderName)
+      } else {
+        reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
+      }
+    }
 
     logger.info("Restore back to log into STDOUT")
   }

@@ -3,7 +3,6 @@ package net.snowflake.spark.snowflake
 import java.io.{PrintWriter, StringWriter}
 import java.sql.Connection
 import java.util.regex.Pattern
-
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -13,7 +12,8 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 
 object SnowflakeTelemetry {
 
@@ -33,6 +33,109 @@ object SnowflakeTelemetry {
   private[snowflake] val MB = 1024 * 1024
 
   private[snowflake] var output: ObjectNode = _
+
+  private var telemetryMessageSender: TelemetryMessageSender = new SnowflakeTelemetryMessageSender
+
+  private[snowflake] def setTelemetryMessageSenderForTest(sender: TelemetryMessageSender)
+  : TelemetryMessageSender = {
+    val oldSender = telemetryMessageSender
+    telemetryMessageSender = sender
+    oldSender
+  }
+
+  private var cachedSparkApplicationId: Option[String] = None
+
+  private def getSparkApplicationId: String = {
+    if (cachedSparkApplicationId.isEmpty) {
+      if (SparkEnv.get != null
+        && SparkEnv.get.conf != null
+        && SparkEnv.get.conf.contains("spark.app.id")) {
+        cachedSparkApplicationId = Some(SparkEnv.get.conf.get("spark.app.id"))
+        cachedSparkApplicationId.get
+      } else {
+        s"spark.app.id not set ${System.currentTimeMillis()}}"
+      }
+    } else {
+      cachedSparkApplicationId.get
+    }
+  }
+
+  private[snowflake] def getSparkLibraries: Seq[String] = {
+    try {
+      val classNames = Thread.currentThread()
+        .getStackTrace
+        .reverse // reverse to make caller on the head
+        .map(_.getClassName)
+        .map(_.replaceAll("\\$", "")) // Replace $ for Scala object class
+
+      val userApplicationPackage = if (classNames.head.contains(".")) {
+        classNames.head.split("\\.").dropRight(1).mkString("", ".", ".")
+      } else {
+        classNames.head
+      }
+      // Skip known libraries and user's application package
+      val knownLibraries = Seq("java.", "jdk.internal.", "scala.",
+        "net.snowflake.spark.snowflake.", "org.apache.spark.sql.", userApplicationPackage)
+
+      classNames
+        .filterNot(name => knownLibraries.exists(name.startsWith)) // Remove known libraries
+        .map { name => // Get package names
+          if (name.contains(".")) {
+            name.split("\\.").dropRight(1).mkString(".")
+          } else {
+            name
+          }
+        }
+        .distinct
+    } catch {
+      case th: Throwable =>
+        logger.warn(s"Fail to retrieve spark libraries. reason: ${th.getMessage}")
+        Seq.empty
+    }
+  }
+
+  private[snowflake] def getSparkDependencies: Seq[String] =
+    SparkSession.getActiveSession
+      .map(_.sparkContext)
+      .map(context => (context.files ++ context.archives).distinct)
+      .getOrElse(Seq.empty)
+
+  private[snowflake] def addSparkClusterStatistics(metric: ObjectNode) = try {
+    metric.put(TelemetryFieldNames.CLUSTER_NODE_COUNT,
+      SparkEnv.get.blockManager.master.getStorageStatus.length)
+
+    SparkSession.getActiveSession
+      .map(_.sparkContext)
+      .map { sc =>
+        metric.put(TelemetryFieldNames.SPARK_DEFAULT_PARALLELISM, sc.defaultParallelism)
+        metric.put(TelemetryFieldNames.DEPLOY_MODE, sc.deployMode)
+      }
+  } catch {
+    case th: Throwable =>
+      logger.warn(s"Fail to get cluster statistic. reason: ${th.getMessage}")
+  }
+
+  private val MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT = 1000
+
+  private[snowflake] def addSparkPlanStatistic(statistic: Set[String]): Unit = {
+    if (statistic.nonEmpty) {
+      this.synchronized {
+        if (logs.length >= MAX_CACHED_SPARK_PLAN_STATISTIC_COUNT) {
+          return
+        }
+      }
+
+      val metric: ObjectNode = mapper.createObjectNode()
+      val arrayNode = metric.putArray(TelemetryFieldNames.STATISTIC_INFO)
+      statistic.foreach(arrayNode.add)
+      SnowflakeTelemetry.addCommonFields(metric)
+
+      SnowflakeTelemetry.addLog(
+        (TelemetryTypes.SPARK_PLAN_STATISTIC, metric),
+        System.currentTimeMillis()
+      )
+    }
+  }
 
   // Enable OOB (out-of-band) telemetry message service
   TelemetryService.enable()
@@ -88,8 +191,7 @@ object SnowflakeTelemetry {
                        success: Boolean,
                        useProxy: Boolean,
                        queryID: Option[String],
-                       throwable: Option[Throwable]): Unit =
-  {
+                       throwable: Option[Throwable]): Unit = try {
     val metric: ObjectNode = mapper.createObjectNode()
     metric.put(TelemetryOOBFields.SPARK_CONNECTOR_VERSION, Utils.VERSION)
     metric.put(TelemetryOOBFields.SFURL, sfurl)
@@ -100,6 +202,7 @@ object SnowflakeTelemetry {
     metric.put(TelemetryOOBFields.SUCCESS, success)
     metric.put(TelemetryOOBFields.USE_PROXY, useProxy)
     metric.put(TelemetryOOBFields.QUERY_ID, queryID.getOrElse("NA"))
+    SnowflakeTelemetry.addCommonFields(metric)
     if (throwable.isDefined) {
       addThrowable(metric, throwable.get)
     } else {
@@ -137,6 +240,9 @@ object SnowflakeTelemetry {
 
     // Send OOB telemetry message.
     oobTelemetryService.report(log)
+  } catch {
+    case th: Throwable =>
+      logger.warn(s"Fail to send OOB Telemetry message: ${th.getMessage}")
   }
 
   def send(telemetry: Telemetry): Unit = {
@@ -145,16 +251,7 @@ object SnowflakeTelemetry {
       curLogs = logs
       logs = Nil
     }
-    curLogs.foreach {
-      case (log, timestamp) =>
-        logger.debug(s"""
-             |Send Telemetry
-             |timestamp:$timestamp
-             |log:${log.toString}"
-           """.stripMargin)
-        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
-    }
-    telemetry.sendBatchAsync()
+    telemetryMessageSender.send(telemetry, curLogs)
   }
 
   /**
@@ -183,6 +280,7 @@ object SnowflakeTelemetry {
     metric.put(TelemetryPushdownFailFields.UNSUPPORTED_OPERATION, exception.unsupportedOperation)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_MESSAGE, exception.getMessage)
     metric.put(TelemetryPushdownFailFields.EXCEPTION_DETAILS, exception.details)
+    SnowflakeTelemetry.addCommonFields(metric)
 
     SnowflakeTelemetry.addLog(
       (TelemetryTypes.SPARK_PUSHDOWN_FAIL, metric),
@@ -240,6 +338,7 @@ object SnowflakeTelemetry {
         addThrowable(metric, throwable.get)
       }
       metric.put(TelemetryQueryStatusFields.DETAILS, details)
+      SnowflakeTelemetry.addCommonFields(metric)
 
       SnowflakeTelemetry.addLog(
         (TelemetryTypes.SPARK_QUERY_STATUS, metric),
@@ -247,9 +346,30 @@ object SnowflakeTelemetry {
       )
       SnowflakeTelemetry.send(conn.getTelemetry)
     } catch {
-      case th: Throwable => {
+      case th: Throwable =>
         logger.warn(s"Fail to send spark_query_status. reason: ${th.getMessage}")
-      }
+    }
+  }
+
+  private[snowflake] def sendIngressMessage(conn: Connection,
+                                            queryId: String,
+                                            rowCount: Long,
+                                            bytes: Long): Unit = {
+    try {
+      val metric: ObjectNode = mapper.createObjectNode()
+      metric.put(TelemetryFieldNames.QUERY_ID, queryId)
+      metric.put(TelemetryFieldNames.INPUT_BYTES, bytes)
+      metric.put(TelemetryFieldNames.ROW_COUNT, rowCount)
+      SnowflakeTelemetry.addCommonFields(metric)
+
+      SnowflakeTelemetry.addLog(
+        (TelemetryTypes.SPARK_INGRESS, metric),
+        System.currentTimeMillis()
+      )
+      SnowflakeTelemetry.send(conn.getTelemetry)
+    } catch {
+      case th: Throwable =>
+        logger.warn(s"Fail to send spark_ingress. reason: ${th.getMessage}")
     }
   }
 
@@ -273,21 +393,27 @@ object SnowflakeTelemetry {
 
       // Add Spark configuration
       val sparkConf = SparkEnv.get.conf
-      metric.put(TelemetryClientInfoFields.SPARK_APPLICATION_ID,
-        sparkConf.get("spark.app.id", "spark.app.id not set"))
+      SnowflakeTelemetry.addCommonFields(metric)
+      metric.put(TelemetryFieldNames.SPARK_LANGUAGE, detectSparkLanguage(sparkConf))
       metric.put(TelemetryClientInfoFields.IS_PYSPARK,
         sparkConf.contains("spark.pyspark.python"))
       val sparkMetric: ObjectNode = mapper.createObjectNode()
-      sparkOptions.foreach(
-        optionName => {
-          if (sparkConf.contains(optionName)) {
-            sparkMetric.put(optionName, sparkConf.get(optionName))
+      sparkConf.getAll.foreach {
+        case (key, value) =>
+          if (sparkOptions.contains(key)) {
+            sparkMetric.put(key, value)
+          } else {
+            sparkMetric.put(key, "N/A")
           }
-        }
-      )
+      }
       if (!sparkMetric.isEmpty) {
         metric.set(TelemetryClientInfoFields.SPARK_CONFIG, sparkMetric)
       }
+      val sparkLibrariesArray = metric.putArray(TelemetryFieldNames.LIBRARIES)
+      SnowflakeTelemetry.getSparkLibraries.foreach(sparkLibrariesArray.add)
+      val sparkDependenciesArray = metric.putArray(TelemetryFieldNames.DEPENDENCIES)
+      SnowflakeTelemetry.getSparkDependencies.foreach(sparkDependenciesArray.add)
+      SnowflakeTelemetry.addSparkClusterStatistics(metric)
 
       // Add task info if available
       addTaskInfo(metric)
@@ -309,13 +435,11 @@ object SnowflakeTelemetry {
     // Driver related
     "spark.driver.host",
     "spark.driver.extraJavaOptions",
-    "spark.driver.extraClassPath",
     "spark.driver.cores",
     // Executor related
     "spark.executor.cores",
     "spark.executor.instances",
     "spark.executor.extraJavaOptions",
-    "spark.executor.extraClassPath",
     "spark.executor.id",
     // Memory related
     "spark.driver.memory",
@@ -338,7 +462,12 @@ object SnowflakeTelemetry {
     "spark.sql.ansi.enabled",
     "spark.pyspark.driver.python",
     "spark.pyspark.python",
-    "spark.sql.session.timeZone"
+    "spark.sql.session.timeZone",
+    // If the users need to use Pandas DataFrame with Spark DataFrame,
+    // spark.sql.execution.arrow.pyspark.enabled needs to be set to "true"
+    "spark.sql.execution.arrow.enabled", // From spark 2.3, depreciated since spark 3.0
+    "spark.sql.execution.arrow.pyspark.enabled", // For PySpark, from spark 3.0
+    "spark.sql.execution.arrow.sparkr.enabled" // For R, from spark 3.0
   )
 
   // Configuration retrieving is optional for for diagnostic purpose,
@@ -366,6 +495,22 @@ object SnowflakeTelemetry {
     }
     metric
   }
+
+  private[snowflake] def detectSparkLanguage(sparkConf: SparkConf): String = {
+    if (sparkConf.contains("spark.r.command")
+      || sparkConf.contains("spark.r.driver.command")
+      || sparkConf.contains("spark.r.shell.command")) {
+      "R"
+    } else if (sparkConf.contains("spark.pyspark.python")) {
+      "Python"
+    } else {
+      "Scala"
+    }
+  }
+
+  private[snowflake] def addCommonFields(metric: ObjectNode): ObjectNode = {
+    metric.put(TelemetryFieldNames.SPARK_APPLICATION_ID, getSparkApplicationId)
+  }
 }
 
 object TelemetryTypes extends Enumeration {
@@ -375,9 +520,11 @@ object TelemetryTypes extends Enumeration {
   val SPARK_STREAMING_START: Value = Value("spark_streaming_start")
   val SPARK_STREAMING_END: Value = Value("spark_streaming_end")
   val SPARK_EGRESS: Value = Value("spark_egress")
+  val SPARK_INGRESS: Value = Value("spark_ingress")
   val SPARK_CLIENT_INFO: Value = Value("spark_client_info")
   val SPARK_QUERY_STATUS: Value = Value("spark_query_status")
   val SPARK_PUSHDOWN_FAIL: Value = Value("spark_pushdown_fail")
+  val SPARK_PLAN_STATISTIC: Value = Value("spark_plan_statistic")
 }
 
 // All telemetry message field names have to be defined here
@@ -413,6 +560,8 @@ private[snowflake] object TelemetryFieldNames {
   val LOAD_RATE = "load_rate"
   val DATA_BATCH = "data_batch"
   val OUTPUT_BYTES = "output_bytes"
+  val ROW_COUNT = "row_count"
+  val INPUT_BYTES = "input_bytes"
   val OS_NAME = "os_name"
   val MAX_MEMORY_IN_MB = "max_memory_in_mb"
   val TOTAL_MEMORY_IN_MB = "total_memory_in_mb"
@@ -427,6 +576,13 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_CONFIG = "spark_config"
   val SPARK_APPLICATION_ID = "spark_application_id"
   val IS_PYSPARK = "is_pyspark"
+  val SPARK_LANGUAGE = "spark_language"
+  val LIBRARIES = "libraries"
+  val STATISTIC_INFO = "statistic_info"
+  val DEPENDENCIES = "dependencies"
+  val SPARK_DEFAULT_PARALLELISM = "spark_default_parallelism"
+  val CLUSTER_NODE_COUNT = "cluster_node_count"
+  val DEPLOY_MODE = "deploy_mode"
 }
 
 private[snowflake] object TelemetryConstValues {
@@ -549,4 +705,26 @@ object TelemetryOOBTags {
   val CTX_PORT = "ctx_port"
   val CTX_PROTOCAL = "ctx_protocol"
   val CTX_USER = "ctx_user"
+}
+
+private[snowflake] trait TelemetryMessageSender {
+  def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit
+}
+
+private final class SnowflakeTelemetryMessageSender extends TelemetryMessageSender {
+  private val logger = LoggerFactory.getLogger(getClass)
+
+  override def send(telemetry: Telemetry, logs: List[(ObjectNode, Long)]): Unit = {
+    logs.foreach {
+      case (log, timestamp) =>
+        logger.debug(
+          s"""
+             |Send Telemetry
+             |timestamp:$timestamp
+             |log:${log.toString}"
+           """.stripMargin)
+        telemetry.asInstanceOf[TelemetryClient].addLogToBatch(log, timestamp)
+    }
+    telemetry.sendBatchAsync()
+  }
 }

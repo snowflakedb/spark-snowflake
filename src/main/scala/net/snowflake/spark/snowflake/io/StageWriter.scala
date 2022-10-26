@@ -307,7 +307,15 @@ private[io] object StageWriter {
     val writeTableState = new WriteTableState(conn)
 
     try {
-      val tableExists = DefaultJDBCWrapper.tableExists(params, tableName)
+      val tableExists = if (params.checkTableExistenceWithFullyQualifiedName) {
+        val adjustedName = Utils.getTableNameForExistenceCheck(
+          params.sfDatabase, params.sfSchema, tableName)
+        log.info(s"writeToTableWithoutStagingTable: check table existence" +
+          s" with $adjustedName for $tableName")
+        conn.tableExists(adjustedName)
+      } else {
+        DefaultJDBCWrapper.tableExists(params, tableName)
+      }
       // Drop table only if necessary.
       if (saveMode == SaveMode.Overwrite && tableExists && !params.truncateTable)
       {
@@ -389,7 +397,15 @@ private[io] object StageWriter {
       }
 
     try {
-      val tableExists = DefaultJDBCWrapper.tableExists(params, table.toString)
+      val tableExists = if (params.checkTableExistenceWithFullyQualifiedName) {
+        val adjustedName = Utils.getTableNameForExistenceCheck(
+          params.sfDatabase, params.sfSchema, table.toString)
+        log.info(s"writeToTableWithStagingTable: check table existence" +
+          s" with $adjustedName for ${table.toString}")
+        conn.tableExists(adjustedName)
+      } else {
+        DefaultJDBCWrapper.tableExists(params, table.toString)
+      }
       // purge tables when overwriting
       if (saveMode == SaveMode.Overwrite && tableExists) {
         if (params.useStagingTable) {
@@ -488,16 +504,19 @@ private[io] object StageWriter {
 
     // If a file is empty, there is no file are upload.
     // So the expected files are non empty files.
+    var totalRowCount: Long = 0
     var totalSize: Long = 0
     val expectedFileSet = mutable.Set[String]()
     fileUploadResults.foreach(fileUploadResult =>
       if (fileUploadResult.fileSize > 0) {
         expectedFileSet += fileUploadResult.fileName
         totalSize += fileUploadResult.fileSize
+        totalRowCount += fileUploadResult.rowCount
       })
     logAndAppend(progress, s"Total file count is ${fileUploadResults.size}, " +
       s"non-empty files count is ${expectedFileSet.size}, " +
-      s"total file size is ${Utils.getSizeString(totalSize)}.")
+      s"total file size is ${Utils.getSizeString(totalSize)}, " +
+      s"total row count is ${Utils.getSizeString(totalRowCount)}.")
 
     // Indicate whether to use FILES clause in the copy command
     var useFilesClause = false
@@ -559,6 +578,7 @@ private[io] object StageWriter {
 
       // Save the original COPY command even if additional COPY is run.
       Utils.setLastCopyLoad(copyStatement.toString)
+      Utils.setLastCopyLoadQueryId(lastStatement.getLastQueryID())
 
       // Get missed files if there are any.
       var missedFileSet = getCopyMissedFiles(params, resultSet, expectedFileSet)
@@ -643,10 +663,15 @@ private[io] object StageWriter {
       logAndAppend(progress,
         s"Succeed to write in ${Utils.getTimeString(end - start)}" +
           s" at ${LocalDateTime.now()}")
+
+      // Send egress telemetry message
+      SnowflakeTelemetry.sendIngressMessage(conn, lastStatement.getLastQueryID(),
+        totalRowCount, totalSize)
     } catch {
       case th: Throwable => {
         val end = System.currentTimeMillis()
-        val message = s"Fail to write in ${Utils.getTimeString(end - start)} at ${LocalDateTime.now()}"
+        val message = s"Fail to write in ${Utils.getTimeString(end - start)} at" +
+          s" ${LocalDateTime.now()}"
         logger.error(message)
         progress.append(message)
         // send telemetry message
@@ -808,9 +833,10 @@ private[io] object StageWriter {
     ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.JSON =>
+          val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
             val names = schema.fields
-              .map(x => "parse_json($1):".concat(
+              .map(x => columnPrefix.concat(
                 if (params.quoteJsonFieldName) {
                   "\"" + x.name + "\""
                 } else {
@@ -822,7 +848,7 @@ private[io] object StageWriter {
           } else {
             ConstantString("from (select") +
               list.get
-                .map(x => "parse_json($1):".concat(
+                .map(x => columnPrefix.concat(
                   if (params.quoteJsonFieldName) {
                     "\"" + schema(x._1 - 1).name + "\""
                   } else {

@@ -419,7 +419,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
                   | int_c int, c_string string(1024) )""".stripMargin)
 
     jdbcUpdate(s"""insert into $test_table_large_result select
-                  | seq4(), '$largeStringValue'
+                  | row_number() over (order by seq4()) - 1, '$largeStringValue'
                   | from table(generator(rowcount => $LARGE_TABLE_ROW_COUNT))""".stripMargin)
 
     val tmpdf = sparkSession.read
@@ -638,7 +638,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val df1 = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("query", "select seq4() as INT_C, 'test123' as C_STRING from table(generator(rowcount => 5))")
+      .option("query", "select seq4() as INT_C, 'test123' as C_STRING from" +
+        " table(generator(rowcount => 5))")
       .load()
     df1.write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -1511,7 +1512,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val partitionCount = 1
     val rowCountPerPartition = 1024 * 50
     // It is enough to run this test on AWS for Arrow
-    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") &&
+      !params.useCopyUnload) {
       val thisSparkSession = SparkSession
         .builder()
         .appName("Spark SQL basic example")
@@ -1589,7 +1591,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val partitionCount = 1
     val rowCountPerPartition = 1024 * 300
     // It is enough to run this test on AWS for Arrow
-    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") && !params.useCopyUnload) {
+    if (Option(System.getenv("SNOWFLAKE_TEST_ACCOUNT")).getOrElse("aws").equals("aws") &&
+      !params.useCopyUnload) {
       val thisSparkSession = SparkSession
         .builder()
         .appName("Spark SQL basic example")
@@ -1734,7 +1737,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       // output perf result
       if (maxRunTime > 0) {
         def getPerfReport(results: Array[Long]): String = {
-          val buf = new StringBuilder(s"Average ${Utils.getTimeString(results.sum / results.size)}: ")
+          val buf = new StringBuilder(
+            s"Average ${Utils.getTimeString(results.sum / results.size)}: ")
           results.foreach(x => buf.append(Utils.getTimeString(x)).append(", "))
           buf.toString()
         }
@@ -1863,8 +1867,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
     )
     val expectedResult = if (params.useCopyUnload) {
-      // The returned format is different for USE_COPY_UNLOAD=true.
-      def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+      // The returned format is different for USE_COPY_UNLOAD = true
+      def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
       expectedResultArrow.map(r => Row(
         r.getString(0),
         replaceSpace(r.getString(1)),
@@ -1920,8 +1924,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
       )
       val expectedResult = if (params.useCopyUnload) {
-        // The returned format is different for USE_COPY_UNLOAD=true.
-        def replaceSpace(data: String) =data.replaceAll("\n", "").replaceAll(" ", "")
+        // The returned format is different for USE_COPY_UNLOAD = true
+        def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
         expectedResultArrow.map(r => Row(
           r.getString(0),
           replaceSpace(r.getString(1)),
@@ -2022,6 +2026,11 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val tmpDF = sparkSession
       .sql("select * from test_table_large_result where int_c < 10")
 
+    // To test check_table_existence_in_current_schema,
+    // internal_check_table_existence_with_fully_qualified_name need to be false
+    thisConnectorOptionsNoTable +=
+      (Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME -> "false")
+
     try {
       // create one same name table in schema:public
       jdbcUpdate(s"create table public.$test_table_write(c1 int)")
@@ -2071,7 +2080,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           .save()
       })
 
-      // Without staging table with check_table_existence_in_current_schema = "true", table doesn't exist
+      // Without staging table with check_table_existence_in_current_schema = "true",
+      // table doesn't exist
       tmpDF.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
@@ -2095,6 +2105,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     } finally {
       jdbcUpdate(s"drop table if exists $test_table_write")
       jdbcUpdate(s"drop table if exists public.$test_table_write")
+      thisConnectorOptionsNoTable -=
+        Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME
     }
   }
 
@@ -2181,6 +2193,149 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     } finally {
       jdbcUpdate(s"drop table if exists $test_table_write")
       jdbcUpdate(s"drop table if exists public.$test_table_write")
+    }
+  }
+
+  // Copy from test("repro & test SNOW-262080") and modify it
+  test("test SNOW-521177") {
+    setupLargeResultTable
+    val tmpDF = sparkSession
+      .sql("select * from test_table_large_result where int_c < 10")
+
+    // To test internal_check_table_existence_with_fully_qualified_name,
+    // check_table_existence_in_current_schema need to be false
+    thisConnectorOptionsNoTable +=
+      (Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY -> "false")
+
+    try {
+      // create one same name table in schema:public
+      jdbcUpdate(s"create table public.$test_table_write(c1 int)")
+      // drop table in this schema
+      jdbcUpdate(s"drop table if exists $test_table_write")
+
+      // Staging table with check_table_existence_in_current_schema = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(
+            Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "false")
+          .option("dbtable", test_table_write)
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Staging table with check_table_existence_in_current_schema = "true", table doesn't exist
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Staging table with check_table_existence_in_current_schema = "true", table exists
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      // Without staging table with check_table_existence_in_current_schema = "false"
+      assertThrows[Exception]({
+        tmpDF.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option(
+            Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "false")
+          .option("dbtable", test_table_write)
+          .option("usestagingtable", "false")
+          .option("truncate_table", "true")
+          .mode(SaveMode.Overwrite)
+          .save()
+      })
+
+      // Without staging table with check_table_existence_in_current_schema = "true",
+      // table doesn't exist
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .option("usestagingtable", "false")
+        .option("truncate_table", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Without staging table with check_table_existence_in_current_schema = "true", table exists
+      tmpDF.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_WITH_FULLY_QUALIFIED_NAME, "true")
+        .option("dbtable", test_table_write)
+        .option("usestagingtable", "false")
+        .option("truncate_table", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+    } finally {
+      jdbcUpdate(s"drop table if exists $test_table_write")
+      jdbcUpdate(s"drop table if exists public.$test_table_write")
+      thisConnectorOptionsNoTable -=
+        Parameters.PARAM_INTERNAL_CHECK_TABLE_EXISTENCE_IN_CURRENT_SCHEMA_ONLY
+    }
+  }
+
+  test("test write table name with schema/database") {
+    val rowCount = 100
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select seq4() from table(generator(rowcount => $rowCount))")
+      .load()
+
+    val testTableNames = Seq(
+      s"${params.sfDatabase}.${params.sfSchema}.$test_table_write",
+      s"${params.sfSchema}.$test_table_write",
+      s"${params.sfDatabase}..$test_table_write")
+
+    testTableNames.foreach{ name =>
+      try {
+        // write with stage table
+        jdbcUpdate(s"drop table if exists $name")
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", name)
+          .mode(SaveMode.Overwrite)
+          .save()
+        assert(sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", name)
+          .load()
+          .count() == rowCount)
+
+        // write without stage table
+        df.write
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", name)
+          .option("usestagingtable", "false")
+          .option("truncate_table", "true")
+          .mode(SaveMode.Overwrite)
+          .save()
+        assert(sparkSession.read
+          .format(SNOWFLAKE_SOURCE_NAME)
+          .options(thisConnectorOptionsNoTable)
+          .option("dbtable", name)
+          .load()
+          .count() == rowCount)
+      } finally {
+        jdbcUpdate(s"drop table if exists $name")
+      }
     }
   }
 

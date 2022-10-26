@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.10.0"
+val sparkConnectorVersion = "2.11.0"
 val scalaVersionMajor = "2.12"
-val sparkVersionMajor = "3.2"
+val sparkVersionMajor = "3.3"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
-unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
+unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/" +
+  s"spark-snowflake_${scalaVersionMajor}-${sparkConnectorVersion}-spark_${sparkVersionMajor}.jar")
 
 lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
@@ -35,8 +36,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.14",
+      "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
+      "net.snowflake" % "snowflake-jdbc" % "3.13.22",
       // "net.snowflake" %% "spark-snowflake" % "2.8.0-spark_3.0",
       // "com.google.guava" % "guava" % "14.0.1" % Test,
       // "org.scalatest" %% "scalatest" % "3.0.5" % Test,

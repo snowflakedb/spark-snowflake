@@ -55,12 +55,12 @@ object Utils {
     */
   val SNOWFLAKE_SOURCE_SHORT_NAME = "snowflake"
 
-  val VERSION = "2.10.0"
+  val VERSION = "2.11.0"
 
   /**
     * The certified JDBC version to work with this spark connector version.
     */
-  val CERTIFIED_JDBC_VERSION = "3.13.14"
+  val CERTIFIED_JDBC_VERSION = "3.13.22"
 
   /**
     * Important:
@@ -285,7 +285,9 @@ object Utils {
   // Stores the last generated Select query
   private var lastCopyUnload: String = _
   private var lastCopyLoad: String = _
+  private var lastCopyLoadQueryId: String = _
   private var lastSelect: String = _
+  private var lastSelectQueryId: String = _
   private var lastPutCommand: String = _
   private var lastGetCommand: String = _
 
@@ -303,6 +305,12 @@ object Utils {
 
   def getLastSelect: String = lastSelect
 
+  private[snowflake] def setLastSelectQueryId(queryId: String): Unit =
+    lastSelectQueryId = queryId
+
+  /** Get the query ID for the last query. */
+  def getLastSelectQueryId: String = lastSelectQueryId
+
   private[snowflake] def setLastCopyLoad(select: String): Unit = {
     lastCopyLoad = select
   }
@@ -310,6 +318,12 @@ object Utils {
   def getLastCopyLoad: String = {
     lastCopyLoad
   }
+
+  private[snowflake] def setLastCopyLoadQueryId(queryId: String): Unit =
+    lastCopyLoadQueryId = queryId
+
+  /** Get the query ID for the last Copy Into Table command. */
+  def getLastCopyLoadQueryId: String = lastCopyLoadQueryId
 
   private[snowflake] def setLastPutCommand(set: String): Unit = {
     lastPutCommand = set
@@ -703,6 +717,7 @@ object Utils {
     * Print JDBC ResultSet for debugging purpose
     */
   private[snowflake] def printResultSet(rs: ResultSet): Unit = {
+    // scalastyle:off println
     try {
       val columnCount = rs.getMetaData.getColumnCount
       val sb = new StringBuilder
@@ -721,5 +736,33 @@ object Utils {
       case th: Throwable =>
         println(s"Fail to print result set: ${th.getMessage}")
     }
+    // scalastyle:off println
   }
+
+  // Adjust table name by adding database or schema name for table existence check.
+  private[snowflake] def getTableNameForExistenceCheck(database: String,
+                                                       schema: String,
+                                                       name: String): String = {
+    val unQuotedIdPattern = """([a-zA-Z_][\w$]*)"""
+    val quotedIdPattern = """("([^"]|"")+")"""
+    val idPattern = s"($unQuotedIdPattern|$quotedIdPattern)"
+
+    // scalastyle:off
+    // Only add the database/schema name for <id> and <id>.<id>
+    // If the name is fully qualified name or invalid name, don't need to adjust it.
+    // NOTE: <id>..<id> is equals to <id>.PUBLIC.<id> which is a fully qualified name.
+    // refer to https://docs.snowflake.com/en/sql-reference/name-resolution.html#resolution-when-schema-omitted-double-dot-notation
+    // scalastyle:off
+    if (name.matches(idPattern)) {
+      // Add database and schema name
+      s"${ensureQuoted(database)}.${ensureQuoted(schema)}.$name"
+    } else if (name.matches(s"$idPattern\\.$idPattern")) {
+      // Add database name
+      s"${ensureQuoted(database)}.$name"
+    } else {
+      // For all the other cases, don't adjust it
+      name
+    }
+  }
+
 }

@@ -224,7 +224,9 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
         testPushdownOff = false // The table is big, only test pushdown is on
       )
     } else {
+      // scalastyle:off println
       println("Skip test: LIMIT and SORT with large table")
+      // scalastyle:on println
     }
   }
 

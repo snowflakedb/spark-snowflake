@@ -64,8 +64,10 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
   }
 
   test("test pushdown basic: OR, BIT operation") {
-    jdbcUpdate(s"create or replace table $test_table_basic(name String, value1 Integer, value2 Integer)")
-    jdbcUpdate(s"insert into $test_table_basic values ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")
+    jdbcUpdate(s"create or replace table $test_table_basic" +
+      s"(name String, value1 Integer, value2 Integer)")
+    jdbcUpdate(s"insert into $test_table_basic values" +
+      s" ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -89,14 +91,16 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     resultDF.show(10, false)
 
     val expectedResult = Seq(
-      Row("Ray"  , 1, 9, 1,  9, 8, -2),
-      Row("Ray"  , 2, 8, 0, 10, 10, -3),
-      Row("Ray"  , 3, 7, 3,  7, 4, -4),
-      Row("Emily", 4, 6, 4,  6, 2, -5),
-      Row("Emily", 5, 5, 5,  5, 0, -6)
+      Row("Ray", 1, 9, 1, 9, 8, -2),
+      Row("Ray", 2, 8, 0, 10, 10, -3),
+      Row("Ray", 3, 7, 3, 7, 4, -4),
+      Row("Emily", 4, 6, 4, 6, 2, -5),
+      Row("Emily", 5, 5, 5, 5, 0, -6)
     )
 
-    testPushdown(
+    // Spark 3.3 change the plan
+    val expectedQueries = Seq(
+      // Query for spark 3.2 and previous
       s"""SELECT ( "SUBQUERY_1"."NAME" ) AS "SUBQUERY_2_COL_0" ,
          |( CAST ( "SUBQUERY_1"."VALUE1" AS NUMBER ) ) AS "SUBQUERY_2_COL_1" ,
          |( CAST ( "SUBQUERY_1"."VALUE2" AS NUMBER ) ) AS "SUBQUERY_2_COL_2" ,
@@ -112,14 +116,34 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |AS "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."NAME" = 'Ray' ) OR
          |( "SUBQUERY_0"."NAME" = 'Emily' ) ) ) AS "SUBQUERY_1"
          |""".stripMargin,
-      resultDF,
-      expectedResult
+      // Query for spark 3.3 and after
+      s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) AS "SUBQUERY_3_COL_1" ,
+         | ( "SUBQUERY_2"."SUBQUERY_2_COL_2" ) AS "SUBQUERY_3_COL_2" ,
+         | ( BITAND ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_3" ,
+         | ( BITOR ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_4" ,
+         | ( BITXOR ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ,
+         |   "SUBQUERY_2"."SUBQUERY_2_COL_2" ) ) AS "SUBQUERY_3_COL_5" ,
+         | ( BITNOT ( "SUBQUERY_2"."SUBQUERY_2_COL_1" ) ) AS "SUBQUERY_3_COL_6"
+         |FROM ( SELECT ( "SUBQUERY_1"."NAME" ) AS "SUBQUERY_2_COL_0" ,
+         | ( CAST ( "SUBQUERY_1"."VALUE1" AS NUMBER ) ) AS "SUBQUERY_2_COL_1" ,
+         |  ( CAST ( "SUBQUERY_1"."VALUE2" AS NUMBER ) ) AS "SUBQUERY_2_COL_2"
+         |FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_basic )
+         | AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |  ( ( "SUBQUERY_0"."NAME" = 'Ray' ) OR ( "SUBQUERY_0"."NAME" = 'Emily' )
+         |   ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
+         |""".stripMargin,
     )
+    testPushdownMultiplefQueries(expectedQueries, resultDF, expectedResult)
   }
 
   test("test pushdown boolean functions: NOT/Contains/EndsWith/StartsWith") {
-    jdbcUpdate(s"create or replace table $test_table_basic(name String, value1 Integer, value2 Integer)")
-    jdbcUpdate(s"insert into $test_table_basic values ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")
+    jdbcUpdate(s"create or replace table $test_table_basic" +
+      s"(name String, value1 Integer, value2 Integer)")
+    jdbcUpdate(s"insert into $test_table_basic values" +
+      s" ('Ray', 1, 9), ('Ray', 2, 8), ('Ray', 3, 7), ('Emily', 4, 6), ('Emily', 5, 5)")
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -236,8 +260,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val resultDF = tmpDF.select(
       col("d1"),
-      date_add(col("d1"),4).as("date_add"),
-      date_sub(col("d1"),4).as("date_sub")
+      date_add(col("d1"), 4).as("date_add"),
+      date_sub(col("d1"), 4).as("date_sub")
     )
 
     val expectedResult = Seq(
@@ -277,14 +301,14 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val resultDF = tmpDF.select(
       col("leap_02_29"),
-      date_add(col("leap_02_29"),1),  // Add +1
-      date_sub(col("leap_02_29"),-1), // Sub -1
-      date_add(col("leap_03_01"),-1), // Add -1
-      date_sub(col("leap_03_01"),1),  // Sub +1
-      date_add(col("non_leap_02_28"),1),  // Add +1
-      date_sub(col("non_leap_02_28"),-1), // Sub -1
-      date_add(col("non_leap_03_01"),-1), // Add -1
-      date_sub(col("non_leap_03_01"),1)   // Sub +1
+      date_add(col("leap_02_29"), 1), // Add +1
+      date_sub(col("leap_02_29"), -1), // Sub -1
+      date_add(col("leap_03_01"), -1), // Add -1
+      date_sub(col("leap_03_01"), 1), // Sub +1
+      date_add(col("non_leap_02_28"), 1), // Add +1
+      date_sub(col("non_leap_02_28"), -1), // Sub -1
+      date_add(col("non_leap_03_01"), -1), // Add -1
+      date_sub(col("non_leap_03_01"), 1) // Sub +1
     )
 
     val expectedResult = Seq(

@@ -366,10 +366,12 @@ class TruncateTableSuite extends IntegrationSuiteBase {
 
   // This test case is used to reproduce/test SNOW-222104
   // The reproducing conditions are:
-  // 1. Write data frame to a table with OVERWRITE and (usestagingtable=on truncate_table=off (they are default)).
+  // 1. Write data frame to a table with OVERWRITE and
+  //    (usestagingtable=on truncate_table=off (they are default)).
   // 2. table name includes database name and schema name.
   // 3. sfSchema is configured to a different schema
-  // 4. The user has privilege to create stage but doesn't have privilege to create table on sfSchema
+  // 4. The user has privilege to create stage but doesn't have privilege to
+  //    create table on sfSchema
   //
   // Below is how to create the env to reproduce it and test
   // 1. create a new role TESTROLE_SPARK_2 with ADMIN.
@@ -659,6 +661,50 @@ class TruncateTableSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Append)
         .save()
       assert(getRowCount(targetTable) == partitionCount * rowCountPerPartition * 2)
+    }
+  }
+
+  test("test Utils.getLastSelectQueryId & Utils.lastCopyLoadQueryId") {
+    jdbcUpdate(s"create or replace table $targetTable (c1 int)")
+
+    val readQuery = "select seq8() from table(generator(rowcount => 100))"
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", readQuery)
+      .load()
+
+    // Write empty DataFrame with Append mode
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", targetTable)
+      .mode(SaveMode.Append)
+      .save()
+
+    try {
+      // Check Utils.getLastSelectQueryId
+      assert(Utils.getLastSelect.contains(readQuery))
+      if (params.useCopyUnload) {
+        assert(getQueryTextFromHistory(Utils.getLastSelectQueryId).replaceAll("\\s+", "")
+          .contains(Utils.getLastSelect.replaceAll("\\s+", "")))
+      } else {
+        assert(getQueryTextFromHistory(Utils.getLastSelectQueryId).replaceAll("\\s+", "")
+          == Utils.getLastSelect.replaceAll("\\s+", ""))
+      }
+
+      // Check Utils.getLastCopyLoadQueryId
+      assert(Utils.getLastCopyLoad.contains(targetTable))
+      assert(getQueryTextFromHistory(Utils.getLastCopyLoadQueryId).replaceAll("\\s+", "")
+        == Utils.getLastCopyLoad.replaceAll("\\s+", ""))
+    } catch {
+      case e: Exception =>
+        // getQueryTextFromHistory() may raise Exception with
+        // "Cannot find query text for this user".
+        // But the query history searching is not stable. I saw one case is,
+        // the COPY INTO TABLE has been executed, but it is running status in query history.
+        // This query history search can't find it even retry after sleep some seconds.
+        assert(e.getMessage.contains("Cannot find query text for this user"))
     }
   }
 

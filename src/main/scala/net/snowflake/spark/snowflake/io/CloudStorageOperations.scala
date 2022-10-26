@@ -479,7 +479,8 @@ object CloudStorageOperations {
 }
 
 class FileUploadResult(val fileName: String,
-                       val fileSize: Long) extends Serializable {
+                       val fileSize: Long,
+                       val rowCount: Long) extends Serializable {
 }
 
 private[io] class SingleElementIterator(fileUploadResult: FileUploadResult)
@@ -558,11 +559,10 @@ sealed trait CloudStorage {
     uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
 
   private[io] def checkUploadMetadata(storageInfo: Option[Map[String, String]],
-                                      fileTransferMetadata:Option[SnowflakeFileTransferMetadata]): Unit =
-  {
+                                      fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
+                                     ): Unit = {
     if ((storageInfo.isEmpty && fileTransferMetadata.isEmpty)
-      || (storageInfo.isDefined && fileTransferMetadata.isDefined))
-    {
+      || (storageInfo.isDefined && fileTransferMetadata.isDefined)) {
       val errorMessage =
         s"""Hit internal error: Either storageInfo or fileTransferMetadata
            | must be set. storageInfo=${storageInfo.isDefined}
@@ -582,8 +582,8 @@ sealed trait CloudStorage {
   // instead of implementing retry in spark connector. Spark sleeps 3 seconds
   // by default before reschedule. To handle cloud storage service throttling
   // issue, it is necessary to use exponential sleep time
-  // (but spark doesn’t support it). So, we introduce extra exponential
-  // sleep time based on the task’s attempt number.
+  // (but spark doesn't support it). So, we introduce extra exponential
+  // sleep time based on the task's attempt number.
   protected def uploadPartition(rows: Iterator[String],
                                 format: SupportedFormat,
                                 compress: Boolean,
@@ -760,7 +760,7 @@ sealed trait CloudStorage {
          | $processTimeInfo
          |""".stripMargin.filter(_ >= ' '))
 
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize))
+    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
   }
 
   protected def uploadRDD(data: RDD[String],
@@ -1049,7 +1049,7 @@ case class InternalAzureStorage(param: MergedParameters,
         new CipherOutputStream(azureOutput, cipher)
       } catch {
         case th: Throwable =>
-          throw StorageUtils.logAzureThrowable(true, "internal", file,  blob, opContext, th)
+          throw StorageUtils.logAzureThrowable(true, "internal", file, blob, opContext, th)
       }
     }
 
@@ -1146,7 +1146,7 @@ case class InternalAzureStorage(param: MergedParameters,
       )
     } catch {
       case th: Throwable =>
-        throw StorageUtils.logAzureThrowable(false, "internal", fileName,  blob, opContext, th)
+        throw StorageUtils.logAzureThrowable(false, "internal", fileName, blob, opContext, th)
     }
 
     val inputStream: InputStream =
@@ -1204,7 +1204,8 @@ case class ExternalAzureStorage(containerName: String,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      StorageUtils.logAzureInfo(true, "external", file, opContext.getClientRequestID, blob.getContainer.getName)
+      StorageUtils.logAzureInfo(true, "external", file, opContext.getClientRequestID,
+        blob.getContainer.getName)
 
       if (compress) {
         new GZIPOutputStream(azureOutput)
@@ -1213,7 +1214,7 @@ case class ExternalAzureStorage(containerName: String,
       }
     } catch {
       case th: Throwable =>
-        throw StorageUtils.logAzureThrowable(true, "external", fileName,  blob, opContext, th)
+        throw StorageUtils.logAzureThrowable(true, "external", fileName, blob, opContext, th)
     }
   }
 
@@ -1265,10 +1266,11 @@ case class ExternalAzureStorage(containerName: String,
         null.asInstanceOf[AccessCondition],
         null.asInstanceOf[BlobRequestOptions],
         opContext)
-      StorageUtils.logAzureInfo(false, "external", fileName, opContext.getClientRequestID, blob.getContainer.getName)
+      StorageUtils.logAzureInfo(false, "external", fileName,
+        opContext.getClientRequestID, blob.getContainer.getName)
     } catch {
       case th: Throwable =>
-        throw StorageUtils.logAzureThrowable(false, "external", fileName,  blob, opContext, th)
+        throw StorageUtils.logAzureThrowable(false, "external", fileName, blob, opContext, th)
     }
 
     val inputStream: InputStream =
