@@ -9,9 +9,12 @@ import net.snowflake.spark.snowflake.Parameters.{
 }
 import net.snowflake.spark.snowflake.{DefaultJDBCWrapper, Parameters}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.{
+  NoSuchNamespaceException,
+  NoSuchTableException
+}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -89,7 +92,8 @@ class SfCatalog extends TableCatalog with Logging with SupportsNamespaces {
       SfTable(ident, jdbcWrapper, params)
     } catch {
       case _: SQLException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw new NoSuchTableException(ident)
+
     }
   }
 
@@ -133,7 +137,7 @@ class SfCatalog extends TableCatalog with Logging with SupportsNamespaces {
       case Array(_, _) if namespaceExists(namespace) =>
         Array()
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw new NoSuchNamespaceException(namespace)
     }
   }
 
@@ -143,13 +147,13 @@ class SfCatalog extends TableCatalog with Logging with SupportsNamespaces {
     namespace match {
       case Array(catalog, schema) =>
         if (!namespaceExists(namespace)) {
-          throw QueryCompilationErrors.noSuchNamespaceError(
+          throw new NoSuchNamespaceException(
             Array(catalog, schema)
           )
         }
         new java.util.HashMap[String, String]()
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw new NoSuchNamespaceException(namespace)
     }
   }
 
@@ -174,7 +178,10 @@ class SfCatalog extends TableCatalog with Logging with SupportsNamespaces {
 
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = {
+  override def dropNamespace(
+      namespace: Array[String],
+      cascade: Boolean
+  ): Boolean = {
     throw new UnsupportedOperationException(
       "SfCatalog does not support dropping namespace operation"
     )
@@ -183,7 +190,7 @@ class SfCatalog extends TableCatalog with Logging with SupportsNamespaces {
   private def checkNamespace(namespace: Array[String]): Unit = {
     // a database and schema comprise a namespace in Snowflake
     if (namespace.length != 2) {
-      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+      throw new NoSuchNamespaceException(namespace)
     }
   }
 
