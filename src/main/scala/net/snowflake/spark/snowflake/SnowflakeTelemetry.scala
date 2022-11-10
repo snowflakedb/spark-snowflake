@@ -253,7 +253,7 @@ object SnowflakeTelemetry {
     }
     telemetryMessageSender.send(telemetry, curLogs)
   } else {
-    logger.warn(s"Don't send Telemetry message because Telemetry is null")
+    logger.warn("Telemetry message not sent because Telemetry client is null")
   }
 
   /**
