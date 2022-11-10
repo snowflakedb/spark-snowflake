@@ -131,6 +131,7 @@ object Parameters {
 
   // Proxy related info
   val PARAM_USE_PROXY: String = knownParam("use_proxy")
+  val PARAM_PROXY_PROTOCOL: String = knownParam("proxy_protocol")
   val PARAM_PROXY_HOST: String = knownParam("proxy_host")
   val PARAM_PROXY_PORT: String = knownParam("proxy_port")
   val PARAM_PROXY_USER: String = knownParam("proxy_user")
@@ -454,6 +455,7 @@ object Parameters {
       if (this.useProxy) {
         Some(
           new ProxyInfo(
+            proxyProtocol,
             proxyHost,
             proxyPort,
             proxyUser,
@@ -627,6 +629,9 @@ object Parameters {
       */
     def useProxy: Boolean = {
       isTrue(parameters.getOrElse(PARAM_USE_PROXY, "false"))
+    }
+    def proxyProtocol: Option[String] = {
+      parameters.get(PARAM_PROXY_PROTOCOL)
     }
     def proxyHost: Option[String] = {
       parameters.get(PARAM_PROXY_HOST)
