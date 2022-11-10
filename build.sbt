@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.3.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.11.0"
+val sparkConnectorVersion = "2.11.1"
 
 lazy val ItTest = config("it") extend Test
 
@@ -44,7 +44,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     version := s"${sparkConnectorVersion}-spark_3.3",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.2 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.7"),
+    crossScalaVersions := Seq("2.12.11", "2.13.9"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -52,7 +52,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.22",
+      "net.snowflake" % "snowflake-jdbc" % "3.13.24",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
