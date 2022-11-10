@@ -208,6 +208,16 @@ object Parameters {
     "internal_use_aws_region_url"
   )
 
+  // Session level parameter S3_STAGE_VPCE_DNS_NAME
+  val PARAM_S3_STAGE_VPCE_DNS_NAME: String = knownParam("s3_stage_vpce_dns_name")
+
+  // Internal option to support AWS stage endPoint. This may be used for AWS S3 FIPS and VPCE.
+  // by default, it is 'true'. This option may be removed without any notice in any time.
+  // Introduced since Spark Connector 2.11.1
+  val PARAM_INTERNAL_SUPPORT_AWS_STAGE_END_POINT: String = knownParam(
+    "internal_support_aws_stage_end_point"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -671,6 +681,12 @@ object Parameters {
     }
     def useAWSRegionURL: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_USE_AWS_REGION_URL, "true"))
+    }
+    def getS3StageVpceDnsName: Option[String] = {
+      parameters.get(PARAM_S3_STAGE_VPCE_DNS_NAME)
+    }
+    def supportAWSStageEndPoint: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_SUPPORT_AWS_STAGE_END_POINT, "true"))
     }
     def stagingTableNameRemoveQuotesOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))

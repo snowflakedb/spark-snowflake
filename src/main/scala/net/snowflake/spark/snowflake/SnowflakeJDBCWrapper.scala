@@ -229,6 +229,14 @@ private[snowflake] class JDBCWrapper {
       }
     }
 
+    // Setup query result format explicitly because this option is not supported
+    // to be set with JDBC properties
+    if (params.supportAWSStageEndPoint) {
+      params.getS3StageVpceDnsName.map {
+        x => conn.createStatement().execute(s"alter session set S3_STAGE_VPCE_DNS_NAME = '$x'")
+      }
+    }
+
     // Send client info telemetry message.
     val extraValues = Map(TelemetryClientInfoFields.SFURL -> sfURL)
     SnowflakeTelemetry.sendClientInfoTelemetry(extraValues, conn)

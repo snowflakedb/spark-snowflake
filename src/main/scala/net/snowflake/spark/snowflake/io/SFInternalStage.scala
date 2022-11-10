@@ -172,4 +172,6 @@ private[io] class SFInternalStage(isWrite: Boolean,
       connection.getSFBaseSession.getUseRegionalS3EndpointsForPresignedURL
 
   private[io] def getRegion: String = sfAgent.getStageInfo.getRegion
+
+  private[io] def getStageEndpoint: String = sfAgent.getStageInfo.getEndPoint
 }
