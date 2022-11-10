@@ -1195,6 +1195,19 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     assert(count == LARGE_TABLE_ROW_COUNT)
   }
 
+  test("count super large table") {
+    if (!skipBigDataTest) {
+      val expectedCount = Int.MaxValue + 1L
+      val actualCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option("query", s"select 1 from table(generator(rowcount => $expectedCount))")
+        .load()
+        .count()
+      assert(actualCount == expectedCount)
+    }
+  }
+
   // Copy one table from AWS account to GCP account
   ignore("copy data from AWS to GCP") {
     val moveTableName = "LINEITEM_FROM_PARQUET"

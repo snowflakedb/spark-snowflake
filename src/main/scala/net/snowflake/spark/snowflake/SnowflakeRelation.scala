@@ -131,7 +131,7 @@ private[snowflake] case class SnowflakeRelation(
             sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
           val emptyRow = Row.empty
           sqlContext.sparkContext
-            .parallelize(1L to numRows, parallelism)
+            .range(start = 0L, end = numRows, numSlices = parallelism)
             .map(_ => emptyRow)
         } else {
           throw new IllegalStateException("Could not read count from Snowflake")
