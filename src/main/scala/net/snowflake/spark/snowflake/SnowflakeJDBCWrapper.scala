@@ -184,7 +184,7 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("client_session_keep_alive", "true")
 
     // Force DECIMAL for NUMBER (SNOW-33227)
-    if (params.treadDecimalAsLong) {
+    if (params.treatDecimalAsLong) {
       jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "true")
     } else {
       jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")

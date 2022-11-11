@@ -925,7 +925,7 @@ object Parameters {
     def useAwsMultiplePartsUpload: Boolean =
       isTrue(parameters(PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD))
 
-    def treadDecimalAsLong: Boolean =
+    def treatDecimalAsLong: Boolean =
       isTrue(parameters.getOrElse(PARAM_TREAT_DECIMAL_AS_LONG, "false"))
 
     /**
