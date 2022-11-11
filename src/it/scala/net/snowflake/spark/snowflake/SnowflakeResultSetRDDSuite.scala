@@ -1603,7 +1603,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     val df = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_INT, "true")
+      .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_LONG, "true")
       .option("query", s"select 1 as a, 2::Decimal(10, 0) as b, 3::Decimal(10, 1) as c")
       .load()
 
@@ -1629,7 +1629,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(thisConnectorOptionsNoTable)
-        .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_INT, "true")
+        .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_LONG, "true")
         .option("query", s"select $maxLong10 :: Decimal(38, 0)")
         .load()
         .collect()

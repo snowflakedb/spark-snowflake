@@ -130,8 +130,8 @@ object Parameters {
   )
   // Treat Decimal(X, 0) as Long when reading from Snowflake
   // WARNING: if the Decimal value is greater than max value of Long, conversion will happen.
-  val PARAM_TREAT_DECIMAL_X_0_AS_INT: String = knownParam(
-    "treat_decimal_x_0_as_int"
+  val PARAM_TREAT_DECIMAL_X_0_AS_LONG: String = knownParam(
+    "treat_decimal_x_0_as_long"
   )
 
   // Proxy related info
@@ -926,7 +926,7 @@ object Parameters {
       isTrue(parameters(PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD))
 
     def treadDecimalAsLong: Boolean =
-      isTrue(parameters.getOrElse(PARAM_TREAT_DECIMAL_X_0_AS_INT, "false"))
+      isTrue(parameters.getOrElse(PARAM_TREAT_DECIMAL_X_0_AS_LONG, "false"))
 
     /**
       * Snowflake time output format
