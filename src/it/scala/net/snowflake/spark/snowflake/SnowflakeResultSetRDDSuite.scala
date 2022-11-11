@@ -1599,6 +1599,55 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("treat decimal(X, 0) as long") {
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_INT, "true")
+      .option("query", s"select 1 as a, 2::Decimal(10, 0) as b, 3::Decimal(10, 1) as c")
+      .load()
+
+    val schema = df.schema
+    assert(schema.fields(0).dataType == LongType)
+    assert(schema.fields(1).dataType == LongType)
+    // Column c is Decimal(10, 1) which is not affected by this option
+    assert(schema.fields(2).dataType == DecimalType(10, 1))
+
+    val row = df.collect()(0)
+    assert(row.schema.fields(0).dataType == LongType)
+    assert(row.schema.fields(1).dataType == LongType)
+    assert(row.schema.fields(2).dataType == DecimalType(10, 1))
+    assert(row.getLong(0) == 1)
+    assert(row.getLong(1) == 2)
+    assert(row.getDecimal(2) == java.math.BigDecimal.valueOf(3.0))
+  }
+
+  test("negative test: treat decimal(X, 0) as long") {
+    val maxLong10 = s"${Long.MaxValue}0"
+    // Conversion will happen if the decimal value is overflow for Long
+    val ex = intercept[Exception] {
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(thisConnectorOptionsNoTable)
+        .option(Parameters.PARAM_TREAT_DECIMAL_X_0_AS_INT, "true")
+        .option("query", s"select $maxLong10 :: Decimal(38, 0)")
+        .load()
+        .collect()
+    }
+    assert(ex.getMessage.contains(maxLong10))
+
+    // It will work with decimal (default)
+    val row = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select $maxLong10 :: Decimal(38, 0)")
+      .load()
+      .collect()(0)
+    val decimalMaxLong10 = java.math.BigDecimal.valueOf(Long.MaxValue)
+      .multiply(java.math.BigDecimal.valueOf(10))
+    assert(row.getDecimal(0) == decimalMaxLong10)
+  }
+
   ignore("perf test for AWS multiple parts upload API") {
     val maxRunTime = 3
     val partitionCount = 1
