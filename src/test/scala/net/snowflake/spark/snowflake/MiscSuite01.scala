@@ -23,7 +23,7 @@ import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.SnowflakeSQLException
-import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
@@ -149,6 +149,73 @@ class MiscSuite01 extends FunSuite with Matchers {
     assertThrows[IllegalArgumentException]({
       param.proxyInfo.get.setProxyForAzure()
     })
+  }
+
+  test("test ProxyInfo with proxy protocol") {
+    // positive test
+    Seq("http", "https").foreach {
+      protocolString =>
+        val sfOptions = Map(
+          Parameters.PARAM_USE_PROXY -> "true",
+          Parameters.PARAM_PROXY_PROTOCOL -> protocolString,
+          Parameters.PARAM_PROXY_HOST -> "proxyHost",
+          Parameters.PARAM_PROXY_PORT -> "1234"
+        )
+        val param = Parameters.MergedParameters(sfOptions)
+        val proxyInfo = param.proxyInfo.get
+
+        // Set proxy for JDBC
+        val jdbcProperties = new Properties()
+        param.setJDBCProxyIfNecessary(jdbcProperties)
+        assert(jdbcProperties.getProperty(
+          SFSessionProperty.PROXY_PROTOCOL.getPropertyKey).equals(protocolString))
+
+        // Set proxy for AWS
+        val clientConfig = new ClientConfiguration()
+        proxyInfo.setProxyForS3(clientConfig)
+        val protocol =
+          if (protocolString.equalsIgnoreCase("https")) Protocol.HTTPS else Protocol.HTTP
+        assert(clientConfig.getProtocol.equals(protocol))
+    }
+
+    // negative test for JDBC properties
+    Seq("", "g1", null, "http1", "HTTP", "HTTPS").foreach {
+      protocolString =>
+        val ex = intercept[Exception] {
+          val sfOptions = Map(
+            Parameters.PARAM_USE_PROXY -> "true",
+            Parameters.PARAM_PROXY_PROTOCOL -> protocolString,
+            Parameters.PARAM_PROXY_HOST -> "proxyHost",
+            Parameters.PARAM_PROXY_PORT -> "1234"
+          )
+          val param = Parameters.MergedParameters(sfOptions)
+
+          // Set proxy for JDBC
+          val jdbcProperties = new Properties()
+          param.setJDBCProxyIfNecessary(jdbcProperties)
+        }
+        assert(ex.getMessage.contains("Valid values for proxy protocol are 'http' and 'https'."))
+    }
+
+    // negative test for S3
+    Seq("", "g1", null, "http1", "HTTP", "HTTPS").foreach {
+      protocolString =>
+        val ex = intercept[Exception] {
+          val sfOptions = Map(
+            Parameters.PARAM_USE_PROXY -> "true",
+            Parameters.PARAM_PROXY_PROTOCOL -> protocolString,
+            Parameters.PARAM_PROXY_HOST -> "proxyHost",
+            Parameters.PARAM_PROXY_PORT -> "1234"
+          )
+          val param = Parameters.MergedParameters(sfOptions)
+          val proxyInfo = param.proxyInfo.get
+
+          // Set proxy for AWS
+          val clientConfig = new ClientConfiguration()
+          proxyInfo.setProxyForS3(clientConfig)
+        }
+        assert(ex.getMessage.contains("Valid values for proxy protocol are 'http' and 'https'."))
+    }
   }
 
   test("test Parameters.removeQuoteForStageTableName()") {

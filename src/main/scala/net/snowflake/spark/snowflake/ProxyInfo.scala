@@ -5,10 +5,11 @@ import java.net.Proxy.Type
 import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
-import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
+import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
 
-private[snowflake] class ProxyInfo(proxyHost: Option[String],
+private[snowflake] class ProxyInfo(proxyProtocol: Option[String],
+                                   proxyHost: Option[String],
                                    proxyPort: Option[String],
                                    proxyUser: Option[String],
                                    proxyPassword: Option[String],
@@ -33,6 +34,12 @@ private[snowflake] class ProxyInfo(proxyHost: Option[String],
         "proxy user must be set if proxy password is set."
       )
     }
+
+    if (proxyProtocol.isDefined && !Set("http", "https").contains(proxyProtocol.get)) {
+      throw new IllegalArgumentException(
+        "Valid values for proxy protocol are 'http' and 'https'."
+      )
+    }
   }
 
   def setProxyForJDBC(jdbcProperties: Properties): Unit = {
@@ -55,7 +62,15 @@ private[snowflake] class ProxyInfo(proxyHost: Option[String],
     //  jdbcProperties.put(SFSessionProperty.PROXY_PORT.getPropertyKey(), "12345")
     // }
 
-    // Setup 3 optional properties if they are provided.
+    // Setup 4 optional properties if they are provided.
+    proxyProtocol match {
+      case Some(optionValue) =>
+        jdbcProperties.put(
+          SFSessionProperty.PROXY_PROTOCOL.getPropertyKey,
+          optionValue
+        )
+      case None =>
+    }
     proxyUser match {
       case Some(optionValue) =>
         jdbcProperties.put(
@@ -93,7 +108,13 @@ private[snowflake] class ProxyInfo(proxyHost: Option[String],
     // s3client.setProxyHost("wronghost")
     // s3client.setProxyPort(12345)
 
-    // Setup 3 optional properties if they are provided.
+    // Setup 4 optional properties if they are provided.
+    proxyProtocol match {
+      case Some(optionValue) =>
+        val protocol = if (optionValue.equalsIgnoreCase("https")) Protocol.HTTPS else Protocol.HTTP
+        s3client.setProtocol(protocol)
+      case None =>
+    }
     proxyUser match {
       case Some(optionValue) =>
         s3client.setProxyUsername(optionValue)
