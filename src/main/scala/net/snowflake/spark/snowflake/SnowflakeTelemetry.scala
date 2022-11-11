@@ -245,6 +245,11 @@ object SnowflakeTelemetry {
       logger.warn(s"Fail to send OOB Telemetry message: ${th.getMessage}")
   }
 
+  private lazy val telemetryClientNullWarningSent = {
+    logger.warn("Telemetry message not sent because Telemetry client is null")
+    true
+  }
+
   def send(telemetry: Telemetry): Unit = if (telemetry != null) {
     var curLogs: List[(ObjectNode, Long)] = Nil
     this.synchronized {
@@ -253,7 +258,7 @@ object SnowflakeTelemetry {
     }
     telemetryMessageSender.send(telemetry, curLogs)
   } else {
-    logger.warn("Telemetry message not sent because Telemetry client is null")
+    telemetryClientNullWarningSent
   }
 
   /**
