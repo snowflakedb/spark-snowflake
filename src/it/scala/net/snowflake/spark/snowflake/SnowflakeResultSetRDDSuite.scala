@@ -2396,6 +2396,74 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .collect()
   }
 
+  ignore("manual test for read with AWS VPCE stage") {
+    val sfOptionsNoTable: Map[String, String] =
+      replaceOption(
+        thisConnectorOptionsNoTable,
+        "S3_STAGE_VPCE_DNS_NAME",
+        // This is not a real value. Need to change to use a valid one for manual test
+        "*.vpce-XXXXXXXXXXX-YYYYYYYYYY.s3.us-west-2.vpce.amazonaws.com"
+      )
+
+    val query = "select seq4(), uniform(1, 10, random(12)) from" +
+      " table(generator(rowcount => 100000)) order by 1"
+
+    val rows = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptionsNoTable)
+      .option("query", query)
+      .load()
+      .collect()
+    assert(rows.length == 100000)
+  }
+
+  ignore("manual test for write with AWS VPCE stage") {
+    val sfOptionsNoTable: Map[String, String] =
+      replaceOption(
+        thisConnectorOptionsNoTable,
+        "S3_STAGE_VPCE_DNS_NAME",
+        // This is not a real value. Need to change to use a valid one for manual test
+        "*.vpce-XXXXXXXXXXX-YYYYYYYYYY.s3.us-west-2.vpce.amazonaws.com")
+
+    def getRandomString(len: Int): String = {
+      Random.alphanumeric take len mkString ""
+    }
+
+    val partitionCount = 1
+    val rowCountPerPartition = 100
+    val strValue = getRandomString(10)
+    // Create RDD which generates 1 large partition
+    val testRDD: RDD[Row] = sparkSession.sparkContext
+      .parallelize(Seq[Int](), partitionCount)
+      .mapPartitions { _ => {
+        (1 to rowCountPerPartition).map { _ => {
+          Row(strValue, strValue, strValue, strValue)
+        }
+        }.iterator
+      }
+      }
+    val schema = StructType(
+      List(
+        StructField("str1", StringType),
+        StructField("str2", StringType),
+        StructField("str3", StringType),
+        StructField("str4", StringType)
+      )
+    )
+
+    // Convert RDD to DataFrame
+    val df = sparkSession.createDataFrame(testRDD, schema)
+
+    // Write to snowflake
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(sfOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Overwrite)
+      .save()
+    assert(getRowCount(test_table_write) == partitionCount * rowCountPerPartition)
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
   }

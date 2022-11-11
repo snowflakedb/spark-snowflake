@@ -17,7 +17,7 @@
 package net.snowflake.spark.snowflake.io
 
 import java.io.File
-import net.snowflake.client.jdbc.SnowflakeFileTransferMetadataV1
+import net.snowflake.client.jdbc.{SnowflakeFileTransferMetadataV1, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
@@ -378,7 +378,8 @@ class StageSuite extends IntegrationSuiteBase {
         pref = "test_dir",
         connection = connection,
         useRegionUrl = None,
-        regionName = None
+        regionName = None,
+        stageEndPoint = None
       )
 
       assertThrows[Exception]({
@@ -497,7 +498,8 @@ class StageSuite extends IntegrationSuiteBase {
         pref = "test_dir",
         connection = connection,
         useRegionUrl = None,
-        regionName = None
+        regionName = None,
+        stageEndPoint = None
       )
 
       val storageInfo: Map[String, String] = Map()
@@ -617,6 +619,18 @@ class StageSuite extends IntegrationSuiteBase {
       )
       TestHook.disableTestHook()
     }
+  }
+
+  test("negative test Parameters.PARAM_S3_STAGE_VPCE_DNS_NAME") {
+    val ex = intercept[SnowflakeSQLException] {
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_S3_STAGE_VPCE_DNS_NAME, "negative_test_invalid_s3_dns")
+        .option("query", "select 'any-query'")
+        .load()
+    }
+    assert(ex.getMessage.contains("invalid value [negative_test_invalid_s3_dns] for parameter"))
   }
 }
 // scalastyle:on println
