@@ -128,6 +128,11 @@ object Parameters {
   val PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD: String = knownParam(
     "use_aws_multiple_parts_upload"
   )
+  // Treat Decimal(X, 0) as Long when reading from Snowflake
+  // WARNING: if the Decimal value is greater than max value of Long, conversion will happen.
+  val PARAM_TREAT_DECIMAL_AS_LONG: String = knownParam(
+    "treat_decimal_as_long"
+  )
 
   // Proxy related info
   val PARAM_USE_PROXY: String = knownParam("use_proxy")
@@ -919,6 +924,9 @@ object Parameters {
     }
     def useAwsMultiplePartsUpload: Boolean =
       isTrue(parameters(PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD))
+
+    def treatDecimalAsLong: Boolean =
+      isTrue(parameters.getOrElse(PARAM_TREAT_DECIMAL_AS_LONG, "false"))
 
     /**
       * Snowflake time output format
