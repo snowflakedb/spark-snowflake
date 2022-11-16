@@ -2,7 +2,8 @@ package org.apache.spark.sql.snowflake
 
 import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters}
 import org.apache.spark.sql.SparkSession
-import org.apache.logging.log4j.Level
+// These classes exist for log4j2 for spark 3.3 and newer version
+// import org.apache.logging.log4j.Level
 
 import scala.language.implicitConversions
 import scala.util.Random
@@ -35,7 +36,8 @@ trait SFTestSessionBase extends IntegrationEnv {
     super.beforeAll()
     // Run ported test in WARN level to avoid large log volume
     if (USE_LOG4J2_PROPERTIES) {
-      reconfigureLog4j2LogLevel(Level.WARN)
+      assert(false)
+      // reconfigureLog4j2LogLevel(Level.WARN)
     } else {
       reconfigureLogFile(PORTED_TEST_LOG4J_PROPERTY)
     }
@@ -56,7 +58,8 @@ trait SFTestSessionBase extends IntegrationEnv {
     try {
       // Reset test log level to default.
       if (USE_LOG4J2_PROPERTIES) {
-        reconfigureLog4j2LogLevel(Level.INFO)
+        assert(false)
+        // reconfigureLog4j2LogLevel(Level.INFO)
       } else {
         reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
       }
