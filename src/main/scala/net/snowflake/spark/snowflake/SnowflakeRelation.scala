@@ -96,13 +96,14 @@ private[snowflake] case class SnowflakeRelation(
                                     schema: Option[StructType]): RDD[T] = {
     log.debug(Utils.sanitizeQueryText(statement.statementString))
 
-    val conn = jdbcWrapper.getConnector(params)
-    val resultSchema = schema.getOrElse(
+    val resultSchema = schema.getOrElse({
+      val conn = jdbcWrapper.getConnector(params)
       try {
         conn.tableSchema(statement, params)
       } finally {
         conn.close()
-      })
+      }
+    })
     getRDD[T](statement, resultSchema)
   }
 
@@ -182,115 +183,118 @@ private[snowflake] case class SnowflakeRelation(
     resultSchema: StructType
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
-    Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
-    Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
-    Utils.setLastSelect(statement.toString)
-    log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
-
-    val startTime = System.currentTimeMillis()
-    val (resultSet, queryID, serializables) = try {
-      if (params.isExecuteQueryWithSyncMode) {
-        val rs = statement.execute(bindVariableEnabled = false)(conn)
-        val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
-        log.info(s"The query ID for reading from snowflake is: $queryID; " +
-          s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
-        val objects = rs
-          .asInstanceOf[SnowflakeResultSet]
-          .getResultSetSerializables(params.expectedPartitionSize)
-        (rs, queryID, objects)
-      } else {
-        val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
-        val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-        log.info(s"The query ID for async reading from snowflake is: $queryID; " +
-          s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
-        SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
-        // The query is executed in async mode, getResultSetSerializables() is blocked
-        // until query is done.
-        val objects = asyncRs
-          .asInstanceOf[SnowflakeResultSet]
-          .getResultSetSerializables(params.expectedPartitionSize)
-        SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
-        (asyncRs, queryID, objects)
-      }
-    } catch {
-      case ex: SnowflakeLoggedFeatureNotSupportedException =>
-        // Spark connector requires JDBC version to be >= 3.13.9 from 2.9.2,
-        // otherwise, SnowflakeLoggedFeatureNotSupportedException is raised.
-        // For details refer to JIRA: SNOW-411516.
-        val errorMessage = "Spark connector requires JDBC version to be greater than or equal to" +
-          s" 3.13.9 from 2.9.2, the JDBC version in your environment is ${Utils.jdbcVersion}"
-        // send telemetry message
-        SnowflakeTelemetry.sendQueryStatus(
-          conn,
-          TelemetryConstValues.OPERATION_READ,
-          statement.getLastQueryID(),
-          TelemetryConstValues.STATUS_FAIL,
-          System.currentTimeMillis() - startTime,
-          Some(ex),
-          errorMessage)
-        // Re-throw the exception with more readable message
-        throw new Exception(errorMessage, ex)
-      case th: Throwable =>
-        // send telemetry message
-        SnowflakeTelemetry.sendQueryStatus(
-          conn,
-          TelemetryConstValues.OPERATION_READ,
-          statement.getLastQueryID(),
-          TelemetryConstValues.STATUS_FAIL,
-          System.currentTimeMillis() - startTime,
-          Some(th),
-          "Hit exception when reading with arrow format")
-        // Re-throw the exception
-        throw th
-    }
-    Utils.setLastSelectQueryId(queryID)
-
-    // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
-    // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
-    // So JavaConversions.asScalaBuffer is used so far.
-    val resultSetSerializables = JavaConverters.asScalaBuffer(serializables).toArray
-
-    // The result set can be closed on master side, since is it not necessary.
     try {
-      resultSet.close()
-      // Inject negative test
-      TestHook.raiseExceptionIfTestFlagEnabled(
-        TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET,
-        "Negative test to raise error when driver closes a result set"
-      )
-    } catch {
-      case th: Throwable => {
-        val stringWriter = new StringWriter
-        th.printStackTrace(new PrintWriter(stringWriter))
-        log.warn(
-          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-             | Fail to close the original ResultSet, but it
-             | is not necessary anymore, so regard it as warning.
-             | ${th.getClass().getCanonicalName}; ${th.getMessage}
-             | ${stringWriter.toString}
-             |""".stripMargin.filter(_ >= ' ')
-        )
+      Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
+      Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
+      Utils.setLastSelect(statement.toString)
+      log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
+
+      val startTime = System.currentTimeMillis()
+      val (resultSet, queryID, serializables) = try {
+        if (params.isExecuteQueryWithSyncMode) {
+          val rs = statement.execute(bindVariableEnabled = false)(conn)
+          val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
+          log.info(s"The query ID for reading from snowflake is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+          val objects = rs
+            .asInstanceOf[SnowflakeResultSet]
+            .getResultSetSerializables(params.expectedPartitionSize)
+          (rs, queryID, objects)
+        } else {
+          val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
+          val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+          log.info(s"The query ID for async reading from snowflake is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+          SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
+          // The query is executed in async mode, getResultSetSerializables() is blocked
+          // until query is done.
+          val objects = asyncRs
+            .asInstanceOf[SnowflakeResultSet]
+            .getResultSetSerializables(params.expectedPartitionSize)
+          SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
+          (asyncRs, queryID, objects)
+        }
+      } catch {
+        case ex: SnowflakeLoggedFeatureNotSupportedException =>
+          // Spark connector requires JDBC version to be >= 3.13.9 from 2.9.2,
+          // otherwise, SnowflakeLoggedFeatureNotSupportedException is raised.
+          // For details refer to JIRA: SNOW-411516.
+          val errorMessage = "Spark connector requires JDBC version to be greater than or equal" +
+            s" to 3.13.9 from 2.9.2, the JDBC version in your environment is ${Utils.jdbcVersion}"
+          // send telemetry message
+          SnowflakeTelemetry.sendQueryStatus(
+            conn,
+            TelemetryConstValues.OPERATION_READ,
+            statement.getLastQueryID(),
+            TelemetryConstValues.STATUS_FAIL,
+            System.currentTimeMillis() - startTime,
+            Some(ex),
+            errorMessage)
+          // Re-throw the exception with more readable message
+          throw new Exception(errorMessage, ex)
+        case th: Throwable =>
+          // send telemetry message
+          SnowflakeTelemetry.sendQueryStatus(
+            conn,
+            TelemetryConstValues.OPERATION_READ,
+            statement.getLastQueryID(),
+            TelemetryConstValues.STATUS_FAIL,
+            System.currentTimeMillis() - startTime,
+            Some(th),
+            "Hit exception when reading with arrow format")
+          // Re-throw the exception
+          throw th
       }
+      Utils.setLastSelectQueryId(queryID)
+
+      // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
+      // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
+      // So JavaConversions.asScalaBuffer is used so far.
+      val resultSetSerializables = JavaConverters.asScalaBuffer(serializables).toArray
+
+      // The result set can be closed on master side, since is it not necessary.
+      try {
+        resultSet.close()
+        // Inject negative test
+        TestHook.raiseExceptionIfTestFlagEnabled(
+          TestHookFlag.TH_ARROW_DRIVER_FAIL_CLOSE_RESULT_SET,
+          "Negative test to raise error when driver closes a result set"
+        )
+      } catch {
+        case th: Throwable => {
+          val stringWriter = new StringWriter
+          th.printStackTrace(new PrintWriter(stringWriter))
+          log.warn(
+            s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+               | Fail to close the original ResultSet, but it
+               | is not necessary anymore, so regard it as warning.
+               | ${th.getClass().getCanonicalName}; ${th.getMessage}
+               | ${stringWriter.toString}
+               |""".stripMargin.filter(_ >= ' ')
+          )
+        }
+      }
+
+      Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
+
+      val endTime = System.currentTimeMillis()
+      val (rowCount, dataSize) = printStatForSnowflakeResultSetRDD(
+        resultSetSerializables, endTime - startTime, queryID)
+
+      StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
+      SnowflakeTelemetry.send(conn.getTelemetry)
+
+      new SnowflakeResultSetRDD[T](
+        resultSchema,
+        sqlContext.sparkContext,
+        resultSetSerializables,
+        params.proxyInfo,
+        queryID,
+        params.sfFullURL
+      )
+    } finally {
+      conn.close()
     }
-
-    Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
-
-    val endTime = System.currentTimeMillis()
-    val (rowCount, dataSize) = printStatForSnowflakeResultSetRDD(
-      resultSetSerializables, endTime - startTime, queryID)
-
-    StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
-    SnowflakeTelemetry.send(conn.getTelemetry)
-    conn.close()
-
-    new SnowflakeResultSetRDD[T](
-      resultSchema,
-      sqlContext.sparkContext,
-      resultSetSerializables,
-      params.proxyInfo,
-      queryID,
-      params.sfFullURL
-    )
   }
 
   // Print result set statistic information
