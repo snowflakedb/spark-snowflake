@@ -137,7 +137,14 @@ class SecuritySuite extends IntegrationSuiteBase {
     var i = 0
     for (line <- bufferedSource.getLines) {
       if (line.matches(regex)) {
-        found = true
+        // Third party library: http-client (4.5.2) may log the URL of
+        // the snowflake internal stage bucket in DEBUG level.
+        // The data uploading needs credential and prefix for internal stage.
+        // So it is not a security problem. Change test case to tolerate it.
+        if (!line.matches(s".*DEBUG.*PoolingHttpClientConnectionManager.*$regex") &&
+          !line.matches(s".*DEBUG.*MainClientExec.*$regex")) {
+          found = true
+        }
         // println(s"$regex matches line $i: $line")
       }
       i += 1
