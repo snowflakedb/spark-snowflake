@@ -48,6 +48,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+    // Set up GPG key for release build from environment variable: GPG_HEX_CODE
+    // Build jenkins job must have set it, otherwise, the release build will fail.
+    credentials += Credentials(
+      "GnuPG Key ID",
+      "gpg",
+      Properties.envOrNone("GPG_HEX_CODE").getOrElse("Jenkins_build_not_set_GPG_HEX_CODE"),
+      "ignored" // this field is ignored; passwords are supplied by pinentry
+    ),
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
@@ -82,7 +90,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
 
     // Release settings
-    usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
+    // usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
     Global / pgpPassphrase := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(_.toCharArray),
 
     publishMavenStyle := true,
