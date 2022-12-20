@@ -8,7 +8,7 @@ concurrency: snyk-issue
 
 jobs:
   snyk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: checkout action
       uses: actions/checkout@v3
