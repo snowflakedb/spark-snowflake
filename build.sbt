@@ -33,6 +33,11 @@ lazy val ItTest = config("it") extend Test
 // Test to use self-download or self-build JDBC driver
 // unmanagedJars in Compile += file(s"lib/snowflake-jdbc-3.12.12.jar")
 
+// unmanagedJars in Runtime += file(s"/home/mparmar/spark-3.3.1-bin-hadoop3/jars/" +
+//  "iceberg-spark-runtime-3.3_2.12.jar")
+
+// unmanagedClasspath in Runtime += file(s"/home/mparmar/spark-3.3.1-bin-hadoop3/jars/")
+
 lazy val root = project.withId("spark-snowflake").in(file("."))
   .configs(ItTest)
   .settings(inConfig(ItTest)(Defaults.testSettings))
@@ -81,8 +86,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test"
         classifier "test-sources",
       "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test"
-        classifier "test-sources"
+        classifier "test-sources",
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
+      "org.apache.iceberg" % "iceberg-spark-runtime" % "3.3_2.12"  % "provided, test"
     ),
 
     Test / testOptions += Tests.Argument("-oF"),

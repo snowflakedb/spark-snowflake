@@ -268,6 +268,25 @@ trait IntegrationEnv
     val conf = new SparkConf()
     conf.setMaster("local")
     conf.setAppName("SnowflakeSourceSuite")
+    conf.set("spark.sql.extensions",
+      "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions");
+    conf.set("spark.sql.catalog.snowlog",
+      "org.apache.iceberg.spark.SparkCatalog");
+    conf.set("spark.sql.catalog.snowlog.catalog-impl",
+      "org.apache.iceberg.snowflake.SnowflakeCatalog");
+    conf.set("spark.sql.catalog.snowlog.uri",
+      "jdbc:snowflake://http://snowflake.dev.local:8082/?us" +
+        "er=admin&password=test&warehouse=regress&db=replication&schema=public");
+    conf.set("spark.sql.catalog.snowlog.io-impl",
+      "org.apache.iceberg.hadoop.HadoopFileIO");
+    conf.set("spark.hadoop.fs.s3.impl",
+      "org.apache.hadoop.fs.s3a.S3AFileSystem");
+    conf.set("spark.hadoop.fs.AbstractFileSystem.s3.impl",
+      "org.apache.hadoop.fs.s3a.S3A");
+    conf.set("spark.sql.iceberg.vectorization.enabled",
+      "false");
+    conf.set("spark.driver.extraClassPath", "/home/mparmar/spark-3.3.1-bin-hadoop3/jars/");
+
 
     sc = SparkContext.getOrCreate(conf)
 
