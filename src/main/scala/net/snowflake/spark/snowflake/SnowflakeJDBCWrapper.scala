@@ -531,6 +531,20 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         .execute(bindVariableEnabled)(connection)
     }
 
+    def createIcebergTable(name: String,
+                    schema: StructType,
+                    params: MergedParameters,
+                           externalVolume: String,
+                    overwrite: Boolean,
+                    bindVariableEnabled: Boolean = true): Unit =
+      (ConstantString("create") +
+        (if (overwrite) "or replace" else "") +
+        " iceberg table" +
+        (if (!overwrite) "if not exists" else "") + Identifier(name) +
+        s"(${schemaString(schema, params)})" +
+        s" external_volume = '$externalVolume'")
+        .execute(bindVariableEnabled)(connection)
+
     def truncateTable(table: String,
                       bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("truncate") + table)

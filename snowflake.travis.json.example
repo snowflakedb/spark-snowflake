@@ -30,5 +30,12 @@
         "sfURL": "xxxx.us-central1.gcp.snowflakecomputing.com"
       }
     }
-  ]
+  ],
+ "spark_config": {
+     "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+     "spark.sql.catalog.snowlog": "org.apache.iceberg.spark.SparkCatalog"
+     },
+ "iceberg_config": {
+    "externalVolume" : "extVol"
+  }
 }

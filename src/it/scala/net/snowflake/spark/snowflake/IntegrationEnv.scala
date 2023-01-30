@@ -148,7 +148,12 @@ trait IntegrationEnv
 
   // Merges maps, preferring file values over env ones
   protected def loadConfig(): Map[String, String] =
-    loadJsonConfig().getOrElse(configsFromFile) ++ configsFromEnv
+    loadConnectorConfig().getOrElse(configsFromFile) ++ configsFromEnv
+
+  // Load configs for spark, preferring file values over env ones
+  protected def loadSparkConfig(): Map[String, String] =
+    loadConfigFromFile("spark_config").getOrElse(configsFromFile) ++ configsFromEnv
+
 
   // Used for internal integration testing in SF env.
   protected def readConfigValueFromEnv(name: String): Option[String] = {
@@ -200,6 +205,8 @@ trait IntegrationEnv
     rs.getLong(1)
   }
 
+
+  protected var sparkOptions: Map[String, String] = _
   protected var connectorOptions: Map[String, String] = _
   protected var connectorOptionsNoTable: Map[String, String] = _
 
@@ -265,33 +272,17 @@ trait IntegrationEnv
     TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
     log.debug(s"time zone:${ZonedDateTime.now()}")
 
+    // Initialize variables
+    connectorOptions = loadConfig()
+    sparkOptions = loadSparkConfig()
+
     val conf = new SparkConf()
     conf.setMaster("local")
     conf.setAppName("SnowflakeSourceSuite")
-    conf.set("spark.sql.extensions",
-      "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions");
-    conf.set("spark.sql.catalog.snowlog",
-      "org.apache.iceberg.spark.SparkCatalog");
-    conf.set("spark.sql.catalog.snowlog.catalog-impl",
-      "org.apache.iceberg.snowflake.SnowflakeCatalog");
-    conf.set("spark.sql.catalog.snowlog.uri",
-      "jdbc:snowflake://http://snowflake.dev.local:8082/?us" +
-        "er=admin&password=test&warehouse=regress&db=replication&schema=public");
-    conf.set("spark.sql.catalog.snowlog.io-impl",
-      "org.apache.iceberg.hadoop.HadoopFileIO");
-    conf.set("spark.hadoop.fs.s3.impl",
-      "org.apache.hadoop.fs.s3a.S3AFileSystem");
-    conf.set("spark.hadoop.fs.AbstractFileSystem.s3.impl",
-      "org.apache.hadoop.fs.s3a.S3A");
-    conf.set("spark.sql.iceberg.vectorization.enabled",
-      "false");
-    conf.set("spark.driver.extraClassPath", "/home/mparmar/spark-3.3.1-bin-hadoop3/jars/");
 
-
+    conf.setAll(sparkOptions)
     sc = SparkContext.getOrCreate(conf)
 
-    // Initialize variables
-    connectorOptions = loadConfig()
     connectorOptionsNoTable = connectorOptions.filterKeys(_ != "dbtable").toMap
     connectorOptionsNoExternalStageNoTable =
       connectorOptionsNoTable.filterKeys(_ != "tempdir").toMap
@@ -338,12 +329,10 @@ trait IntegrationEnv
     super.beforeEach()
   }
 
-  /**
-   * read snowflake.travis.json
-   */
-  def loadJsonConfig(): Option[Map[String, String]] = {
-
+  def loadJsonNodeConfig(jsonNode: JsonNode, section : Option[String] )
+    : Option[Map[String, String]] = {
     var result: Map[String, String] = Map()
+
     def read(node: JsonNode): Unit =
       node
         .fields()
@@ -351,20 +340,54 @@ trait IntegrationEnv
         .foreach(
           entry => result = result + (entry.getKey.toLowerCase -> entry.getValue.asText())
         )
+    try {
+      val sectionConfig = if (section.isEmpty) jsonNode else jsonNode.get(section.get)
+      read(sectionConfig)
+      log.info(s"load config for section $section from $CONFIG_JSON_FILE")
+      Some(result)
+    } catch {
+      case _: Throwable =>
+        log.info(s"Can't read section $section from " +
+          s"$CONFIG_JSON_FILE, load config from other source")
+        None
+    }
+  }
 
+  def loadConfigFromFile(section : String) : Option[Map[String, String]] = {
+    var result: Map[String, String] = Map()
     try {
       val jsonConfigFile = Source.fromFile(CONFIG_JSON_FILE)
       val file = jsonConfigFile.mkString
       val mapper: ObjectMapper = new ObjectMapper()
       val json = mapper.readTree(file)
-      val commonConfig = json.get("common")
+      result = loadJsonNodeConfig(json, Some(section)).get
+      log.info(s"load section $section from $CONFIG_JSON_FILE")
+      jsonConfigFile.close()
+      Some(result)
+    } catch {
+      case _: Throwable =>
+        log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
+        None
+    }
+  }
+
+  /**
+   * read snowflake.travis.json
+   */
+  def loadConnectorConfig(): Option[Map[String, String]] = {
+    try {
+      val jsonConfigFile = Source.fromFile(CONFIG_JSON_FILE)
+      val file = jsonConfigFile.mkString
+      val mapper: ObjectMapper = new ObjectMapper()
+      val json = mapper.readTree(file)
       val accountConfig = json.get("account_info")
+
       val accountName: String =
         Option(System.getenv(SNOWFLAKE_TEST_ACCOUNT)).getOrElse("aws")
 
       log.info(s"test account: $accountName")
 
-      read(commonConfig)
+      var commonJson = loadJsonNodeConfig(json, Some("common"))
 
       var accountUrlJson: Option[JsonNode] = None
       for (i <- 0 until accountConfig.size()) {
@@ -373,11 +396,14 @@ trait IntegrationEnv
           accountUrlJson = Some(node.get("config"))
         }
       }
-      read(accountUrlJson.get)
 
-      log.info(s"load config from $CONFIG_JSON_FILE")
+      log.info(s"load connector config from $CONFIG_JSON_FILE")
       jsonConfigFile.close()
-      Some(result)
+      // (commonJson ++ loadJsonNodeConfig(accountUrlJson.get, None)).toMap
+      commonJson
+      var result: Map[String, String] =
+        loadJsonNodeConfig(accountUrlJson.get, None).getOrElse( Map[String, String]())
+      Some(result ++ commonJson.getOrElse(Map[String, String]()))
     } catch {
       case _: Throwable =>
         log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
