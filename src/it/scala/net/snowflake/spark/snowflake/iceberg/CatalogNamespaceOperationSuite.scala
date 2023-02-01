@@ -16,6 +16,7 @@
  */
 
 package net.snowflake.spark.snowflake.iceberg
+import org.apache.iceberg.jdbc.UncheckedSQLException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 
@@ -54,18 +55,18 @@ class CatalogNamespaceOperationSuite extends IcebergSuiteBase {
     checkAnswer(sparkNamespaces.select("namespace"), schemaNames);
   }
 
-  test("Use non existing namespace at db level") {
+  test("FAIL : Use non-existing namespace at db level") {
 
     assertThrows[NoSuchNamespaceException](sparkSession.sql("use namespace NonExistingDB"));
   }
 
-  test("Use non existing namespace at schema level") {
+  test("FAIL: Use non existing namespace at schema level ") {
 
     assertThrows[NoSuchNamespaceException](sparkSession.sql("use namespace NonExistingDB." +
       "NonExistingSchema"));
   }
 
-  test("Exceed max supported namespace hierarchy") {
+  test("FAIL: Exceed max supported namespace hierarchy ") {
 
     val caught =
     intercept[IllegalArgumentException](sparkSession.sql("use namespace NonExistingDB." +
@@ -88,7 +89,8 @@ class CatalogNamespaceOperationSuite extends IcebergSuiteBase {
       }
   }
 
-  test("Unquoted namespace identifier with no special characters as case insensitive") {
+  test("Unquoted namespace identifier with no special characters " +
+    "(digits and letters only) as case insensitive") {
 
     val unQuotedSchema = "Schema1"
     try {
@@ -150,6 +152,63 @@ class CatalogNamespaceOperationSuite extends IcebergSuiteBase {
     }
     finally {
       conn.createStatement().executeUpdate(s"""DROP SCHEMA IF EXISTS "$quotedSchema" """)
+    }
+  }
+
+  test("Failure on accessing quoted namespace identifier with lower case as unquoted identifier") {
+
+    val quotedSchema = "lowerquoted"
+    try {
+      conn.createStatement().executeUpdate(
+        s"""CREATE SCHEMA IF NOT EXISTS "$quotedSchema"""")
+      assertThrows[NoSuchNamespaceException](sparkSession.sql(
+        s"use namespace $test_database.`$quotedSchema`"))
+    }
+    finally {
+      conn.createStatement().executeUpdate(s"""DROP SCHEMA IF EXISTS "$quotedSchema" """)
+    }
+  }
+
+  test("Failure on accessing quoted namespace identifier without case sensitivity") {
+
+    val quotedSchema = "lowerquoted"
+    try {
+      conn.createStatement().executeUpdate(
+        s"""CREATE SCHEMA IF NOT EXISTS "$quotedSchema"""")
+      assertThrows[NoSuchNamespaceException](sparkSession.sql(
+        s"""use namespace $test_database.`"${quotedSchema.toUpperCase}"`"""))
+    }
+    finally {
+      conn.createStatement().executeUpdate(s"""DROP SCHEMA IF EXISTS "$quotedSchema" """)
+    }
+  }
+
+  test("Quoted namespace identifier with special characters") {
+
+    val quotedSchema = "H@!!.0-w*r()^'"
+    try {
+      conn.createStatement().executeUpdate(
+        s"""CREATE SCHEMA IF NOT EXISTS "$quotedSchema"""")
+      sparkSession.sql(s"""use namespace $test_database.`"$quotedSchema"`""")
+    }
+    finally {
+      conn.createStatement().executeUpdate(s"""DROP SCHEMA IF EXISTS "$quotedSchema" """)
+    }
+  }
+
+  test("Quoted namespace identifier with double quote as special characters") {
+
+    val quotedSchema = "H@\"!!0\""
+
+    // user is expected to escape the double quotes
+    val escapedQuotedSchema = quotedSchema.replace("\"", "\"\"")
+    try {
+      conn.createStatement().executeUpdate(
+        s"""CREATE SCHEMA IF NOT EXISTS "$escapedQuotedSchema"""")
+      sparkSession.sql(s"""use namespace $test_database.`"$escapedQuotedSchema"`""")
+    }
+    finally {
+      conn.createStatement().executeUpdate(s"""DROP SCHEMA IF EXISTS "$escapedQuotedSchema" """)
     }
   }
 
