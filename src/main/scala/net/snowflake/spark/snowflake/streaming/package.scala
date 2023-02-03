@@ -1,7 +1,5 @@
 package net.snowflake.spark.snowflake
 
-import java.sql.Connection
-
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.{CloudStorage, SupportedFormat}
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -30,7 +28,7 @@ package object streaming {
     format: SupportedFormat,
     schema: StructType,
     storage: CloudStorage,
-    conn: Connection
+    conn: ServerConnection
   ): SnowflakeIngestService = {
     LOGGER.debug(s"create new ingestion service, pipe name: $pipeName")
 
@@ -88,7 +86,7 @@ package object streaming {
     * Generate the COPY SQL command for creating pipe only
     */
   private def copySql(param: MergedParameters,
-                      conn: Connection,
+                      conn: ServerConnection,
                       format: SupportedFormat,
                       schema: StructType
                      ): String = {
@@ -198,7 +196,7 @@ package object streaming {
     """.stripMargin.trim
   }
 
-  private[streaming] def verifyPipe(conn: Connection,
+  private[streaming] def verifyPipe(conn: ServerConnection,
                                     pipeName: String,
                                     copyStatement: String): Boolean =
     conn.pipeDefinition(pipeName) match {

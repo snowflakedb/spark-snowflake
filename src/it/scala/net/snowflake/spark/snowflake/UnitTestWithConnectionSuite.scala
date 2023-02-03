@@ -51,7 +51,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
 
   private def setupLargeResultTable(sfOptions: Map[String, String]): Unit = {
     val param = Parameters.MergedParameters(sfOptions)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     connection.createStatement.executeQuery(
       s"""create or replace table $test_table_large_result (
@@ -116,7 +116,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
   }
 
   test("test DefaultJDBCWrapper functions") {
-    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    val connection = TestUtils.getServerConnection(Utils.getJDBCConnection(javaSfOptionsNoTable))
     try {
       val jdbcWrapper = new JDBCWrapper
       assert(jdbcWrapper.executePreparedInterruptibly(connection,
@@ -132,7 +132,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
   }
 
   test("test SnowflakeSQLStatement: simple count") {
-    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    val connection = TestUtils.getServerConnection(Utils.getJDBCConnection(javaSfOptionsNoTable))
     try {
 
       val stmt =
@@ -149,7 +149,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
   }
 
   test("test SnowflakeSQLStatement: filter clause with prepared statement") {
-    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    val connection = TestUtils.getServerConnection(Utils.getJDBCConnection(javaSfOptionsNoTable))
     try {
       val stmt =
         ConstantString("SELECT") + ConstantString("int_c") + "FROM" +
@@ -172,7 +172,7 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
   }
 
   test("test SnowflakeSQLStatement: null variables") {
-    val connection = Utils.getJDBCConnection(javaSfOptionsNoTable)
+    val connection = TestUtils.getServerConnection(Utils.getJDBCConnection(javaSfOptionsNoTable))
     try {
       val stmt =
         ConstantString("SELECT") + StringVariable(None) + "FROM" +

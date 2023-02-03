@@ -26,7 +26,7 @@ import org.scalatest.FunSuite
 /**
   * Copy of Spark SQL's `QueryTest` trait.
   */
-trait QueryTest extends FunSuite {
+trait QueryTest extends org.scalatest.funsuite.AnyFunSuite {
 
   /**
     * Runs the plan and makes sure the answer matches the expected result.

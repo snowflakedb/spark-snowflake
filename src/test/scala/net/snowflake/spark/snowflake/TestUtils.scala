@@ -17,9 +17,10 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Date, ResultSet, Timestamp}
-import java.util.Calendar
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
+import java.sql.{Connection, Date, ResultSet, Timestamp}
+import java.util.Calendar
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
 
@@ -218,7 +219,14 @@ object TestUtils {
   def createTable(df: DataFrame, options: Map[String, String], name: String): Unit = {
     import DefaultJDBCWrapper._
     val params = Parameters.mergeParameters(options)
-    val conn = DefaultJDBCWrapper.getConnector(params)
+    val conn = TestUtils.getServerConnection(params)
     conn.createTable(name, df.schema, params, true, false)
   }
+
+  def getServerConnection(params: MergedParameters,
+                          enableCache: Boolean = false): ServerConnection =
+    ServerConnection.getServerConnection(params, enableCache)
+
+  def getServerConnection(connection: Connection): ServerConnection =
+    ServerConnection(connection)
 }

@@ -17,7 +17,13 @@
 package net.snowflake.spark.snowflake.testsuite
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.{ClusterTestResultBuilder, DefaultJDBCWrapper, Parameters, TestUtils}
+import net.snowflake.spark.snowflake.{
+  ClusterTestResultBuilder,
+  DefaultJDBCWrapper,
+  Parameters,
+  ServerConnection,
+  TestUtils
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
@@ -114,7 +120,7 @@ class LowMemoryStressSuite extends ClusterTestSuiteBase {
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
     if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
-      val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
+      val connection = TestUtils.getServerConnection(TestUtils.param)
       connection
         .createStatement()
         .execute(s"drop table if exists $test_big_partition")

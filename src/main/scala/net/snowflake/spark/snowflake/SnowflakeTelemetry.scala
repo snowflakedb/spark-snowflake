@@ -1,7 +1,6 @@
 package net.snowflake.spark.snowflake
 
 import java.io.{PrintWriter, StringWriter}
-import java.sql.Connection
 import java.util.regex.Pattern
 import net.snowflake.client.jdbc.SnowflakeSQLException
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
@@ -152,7 +151,7 @@ object SnowflakeTelemetry {
   }
 
   def sendClientInfoTelemetry(extraValues: Map[String, String],
-                              conn: Connection): Unit = {
+                              conn: ServerConnection): Unit = {
     SparkConnectorContext.recordConfig()
     val metric = Utils.getClientInfoJson()
     for ((key, value) <- extraValues) {
@@ -162,7 +161,7 @@ object SnowflakeTelemetry {
       (TelemetryTypes.SPARK_CLIENT_INFO, metric),
       System.currentTimeMillis()
     )
-    send(conn.getTelemetry)
+    SnowflakeTelemetry.send(conn.getTelemetry)
   }
 
   def addLog(log: ((TelemetryTypes, ObjectNode), Long)): Unit = {
@@ -326,7 +325,7 @@ object SnowflakeTelemetry {
     }
   }
 
-  private[snowflake] def sendQueryStatus(conn: Connection,
+  private[snowflake] def sendQueryStatus(conn: ServerConnection,
                                          operation: String,
                                          queryId: String,
                                          queryStatus: String,
@@ -358,7 +357,7 @@ object SnowflakeTelemetry {
     }
   }
 
-  private[snowflake] def sendIngressMessage(conn: Connection,
+  private[snowflake] def sendIngressMessage(conn: ServerConnection,
                                             queryId: String,
                                             rowCount: Long,
                                             bytes: Long): Unit = {
@@ -590,6 +589,7 @@ private[snowflake] object TelemetryFieldNames {
   val SPARK_DEFAULT_PARALLELISM = "spark_default_parallelism"
   val CLUSTER_NODE_COUNT = "cluster_node_count"
   val DEPLOY_MODE = "deploy_mode"
+  val SHARED = "shared"
 }
 
 private[snowflake] object TelemetryConstValues {
@@ -650,6 +650,9 @@ object TelemetryClientInfoFields {
   val SPARK_CONFIG = TelemetryFieldNames.SPARK_CONFIG
   val SPARK_APPLICATION_ID = TelemetryFieldNames.SPARK_APPLICATION_ID
   val IS_PYSPARK = TelemetryFieldNames.IS_PYSPARK
+
+  // Is the JDBC connection shared
+  val SHARED = TelemetryFieldNames.SHARED
 }
 
 object TelemetryTaskInfoFields {

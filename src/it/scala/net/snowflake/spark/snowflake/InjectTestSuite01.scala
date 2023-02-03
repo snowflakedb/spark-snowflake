@@ -41,7 +41,7 @@ class InjectTestSuite01 extends IntegrationSuiteBase {
 
   private def setupLargeResultTable(sfOptions: Map[String, String]): Unit = {
     val param = Parameters.MergedParameters(sfOptions)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     connection.createStatement.executeQuery(
       s"""create or replace table $test_table_basic (

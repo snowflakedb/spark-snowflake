@@ -236,4 +236,7 @@ object TestUtils {
     DriverManager.getConnection(jdbcURL, jdbcProperties)
   }
 
+  def getServerConnection(params: MergedParameters,
+                          enableCache: Boolean = false): ServerConnection =
+    ServerConnection.getServerConnection(params, enableCache)
 }

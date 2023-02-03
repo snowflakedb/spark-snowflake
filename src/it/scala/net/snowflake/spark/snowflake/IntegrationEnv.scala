@@ -233,7 +233,7 @@ trait IntegrationEnv
     * no-matter what temp directory was generated and requested.
     */
   protected var sc: SparkContext = _
-  protected var conn: Connection = _
+  protected var conn: ServerConnection = _
 
   protected var sparkSession: SparkSession = _
 
@@ -284,7 +284,7 @@ trait IntegrationEnv
       }
       .mkString(" , ")
 
-    conn = DefaultJDBCWrapper.getConnector(params)
+    conn = TestUtils.getServerConnection(params)
 
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")

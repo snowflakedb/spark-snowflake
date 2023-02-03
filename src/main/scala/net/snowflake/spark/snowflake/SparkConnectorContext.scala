@@ -19,16 +19,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.Connection
-
-import net.snowflake.client.jdbc.SnowflakeConnectionV1
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
 
-private[snowflake] case class RunningQuery (conn: Connection, queryID: String)
+private[snowflake] case class RunningQuery (conn: ServerConnection, queryID: String)
 
 object SparkConnectorContext {
   // The map to track running queries for spark application.
@@ -49,6 +46,8 @@ object SparkConnectorContext {
           override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
             try {
               cancelRunningQueries(appId)
+              // Close all cached connections
+              ServerConnection.closeAllCachedConnections
             } finally {
               super.onApplicationEnd(applicationEnd)
             }
@@ -67,7 +66,7 @@ object SparkConnectorContext {
         queries.get.foreach(rq => try {
           if (!rq.conn.isClosed) {
             val statement = rq.conn.createStatement()
-            val sessionID = rq.conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+            val sessionID = rq.conn.getSessionID
             logger.warn(s"Canceling query ${rq.queryID} for session: $sessionID")
             statement.execute(s"select SYSTEM$$CANCEL_QUERY('${rq.queryID}')")
             statement.close()
@@ -84,23 +83,23 @@ object SparkConnectorContext {
     }
 
   private[snowflake] def addRunningQuery(sparkContext: SparkContext,
-                                         conn: Connection,
+                                         conn: ServerConnection,
                                          queryID: String): Unit =
     withSyncAndDoNotThrowException {
       registerSparkListenerIfNotYet(sparkContext)
       val appId = sparkContext.applicationId
-      val sessionID = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      val sessionID = conn.getSessionID
       logger.info(s"Add running query for $appId session: $sessionID queryId: $queryID")
       val queries = runningQueries.get(appId)
       queries.foreach(_.add(RunningQuery(conn, queryID)))
     }
 
   private[snowflake] def removeRunningQuery(sparkContext: SparkContext,
-                                            conn: Connection,
+                                            conn: ServerConnection,
                                             queryID: String): Unit =
     withSyncAndDoNotThrowException {
       val appId = sparkContext.applicationId
-      val sessionID = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      val sessionID = conn.getSessionID
       logger.info(s"Remove running query for $appId session: $sessionID queryId: $queryID")
       val queries = runningQueries.get(appId)
       queries.foreach(_.remove(RunningQuery(conn, queryID)))

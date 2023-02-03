@@ -113,6 +113,22 @@ object SnowflakeConnectorUtils {
       throw ex
     }
   }
+
+  /**
+    * Enable the JDBC connection sharing optimization.
+    * If the JDBC connection sharing is enabled, the spark connector will attempt to re-use
+    * the JDBC connection if the spark connector options are the same.
+    */
+  def enableSharingJDBCConnection(): Unit =
+    ServerConnection.setSupportSharingJDBCConnection(true)
+
+  /**
+    * Disable the JDBC connection sharing optimization.
+    * If the JDBC connection sharing is enabled, the spark connector will attempt to re-use
+    * the JDBC connection if the spark connector options are the same.
+    */
+  def disableSharingJDBCConnection(): Unit =
+    ServerConnection.setSupportSharingJDBCConnection(false)
 }
 
 class SnowflakeConnectorException(message: String) extends Exception(message)

@@ -1,7 +1,5 @@
 package net.snowflake.spark.snowflake.io
 
-import java.sql.Connection
-
 import net.snowflake.client.jdbc.SnowflakeResultSet
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
@@ -172,7 +170,7 @@ private[snowflake] object StageReader {
 
   }
 
-  private[snowflake] def sendEgressUsage(conn: Connection,
+  private[snowflake] def sendEgressUsage(conn: ServerConnection,
                                          queryId: String,
                                          rowCount: Long,
                                          bytes: Long): Unit = {

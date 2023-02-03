@@ -1,7 +1,5 @@
 package net.snowflake.spark.snowflake.streaming
 
-import java.sql.Connection
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
@@ -61,7 +59,7 @@ class SnowflakeSink(sqlContext: SQLContext,
     "Spark Streaming only supports internal stages, please unset tempDir parameter."
   )
 
-  private implicit val conn: Connection = DefaultJDBCWrapper.getConnector(param)
+  private implicit val conn: ServerConnection = DefaultJDBCWrapper.getConnector(param)
 
   private val stageName: String = {
     val name = param.streamingStage.get

@@ -66,7 +66,7 @@ class StageSuite extends IntegrationSuiteBase {
 
   private def setupLargeResultTable(sfOptions: Map[String, String]): Unit = {
     val param = Parameters.MergedParameters(sfOptions)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     connection.createStatement.executeQuery(
       s"""create or replace table $test_table_large_result (
@@ -113,7 +113,7 @@ class StageSuite extends IntegrationSuiteBase {
     sfOptionsNoTable += ("upload_chunk_size_in_mb" -> "5")
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     try {
       val stmt = connection.createStatement()
@@ -157,7 +157,7 @@ class StageSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     try {
       val stmt = connection.createStatement()
@@ -306,7 +306,7 @@ class StageSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     try {
       // The credential for the external stage is fake.
@@ -362,7 +362,7 @@ class StageSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     try {
       // The credential for the external stage is fake.
@@ -482,7 +482,7 @@ class StageSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.MergedParameters(sfOptionsNoTable)
-    val connection = DefaultJDBCWrapper.getConnector(param)
+    val connection = TestUtils.getServerConnection(param)
 
     try {
       // The credential for the external stage is fake.
