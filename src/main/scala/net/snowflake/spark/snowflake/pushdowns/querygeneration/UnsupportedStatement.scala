@@ -37,14 +37,6 @@ private[querygeneration] object UnsupportedStatement {
       SnowflakeFailMessage.FAIL_PUSHDOWN_STATEMENT,
       expr.prettyName,
       expr.sql,
-      isKnownUnsupportedOperation(expr))
-  }
-
-  // Determine whether the unsupported operation is known or not.
-  private def isKnownUnsupportedOperation(expr: Expression): Boolean = {
-    // The pushdown for UDF is known unsupported
-    (expr.isInstanceOf[PythonUDF]
-      || expr.isInstanceOf[ScalaUDF]
-      || expr.isInstanceOf[ScalaUDAF])
+      false)
   }
 }
