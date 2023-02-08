@@ -16,16 +16,15 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.Connection
-
-import net.snowflake.client.jdbc.{SnowflakeConnectionV1, SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 class SparkConnectorContextSuite extends IntegrationSuiteBase {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -34,8 +33,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
-    val conn = DefaultJDBCWrapper.getConnector(param)
-    val conn2 = DefaultJDBCWrapper.getConnector(param)
+    val conn = TestUtils.getServerConnection(param)
+    val conn2 = TestUtils.getServerConnection(param)
 
     // Add one running query
     SparkConnectorContext.addRunningQuery(sc, conn, "test_query_id_1")
@@ -88,8 +87,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
-    val conn = DefaultJDBCWrapper.getConnector(param)
-    val conn2 = DefaultJDBCWrapper.getConnector(param)
+    val conn = TestUtils.getServerConnection(param)
+    val conn2 = TestUtils.getServerConnection(param)
 
     // Add one running query
     SparkConnectorContext.addRunningQuery(sc, conn, "test_query_id_1")
@@ -131,7 +130,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     val sc = sparkSession.sparkContext
     val appId = sc.applicationId
     val param = Parameters.MergedParameters(connectorOptions)
-    val conn = DefaultJDBCWrapper.getConnector(param)
+    val conn = TestUtils.getServerConnection(param)
 
     // Execute a 2 minutes query in async mode and get the query ID
     val rs = conn
@@ -181,11 +180,11 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       .getOrCreate()
   }
 
-  private def getSessionID(connection: Connection): String = {
-    connection.asInstanceOf[SnowflakeConnectionV1].getSessionID
+  private def getSessionID(connection: ServerConnection): String = {
+    connection.getSessionID
   }
 
-  private def getQueryMessage(connection: Connection,
+  private def getQueryMessage(connection: ServerConnection,
                               queryID: String,
                               sessionID: String): (String, String) = {
     val rs = connection
@@ -207,14 +206,14 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       val sc = sparkSession.sparkContext
       val appId = sc.applicationId
       val param = Parameters.MergedParameters(connectorOptions)
-      val conn = DefaultJDBCWrapper.getConnector(param)
+      val conn = TestUtils.getServerConnection(param)
 
       val schema = StructType(
         List(
           StructField("str1", StringType)
         )
       )
-      val query = "SELECT SYSTEM$WAIT(2, 'MINUTES')"
+      val query = "SELECT SYSTEM$WAIT(1, 'MINUTES')"
       // Execute a 2 minutes query with DataFrame in a Future
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -222,7 +221,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
         .options(connectorOptionsNoTable)
         .option("query", query)
         .load()
-      Future {
+      val f: Future[Int] = Future(0)
+      val f2: Future[Unit] = f.map { x =>
         df.collect()
       }
 
@@ -272,6 +272,8 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
         // It may not be necessary for spark 2.X.
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
         .getOrCreate()
+      // Wait for child thread done to avoid affect other test cases.
+      Await.ready(f2, Duration.Inf)
     }
   }
 

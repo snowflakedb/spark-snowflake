@@ -15,7 +15,7 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import java.sql.{Connection, ResultSet}
+import java.sql.ResultSet
 import java.time.LocalDateTime
 import java.util.TimeZone
 
@@ -50,7 +50,7 @@ import scala.util.Random
 // Operation 4: Copy-into (MUST)
 // Operation 5: commit or rollback (MUST)
 //              The rollback is done in reverse order of the happened operations.
-class WriteTableState(conn: Connection) {
+class WriteTableState(conn: ServerConnection) {
   // In case a table need to drop, rename is first. It will be dropped when commit.
   private var tableNameToBeDropped: String = ""
   private var tableNameToBeDroppedRename: String = ""
@@ -274,7 +274,7 @@ private[io] object StageWriter {
     * load data from stage to table
     */
   private def writeToTable(sqlContext: SQLContext,
-                           conn: Connection,
+                           conn: ServerConnection,
                            schema: StructType,
                            saveMode: SaveMode,
                            params: MergedParameters,
@@ -295,7 +295,7 @@ private[io] object StageWriter {
     * load data from stage to table without staging table
     */
   private def writeToTableWithoutStagingTable(sqlContext: SQLContext,
-                                              conn: Connection,
+                                              conn: ServerConnection,
                                               schema: StructType,
                                               saveMode: SaveMode,
                                               params: MergedParameters,
@@ -370,7 +370,7 @@ private[io] object StageWriter {
     * This function is deprecated.
     */
   private def writeToTableWithStagingTable(sqlContext: SQLContext,
-                                           conn: Connection,
+                                           conn: ServerConnection,
                                            schema: StructType,
                                            saveMode: SaveMode,
                                            params: MergedParameters,
@@ -487,7 +487,7 @@ private[io] object StageWriter {
     * the missed files.
     */
   private[io] def executeCopyIntoTable(sqlContext: SQLContext,
-                                       conn: Connection,
+                                       conn: ServerConnection,
                                        schema: StructType,
                                        saveMode: SaveMode,
                                        params: MergedParameters,
@@ -764,7 +764,7 @@ private[io] object StageWriter {
                           prefix: String,
                           tempStage: String,
                           format: SupportedFormat,
-                          conn: Connection,
+                          conn: ServerConnection,
                           useFilesClause: Boolean,
                           filesToCopy: Set[String]): SnowflakeSQLStatement = {
 

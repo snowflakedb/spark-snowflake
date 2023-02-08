@@ -133,4 +133,155 @@ class ParametersSuite extends FunSuite with Matchers {
       include("authenticator")  )
   }
 
+  test("test ConnectionCacheKey.isQueryInWhiteList()") {
+    val mergedParams = Parameters.mergeParameters(minParams)
+    val connectionCacheKey = new ConnectionCacheKey(mergedParams)
+
+    // test create table
+    assert(connectionCacheKey.isQueryInWhiteList("create table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList("create \tor replace table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList("create \tor replace temp table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      "create \tor replace temporary table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      "create \tor replace\tglobal temp table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      "create \tor replace\tglobal temporary table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      "create \tor replace local temp table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      "create \tor replace local temporary table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      " create \tor replace transient table t1 (c1 int)"))
+    assert(connectionCacheKey.isQueryInWhiteList(
+      " create \tor replace volatile table t1 (c1 int)"))
+
+    // test create stage
+    assert(connectionCacheKey.isQueryInWhiteList("create stage st1;"))
+    assert(connectionCacheKey.isQueryInWhiteList("create temp stage\t st1"))
+    assert(connectionCacheKey.isQueryInWhiteList("create temporary stage st1"))
+    assert(connectionCacheKey.isQueryInWhiteList("create or replace stage st1"))
+    assert(connectionCacheKey.isQueryInWhiteList("create or replace\ttemp stage st1"))
+    assert(connectionCacheKey.isQueryInWhiteList("create or replace temporary stage st1"))
+
+    // test drop table/stage
+    assert(connectionCacheKey.isQueryInWhiteList("drop stage st1;"))
+    assert(connectionCacheKey.isQueryInWhiteList("drop\t stage if exists st1;"))
+    assert(connectionCacheKey.isQueryInWhiteList("drop table t1;"))
+    assert(connectionCacheKey.isQueryInWhiteList("drop\t table if exists t1;"))
+
+    // merge into
+    assert(connectionCacheKey.isQueryInWhiteList("merge into t1 using t2 ..."))
+    assert(connectionCacheKey.isQueryInWhiteList(" merge into t1 using t2 ..."))
+    assert(connectionCacheKey.isQueryInWhiteList("\tmerge\tinto t1 using t2 ..."))
+
+    // negative test
+    assert(!connectionCacheKey.isQueryInWhiteList("create database db1"))
+    assert(!connectionCacheKey.isQueryInWhiteList("create schema sc1"))
+    assert(!connectionCacheKey.isQueryInWhiteList("DROP something"))
+    assert(!connectionCacheKey.isQueryInWhiteList("use role role_1"))
+    assert(!connectionCacheKey.isQueryInWhiteList("use warehouse role_1"))
+  }
+
+  test("test ConnectionCacheKey.isConnectionCacheSupported()") {
+    val enableShareMap: Map[String, String] =
+      Map((Parameters.PARAM_SUPPORT_SHARE_CONNECTION -> "on"))
+
+    // default preactions and postactions
+    var mergedParams = Parameters.mergeParameters(minParams ++ enableShareMap)
+    var connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(connectionCacheKey.isConnectionCacheSupported)
+
+    val whiteListQuery1 = "create table t1(c1 int)"
+    // preactions has 1 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_PREACTIONS -> whiteListQuery1))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 1 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_POSTACTIONS -> whiteListQuery1))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(connectionCacheKey.isConnectionCacheSupported)
+
+    val whiteListQuery2 = "create stage st1;drop table t1"
+    // preactions has 2 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_PREACTIONS -> whiteListQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 2 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_POSTACTIONS -> whiteListQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(connectionCacheKey.isConnectionCacheSupported)
+  }
+
+  test("negative test ConnectionCacheKey.isConnectionCacheSupported(): " +
+    "support_share_connection = false") {
+    val enableShareMap: Map[String, String] =
+      Map((Parameters.PARAM_SUPPORT_SHARE_CONNECTION -> "off"))
+
+    // default preactions and postactions
+    var mergedParams = Parameters.mergeParameters(minParams ++ enableShareMap)
+    var connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    val whiteListQuery1 = "create table t1(c1 int)"
+    // preactions has 1 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ enableShareMap ++ Map(Parameters.PARAM_PREACTIONS -> whiteListQuery1))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 1 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ enableShareMap ++ Map(Parameters.PARAM_POSTACTIONS -> whiteListQuery1))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    val whiteListQuery2 = "create stage st1;drop table t1"
+    // preactions has 2 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ enableShareMap ++ Map(Parameters.PARAM_PREACTIONS -> whiteListQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 2 white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ enableShareMap ++ Map(Parameters.PARAM_POSTACTIONS -> whiteListQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+  }
+
+  test("negative test ConnectionCacheKey.isConnectionCacheSupported(): " +
+    "query not in white list") {
+    val listQuery1 = "create database db1"
+    // preactions has 1 non-white list query
+    var mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_PREACTIONS -> listQuery1))
+    var connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 1 non-white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_POSTACTIONS -> listQuery1))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    val listQuery2 = "create stage st1; create database db1"
+    // preactions has 2 non-white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_PREACTIONS -> listQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+
+    // postactions has 2 non-white list query
+    mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_POSTACTIONS -> listQuery2))
+    connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isConnectionCacheSupported)
+  }
 }

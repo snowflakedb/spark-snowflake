@@ -272,9 +272,8 @@ object Utils {
   }
 
   def getJDBCConnection(params: Map[String, String]): Connection = {
-    val wrapper = new JDBCWrapper()
     val mergedParams = getMergedParameters(params)
-    wrapper.getConnector(mergedParams)
+    ServerConnection.getServerConnection(mergedParams, false).jdbcConnection
   }
 
   def getJDBCConnection(params: java.util.Map[String, String]): Connection = {
@@ -404,7 +403,7 @@ object Utils {
   }
 
   private[snowflake] def executePreActions(jdbcWrapper: JDBCWrapper,
-                                           conn: Connection,
+                                           conn: ServerConnection,
                                            params: MergedParameters,
                                            table: Option[TableName]): Unit = {
     // Execute preActions
@@ -421,7 +420,7 @@ object Utils {
   }
 
   private[snowflake] def executePostActions(jdbcWrapper: JDBCWrapper,
-                                            conn: Connection,
+                                            conn: ServerConnection,
                                             params: MergedParameters,
                                             table: Option[TableName]): Unit = {
     // Execute preActions

@@ -29,7 +29,7 @@ import scala.util.Random
 private[io] class SFInternalStage(isWrite: Boolean,
                                   params: MergedParameters,
                                   tempStage: String,
-                                  connection: SnowflakeConnectionV1,
+                                  connection: ServerConnection,
                                   fileName: String = "") {
 
   private[io] final val DUMMY_LOCATION =

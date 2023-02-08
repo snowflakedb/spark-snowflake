@@ -122,6 +122,8 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("query", "select current_timestamp()")
+        // Disable PARAM_SUPPORT_SHARE_CONNECTION to make sure spark_client_info is sent for test
+        .option(Parameters.PARAM_SUPPORT_SHARE_CONNECTION, false)
         .load()
       df1.collect()
 
@@ -229,6 +231,8 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       val df1 = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
+        // Disable PARAM_SUPPORT_SHARE_CONNECTION to make sure spark_client_info is sent for test
+        .option(Parameters.PARAM_SUPPORT_SHARE_CONNECTION, false)
         .option("query", "select current_timestamp()")
         .load()
       df1.collect()
@@ -267,6 +271,8 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       val dfTable = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
+        // Disable PARAM_SUPPORT_SHARE_CONNECTION to make sure spark_client_info is sent for test
+        .option(Parameters.PARAM_SUPPORT_SHARE_CONNECTION, false)
         .option("dbtable", test_table)
         .load()
 
@@ -455,6 +461,35 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
         // Scala UDF is used
         assert(nodeContains(planStatistics, "org.apache.spark.sql.catalyst.expressions.ScalaUDF"))
         assert(nodeContains(planStatistics, "LogicalRelation:SnowflakeRelation"))
+      }
+    } finally {
+      // Reset to the real Telemetry message sender
+      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
+    }
+  }
+
+  test("IT test: CLIENT_INFO: shared connection") {
+    // close all connections to trigger create JDBC connections
+    ServerConnection.closeAllCachedConnections
+    // Enable dummy sending telemetry message.
+    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
+    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
+      new MockTelemetryMessageSender(messageBuffer))
+    try {
+      // A basis dataframe read
+      val df1 = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", "select 123 as A")
+        .load()
+
+      df1.collect()
+      val clientInfoMessages = messageBuffer
+        .filter(_.get("type").asText().equals("spark_client_info"))
+      assert(clientInfoMessages.nonEmpty)
+      clientInfoMessages.foreach { x =>
+        val shared = x.get("data").get(TelemetryFieldNames.SHARED)
+        assert(shared.asBoolean())
       }
     } finally {
       // Reset to the real Telemetry message sender

@@ -19,19 +19,14 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
-import java.util.Properties
+import java.sql.{PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
-
-import net.snowflake.client.core.SFSessionProperty
 import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import net.snowflake.client.jdbc.{SnowflakePreparedStatement, SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
-import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 
@@ -76,12 +71,12 @@ private[snowflake] class JDBCWrapper {
     * @throws SQLException if the table specification is garbage.
     * @throws SQLException if the table contains an unsupported type.
     */
-  def resolveTable(conn: Connection,
+  def resolveTable(conn: ServerConnection,
                    table: String,
                    params: MergedParameters): StructType =
     resolveTableFromMeta(conn, conn.tableMetaData(table), params)
 
-  def resolveTableFromMeta(conn: Connection,
+  def resolveTableFromMeta(conn: ServerConnection,
                            rsmd: ResultSetMetaData,
                            params: MergedParameters): StructType = {
     val ncols = rsmd.getColumnCount
@@ -112,141 +107,8 @@ private[snowflake] class JDBCWrapper {
   /**
     * Get a connection based on the provided parameters
     */
-  def getConnector(params: MergedParameters): Connection = {
-    // Derive class name
-    val driverClassName = JDBC_DRIVER
-    try {
-      val driverClass = Utils.classForName(driverClassName)
-      DriverRegistry.register(driverClass.getCanonicalName)
-    } catch {
-      case e: ClassNotFoundException =>
-        throw new ClassNotFoundException(
-          s"Could not load a Snowflake JDBC driver class < $driverClassName > ",
-          e
-        )
-    }
-
-    val sfURL = params.sfURL
-    val jdbcURL = s"""jdbc:snowflake://$sfURL"""
-
-    val jdbcProperties = new Properties()
-
-    // Obligatory properties
-    jdbcProperties.put("db", params.sfDatabase)
-    jdbcProperties.put("schema", params.sfSchema) // Has a default
-    jdbcProperties.put("user", params.sfUser)
-
-    params.privateKey match {
-      case Some(privateKey) =>
-        jdbcProperties.put("privateKey", privateKey)
-      case None =>
-        // Adding OAuth Token parameter
-        params.sfToken match {
-          case Some(value) =>
-            jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
-        }
-    }
-    jdbcProperties.put("ssl", params.sfSSL) // Has a default
-    // Optional properties
-    if (params.sfAccount.isDefined) {
-      jdbcProperties.put("account", params.sfAccount.get)
-    }
-    if (params.sfWarehouse.isDefined) {
-      jdbcProperties.put("warehouse", params.sfWarehouse.get)
-    }
-    if (params.sfRole.isDefined) {
-      jdbcProperties.put("role", params.sfRole.get)
-    }
-    params.getTimeOutputFormat match {
-      case Some(value) =>
-        jdbcProperties.put(Parameters.PARAM_TIME_OUTPUT_FORMAT, value)
-      case _ => // No default value for it.
-    }
-    params.getQueryResultFormat match {
-      case Some(value) =>
-        jdbcProperties.put(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT, value)
-      case _ => // No default value for it.
-    }
-
-    // Set up proxy info if it is configured.
-    params.setJDBCProxyIfNecessary(jdbcProperties)
-
-    // Adding Authenticator parameter
-    params.sfAuthenticator match {
-      case Some(value) =>
-        jdbcProperties.put("authenticator", value)
-      case _ => // No default value for it.
-    }
-
-    // Always set CLIENT_SESSION_KEEP_ALIVE.
-    // Note, can be overridden with options
-    jdbcProperties.put("client_session_keep_alive", "true")
-
-    // Force DECIMAL for NUMBER (SNOW-33227)
-    if (params.treatDecimalAsLong) {
-      jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "true")
-    } else {
-      jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")
-    }
-
-    // Add extra properties from sfOptions
-    val extraOptions = params.sfExtraOptions
-    for ((k: String, v: Object) <- extraOptions) {
-      jdbcProperties.put(k.toLowerCase, v.toString)
-    }
-
-    // Only one JDBC version is certified for each spark connector.
-    if (!Utils.CERTIFIED_JDBC_VERSION.equals(Utils.jdbcVersion)) {
-      log.warn(
-        s"""JDBC ${Utils.jdbcVersion} is being used.
-           | But the certified JDBC version
-           | ${Utils.CERTIFIED_JDBC_VERSION} is recommended.
-           |""".stripMargin.filter(_ >= ' '))
-    }
-
-    // Important: Set client_info is very important!
-    // For more details, refer to PROPERTY_NAME_OF_CONNECTOR_VERSION
-    // NOTE: From JDBC 3.13.3, the client info can be set with JDBC properties
-    // instead of system property: "snowflake.client.info".
-    jdbcProperties.put(SFSessionProperty.CLIENT_INFO.getPropertyKey, Utils.getClientInfoString())
-
-    val conn: Connection = DriverManager.getConnection(jdbcURL, jdbcProperties)
-
-    // Setup query result format explicitly because this option is not supported
-    // to be set with JDBC properties
-    if (jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT) != null) {
-      try {
-        val resultFormat =
-          jdbcProperties.getProperty(Parameters.PARAM_JDBC_QUERY_RESULT_FORMAT)
-        conn
-          .createStatement()
-          .execute(
-            s"alter session set JDBC_QUERY_RESULT_FORMAT = '$resultFormat'"
-          )
-      } catch {
-        case e: SQLException =>
-          log.info(e.getMessage)
-        case other: Any =>
-          // Rethrow other errors.
-          throw other
-      }
-    }
-
-    // Setup query result format explicitly because this option is not supported
-    // to be set with JDBC properties
-    if (params.supportAWSStageEndPoint) {
-      params.getS3StageVpceDnsName.map {
-        x => conn.createStatement().execute(s"alter session set S3_STAGE_VPCE_DNS_NAME = '$x'")
-      }
-    }
-
-    // Send client info telemetry message.
-    val extraValues = Map(TelemetryClientInfoFields.SFURL -> sfURL)
-    SnowflakeTelemetry.sendClientInfoTelemetry(extraValues, conn)
-
-    conn
-  }
+  def getConnector(params: MergedParameters): ServerConnection =
+    ServerConnection.getServerConnection(params)
 
   /**
     * Compute the SQL schema string for the given Spark SQL Schema.
@@ -331,7 +193,7 @@ private[snowflake] class JDBCWrapper {
     })
   }
 
-  def executePreparedInterruptibly(conn: Connection, sql: String): Boolean = {
+  def executePreparedInterruptibly(conn: ServerConnection, sql: String): Boolean = {
     executePreparedInterruptibly(conn.prepareStatement(sql))
   }
 
@@ -353,7 +215,7 @@ private[snowflake] class JDBCWrapper {
     })
   }
 
-  def executePreparedQueryInterruptibly(conn: Connection,
+  def executePreparedQueryInterruptibly(conn: ServerConnection,
                                         sql: String): ResultSet = {
     executePreparedQueryInterruptibly(conn.prepareStatement(sql))
   }
@@ -370,7 +232,7 @@ private[snowflake] class JDBCWrapper {
   /**
     * A version of <code>executeQueryInterruptibly</code> accepting a string
     */
-  def executeQueryInterruptibly(conn: Connection, sql: String): ResultSet = {
+  def executeQueryInterruptibly(conn: ServerConnection, sql: String): ResultSet = {
     val stmt = conn.createStatement
     executeQueryInterruptibly(stmt, sql)
   }
@@ -378,7 +240,7 @@ private[snowflake] class JDBCWrapper {
   /**
     * A version of <code>executeQueryInterruptibly</code> accepting a string
     */
-  def executeInterruptibly(conn: Connection, sql: String): Boolean = {
+  def executeInterruptibly(conn: ServerConnection, sql: String): Boolean = {
     val stmt = conn.createStatement
     executeInterruptibly(stmt, sql)
   }
@@ -487,20 +349,20 @@ private[snowflake] class JDBCWrapper {
   }
 
   @deprecated
-  def getTelemetry(conn: Connection): Telemetry =
-    TelemetryClient.createTelemetry(conn)
+  def getTelemetry(conn: ServerConnection): Telemetry =
+    TelemetryClient.createTelemetry(conn.jdbcConnection)
 }
 
 private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
   private val LOGGER = LoggerFactory.getLogger(getClass.getName)
 
-  implicit class DataBaseOperations(connection: Connection) {
+  implicit class DataBaseOperations(connection: ServerConnection) {
 
     /**
       * @return telemetry connector
       */
-    def getTelemetry: Telemetry = TelemetryClient.createTelemetry(connection)
+    def getTelemetry: Telemetry = TelemetryClient.createTelemetry(connection.jdbcConnection)
 
     /**
       * Create a table
@@ -749,7 +611,7 @@ private[snowflake] class SnowflakeSQLStatement(
 
   def execute(
     bindVariableEnabled: Boolean
-  )(implicit conn: Connection): ResultSet = {
+  )(implicit conn: ServerConnection): ResultSet = {
     val statement = prepareStatement(bindVariableEnabled)
     try {
       val rs = DefaultJDBCWrapper.executePreparedQueryInterruptibly(statement)
@@ -765,7 +627,7 @@ private[snowflake] class SnowflakeSQLStatement(
 
   def executeAsync(
     bindVariableEnabled: Boolean
-  )(implicit conn: Connection): ResultSet = {
+  )(implicit conn: ServerConnection): ResultSet = {
     val statement = prepareStatement(bindVariableEnabled)
     try {
       val rs = DefaultJDBCWrapper.executePreparedQueryAsyncInterruptibly(statement)
@@ -781,11 +643,11 @@ private[snowflake] class SnowflakeSQLStatement(
 
   private[snowflake] def prepareStatement(
     bindVariableEnabled: Boolean
-  )(implicit conn: Connection): PreparedStatement =
+  )(implicit conn: ServerConnection): PreparedStatement =
     if (bindVariableEnabled) prepareWithBindVariable(conn)
     else parepareWithoutBindVariable(conn)
 
-  private def parepareWithoutBindVariable(conn: Connection): PreparedStatement = {
+  private def parepareWithoutBindVariable(conn: ServerConnection): PreparedStatement = {
     val sql = list.reverse
     val query = sql
       .foldLeft(new StringBuilder) {
@@ -806,7 +668,7 @@ private[snowflake] class SnowflakeSQLStatement(
     conn.prepareStatement(query)
   }
 
-  private def prepareWithBindVariable(conn: Connection): PreparedStatement = {
+  private def prepareWithBindVariable(conn: ServerConnection): PreparedStatement = {
     val sql = list.reverse
     val varArray: Array[StatementElement] =
       new Array[StatementElement](numOfVar)

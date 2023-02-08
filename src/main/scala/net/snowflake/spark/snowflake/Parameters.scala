@@ -224,6 +224,11 @@ object Parameters {
     "internal_support_aws_stage_end_point"
   )
 
+  // Support to share JDBC connection if possible
+  val PARAM_SUPPORT_SHARE_CONNECTION: String = knownParam(
+    "support_share_connection"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -697,6 +702,9 @@ object Parameters {
     }
     def supportAWSStageEndPoint: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SUPPORT_AWS_STAGE_END_POINT, "true"))
+    }
+    def supportShareConnection: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_SUPPORT_SHARE_CONNECTION, "true"))
     }
     def stagingTableNameRemoveQuotesOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))

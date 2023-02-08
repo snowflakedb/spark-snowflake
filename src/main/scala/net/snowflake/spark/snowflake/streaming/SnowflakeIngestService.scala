@@ -1,8 +1,6 @@
 package net.snowflake.spark.snowflake.streaming
 
 import java.nio.charset.Charset
-import java.sql.Connection
-
 import net.snowflake.client.jdbc.internal.apache.commons.logging.{Log, LogFactory}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ArrayNode
@@ -10,6 +8,7 @@ import net.snowflake.ingest.SimpleIngestManager
 import net.snowflake.ingest.connection.IngestStatus
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.ServerConnection
 import net.snowflake.spark.snowflake.io.CloudStorage
 
 import scala.collection.mutable
@@ -22,7 +21,7 @@ import scala.language.postfixOps
 class SnowflakeIngestService(param: MergedParameters,
                              pipeName: String,
                              storage: CloudStorage,
-                             conn: Connection) {
+                             conn: ServerConnection) {
 
   val SLEEP_TIME: Long = 60 * 1000 // 1m
   val HISTORY_CHECK_TIME: Long = 60 * 60 * 1000 // 1h
@@ -124,7 +123,7 @@ object IngestContextManager {
   val logger: Log = LogFactory.getLog(getClass)
 
   def readIngestList(storage: CloudStorage,
-                     conn: Connection): IngestedFileList = {
+                     conn: ServerConnection): IngestedFileList = {
     val fileName = s"$CONTEXT_DIR/$INGEST_FILE_LIST_NAME"
     if (storage.fileExists(fileName)) {
       val inputStream = storage.download(fileName, compress = false)
@@ -160,7 +159,7 @@ object IngestContextManager {
 
   def readFailedFileList(index: Int,
                          storage: CloudStorage,
-                         conn: Connection): FailedFileList = {
+                         conn: ServerConnection): FailedFileList = {
     val fileName = s"$CONTEXT_DIR/failed_file_list_$index.json"
     if (storage.fileExists(fileName)) {
       val inputStream = storage.download(fileName, compress = false)
@@ -196,7 +195,7 @@ sealed trait IngestContext {
 
   val fileName: String
 
-  val conn: Connection
+  val conn: ServerConnection
 
   def save(): Unit = {
     IngestContextManager.logger.debug(s"$fileName:$toString")
@@ -210,7 +209,7 @@ sealed trait IngestContext {
 }
 
 case class FailedFileList(override val storage: CloudStorage,
-                          override val conn: Connection,
+                          override val conn: ServerConnection,
                           fileIndex: Int = 0,
                           files: Option[mutable.HashSet[String]] = None)
     extends IngestContext {
@@ -240,7 +239,7 @@ case class FailedFileList(override val storage: CloudStorage,
 }
 
 case class IngestedFileList(override val storage: CloudStorage,
-                            override val conn: Connection,
+                            override val conn: ServerConnection,
                             failedFileList: Option[FailedFileList] = None,
                             ingestList: Option[List[(String, Long)]] = None)
     extends IngestContext {

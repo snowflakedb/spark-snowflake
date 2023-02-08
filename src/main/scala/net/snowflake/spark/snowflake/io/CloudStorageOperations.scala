@@ -19,7 +19,6 @@ package net.snowflake.spark.snowflake.io
 import java.io._
 import java.net.URI
 import java.security.SecureRandom
-import java.sql.Connection
 import java.util
 import java.util.Properties
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
@@ -30,7 +29,6 @@ import net.snowflake.client.core.{OCSPMode, SFStatement}
 import net.snowflake.client.jdbc.{
   ErrorCode,
   MatDesc,
-  SnowflakeConnectionV1,
   SnowflakeFileTransferAgent,
   SnowflakeFileTransferConfig,
   SnowflakeFileTransferMetadata,
@@ -248,7 +246,7 @@ object CloudStorageOperations {
   }
 
   def createStorageClientFromStage(param: MergedParameters,
-                                   conn: Connection,
+                                   conn: ServerConnection,
                                    stageName: String,
                                    dir: Option[String] = None,
                                    temporary: Boolean = false): CloudStorage = {
@@ -258,7 +256,7 @@ object CloudStorageOperations {
         false,
         param,
         stageName,
-        conn.asInstanceOf[SnowflakeConnectionV1]
+        conn
       )
 
     stageManager.stageType match {
@@ -285,7 +283,7 @@ object CloudStorageOperations {
     */
   def createStorageClient(
     param: MergedParameters,
-    conn: Connection,
+    conn: ServerConnection,
     tempStage: Boolean = true,
     stage: Option[String] = None,
     operation: String = "unload"
@@ -397,7 +395,7 @@ object CloudStorageOperations {
   }
 
   def deleteFiles(files: List[String])(implicit storage: CloudStorage,
-                                       connection: Connection): Unit =
+                                       connection: ServerConnection): Unit =
     storage.deleteFiles(files)
 
   private[io] def createS3Client(
@@ -526,7 +524,7 @@ sealed trait CloudStorage {
   protected val RETRY_SLEEP_TIME_UNIT_IN_MS: Int = 1500
   protected val MAX_SLEEP_TIME_IN_MS: Int = 3 * 60 * 1000
   private var processedFileCount = 0
-  protected val connection: Connection
+  protected val connection: ServerConnection
   protected val maxRetryCount: Int
   protected val proxyInfo: Option[ProxyInfo]
   protected val sfURL: String
@@ -943,7 +941,7 @@ sealed trait CloudStorage {
 
 case class InternalAzureStorage(param: MergedParameters,
                                 stageName: String,
-                                @transient override val connection: Connection)
+                                @transient override val connection: ServerConnection)
     extends CloudStorage {
 
   override val maxRetryCount = param.maxRetryCount
@@ -960,7 +958,7 @@ case class InternalAzureStorage(param: MergedParameters,
         isWrite,
         param,
         stageName,
-        connection.asInstanceOf[SnowflakeConnectionV1],
+        connection,
         fileName
       )
     @transient val keyIds = stageManager.getKeyIds
@@ -1180,7 +1178,7 @@ case class ExternalAzureStorage(containerName: String,
                                 override val useExponentialBackoff: Boolean,
                                 fileCountPerPartition: Int,
                                 pref: String = "",
-                                @transient override val connection: Connection)
+                                @transient override val connection: ServerConnection)
     extends CloudStorage {
 
   lazy val prefix: String =
@@ -1324,7 +1322,7 @@ case class ExternalAzureStorage(containerName: String,
 
 case class InternalS3Storage(param: MergedParameters,
                              stageName: String,
-                             @transient override val connection: Connection,
+                             @transient override val connection: ServerConnection,
                              parallelism: Int =
                                CloudStorageOperations.DEFAULT_PARALLELISM)
     extends CloudStorage {
@@ -1342,7 +1340,7 @@ case class InternalS3Storage(param: MergedParameters,
         isWrite,
         param,
         stageName,
-        connection.asInstanceOf[SnowflakeConnectionV1],
+        connection,
         fileName
       )
     @transient val keyIds = stageManager.getKeyIds
@@ -1580,7 +1578,7 @@ case class ExternalS3Storage(bucketName: String,
                              fileCountPerPartition: Int,
                              awsToken: Option[String] = None,
                              pref: String = "",
-                             @transient override val connection: Connection,
+                             @transient override val connection: ServerConnection,
                              parallelism: Int =
                                CloudStorageOperations.DEFAULT_PARALLELISM,
                              useRegionUrl: Option[String],
@@ -1726,7 +1724,7 @@ case class ExternalS3Storage(bucketName: String,
 // NOTE: External storage for GCS is not supported.
 case class InternalGcsStorage(param: MergedParameters,
                               stageName: String,
-                              @transient override val connection: Connection,
+                              @transient override val connection: ServerConnection,
                               @transient stageManager: SFInternalStage)
   extends CloudStorage {
 
@@ -1752,7 +1750,6 @@ case class InternalGcsStorage(param: MergedParameters,
          | PUT command for each file.
          |""".stripMargin.filter(_ >= ' '))
 
-    val connectionV1 = connection.asInstanceOf[SnowflakeConnectionV1]
     var result = new ListBuffer[SnowflakeFileTransferMetadata]()
 
     val startTime = System.currentTimeMillis()
@@ -1768,8 +1765,8 @@ case class InternalGcsStorage(param: MergedParameters,
       // Retrieve pre-signed URLs and put them in result
       new SnowflakeFileTransferAgent(
         putCommand,
-        connectionV1.getSfSession,
-        new SFStatement(connectionV1.getSfSession)
+        connection.getSfSession,
+        new SFStatement(connection.getSfSession)
       ).getFileTransferMetadatas
         .asScala
         .map(oneMetadata => result += oneMetadata)

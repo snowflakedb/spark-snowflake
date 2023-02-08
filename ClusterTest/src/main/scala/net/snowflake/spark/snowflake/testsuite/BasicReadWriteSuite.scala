@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake.testsuite
 import net.snowflake.spark.snowflake.{
   ClusterTestResultBuilder,
   DefaultJDBCWrapper,
+  ServerConnection,
   TestUtils
 }
 import org.apache.spark.sql.SparkSession
@@ -46,7 +47,7 @@ class BasicReadWriteSuite extends ClusterTestSuiteBase {
     // If test is successful, drop the target table,
     // otherwise, keep it for further investigation.
     if (resultBuilder.testStatus == TestUtils.TEST_RESULT_STATUS_SUCCESS) {
-      val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
+      val connection = TestUtils.getServerConnection(TestUtils.param)
       connection
         .createStatement()
         .execute(s"drop table $targetSchema.$targetTableName")

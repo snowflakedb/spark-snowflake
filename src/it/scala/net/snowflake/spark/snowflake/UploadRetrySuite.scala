@@ -89,7 +89,7 @@ class UploadRetrySuite extends IntegrationSuiteBase{
       }
       .mkString(" , ")
 
-    conn = DefaultJDBCWrapper.getConnector(params)
+    conn = TestUtils.getServerConnection(params)
 
     // Force UTC also on the JDBC connection
     jdbcUpdate("alter session set timezone='UTC'")

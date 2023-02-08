@@ -41,7 +41,7 @@ class ClusterTestResult(builder: ClusterTestResultBuilder) {
   val reason: String = builder.reason
 
   def writeToSnowflake(): Unit = {
-    val connection = DefaultJDBCWrapper.getConnector(TestUtils.param)
+    val connection = TestUtils.getServerConnection(TestUtils.param)
 
     // Create test result table if it doesn't exist.
     if (!DefaultJDBCWrapper.tableExists(
