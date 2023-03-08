@@ -199,7 +199,7 @@ class ConversionsSuite extends FunSuite {
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
-    val unicodeString = "instacart是独角兽"
+    val unicodeString = "Unicode是樂趣"
     // scalastyle:on
 
     val timestampString = "2014-03-01 00:00:01.123456"
