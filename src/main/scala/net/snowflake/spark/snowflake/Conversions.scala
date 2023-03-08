@@ -41,15 +41,18 @@ private[snowflake] object Conversions {
   // Note - we use a pattern with timezone in the beginning, to make sure
   // parsing with PATTERN_NTZ fails for PATTERN_TZLTZ strings.
   // Note - for JDK 1.6, we use Z ipo XX for SimpleDateFormat
+  // Because simpleDateFormat only support milliseconds,
+  // we need to refactor this and handle nano seconds field separately
   private val PATTERN_TZLTZ =
     if (System.getProperty("java.version").startsWith("1.6.")) {
-      "Z yyyy-MM-dd HH:mm:ss.SSS"
+      "Z yyyy-MM-dd HH:mm:ss."
     } else {
-      "XX yyyy-MM-dd HH:mm:ss.SSS"
+      "XX yyyy-MM-dd HH:mm:ss."
     }
 
   // For NTZ, Snowflake serializes w/o timezone
-  private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss.SSS"
+  // and handle nano seconds field separately during parsing
+  private val PATTERN_NTZ = "yyyy-MM-dd HH:mm:ss."
 
   // For DATE, simple ISO format
   private val PATTERN_DATE = "yyyy-MM-dd"
@@ -193,8 +196,25 @@ private[snowflake] object Conversions {
     * Parse a string exported from a Snowflake TIMESTAMP column
     */
   private def parseTimestamp(s: String, isInternalRow: Boolean): Any = {
+    // Need to handle the nano seconds filed separately
+    // valueOf only works with yyyy-[m]m-[d]d hh:mm:ss[.f...]
+    // so we need to do a little parsing
+    val timestampRegex = """\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3,9}""".r
+
+    val parsedTS = timestampRegex.findFirstMatchIn(s) match {
+      case Some(ts) => ts.toString()
+      case None => throw new IllegalArgumentException(s"Malformed timestamp $s")
+    }
+
+    val ts = java.sql.Timestamp.valueOf(parsedTS)
+    val nanoFraction = ts.getNanos
+
     val res = new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
-    if (isInternalRow) DateTimeUtils.fromJavaTimestamp(res)
+
+    res.setNanos(nanoFraction)
+    // Since fromJavaTimestamp and spark only support microsecond
+    // level precision so have to divide the nano field by 1000
+    if (isInternalRow) (DateTimeUtils.fromJavaTimestamp(res) + nanoFraction/1000)
     else res
   }
 

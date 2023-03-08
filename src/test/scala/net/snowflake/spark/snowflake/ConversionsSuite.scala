@@ -193,4 +193,88 @@ class ConversionsSuite extends FunSuite {
 
     assert(expect == result.toString())
   }
+
+  test("Data with micro-seconds and nano-seconds precision should be correctly converted"){
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val doubleMin = Double.MinValue.toString
+    val longMax = Long.MaxValue.toString
+    // scalastyle:off
+    val unicodeString = "instacart是独角兽"
+    // scalastyle:on
+
+    val timestampString = "2014-03-01 00:00:01.123456"
+
+    val expectedTimestampMicro: Timestamp = java.sql.Timestamp.valueOf(timestampString)
+
+    val dateString = "2015-07-01"
+    val expectedDate = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
+
+
+
+    val timestampString2 = "2014-03-01 00:00:01.123456789"
+
+    val expectedTimestampMicro2: Timestamp = java.sql.Timestamp.valueOf(timestampString2)
+
+    val dateString2 = "2015-07-01"
+    val expectedDate2 = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
+
+    val convertedRow = convertRow(
+      Array(
+        "1",
+        dateString,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestampString
+      )
+    )
+
+    val expectedRow = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDate),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      expectedTimestampMicro
+    )
+
+    val convertedRow2 = convertRow(
+      Array(
+        "1",
+        dateString2,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestampString2
+      )
+    )
+
+    val expectedRow2 = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDate2),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      expectedTimestampMicro2
+    )
+
+    assert(convertedRow == expectedRow)
+    assert(convertedRow2 == expectedRow2)
+  }
 }
