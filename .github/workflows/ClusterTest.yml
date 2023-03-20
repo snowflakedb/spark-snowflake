@@ -23,7 +23,7 @@ jobs:
         TEST_SCALA_VERSION: '2.12'
         TEST_COMPILE_SCALA_VERSION: '2.12.11'
         TEST_SPARK_CONNECTOR_VERSION: '2.11.2'
-        TEST_JDBC_VERSION: '3.13.28'
+        TEST_JDBC_VERSION: '3.13.29'
 
     steps:
     - uses: actions/checkout@v2
