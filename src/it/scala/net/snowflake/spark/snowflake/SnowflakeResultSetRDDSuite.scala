@@ -781,6 +781,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           .appName("SnowflakeSourceSuite")
           .getOrCreate()
         activeSessions.stop()
+
         SparkSession.builder
           .master("local")
           .appName("SnowflakeSourceSuite")
@@ -2515,6 +2516,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    sparkSession = createDefaultSparkSession
   }
 
   override def afterAll(): Unit = {
