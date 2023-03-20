@@ -583,6 +583,9 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     thisConnectorOptionsNoTable += ("time_output_format" -> "HH24:MI:SS.FF")
     thisConnectorOptionsNoTable += ("s3maxfilesize" -> "1000001")
     thisConnectorOptionsNoTable += ("jdbc_query_result_format" -> "arrow")
+    thisConnectorOptionsNoTable += ("timestamp_ntz_output_format" -> "YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_ltz_output_format" -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_tz_output_format" -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
   }
 
   test("testNumber") {
@@ -763,15 +766,21 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     // Test conditions with (sfTimezone, sparkTimezone)
     val testConditions: List[(String, String)] = List(
-      (null, "GMT")
-      , (null, "America/Los_Angeles")
-      , ("America/New_York", "America/Los_Angeles")
+      (null, "GMT"),
+      (null, "America/Los_Angeles"),
+      ("America/New_York", "America/Los_Angeles")
     )
 
     for ((sfTimezone, sparkTimezone) <- testConditions) {
       // set spark timezone
       val thisSparkSession = if (sparkTimezone != null) {
         TimeZone.setDefault(TimeZone.getTimeZone(sparkTimezone))
+        // Avoid interference from any active sessions
+        val activeSessions = SparkSession.builder
+          .master("local")
+          .appName("SnowflakeSourceSuite")
+          .getOrCreate()
+        activeSessions.stop()
         SparkSession.builder
           .master("local")
           .appName("SnowflakeSourceSuite")

@@ -212,9 +212,8 @@ private[snowflake] object Conversions {
     val res = new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
 
     res.setNanos(nanoFraction)
-    // Since fromJavaTimestamp and spark only support microsecond
-    // level precision so have to divide the nano field by 1000
-    if (isInternalRow) (DateTimeUtils.fromJavaTimestamp(res) + nanoFraction/1000)
+
+    if (isInternalRow) DateTimeUtils.fromJavaTimestamp(res)
     else res
   }
 
