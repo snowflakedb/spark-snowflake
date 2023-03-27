@@ -287,7 +287,7 @@ private[snowflake] object Conversions {
           val value = data.findValue(field.name)
           if (value == null) {
             if (field.nullable) null
-            else throw new IllegalArgumentException("data is not nullable")
+            else throw new IllegalArgumentException("non-nullable field in schema does not support null value in data, field: " + field.name)
           } else jsonStringToRow[T](value, field.dataType)
         })
         if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
