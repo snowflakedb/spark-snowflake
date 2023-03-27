@@ -154,7 +154,7 @@ private[snowflake] case class SnowflakeRelation(
   private def getRDD[T: ClassTag](statement: SnowflakeSQLStatement,
                                   resultSchema: StructType): RDD[T] = {
     if (params.useCopyUnload) {
-      getSnowflakeRDD(statement, resultSchema)
+      getSnowflakeRDD(statement, resultSchema, params)
     } else {
       getSnowflakeResultSetRDD(statement, resultSchema)
     }
@@ -162,7 +162,8 @@ private[snowflake] case class SnowflakeRelation(
 
   // Get an RDD with COPY Unload
   private def getSnowflakeRDD[T: ClassTag](statement: SnowflakeSQLStatement,
-                                           resultSchema: StructType): RDD[T] = {
+                                           resultSchema: StructType,
+                                           params: MergedParameters): RDD[T] = {
     val format: SupportedFormat =
       if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
       else SupportedFormat.CSV
@@ -171,7 +172,9 @@ private[snowflake] case class SnowflakeRelation(
 
     format match {
       case SupportedFormat.CSV =>
-        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
+        // Need to explicitly define params in the functions scope
+        // otherwise would encounter task not serializable error
+        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema, params))
       case SupportedFormat.JSON =>
         rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
     }

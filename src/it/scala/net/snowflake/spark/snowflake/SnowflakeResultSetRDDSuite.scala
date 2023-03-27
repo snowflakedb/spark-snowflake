@@ -698,19 +698,20 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   test("test read write Date Time") {
     setupDateTimeTable
-    val createTableSql =
-      s"""create or replace table $test_table_write (
-         | int_c int, date_c date, time_c0 time(0), time_c1 time(1), time_c2 time(2),
-         | time_c3 time(3), time_c4 time(4), time_c5 time(5), time_c6 time(6),
-         | time_c7 time(7), time_c8 time(8), time_c9 time(9)
+    if (!params.useCopyUnload) {
+      val createTableSql =
+        s"""create or replace table $test_table_write (
+           | int_c int, date_c date, time_c0 time(0), time_c1 time(1), time_c2 time(2),
+           | time_c3 time(3), time_c4 time(4), time_c5 time(5), time_c6 time(6),
+           | time_c7 time(7), time_c8 time(8), time_c9 time(9)
           )""".stripMargin
-    writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
-      test_table_date_time, "", test_table_write, Some(createTableSql), true)
+      writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
+        test_table_date_time, "", test_table_write, Some(createTableSql), true)
+    }
   }
 
   test("testTimestamp") {
     setupTimestampTable
-    // COPY UNLOAD can't be run because it only supports millisecond(0.001s).
     if (!params.useCopyUnload) {
       val result = sparkSession.sql("select * from test_table_timestamp")
 
@@ -722,10 +723,25 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("testTimestamp with copyUnload") {
+    thisConnectorOptionsNoTable += ("timestamp_ntz_output_format" -> "YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_ltz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_tz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    setupTimestampTable
+    val result = sparkSession.sql("select * from test_table_timestamp")
+
+    testPushdown(
+      s""" SELECT * FROM ( $test_table_timestamp ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
+      result,
+      test_table_timestamp_rows
+    )
+  }
+
   // Most simple case for timestamp write
   test("testTimestamp write") {
     setupTimestampTable
-    // COPY UNLOAD can't be run because it only supports millisecond(0.001s).
     if (!params.useCopyUnload) {
       val createTableSql =
         s"""create or replace table $test_table_write (
@@ -744,10 +760,36 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("testTimestamp write with copy unload") {
+    thisConnectorOptionsNoTable += ("timestamp_ntz_output_format" -> "YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_ltz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_tz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    setupTimestampTable
+    if (params.supportMicroSecondDuringUnload) {
+      val createTableSql =
+        s"""create or replace table $test_table_write (
+           | int_c int,
+           | ts_ltz_c timestamp_ltz(9), ts_ltz_c0 timestamp_ltz(0),
+           | ts_ltz_c3 timestamp_ltz(3), ts_ltz_c6 timestamp_ltz(6),
+           |
+           | ts_ntz_c timestamp_ntz(9), ts_ntz_c0 timestamp_ntz(0),
+           | ts_ntz_c3 timestamp_ntz(3), ts_ntz_c6 timestamp_ntz(6),
+           |
+           | ts_tz_c timestamp_tz(9), ts_tz_c0 timestamp_tz(0),
+           | ts_tz_c3 timestamp_tz(3), ts_tz_c6 timestamp_tz(6)
+           | )""".stripMargin
+      writeAndCheckForOneTable(sparkSession, thisConnectorOptionsNoTable,
+        test_table_timestamp, "", test_table_write, Some(createTableSql), true)
+    }
+  }
+
+
+
   // test timestamp write with timezone
   test("testTimestamp write with timezone") {
     setupTimestampTable
-    // COPY UNLOAD can't be run because it only supports millisecond(0.001s).
     if (!params.useCopyUnload) {
       var oldValue: Option[String] = None
       if (thisConnectorOptionsNoTable.contains("sftimezone")) {
@@ -771,15 +813,108 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       // Test conditions with (sfTimezone, sparkTimezone)
       val testConditions: List[(String, String)] = List(
-          (null, "GMT")
-        , (null, "America/Los_Angeles")
-        , ("America/New_York", "America/Los_Angeles")
+        (null, "GMT"),
+        (null, "America/Los_Angeles"),
+        ("America/New_York", "America/Los_Angeles")
       )
 
       for ((sfTimezone, sparkTimezone) <- testConditions) {
         // set spark timezone
         val thisSparkSession = if (sparkTimezone != null) {
           TimeZone.setDefault(TimeZone.getTimeZone(sparkTimezone))
+          // Avoid interference from any active sessions
+          val activeSessions = SparkSession.builder
+            .master("local")
+            .appName("SnowflakeSourceSuite")
+            .getOrCreate()
+          activeSessions.stop()
+
+          SparkSession.builder
+            .master("local")
+            .appName("SnowflakeSourceSuite")
+            .config("spark.sql.shuffle.partitions", "6")
+            .config("spark.driver.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
+            .config("spark.executor.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
+            .config("spark.sql.session.timeZone", sparkTimezone)
+            .getOrCreate()
+        } else {
+          sparkSession
+        }
+
+        // Set timezone option
+        if (sfTimezone != null) {
+          if (thisConnectorOptionsNoTable.contains("sftimezone")) {
+            thisConnectorOptionsNoTable -= "sftimezone"
+          }
+          thisConnectorOptionsNoTable += ("sftimezone" -> sfTimezone)
+        } else {
+          if (thisConnectorOptionsNoTable.contains("sftimezone")) {
+            thisConnectorOptionsNoTable -= "sftimezone"
+          }
+        }
+
+        writeAndCheckForOneTable(thisSparkSession, thisConnectorOptionsNoTable,
+          test_table_timestamp, "", test_table_write, Some(createTableSql), true)
+      }
+
+      // restore options for further test
+      thisConnectorOptionsNoTable -= "sftimezone"
+      if (oldValue.isDefined) {
+        thisConnectorOptionsNoTable += ("sftimezone" -> oldValue.get)
+      }
+      TimeZone.setDefault(oldTimezone)
+    }
+  }
+
+  // test timestamp write with timezone
+  test("testTimestamp write with timezone with copy unload") {
+    thisConnectorOptionsNoTable += ("timestamp_ntz_output_format" -> "YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_ltz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    thisConnectorOptionsNoTable += ("timestamp_tz_output_format" ->
+      "TZHTZM YYYY-MM-DD HH24:MI:SS.FF6")
+    setupTimestampTable
+    if (params.supportMicroSecondDuringUnload) {
+
+
+      var oldValue: Option[String] = None
+      if (thisConnectorOptionsNoTable.contains("sftimezone")) {
+        oldValue = Some(thisConnectorOptionsNoTable("sftimezone"))
+        thisConnectorOptionsNoTable -= "sftimezone"
+      }
+      val oldTimezone = TimeZone.getDefault
+
+      val createTableSql =
+        s"""create or replace table $test_table_write (
+           | int_c int,
+           | ts_ltz_c timestamp_ltz(9), ts_ltz_c0 timestamp_ltz(0),
+           | ts_ltz_c3 timestamp_ltz(3), ts_ltz_c6 timestamp_ltz(6),
+           |
+           | ts_ntz_c timestamp_ntz(9), ts_ntz_c0 timestamp_ntz(0),
+           | ts_ntz_c3 timestamp_ntz(3), ts_ntz_c6 timestamp_ntz(6),
+           |
+           | ts_tz_c timestamp_tz(9), ts_tz_c0 timestamp_tz(0),
+           | ts_tz_c3 timestamp_tz(3), ts_tz_c6 timestamp_tz(6)
+           | )""".stripMargin
+
+      // Test conditions with (sfTimezone, sparkTimezone)
+      val testConditions: List[(String, String)] = List(
+        (null, "GMT"),
+        (null, "America/Los_Angeles"),
+        ("America/New_York", "America/Los_Angeles")
+      )
+
+      for ((sfTimezone, sparkTimezone) <- testConditions) {
+        // set spark timezone
+        val thisSparkSession = if (sparkTimezone != null) {
+          TimeZone.setDefault(TimeZone.getTimeZone(sparkTimezone))
+          // Avoid interference from any active sessions
+          val activeSessions = SparkSession.builder
+            .master("local")
+            .appName("SnowflakeSourceSuite")
+            .getOrCreate()
+          activeSessions.stop()
+
           SparkSession.builder
             .master("local")
             .appName("SnowflakeSourceSuite")
@@ -2515,6 +2650,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    sparkSession = createDefaultSparkSession
   }
 
   override def afterAll(): Unit = {

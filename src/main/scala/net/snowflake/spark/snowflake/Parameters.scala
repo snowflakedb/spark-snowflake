@@ -229,6 +229,11 @@ object Parameters {
     "support_share_connection"
   )
 
+  // Internal option support micro second precision timestamp during copy unload
+  val PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD: String = knownParam(
+    "internal_support_micro_second_during_unload"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -705,6 +710,9 @@ object Parameters {
     }
     def supportShareConnection: Boolean = {
       isTrue(parameters.getOrElse(PARAM_SUPPORT_SHARE_CONNECTION, "true"))
+    }
+    def supportMicroSecondDuringUnload: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD, "true"))
     }
     def stagingTableNameRemoveQuotesOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))
