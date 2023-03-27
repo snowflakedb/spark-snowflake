@@ -22,8 +22,8 @@ import java.text._
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.{Date, TimeZone}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -43,6 +43,7 @@ private[snowflake] object Conversions {
   // Note - for JDK 1.6, we use Z ipo XX for SimpleDateFormat
   // Because simpleDateFormat only support milliseconds,
   // we need to refactor this and handle nano seconds field separately
+
   private val PATTERN_TZLTZ =
     if (System.getProperty("java.version").startsWith("1.6.")) {
       "Z yyyy-MM-dd HH:mm:ss."
@@ -145,9 +146,10 @@ private[snowflake] object Conversions {
     * the given schema to Row instances
     */
   def createRowConverter[T: ClassTag](
-    schema: StructType
+    schema: StructType,
+    parameters: MergedParameters
   ): Array[String] => T = {
-    convertRow[T](schema, _: Array[String])
+    convertRow[T](schema, _: Array[String], parameters)
   }
 
   /**
@@ -155,7 +157,9 @@ private[snowflake] object Conversions {
     * The schema will be used for type mappings.
     */
   private def convertRow[T: ClassTag](schema: StructType,
-                                      fields: Array[String]): T = {
+                                      fields: Array[String],
+                                      parameters: MergedParameters
+                                     ): T = {
 
     val isIR: Boolean = isInternalRow[T]()
 
@@ -179,7 +183,8 @@ private[snowflake] object Conversions {
             case ShortType => data.toShort
             case StringType =>
               if (isIR) UTF8String.fromString(data) else data
-            case TimestampType => parseTimestamp(data, isIR)
+            case TimestampType => parseTimestamp(data, isIR,
+              parameters.supportMicroSecondDuringUnload)
             case _ => data
           }
         }
@@ -192,14 +197,25 @@ private[snowflake] object Conversions {
     }
   }
 
+
   /**
     * Parse a string exported from a Snowflake TIMESTAMP column
     */
-  private def parseTimestamp(s: String, isInternalRow: Boolean): Any = {
+  private def parseTimestamp(s: String,
+                             isInternalRow: Boolean,
+                             supportMicroSeconds: Boolean = true): Any = {
+
+
     // Need to handle the nano seconds filed separately
     // valueOf only works with yyyy-[m]m-[d]d hh:mm:ss[.f...]
     // so we need to do a little parsing
-    val timestampRegex = """\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3,9}""".r
+    // When supportMicroSeconds is disabled, we should only use milliseconds field
+    val timestampRegex = if (supportMicroSeconds) {
+      """\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3,9}""".r
+    }
+    else {
+      """\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}""".r
+    }
 
     val parsedTS = timestampRegex.findFirstMatchIn(s) match {
       case Some(ts) => ts.toString()
@@ -207,11 +223,11 @@ private[snowflake] object Conversions {
     }
 
     val ts = java.sql.Timestamp.valueOf(parsedTS)
-    val nanoFraction = ts.getNanos
+
 
     val res = new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
 
-    res.setNanos(nanoFraction)
+    res.setNanos(ts.getNanos)
 
     if (isInternalRow) DateTimeUtils.fromJavaTimestamp(res)
     else res

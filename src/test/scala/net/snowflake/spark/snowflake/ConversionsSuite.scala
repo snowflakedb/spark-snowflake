@@ -18,11 +18,13 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
+
+import scala.:+
+import scala.collection.immutable.HashMap
 
 /**
   * Unit test for data type conversions
@@ -31,8 +33,19 @@ class ConversionsSuite extends FunSuite {
 
   val mapper = new ObjectMapper()
 
+  val commonOptions = Map("dbtable" -> "test_table",
+    "sfurl" -> "account.snowflakecomputing.com:443",
+    "sfuser" -> "username",
+    "sfpassword" -> "password")
+
+  val notSupportMicro: Parameters.MergedParameters = Parameters.mergeParameters(commonOptions ++
+    Map(Parameters.PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD-> "false"))
+
+  val supportMicro: Parameters.MergedParameters = Parameters.mergeParameters(commonOptions ++
+    Map(Parameters.PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD-> "true"))
+
   test("Data should be correctly converted") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, notSupportMicro)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
@@ -110,7 +123,7 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Row conversion handles null values") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, notSupportMicro)
     val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
@@ -118,7 +131,7 @@ class ConversionsSuite extends FunSuite {
 
   test("Dates are correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", DateType)))
+      StructType(Seq(StructField("a", DateType))), notSupportMicro
     )
     assert(
       convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9))
@@ -195,7 +208,7 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Data with micro-seconds and nano-seconds precision should be correctly converted"){
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, supportMicro)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
