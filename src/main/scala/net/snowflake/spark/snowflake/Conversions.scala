@@ -287,7 +287,7 @@ private[snowflake] object Conversions {
           val value = data.findValue(field.name)
           if (value == null) {
             if (field.nullable) null
-            else throw new IllegalArgumentException("non-nullable field in spark-schema does not support null value in db-data, field: " + field.name)
+            else throw new IllegalArgumentException("Error during read converting db-data to DataFrame using Spark-schema. Non-nullable field in Spark-schema does not support null value in read db-data, field: " + field.name)
           } else jsonStringToRow[T](value, field.dataType)
         })
         if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
