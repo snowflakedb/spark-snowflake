@@ -284,4 +284,20 @@ class ParametersSuite extends FunSuite with Matchers {
     connectionCacheKey = new ConnectionCacheKey(mergedParams)
     assert(!connectionCacheKey.isConnectionCacheSupported)
   }
+
+  test("test ConnectionCacheKey.isPrePostActionsQualifiedForConnectionShare()") {
+    val listQuery1 = "create database db1"
+    val mergedParams = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_POSTACTIONS -> listQuery1))
+    assert(!mergedParams.forceSkipPrePostActionsCheck)
+    val connectionCacheKey = new ConnectionCacheKey(mergedParams)
+    assert(!connectionCacheKey.isPrePostActionsQualifiedForConnectionShare)
+
+    val mergedParamsEnabled = Parameters.mergeParameters(minParams ++
+      Map(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING -> "true",
+        Parameters.PARAM_POSTACTIONS -> listQuery1))
+    assert(mergedParamsEnabled.forceSkipPrePostActionsCheck)
+    val forceEnabledConnectionCacheKey = new ConnectionCacheKey(mergedParamsEnabled)
+    assert(forceEnabledConnectionCacheKey.isPrePostActionsQualifiedForConnectionShare)
+  }
 }
