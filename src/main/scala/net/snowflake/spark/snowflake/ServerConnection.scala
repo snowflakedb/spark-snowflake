@@ -23,6 +23,7 @@ sealed class ConnectionCacheKey(private val parameters: MergedParameters) {
     "overwrite",
     Parameters.PARAM_POSTACTIONS,
     Parameters.PARAM_PREACTIONS,
+    Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING,
     Parameters.PARAM_SF_QUERY,
     Parameters.PARAM_SF_DBTABLE
   )
@@ -69,12 +70,16 @@ sealed class ConnectionCacheKey(private val parameters: MergedParameters) {
     }
   }
 
+  private[snowflake] def isPrePostActionsQualifiedForConnectionShare: Boolean =
+    parameters.forceSkipPrePostActionsCheck ||
+      (parameters.preActions.forall(isQueryInWhiteList) &&
+        parameters.postActions.forall(isQueryInWhiteList))
+
   def isConnectionCacheSupported: Boolean = {
     // Support sharing connection if pre/post actions doesn't change context
     ServerConnection.supportSharingJDBCConnection &&
       parameters.supportShareConnection &&
-      parameters.preActions.forall(isQueryInWhiteList) &&
-      parameters.postActions.forall(isQueryInWhiteList)
+      isPrePostActionsQualifiedForConnectionShare
   }
 }
 
