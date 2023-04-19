@@ -310,4 +310,80 @@ class ShareConnectionSuite extends IntegrationSuiteBase {
     assert(ServerConnection.jdbcConnectionCount.get() == oldJdbcConnectionCount)
     assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
   }
+
+  test("test force_skip_pre_post_action_check_for_session_sharing") {
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_PREACTIONS, s"use schema ${params.sfSchema}")
+      .option(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "false")
+      .option("dbtable", test_table1)
+      .load()
+      .collect()
+
+    // case 1: READ with force_skip_pre_post_action_check_for_session_sharing = false
+    var oldJdbcConnectionCount = ServerConnection.jdbcConnectionCount.get()
+    var oldServerConnectionCount = ServerConnection.serverConnectionCount.get()
+    // Read with the same SfOptions in 2nd time.
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_PREACTIONS, s"use schema ${params.sfSchema}")
+      .option(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "false")
+      .option("dbtable", test_table1)
+      .load()
+      .collect()
+    // JDBC connection count increases.
+    assert(ServerConnection.jdbcConnectionCount.get() > oldJdbcConnectionCount)
+    assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
+
+    // case 2: WRITE with force_skip_pre_post_action_check_for_session_sharing = false
+    oldJdbcConnectionCount = ServerConnection.jdbcConnectionCount.get()
+    oldServerConnectionCount = ServerConnection.serverConnectionCount.get()
+    localDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      // preactions are not in white list
+      .option(Parameters.PARAM_PREACTIONS, s"use schema ${params.sfSchema}")
+      .option(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "false")
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
+    // JDBC connection count increases.
+    assert(ServerConnection.jdbcConnectionCount.get() > oldJdbcConnectionCount)
+    assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
+
+    // case 3: READ with force_skip_pre_post_action_check_for_session_sharing = true
+    oldJdbcConnectionCount = ServerConnection.jdbcConnectionCount.get()
+    oldServerConnectionCount = ServerConnection.serverConnectionCount.get()
+    localDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      // preactions are not in white list
+      .option(Parameters.PARAM_PREACTIONS, s"use schema ${params.sfSchema}")
+      .option(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "true")
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
+    // With force_skip_pre_post_action_check_for_session_sharing = true,
+    // JDBC connection count is the same.
+    assert(ServerConnection.jdbcConnectionCount.get() == oldJdbcConnectionCount)
+    assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
+
+    // case 4: WRITE with force_skip_pre_post_action_check_for_session_sharing = true
+    oldJdbcConnectionCount = ServerConnection.jdbcConnectionCount.get()
+    oldServerConnectionCount = ServerConnection.serverConnectionCount.get()
+    localDF.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      // post actions are not in white list
+      .option(Parameters.PARAM_POSTACTIONS, s"use schema ${params.sfSchema}")
+      .option(Parameters.PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "true")
+      .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
+    // With connection sharing disabled, JDBC connection count increases.
+    assert(ServerConnection.jdbcConnectionCount.get() == oldJdbcConnectionCount)
+    assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
+  }
 }
