@@ -194,7 +194,7 @@ class PushdownJoinAndUnion extends IntegrationSuiteBase {
       Seq(Row(1, "left_in_current_schema"), Row(1, "right_in_current_schema"))
     )
 
-    // union of 2 DataFrame
+    // union of 3 DataFrame
     testPushdown(
       s"""( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
          | UNION ALL
@@ -206,6 +206,40 @@ class PushdownJoinAndUnion extends IntegrationSuiteBase {
       Seq(Row(1, "left_in_current_schema"),
         Row(1, "right_in_current_schema"),
         Row(1, "right_in_current_schema"))
+    )
+  }
+
+  test("self UNION is pushdown") {
+    // Left DataFrame reads test_left_table in current schema
+    val dfLeft = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_left_table)
+      .load()
+      .select("*")
+
+    // union of 2 DataFrame
+    testPushdown(
+      s"""( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         |( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         |""".stripMargin,
+      dfLeft.union(dfLeft),
+      Seq(Row(1, "left_in_current_schema"), Row(1, "left_in_current_schema"))
+    )
+
+    // union of 3 DataFrame
+    testPushdown(
+      s"""( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         |( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         | UNION ALL
+         |( SELECT * FROM ( $test_left_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
+         |""".stripMargin,
+      dfLeft.union(dfLeft).union(dfLeft),
+      Seq(Row(1, "left_in_current_schema"),
+        Row(1, "left_in_current_schema"),
+        Row(1, "left_in_current_schema"))
     )
   }
 

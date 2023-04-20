@@ -254,12 +254,13 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           )
         } else {
           val unionQuery = UnionQuery(children, alias.next)
-          if (canUseSameConnection(unionQuery.getSourceQueries)) {
+          val sourceQueries = unionQuery.getSourceQueries
+          if (canUseSameConnection(sourceQueries)) {
             Some(unionQuery)
           } else {
             throw new SnowflakePushdownUnsupportedException(
-              SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_UNION,
-              s"${plan.nodeName} with byName=$byName allowMissingCol=$allowMissingCol",
+              SnowflakeFailMessage.FAIL_PUSHDOWN_CANNOT_UNION,
+              s"${plan.nodeName} with source query count: ${sourceQueries.size}",
               plan.getClass.getName,
               false
             )
