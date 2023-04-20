@@ -167,13 +167,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
   private def canUseSameConnection(snowflakeQueries: Seq[SnowflakeQuery]): Boolean = {
     val sourceParameters: Seq[ConnectionCacheKey] = snowflakeQueries.flatMap(_.getSourceQueries)
         .map(x => new ConnectionCacheKey(x.relation.params))
-    val first = sourceParameters.head
-    for (i <- sourceParameters.drop(1)) {
-      if (!first.equals(i)) {
-        return false
-      }
-    }
-    true
+    sourceParameters.forall(sourceParameters.head.equals(_))
   }
 
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
