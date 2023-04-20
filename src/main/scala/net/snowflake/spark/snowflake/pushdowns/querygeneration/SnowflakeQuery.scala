@@ -9,6 +9,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /** Building blocks of a translated query, with nested subqueries. */
 private[querygeneration] abstract sealed class SnowflakeQuery {
 
+  /** Get all children snowflake SourceQuery. */
+  def getSourceQueries: Seq[SourceQuery]
+
   /** Output columns. */
   lazy val output: Seq[Attribute] =
     if (helper == null) Seq.empty
@@ -89,6 +92,18 @@ private[querygeneration] abstract sealed class SnowflakeQuery {
   }
 }
 
+private[querygeneration]
+abstract sealed class UnarySnowflakeQuery(child: SnowflakeQuery) extends SnowflakeQuery {
+  override def getSourceQueries: Seq[SourceQuery] = child.getSourceQueries
+}
+
+private[querygeneration]
+abstract sealed class BinarySnowflakeQuery(left: SnowflakeQuery, right: SnowflakeQuery)
+  extends SnowflakeQuery {
+  override def getSourceQueries: Seq[SourceQuery] =
+    left.getSourceQueries ++ right.getSourceQueries
+}
+
 /** The query for a base type (representing a table or view).
   *
   * @constructor
@@ -102,6 +117,8 @@ case class SourceQuery(relation: SnowflakeRelation,
                        refColumns: Seq[Attribute],
                        alias: String)
     extends SnowflakeQuery {
+
+  override def getSourceQueries: Seq[SourceQuery] = Seq(this)
 
   override val helper: QueryHelper = QueryHelper(
     children = Seq.empty,
@@ -141,7 +158,7 @@ case class FilterQuery(conditions: Seq[Expression],
                        child: SnowflakeQuery,
                        alias: String,
                        fields: Option[Seq[Attribute]] = None)
-    extends SnowflakeQuery {
+    extends UnarySnowflakeQuery(child) {
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -169,7 +186,7 @@ case class FilterQuery(conditions: Seq[Expression],
 case class ProjectQuery(columns: Seq[NamedExpression],
                         child: SnowflakeQuery,
                         alias: String)
-    extends SnowflakeQuery {
+    extends UnarySnowflakeQuery(child) {
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -192,7 +209,7 @@ case class AggregateQuery(columns: Seq[NamedExpression],
                           groups: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
-    extends SnowflakeQuery {
+    extends UnarySnowflakeQuery(child) {
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -225,7 +242,7 @@ case class SortLimitQuery(limit: Option[Expression],
                           orderBy: Seq[Expression],
                           child: SnowflakeQuery,
                           alias: String)
-    extends SnowflakeQuery {
+    extends UnarySnowflakeQuery(child) {
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -266,7 +283,7 @@ case class JoinQuery(left: SnowflakeQuery,
                      conditions: Option[Expression],
                      joinType: JoinType,
                      alias: String)
-    extends SnowflakeQuery {
+    extends BinarySnowflakeQuery(left, right) {
 
   val conj: String = joinType match {
     case Inner =>
@@ -317,7 +334,7 @@ case class LeftSemiJoinQuery(left: SnowflakeQuery,
                              conditions: Option[Expression],
                              isAntiJoin: Boolean = false,
                              alias: Iterator[String])
-    extends SnowflakeQuery {
+    extends BinarySnowflakeQuery(left, right) {
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -361,6 +378,9 @@ case class UnionQuery(children: Seq[LogicalPlan],
   val queries: Seq[SnowflakeQuery] = children.map { child =>
     new QueryBuilder(child).treeRoot
   }
+
+  override def getSourceQueries: Seq[SourceQuery] =
+    queries.flatMap(_.getSourceQueries)
 
   override val helper: QueryHelper =
     QueryHelper(
@@ -417,7 +437,7 @@ case class WindowQuery(windowExpressions: Seq[NamedExpression],
                        child: SnowflakeQuery,
                        alias: String,
                        fields: Option[Seq[Attribute]])
-    extends SnowflakeQuery {
+    extends UnarySnowflakeQuery(child) {
 
   val projectionVector: Seq[NamedExpression] =
     windowExpressions ++ child.helper.outputWithQualifier

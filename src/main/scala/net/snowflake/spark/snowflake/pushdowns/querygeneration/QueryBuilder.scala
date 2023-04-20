@@ -4,6 +4,7 @@ import java.io.{PrintWriter, StringWriter}
 import java.util.NoSuchElementException
 
 import net.snowflake.spark.snowflake.{
+  ConnectionCacheKey,
   SnowflakeFailMessage,
   SnowflakePushdownException,
   SnowflakePushdownUnsupportedException,
@@ -163,6 +164,18 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     expression.children.foreach(processExpression(_, statisticSet))
   }
 
+  private def canUseSameConnection(snowflakeQueries: Seq[SnowflakeQuery]): Boolean = {
+    val sourceParameters: Seq[ConnectionCacheKey] = snowflakeQueries.flatMap(_.getSourceQueries)
+        .map(x => new ConnectionCacheKey(x.relation.params))
+    val first = sourceParameters.head
+    for (i <- sourceParameters.drop(1)) {
+      if (!first.equals(i)) {
+        return false
+      }
+    }
+    true
+  }
+
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
     * the bottom up, but the validation of supported nodes for translation happens on the way down.
     *
@@ -211,7 +224,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, joinType, condition, _) =>
+              case Join(_, _, joinType, condition, _) if canUseSameConnection(Seq(l, r)) =>
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)
@@ -240,7 +253,17 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             false
           )
         } else {
-          Some(UnionQuery(children, alias.next))
+          val unionQuery = UnionQuery(children, alias.next)
+          if (canUseSameConnection(unionQuery.getSourceQueries)) {
+            Some(unionQuery)
+          } else {
+            throw new SnowflakePushdownUnsupportedException(
+              SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_UNION,
+              s"${plan.nodeName} with byName=$byName allowMissingCol=$allowMissingCol",
+              plan.getClass.getName,
+              false
+            )
+          }
         }
 
       case Expand(projections, output, child) =>
