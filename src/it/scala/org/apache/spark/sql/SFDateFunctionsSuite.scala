@@ -480,7 +480,8 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     checkAnswer(df.select(to_date(col("s"), "yyyy-hh-MM")), Seq(Row(null), Row(null), Row(null)))
     val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
-    assert(e.getMessage.contains("You may get a different result due to the upgrading to Spark"))
+    // Error message on spark 3.3 is changed.
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
