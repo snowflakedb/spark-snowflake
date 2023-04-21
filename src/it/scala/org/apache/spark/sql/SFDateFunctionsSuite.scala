@@ -264,45 +264,22 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
   * If don't re-copy them, the test fails with error:
   * Cannot mix year-month and day-time fields: INTERVAL'2 months 2 days 2 seconds'
   */
+  // Use the old version for test("time_add") and test("time_sub") for spark 3.1/3.0
   test("time_add") {
     val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
     val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
     val d1 = Date.valueOf("2015-07-31")
     val d2 = Date.valueOf("2015-12-31")
     val i = new CalendarInterval(2, 2, 2000000L)
-    val day = "1 day"
-    val ym = "1 year 2 month"
-    val dt = "1 day 2 hour 3 minute 4 second 5 millisecond 6 microsecond"
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d + INTERVAL'$ym'"),
-      Seq(Row(Date.valueOf("2016-09-30")),
-        Row(Date.valueOf("2017-02-28"))))
+      df.selectExpr(s"d + INTERVAL'${i.toString}'"),
+      Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
     checkAnswer(
-      df.selectExpr(s"t + INTERVAL'$ym'"),
-      Seq(Row(Timestamp.valueOf("2016-09-30 23:59:59")),
-        Row(Timestamp.valueOf("2017-02-28 00:00:00"))))
-    checkAnswer(
-      df.selectExpr(s"d + INTERVAL'$dt'"),
-      Seq(Row(Timestamp.valueOf("2015-08-01 02:03:04.005006")),
-        Row(Timestamp.valueOf("2016-01-01 02:03:04.005006"))))
-    checkAnswer(
-      df.selectExpr(s"d + INTERVAL '$day'"),
-      Seq(Row(Date.valueOf("2015-08-01")),
-        Row(Date.valueOf("2016-01-01"))))
-    checkAnswer(
-      df.selectExpr(s"t + INTERVAL'$dt'"),
-      Seq(Row(Timestamp.valueOf("2015-08-02 02:03:03.005006")),
-        Row(Timestamp.valueOf("2016-01-01 02:03:04.005006"))))
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-      checkAnswer(
-        df.selectExpr(s"d + INTERVAL'${i.toString}'"),
-        Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
-      checkAnswer(
-        df.selectExpr(s"t + INTERVAL'${i.toString}'"),
-        Seq(Row(Timestamp.valueOf("2015-10-03 00:00:01")),
-          Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
-    }
+      df.selectExpr(s"t + INTERVAL'${i.toString}'"),
+      Seq(
+        Row(Timestamp.valueOf("2015-10-03 00:00:01")),
+        Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
   }
 
   test("time_sub") {
@@ -311,39 +288,15 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     val d1 = Date.valueOf("2015-09-30")
     val d2 = Date.valueOf("2016-02-29")
     val i = new CalendarInterval(2, 2, 2000000L)
-    val day = "1 day"
-    val ym = "1 year 2 month"
-    val dt = "1 day 2 hour 3 minute 4 second 5 millisecond 6 microsecond"
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d - INTERVAL'$ym'"),
-      Seq(Row(Date.valueOf("2014-07-30")),
-        Row(Date.valueOf("2014-12-29"))))
+      df.selectExpr(s"d - INTERVAL'${i.toString}'"),
+      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
     checkAnswer(
-      df.selectExpr(s"t - INTERVAL'$ym'"),
-      Seq(Row(Timestamp.valueOf("2014-08-01 00:00:01")),
-        Row(Timestamp.valueOf("2014-12-29 00:00:02"))))
-    checkAnswer(
-      df.selectExpr(s"d - INTERVAL'$dt'"),
-      Seq(Row(Timestamp.valueOf("2015-09-28 21:56:55.994994")),
-        Row(Timestamp.valueOf("2016-02-27 21:56:55.994994"))))
-    checkAnswer(
-      df.selectExpr(s"d - INTERVAL '$day'"),
-      Seq(Row(Date.valueOf("2015-09-29")),
-        Row(Date.valueOf("2016-02-28"))))
-    checkAnswer(
-      df.selectExpr(s"t - INTERVAL'$dt'"),
-      Seq(Row(Timestamp.valueOf("2015-09-29 21:56:56.994994")),
-        Row(Timestamp.valueOf("2016-02-27 21:56:57.994994"))))
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-      checkAnswer(
-        df.selectExpr(s"d - INTERVAL'${i.toString}'"),
-        Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
-      checkAnswer(
-        df.selectExpr(s"t - INTERVAL'${i.toString}'"),
-        Seq(Row(Timestamp.valueOf("2015-07-29 23:59:59")),
-          Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
-    }
+      df.selectExpr(s"t - INTERVAL'${i.toString}'"),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-29 23:59:59")),
+        Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
 
   test("function add_months") {
@@ -480,7 +433,8 @@ class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
     checkAnswer(df.select(to_date(col("s"), "yyyy-hh-MM")), Seq(Row(null), Row(null), Row(null)))
     val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
-    assert(e.getMessage.contains("You may get a different result due to the upgrading to Spark"))
+    // Error message on spark 3.3 is changed.
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"

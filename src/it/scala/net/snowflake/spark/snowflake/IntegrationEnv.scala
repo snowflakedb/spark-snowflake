@@ -25,11 +25,12 @@ import java.util.TimeZone
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.log4j.PropertyConfigurator
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.{Appender, LoggerContext}
-import org.apache.logging.log4j.core.appender.FileAppender
-import org.apache.logging.log4j.core.config.AbstractConfiguration
-import org.apache.logging.log4j.core.layout.PatternLayout
+// These classes exist for log4j2 for spark 3.3 and newer version
+// import org.apache.logging.log4j.{Level, LogManager}
+// import org.apache.logging.log4j.core.{Appender, LoggerContext}
+// import org.apache.logging.log4j.core.appender.FileAppender
+// import org.apache.logging.log4j.core.config.AbstractConfiguration
+// import org.apache.logging.log4j.core.layout.PatternLayout
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
@@ -60,7 +61,7 @@ trait IntegrationEnv
   protected val DEFAULT_LOG4J_PROPERTY = "src/it/resources/log4j_default.properties"
 
   // From spark 3.3, log4j2 is used. For spark 3.2 and older versions, log4j is used.
-  protected val USE_LOG4J2_PROPERTIES = true
+  protected val USE_LOG4J2_PROPERTIES = false
 
   // Reconfigure log4j logging for the test of spark 3.2 and older versions
   protected def reconfigureLogFile(propertyFileName: String): Unit = {
@@ -69,46 +70,47 @@ trait IntegrationEnv
     PropertyConfigurator.configure(log4jfile.getAbsolutePath)
   }
 
-  // Reconfigure log4j2 log level for the test of spark 3.3 and newer versions
-  protected def reconfigureLog4j2LogLevel(logLevel: Level): Unit = {
-    import org.apache.logging.log4j.LogManager
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
-    log.warn(s"reconfigure log level as $logLevel")
-    loggerConfig.setLevel(logLevel)
-    ctx.updateLoggers()
-  }
-
-  // Add a log4j2 FileAppender for the test of spark 3.3 and newer versions
-  protected def addLog4j2FileAppender(filePath: String, appenderName: String): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
-
-    val layout = PatternLayout.createDefaultLayout(config)
-
-    val appender: Appender = FileAppender.createAppender(
-      filePath, "false", "false", appenderName,
-      "true", "false", "false", "4000",
-      layout, null, "false", null, config)
-
-    appender.start()
-    config.addAppender(appender)
-    loggerConfig.addAppender(appender, null, null)
-    config.addLogger("org.apache.logging.log4j", loggerConfig)
-    ctx.updateLoggers()
-  }
-
-  // Drop a log4j2 FileAppender for the test of spark 3.3 and newer versions
-  protected def dropLog4j2FileAppender(appenderName: String): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[org.apache.logging.log4j.core.LoggerContext]
-    val config = ctx.getConfiguration.asInstanceOf[AbstractConfiguration]
-    val appender = config.getAppender(appenderName).asInstanceOf[FileAppender]
-    config.removeAppender(appenderName: String)
-    appender.stop()
-    ctx.updateLoggers()
-  }
+  // Below functions only works for log4j2 for spark 3.3 and newer version
+//  // Reconfigure log4j2 log level for the test of spark 3.3 and newer versions
+//  protected def reconfigureLog4j2LogLevel(logLevel: Level): Unit = {
+//    import org.apache.logging.log4j.LogManager
+//    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+//    val config = ctx.getConfiguration
+//    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+//    log.warn(s"reconfigure log level as $logLevel")
+//    loggerConfig.setLevel(logLevel)
+//    ctx.updateLoggers()
+//  }
+//
+//  // Add a log4j2 FileAppender for the test of spark 3.3 and newer versions
+//  protected def addLog4j2FileAppender(filePath: String, appenderName: String): Unit = {
+//    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+//    val config = ctx.getConfiguration
+//    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+//
+//    val layout = PatternLayout.createDefaultLayout(config)
+//
+//    val appender: Appender = FileAppender.createAppender(
+//      filePath, "false", "false", appenderName,
+//      "true", "false", "false", "4000",
+//      layout, null, "false", null, config)
+//
+//    appender.start()
+//    config.addAppender(appender)
+//    loggerConfig.addAppender(appender, null, null)
+//    config.addLogger("org.apache.logging.log4j", loggerConfig)
+//    ctx.updateLoggers()
+//  }
+//
+//  // Drop a log4j2 FileAppender for the test of spark 3.3 and newer versions
+//  protected def dropLog4j2FileAppender(appenderName: String): Unit = {
+//    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+//    val config = ctx.getConfiguration.asInstanceOf[AbstractConfiguration]
+//    val appender = config.getAppender(appenderName).asInstanceOf[FileAppender]
+//    config.removeAppender(appenderName: String)
+//    appender.stop()
+//    ctx.updateLoggers()
+//  }
 
   // Some integration tests are for large Data, it needs long time to run.
   // But when the test suite is run on travis, there are job time limitation.
