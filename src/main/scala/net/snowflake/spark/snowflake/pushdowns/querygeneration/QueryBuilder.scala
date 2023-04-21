@@ -164,11 +164,12 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     expression.children.foreach(processExpression(_, statisticSet))
   }
 
-  private def canUseSameConnection(snowflakeQueries: Seq[SnowflakeQuery]): Boolean = {
-    val sourceParameters: Seq[ConnectionCacheKey] = snowflakeQueries.flatMap(_.getSourceQueries)
-        .map(x => new ConnectionCacheKey(x.relation.params))
-    sourceParameters.forall(sourceParameters.head.equals(_))
-  }
+  private def canUseSameConnection(snowflakeQueries: Seq[SnowflakeQuery]): Boolean =
+    snowflakeQueries
+      .flatMap(_.getSourceQueries)
+      .map(x => new ConnectionCacheKey(x.relation.params))
+      .toSet
+      .size == 1
 
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
     * the bottom up, but the validation of supported nodes for translation happens on the way down.
