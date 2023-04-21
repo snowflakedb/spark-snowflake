@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Pi,
   Pow,
   // PromotePrecision is removed from Spark 3.4
-  // PromotePrecision,
+  PromotePrecision,
   Rand,
   Round,
   Sin,
@@ -78,7 +78,7 @@ private[querygeneration] object NumericStatement {
 
       // PromotePrecision is removed from Spark 3.4
       // https://github.com/apache/spark/pull/36698
-      // case PromotePrecision(child) => convertStatement(child, fields)
+      case PromotePrecision(child) => convertStatement(child, fields)
 
       case CheckOverflow(child, t, _) =>
         MiscStatement.getCastType(t) match {
@@ -101,7 +101,8 @@ private[querygeneration] object NumericStatement {
       // Spark 3.4 adds a new argument: ansiEnabled
       // https://github.com/apache/spark/commit/42721120f3c7206a9fc22db5d0bb7cf40f0cacfd
       // The pushdown is supported for non-ANSI mode.
-      case Round(child, scale, ansiEnabled) if !ansiEnabled =>
+      // case Round(child, scale, ansiEnabled) if !ansiEnabled =>
+      case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
           convertStatements(fields, child, scale)
         )
