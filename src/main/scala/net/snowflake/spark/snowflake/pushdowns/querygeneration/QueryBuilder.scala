@@ -4,6 +4,7 @@ import java.io.{PrintWriter, StringWriter}
 import java.util.NoSuchElementException
 
 import net.snowflake.spark.snowflake.{
+  ConnectionCacheKey,
   SnowflakeFailMessage,
   SnowflakePushdownException,
   SnowflakePushdownUnsupportedException,
@@ -163,6 +164,13 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     expression.children.foreach(processExpression(_, statisticSet))
   }
 
+  private def canUseSameConnection(snowflakeQueries: Seq[SnowflakeQuery]): Boolean =
+    snowflakeQueries
+      .flatMap(_.getSourceQueries)
+      .map(x => new ConnectionCacheKey(x.relation.params))
+      .toSet
+      .size == 1
+
   /** Attempts to generate the query from the LogicalPlan. The queries are constructed from
     * the bottom up, but the validation of supported nodes for translation happens on the way down.
     *
@@ -211,7 +219,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              case Join(_, _, joinType, condition, _) =>
+              case Join(_, _, joinType, condition, _) if canUseSameConnection(Seq(l, r)) =>
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQuery(l, r, condition, joinType, alias.next)
@@ -240,7 +248,18 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
             false
           )
         } else {
-          Some(UnionQuery(children, alias.next))
+          val unionQuery = UnionQuery(children, alias.next)
+          val sourceQueries = unionQuery.getSourceQueries
+          if (canUseSameConnection(sourceQueries)) {
+            Some(unionQuery)
+          } else {
+            throw new SnowflakePushdownUnsupportedException(
+              SnowflakeFailMessage.FAIL_PUSHDOWN_CANNOT_UNION,
+              s"${plan.nodeName} with source query count: ${sourceQueries.size}",
+              plan.getClass.getName,
+              false
+            )
+          }
         }
 
       case Expand(projections, output, child) =>
