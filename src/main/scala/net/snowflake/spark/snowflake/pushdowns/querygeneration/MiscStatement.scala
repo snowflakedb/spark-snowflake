@@ -8,6 +8,7 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
+import org.apache.spark.sql.catalyst.expressions.EvalMode.LEGACY
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Ascending,
@@ -47,7 +48,13 @@ private[querygeneration] object MiscStatement {
       //   override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
       // So support to pushdown, if ansiEnabled is false.
       // https://github.com/apache/spark/commit/6f51e37eb52f21b50c8d7b15c68bf9969fee3567
-      case Cast(child, t, _, ansiEnabled) if !ansiEnabled =>
+      // Spark 3.4 changed the last argument type:
+      // https://github.com/apache/spark/commit/f8d51b9940b5f1f7c1f37693b10931cbec0a4741
+      // - Old type: ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+      // - New Type: evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)
+      // Currently, there are 3 modes: LEGACY, ANSI, TRY
+      // support to pushdown, if the mode is LEGACY.
+      case Cast(child, t, _, evalMode) if evalMode == LEGACY =>
         getCastType(t) match {
           case Some(cast) =>
             // For known unsupported data conversion, raise exception to break the
@@ -112,7 +119,10 @@ private[querygeneration] object MiscStatement {
       //   joinCond: Seq[Expression] = Seq.empty
       // So support to pushdown, if joinCond is empty.
       // https://github.com/apache/spark/commit/806da9d6fae403f88aac42213a58923cf6c2cb05
-      case ScalarSubquery(subquery, _, _, joinCond) if joinCond.isEmpty =>
+      // Spark 3.4 introduce join hint. The join hint doesn't affect correctness.
+      // So it can be ignored in the pushdown process
+      // https://github.com/apache/spark/commit/0fa9c554fc0b3940a47c3d1c6a5a17ca9a8cee8e
+      case ScalarSubquery(subquery, _, _, joinCond, _) if joinCond.isEmpty =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>

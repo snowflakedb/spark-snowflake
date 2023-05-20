@@ -229,4 +229,18 @@ object TestUtils {
 
   def getServerConnection(connection: Connection): ServerConnection =
     ServerConnection(connection)
+
+  def compareVersion(leftVersion: String, rightVersion: String): Int = {
+    val leftVersionParts = leftVersion.split("\\.").map(_.toLong)
+    val rightVersionParts = rightVersion.split("\\.").map(_.toLong)
+    for (i <- 0 until Math.min(leftVersionParts.length, rightVersionParts.length)) {
+      if (leftVersionParts(i) > rightVersionParts(i)) {
+        return 1
+      } else if (leftVersionParts(i) < rightVersionParts(i)) {
+        return -1
+      }
+    }
+    // 3.1 < 3.1.1
+    leftVersionParts.length - rightVersionParts.length
+  }
 }

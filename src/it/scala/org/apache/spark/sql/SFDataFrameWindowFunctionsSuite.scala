@@ -33,7 +33,7 @@ class SFDataFrameWindowFunctionsSuite
     }
   }
 
-  protected lazy val sql = spark.sql _
+  protected def sql(sqlText: String) = spark.sql(sqlText)
 
   override def spark: SparkSession = getSnowflakeSession()
 
