@@ -22,7 +22,7 @@ jobs:
         DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:3.4.0'
         TEST_SCALA_VERSION: '2.12'
         TEST_COMPILE_SCALA_VERSION: '2.12.11'
-        TEST_SPARK_CONNECTOR_VERSION: '2.11.3'
+        TEST_SPARK_CONNECTOR_VERSION: '2.12.0'
         TEST_JDBC_VERSION: '3.13.30'
 
     steps:
