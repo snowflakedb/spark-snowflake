@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.testsuite.ClusterTestSuiteBase
 import org.slf4j.{Logger, LoggerFactory}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.snowflake.SnowflakeSparkUtils
 
 object ClusterTest {
   val log: Logger = LoggerFactory.getLogger(getClass)
@@ -92,6 +93,11 @@ object ClusterTest {
         }
       }
     }
+
+    // Assert the spark version match the spark connector's version
+    assert(SnowflakeConnectorUtils.checkVersionAndEnablePushdown(spark),
+      s"The spark connector compiled version: ${SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION} " +
+        s"doesn't match the runtime spark version: ${spark.version}")
 
     spark.stop()
   }
