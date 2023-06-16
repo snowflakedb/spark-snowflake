@@ -1,0 +1,7 @@
+sfurl=XXXX.snowflakecomputing.com
+sfuser=XXXX
+sfpassword=XXXX
+sfdatabase=XXXX
+sfschema=XXXX
+sfwarehouse=XXXX
+dbtable=XXXX

@@ -29,7 +29,7 @@ NOTE: Integration tests are currently only partially supported.
 Notes about integration tests
 * Config needs to be set with variable `IT_SNOWFLAKE_CONF` defined and
     pointing to the location of the Snowflake configuration file.
-* An example configuration file is provided in `snowflake.conf.example`.
+* An example configuration file is provided in [snowflake.conf.example]().
 * We run with Spark at least 2.0.0
 
 Once these requirements are met, run e.g.
