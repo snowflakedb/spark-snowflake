@@ -738,6 +738,7 @@ sealed trait CloudStorage {
           .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
           .setUploadStream(inStream)
           .setRequireCompress(compress)
+          .setDestFileName(fileName)
           .setOcspMode(OCSPMode.FAIL_OPEN)
           .setProxyProperties(proxyProperties)
           .build())
@@ -1745,19 +1746,27 @@ case class InternalGcsStorage(param: MergedParameters,
   : List[SnowflakeFileTransferMetadata] = {
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Begin to retrieve pre-signed URL for
+         | Begin to retrieve pre-signed URL or down-scoped token for
          | ${data.getNumPartitions} files by calling
-         | PUT command for each file.
+         | PUT command.
          |""".stripMargin.filter(_ >= ' '))
 
-    var result = new ListBuffer[SnowflakeFileTransferMetadata]()
+    val result = new ListBuffer[SnowflakeFileTransferMetadata]()
 
     val startTime = System.currentTimeMillis()
     val printStep = 1000
-    // Loop to execute one PUT command for one pre-signed URL.
-    // This is because GCS doesn't support to generate pre-signed for
-    // prefix(path). If GCS supports it, this part can be enhanced.
-    for (index <- 0 until fileCount) {
+    // If pre-signed URL is used to upload file, need to execute a dummy PUT command per file
+    // because file needs a pre-signed URL for upload. If down-scoped token is used to upload file,
+    // the token can be used to upload multiple files, so only need to execute one dummy
+    // PUT command to get the down-scoped token. NOTE:
+    // 1. The pre-signed URL or down-scoped token is encapsulated in SnowflakeFileTransferMetadata
+    //    Spark connector doesn't need to touch it directly.
+    // 2. If down-scoped token is used, SnowflakeFileTransferMetadata.isForOneFile will be false.
+    // 3. Spark connector can know whether pre-signed URL is used after getting the first
+    //    SnowflakeFileTransferMetadata.
+    var index = 0
+    var useDownScopedToken = false
+    while (index < fileCount && !useDownScopedToken) {
       val fileName = getFileName(index, format, compress)
       val dummyDir = s"/dummy_put_${index}_of_$fileCount"
       val putCommand = s"put file://$dummyDir/$fileName @$stageName/$dir"
@@ -1769,18 +1778,29 @@ case class InternalGcsStorage(param: MergedParameters,
         new SFStatement(connection.getSfSession)
       ).getFileTransferMetadatas
         .asScala
-        .map(oneMetadata => result += oneMetadata)
+        .foreach(oneMetadata => {
+          if (!oneMetadata.isForOneFile) {
+            CloudStorageOperations.log.info(
+              s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                 | Upload file to GCP with down-scoped token instead of pre-signed URL.
+                 |""".stripMargin.filter(_ >= ' '))
+            useDownScopedToken = true
+          }
+          result.append(oneMetadata)
+        })
 
       // Output time for retrieving every 1000 pre-signed URLs
       // to indicate the progress for big data.
       if ((index % printStep) == (printStep - 1)) {
-        StorageUtils.logPresignedUrlGenerateProgress(data.getNumPartitions, index + 1, startTime)
+        StorageUtils.logPresignedUrlGenerateProgress(
+          data.getNumPartitions, index + 1, startTime, useDownScopedToken)
       }
+      index += 1
     }
 
     // Output the total time for retrieving pre-signed URLs
-    StorageUtils.logPresignedUrlGenerateProgress(data.getNumPartitions,
-      data.getNumPartitions, startTime)
+    StorageUtils.logPresignedUrlGenerateProgress(
+      data.getNumPartitions, index, startTime, useDownScopedToken)
 
     result.toList
   }
@@ -1839,14 +1859,15 @@ case class InternalGcsStorage(param: MergedParameters,
         ///////////////////////////////////////////////////////////////////////
     }
 
+    val result = fileUploadResults.collect().toList
+
     val endTime = System.currentTimeMillis()
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
          | Finish uploading data for ${data.getNumPartitions} partitions in
          | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
-
-    fileUploadResults.collect().toList
+    result
   }
 
   // GCS doesn't support streaming yet
@@ -1950,12 +1971,13 @@ object StorageUtils {
 
   private[io] def logPresignedUrlGenerateProgress(total: Int,
                                                   index: Int,
-                                                  startTime: Long): Unit = {
+                                                  startTime: Long,
+                                                  useDownScopedToken: Boolean): Unit = {
     val endTime = System.currentTimeMillis()
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Time to retrieve pre-signed URL for
-         | $index/$total files is
+         | Time to retrieve ${if (useDownScopedToken)  "down-scoped token" else "pre-signed URL"}
+         | for $index/$total files is
          | ${Utils.getTimeString(endTime - startTime)}.
          |""".stripMargin.filter(_ >= ' '))
   }

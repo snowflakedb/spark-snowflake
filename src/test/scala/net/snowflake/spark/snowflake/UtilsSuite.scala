@@ -180,4 +180,7 @@ class UtilsSuite extends FunSuite with Matchers {
     }
   }
 
+  test("verify JDBC version is updated for release") {
+    assert(Utils.CERTIFIED_JDBC_VERSION.equals(Utils.jdbcVersion))
+  }
 }

@@ -334,15 +334,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     var result =
       sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
 
-    testPushdown(
+    val expectedAdditionQueries = Seq(
       s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
-                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
-                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
-      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedAdditionQueries, result,
       Seq(Row(4), Row(5), Row(7)),
       disablePushDown
     )
@@ -352,14 +359,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     result =
       sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
 
-    testPushdown(
+    val expectedSubtractQueries = Seq(
       s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
-                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
-                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedSubtractQueries, result,
       // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
       Seq(Row(0), Row(1), Row(1)),
       disablePushDown
@@ -370,15 +385,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     result =
       sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
 
-    testPushdown(
+    val expectedMultiplyQueries = Seq(
       s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
-                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
-                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
-      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedMultiplyQueries, result,
       Seq(Row(4), Row(6), Row(12)),
       disablePushDown
     )
@@ -388,15 +410,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     result =
       sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
 
-    testPushdown(
+    val expectedDivisionQueries = Seq(
       s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 6) ) ) AS "SUBQUERY_2_COL_0" FROM
-                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
-                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |AS DECIMAL(38, 6) ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
-      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedDivisionQueries, result,
       Seq(Row(1.000000), Row(1.333333), Row(1.500000)),
       disablePushDown
     )
@@ -406,15 +435,22 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
     result =
       sparkSession.sql(s"select o $operator p from df2 where o IS NOT NULL")
 
-    testPushdown(
+    val expectedModQueries = Seq(
       s"""SELECT ( CAST ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
-                    |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
-                    |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-                    |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
-      // Data in df2 (o, p) values(null, 1), (2, 2), (3, 2), (4, 3)
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( ( "SUBQUERY_1"."O" $operator "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_0" FROM
+         |( SELECT * FROM ( SELECT * FROM ( $test_table2 ) AS
+         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
+         |( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedModQueries, result,
       Seq(Row(0), Row(1), Row(1)),
       disablePushDown
     )
@@ -425,18 +461,28 @@ class SimpleNewPushdownIntegrationSuite extends IntegrationSuiteBase {
       s"select -o, - o + p, - o - p, - ( o + p ), - 3 + o from df2 where o IS NOT NULL"
     )
 
-    testPushdown(
+    val expectedUnaryMinusQueries = Seq(
       s"""SELECT ( - ( "SUBQUERY_1"."O" ) ) AS "SUBQUERY_2_COL_0" , ( CAST (
-                    |( - ( "SUBQUERY_1"."O" ) + "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) )
-                    |AS "SUBQUERY_2_COL_1" , ( CAST ( ( - ( "SUBQUERY_1"."O" ) - "SUBQUERY_1"."P" )
-                    |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_2" , ( - ( CAST ( ( "SUBQUERY_1"."O"
-                    |+ "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) ) ) AS "SUBQUERY_2_COL_3" , ( CAST ( (
-                    |-3 + "SUBQUERY_1"."O" ) AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_4" FROM ( SELECT
-                    |* FROM ( SELECT * FROM ( $test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-                    |"SUBQUERY_0" WHERE ( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+         |( - ( "SUBQUERY_1"."O" ) + "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) )
+         |AS "SUBQUERY_2_COL_1" , ( CAST ( ( - ( "SUBQUERY_1"."O" ) - "SUBQUERY_1"."P" )
+         |AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_2" , ( - ( CAST ( ( "SUBQUERY_1"."O"
+         |+ "SUBQUERY_1"."P" ) AS DECIMAL(38, 0) ) ) ) AS "SUBQUERY_2_COL_3" , ( CAST ( (
+         |-3 + "SUBQUERY_1"."O" ) AS DECIMAL(38, 0) ) ) AS "SUBQUERY_2_COL_4" FROM ( SELECT
+         |* FROM ( SELECT * FROM ( $test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
+         |"SUBQUERY_0" WHERE ( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
       """.stripMargin,
-      result,
-      // Data in df2 (o, p) values(2, 2), (3, 2), (4, 3)
+      // From spark 3.4, the CAST operation is not presented in the plan
+      s"""SELECT ( - ( "SUBQUERY_1"."O" ) ) AS "SUBQUERY_2_COL_0" ,
+         | ( ( - ( "SUBQUERY_1"."O" ) + "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_1" ,
+         | ( ( - ( "SUBQUERY_1"."O" ) - "SUBQUERY_1"."P" ) ) AS "SUBQUERY_2_COL_2" ,
+         | ( - ( ( "SUBQUERY_1"."O" + "SUBQUERY_1"."P" ) ) ) AS "SUBQUERY_2_COL_3" ,
+         | ( ( -3 + "SUBQUERY_1"."O" ) ) AS "SUBQUERY_2_COL_4"
+         | FROM ( SELECT * FROM ( SELECT * FROM (  $test_table2 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
+         | "SUBQUERY_0" WHERE ( "SUBQUERY_0"."O" IS NOT NULL ) ) AS "SUBQUERY_1"
+      """.stripMargin
+    )
+
+    testPushdownMultiplefQueries(expectedUnaryMinusQueries, result,
       Seq(
         Row(-2, 0, -4, -4, -1),
         Row(-3, -1, -5, -5, 0),

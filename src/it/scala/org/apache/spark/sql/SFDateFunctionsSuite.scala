@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class SFDateFunctionsSuite extends SFQueryTest with SFTestSessionBase {
   import SFTestImplicits._
-  protected lazy val sql = spark.sql _
+  protected def sql(sqlText: String) = spark.sql(sqlText)
 
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")

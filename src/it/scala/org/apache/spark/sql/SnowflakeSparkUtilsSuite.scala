@@ -9,7 +9,7 @@ class SnowflakeSparkUtilsSuite extends SFQueryTest with SFTestSessionBase {
 
   import SFTestImplicits._
 
-  protected lazy val sql = spark.sql _
+  protected def sql(sqlText: String) = spark.sql(sqlText)
 
   test("unit test: SnowflakeSparkUtils.getJDBCProviderName") {
     assert(SnowflakeSparkUtils.getJDBCProviderName(

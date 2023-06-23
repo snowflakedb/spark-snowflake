@@ -1,5 +1,6 @@
 package org.apache.spark.sql
 
+import net.snowflake.spark.snowflake.{SnowflakeConnectorUtils, TestUtils}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.snowflake.{SFQueryTest, SFTestData, SFTestSessionBase}
@@ -167,23 +168,41 @@ class SFDataFrameWindowFramesSuite
           window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
       Row("non_numeric", "non_numeric") :: Nil)
 
+    // The error message for 3.4 is different.
+    val expectedErrorMessage1 =
+      if (TestUtils.compareVersion(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION, "3.4") >= 0) {
+      "The data type of the upper bound \"STRING\" does not match the expected data type"
+    } else {
+      "The data type of the upper bound 'string' does not match the expected data type"
+    }
     val e1 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("The data type of the upper bound 'string' " +
-      "does not match the expected data type"))
+    assert(e1.message.contains(expectedErrorMessage1))
 
+    // The error message for 3.4 is different.
+    val expectedErrorMessage2 =
+      if (TestUtils.compareVersion(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION, "3.4") >= 0) {
+        "The data type of the lower bound \"STRING\" does not match the expected data type"
+      } else {
+        "The data type of the lower bound 'string' does not match the expected data type"
+      }
     val e2 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    assert(e2.message.contains(expectedErrorMessage2))
 
+    // The error message for 3.4 is different.
+    val expectedErrorMessage3 =
+      if (TestUtils.compareVersion(SnowflakeConnectorUtils.SUPPORT_SPARK_VERSION, "3.4") >= 0) {
+        "The data type of the lower bound \"STRING\" does not match the expected data type"
+      } else {
+        "The data type of the lower bound 'string' does not match the expected data type"
+      }
     val e3 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    assert(e3.message.contains(expectedErrorMessage3))
   }
 
   test("range between should accept int/long values as boundary") {

@@ -34,7 +34,7 @@ object SnowflakeConnectorUtils {
     * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
     * otherwise disable it.
     */
-  val SUPPORT_SPARK_VERSION = "3.3"
+  val SUPPORT_SPARK_VERSION = "3.4"
 
   def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
     if (session.version.startsWith(SUPPORT_SPARK_VERSION)) {
@@ -145,6 +145,8 @@ object SnowflakeFailMessage {
   final val FAIL_PUSHDOWN_AGGREGATE_EXPRESSION = "pushdown failed for aggregate expression"
   final val FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION = "pushdown failed for unsupported conversion"
   final val FAIL_PUSHDOWN_UNSUPPORTED_UNION = "pushdown failed for Spark feature: UNION by name"
+  final val FAIL_PUSHDOWN_CANNOT_UNION =
+    "pushdown failed for UNION because the spark connector options are not compatible"
 }
 
 class SnowflakePushdownUnsupportedException(message: String,
