@@ -101,9 +101,9 @@ object SnowflakeTelemetry {
       .getOrElse(Seq.empty)
 
   private[snowflake] def addSparkClusterStatistics(metric: ObjectNode) = try {
-    metric.put(TelemetryFieldNames.CLUSTER_NODE_COUNT,
-      SparkEnv.get.blockManager.master.getStorageStatus.length)
-
+//    metric.put(TelemetryFieldNames.CLUSTER_NODE_COUNT,
+//      SparkEnv.get.blockManager.master.getStorageStatus.length)
+    metric.put(TelemetryFieldNames.CLUSTER_NODE_COUNT, 1)
     SparkSession.getActiveSession
       .map(_.sparkContext)
       .map { sc =>
