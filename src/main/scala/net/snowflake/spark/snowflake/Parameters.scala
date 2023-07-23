@@ -719,6 +719,13 @@ object Parameters {
     def supportShareConnection: Boolean = {
       isTrue(parameters.getOrElse(PARAM_SUPPORT_SHARE_CONNECTION, "true"))
     }
+    def supportMicroSecondDuringUnload: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD, "false"))
+    }
+    def forceSkipPrePostActionsCheck: Boolean = {
+      isTrue(parameters.getOrElse(
+        PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "false"))
+    }
     def stagingTableNameRemoveQuotesOnly: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_STAGING_TABLE_NAME_REMOVE_QUOTES_ONLY, "false"))
     }
