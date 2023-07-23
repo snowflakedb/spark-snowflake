@@ -232,6 +232,14 @@ object Parameters {
   // Internal option support micro second precision timestamp during copy unload
   val PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD: String = knownParam(
     "internal_support_micro_second_during_unload"
+    )
+
+  // preactions and postactions may affect the session level setting, so connection sharing
+  // may be enabled only when the queries in preactions and postactions are in a white list.
+  // force_skip_pre_post_action_check_for_session_sharing is introduced if users are sure that
+  // the queries in preactions and postactions don't affect others. Its default value is false.
+  val PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING: String = knownParam(
+    "force_skip_pre_post_action_check_for_session_sharing"
   )
 
   // preactions and postactions may affect the session level setting, so connection sharing
@@ -721,6 +729,10 @@ object Parameters {
     }
     def supportMicroSecondDuringUnload: Boolean = {
       isTrue(parameters.getOrElse(PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD, "false"))
+    }
+    def forceSkipPrePostActionsCheck: Boolean = {
+      isTrue(parameters.getOrElse(
+        PARAM_FORCE_SKIP_PRE_POST_ACTION_CHECK_FOR_SESSION_SHARING, "false"))
     }
     def forceSkipPrePostActionsCheck: Boolean = {
       isTrue(parameters.getOrElse(
