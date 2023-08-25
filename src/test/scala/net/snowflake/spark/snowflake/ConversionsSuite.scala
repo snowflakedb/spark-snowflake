@@ -17,12 +17,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.{Date, Timestamp}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import org.scalatest.FunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
+import org.scalatest.FunSuite
+
+import java.sql.{Date, Timestamp}
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 
 /**
   * Unit test for data type conversions
@@ -32,7 +33,7 @@ class ConversionsSuite extends FunSuite {
   val mapper = new ObjectMapper()
 
   test("Data should be correctly converted") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, isJava8Time = false)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
@@ -110,7 +111,7 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Row conversion handles null values") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, isJava8Time = false)
     val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
@@ -118,7 +119,8 @@ class ConversionsSuite extends FunSuite {
 
   test("Dates are correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", DateType)))
+      StructType(Seq(StructField("a", DateType))),
+      isJava8Time = false
     )
     assert(
       convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9))
@@ -126,6 +128,52 @@ class ConversionsSuite extends FunSuite {
     assert(convertRow(Array(null)) === Row(null))
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
+    }
+  }
+
+  test("Dates are correctly converted to Java 8 dates") {
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", DateType))),
+      isJava8Time = true
+    )
+    assert(
+      convertRow(Array("2015-07-09")) === Row(LocalDate.of(2015, 7, 9))
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-date"))
+    }
+  }
+
+  test("Timestamps are correctly converted") {
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", TimestampType))),
+      isJava8Time = false
+    )
+    assert(
+      convertRow(Array("2013-04-05 18:01:02.123")) === Row(
+        TestUtils.toTimestamp(2013, 3, 5, 18, 1, 2, 123)
+      )
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-timestamp"))
+    }
+  }
+
+  test("Timestamps are correctly converted to Java 8 dates") {
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", TimestampType))),
+      isJava8Time = true
+    )
+    assert(
+      convertRow(Array("Z 2013-04-05 18:01:02.123")) === Row(
+        LocalDateTime.of(2013, 4, 5, 18, 1, 2, 123000000).toInstant(ZoneOffset.UTC)
+      )
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-timestamp"))
     }
   }
 
@@ -180,7 +228,7 @@ class ConversionsSuite extends FunSuite {
 
     val result: Row =
       Conversions
-        .jsonStringToRow[Row](mapper.readTree(str), schema)
+        .jsonStringToRow[Row](mapper.readTree(str), schema, isJava8Time = false)
         .asInstanceOf[Row]
 
     // scalastyle:off println

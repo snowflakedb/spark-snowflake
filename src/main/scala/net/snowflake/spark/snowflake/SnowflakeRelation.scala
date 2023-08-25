@@ -18,7 +18,6 @@
 package net.snowflake.spark.snowflake
 
 import java.io.{PrintWriter, StringWriter}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -33,6 +32,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
+import org.apache.spark.SparkConf
 
 import scala.collection.JavaConverters
 
@@ -167,13 +167,20 @@ private[snowflake] case class SnowflakeRelation(
       if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
       else SupportedFormat.CSV
 
+    val isJava8Time: Boolean = sqlContext.sparkContext.getConf.getBoolean(
+      "spark.sql.datetime.java8API.enabled",
+      defaultValue = false
+    )
+
     val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
 
     format match {
       case SupportedFormat.CSV =>
-        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema))
+        rdd.mapPartitions(CSVConverter.convert[T](_, resultSchema, isJava8Time))
       case SupportedFormat.JSON =>
-        rdd.mapPartitions(JsonConverter.convert[T](_, resultSchema))
+        rdd.mapPartitions(
+          JsonConverter.convert[T](_, resultSchema, isJava8Time)
+        )
     }
   }
 
