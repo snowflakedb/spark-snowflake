@@ -5,8 +5,6 @@ import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 
-import scala.collection.Seq
-
 class VariantTypeSuite extends IntegrationSuiteBase {
 
   lazy val schema = new StructType(
