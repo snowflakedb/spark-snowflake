@@ -5,6 +5,8 @@ import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 
+import scala.collection.Seq
+
 class VariantTypeSuite extends IntegrationSuiteBase {
 
   lazy val schema = new StructType(
@@ -23,6 +25,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   val tableName1 = s"spark_test_table_1$randomSuffix"
   val tableName2 = s"spark_test_table_2$randomSuffix"
   val tableName3 = s"spark_test_table_3$randomSuffix"
+  val tableName4 = s"spark_test_table_4$randomSuffix"
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -43,6 +46,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table if exists $tableName1")
     jdbcUpdate(s"drop table if exists $tableName2")
     jdbcUpdate(s"drop table if exists $tableName3")
+    jdbcUpdate(s"drop table if exists $tableName4")
     super.afterAll()
   }
 
@@ -209,6 +213,55 @@ class VariantTypeSuite extends IntegrationSuiteBase {
         .asText()
         .equals("c | d")
     )
+  }
+
+  test ("load variant + binary column") {
+    val data = sc.parallelize(
+      Seq(
+        Row("binary1".getBytes(), Array(1, 2, 3), Map("a" -> 1), Row("abc")),
+        Row("binary2".getBytes(), Array(4, 5, 6), Map("b" -> 2), Row("def")),
+        Row("binary3".getBytes(), Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
+      )
+    )
+
+    val schema1 = new StructType(
+      Array(
+        StructField("BIN", BinaryType, nullable = false),
+        StructField("ARR", ArrayType(IntegerType), nullable = false),
+        StructField("MAP", MapType(StringType, IntegerType), nullable = false),
+        StructField(
+          "OBJ",
+          StructType(Array(StructField("STR", StringType, nullable = false)))
+        )
+      )
+    )
+
+    val df = sparkSession.createDataFrame(data, schema1)
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableName4)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val out = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableName4)
+      .schema(schema1)
+      .load()
+
+    val result = out.collect()
+    assert(result.length == 3)
+
+    val bin = result(0).get(0).asInstanceOf[Array[Byte]]
+    assert(new String(bin).equals("binary1"))
+    assert(result(0).getList[Int](1).get(0) == 1)
+    assert(result(1).getList[Int](1).get(1) == 5)
+    assert(result(2).getList[Int](1).get(2) == 9)
+    assert(result(1).getMap[String, Int](2)("b") == 2)
+    assert(result(2).getStruct(3).getString(0) == "ghi")
   }
 
 }
