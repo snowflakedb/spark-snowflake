@@ -214,52 +214,55 @@ class VariantTypeSuite extends IntegrationSuiteBase {
   }
 
   test ("load variant + binary column") {
-    val data = sc.parallelize(
-      Seq(
-        Row("binary1".getBytes(), Array(1, 2, 3), Map("a" -> 1), Row("abc")),
-        Row("binary2".getBytes(), Array(4, 5, 6), Map("b" -> 2), Row("def")),
-        Row("binary3".getBytes(), Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
-      )
-    )
-
-    val schema1 = new StructType(
-      Array(
-        StructField("BIN", BinaryType, nullable = false),
-        StructField("ARR", ArrayType(IntegerType), nullable = false),
-        StructField("MAP", MapType(StringType, IntegerType), nullable = false),
-        StructField(
-          "OBJ",
-          StructType(Array(StructField("STR", StringType, nullable = false)))
+    // COPY UNLOAD can't be run because it doesn't support binary
+    if (!params.useCopyUnload) {
+      val data = sc.parallelize(
+        Seq(
+          Row("binary1".getBytes(), Array(1, 2, 3), Map("a" -> 1), Row("abc")),
+          Row("binary2".getBytes(), Array(4, 5, 6), Map("b" -> 2), Row("def")),
+          Row("binary3".getBytes(), Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
         )
       )
-    )
 
-    val df = sparkSession.createDataFrame(data, schema1)
+      val schema1 = new StructType(
+        Array(
+          StructField("BIN", BinaryType, nullable = false),
+          StructField("ARR", ArrayType(IntegerType), nullable = false),
+          StructField("MAP", MapType(StringType, IntegerType), nullable = false),
+          StructField(
+            "OBJ",
+            StructType(Array(StructField("STR", StringType, nullable = false)))
+          )
+        )
+      )
 
-    df.write
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option("dbtable", tableName4)
-      .mode(SaveMode.Overwrite)
-      .save()
+      val df = sparkSession.createDataFrame(data, schema1)
 
-    val out = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option("dbtable", tableName4)
-      .schema(schema1)
-      .load()
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", tableName4)
+        .mode(SaveMode.Overwrite)
+        .save()
 
-    val result = out.collect()
-    assert(result.length == 3)
+      val out = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", tableName4)
+        .schema(schema1)
+        .load()
 
-    val bin = result(0).get(0).asInstanceOf[Array[Byte]]
-    assert(new String(bin).equals("binary1"))
-    assert(result(0).getList[Int](1).get(0) == 1)
-    assert(result(1).getList[Int](1).get(1) == 5)
-    assert(result(2).getList[Int](1).get(2) == 9)
-    assert(result(1).getMap[String, Int](2)("b") == 2)
-    assert(result(2).getStruct(3).getString(0) == "ghi")
+      val result = out.collect()
+      assert(result.length == 3)
+
+      val bin = result(0).get(0).asInstanceOf[Array[Byte]]
+      assert(new String(bin).equals("binary1"))
+      assert(result(0).getList[Int](1).get(0) == 1)
+      assert(result(1).getList[Int](1).get(1) == 5)
+      assert(result(2).getList[Int](1).get(2) == 9)
+      assert(result(1).getMap[String, Int](2)("b") == 2)
+      assert(result(2).getStruct(3).getString(0) == "ghi")
+    }
   }
 
 }
