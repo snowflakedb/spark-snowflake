@@ -93,9 +93,43 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             .mkString("|")
         })
       case SupportedFormat.JSON =>
-        data.toJSON.map(_.toString).rdd
+        // convert binary (Array of Byte) to encoded base64 String before COPY
+        val newSchema: StructType = prepareSchemaForJson(data.schema)
+        val conversionsFunction = genConversionFunctionsForJson(data.schema)
+        val newData: RDD[Row] = data.rdd.map(row => {
+          Row.fromSeq(
+            row.toSeq
+              .zip(conversionsFunction)
+              .map {
+                case (element, func) => func(element)
+              }
+          )
+        })
+        spark.createDataFrame(newData, newSchema).toJSON.map(_.toString).rdd
     }
   }
+
+  private def prepareSchemaForJson(schema: StructType): StructType =
+    StructType.apply(schema.map{
+      // Binary types will be converted to String type before COPY
+      case field: StructField if field.dataType == BinaryType =>
+        StructField(field.name, StringType, field.nullable, field.metadata)
+      case other => other
+    })
+
+
+  private def genConversionFunctionsForJson(schema: StructType): Array[Any => Any] =
+    schema.fields.map(field =>
+      field.dataType match {
+        case BinaryType =>
+          (v: Any) =>
+            v match {
+              case null => ""
+              case bytes: Array[Byte] => Base64.encodeBase64String(bytes)
+            }
+        case _ => (input: Any) => input
+      }
+    )
 
   /**
     * If column mapping is enable, remove all useless columns from the input DataFrame

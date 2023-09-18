@@ -18,7 +18,6 @@ package net.snowflake.spark.snowflake.io
 import java.sql.ResultSet
 import java.time.LocalDateTime
 import java.util.TimeZone
-
 import net.snowflake.client.jdbc.SnowflakeResultSet
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
@@ -26,7 +25,7 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
@@ -836,13 +835,16 @@ private[io] object StageWriter {
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
             val names = schema.fields
-              .map(x => columnPrefix.concat(
-                if (params.quoteJsonFieldName) {
+              .map(x => {
+                var name = if (params.quoteJsonFieldName) {
                   "\"" + x.name + "\""
                 } else {
                   x.name
                 }
-              ))
+                if (x.dataType == BinaryType) {
+                  name += "::BINARY"
+                }
+                columnPrefix.concat(name)})
               .mkString(",")
             ConstantString("from (select") + names + from + "tmp)"
           } else {
@@ -908,6 +910,7 @@ private[io] object StageWriter {
           ConstantString(s"""
                |FILE_FORMAT = (
                |    TYPE = JSON
+               |    BINARY_FORMAT=BASE64
                |)
            """.stripMargin) !
       }
