@@ -69,19 +69,12 @@ class SecuritySuite extends IntegrationSuiteBase {
     FileUtils.deleteQuietly(new File(TEST_LOG_FILE_NAME))
   }
 
-  ignore("manual test for addLog4j2FileAppender()/dropLog4j2FileAppender()") {
-    logger.info("Before adding file appender")
-    addLog4j2FileAppender(loggingFilePath, fileAppenderName)
-    logger.info("After adding file appender")
-    dropLog4j2FileAppender(fileAppenderName)
-    logger.info("After dropping file appender")
-  }
 
   test("verify pre-signed URL are not logged for read & write") {
     logger.info("Reconfigure to log into file")
     // Reconfigure log file to output all logging entries.
     if (USE_LOG4J2_PROPERTIES) {
-      addLog4j2FileAppender(loggingFilePath, fileAppenderName)
+      assert(false)
     } else {
       reconfigureLogFile(TEST_LOG4J_PROPERTY)
     }
@@ -108,7 +101,7 @@ class SecuritySuite extends IntegrationSuiteBase {
     } finally {
       // Reconfigure back to the default log file.
       if (USE_LOG4J2_PROPERTIES) {
-        dropLog4j2FileAppender(fileAppenderName)
+        assert(false)
       } else {
         reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
       }
