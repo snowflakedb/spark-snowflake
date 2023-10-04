@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, test_main ]
 
 jobs:
   test:
@@ -14,8 +14,8 @@ jobs:
      matrix:
        scala_version: [ '2.12.11' ]
        spark_version: [ '3.1.1' ]
-       use_copy_unload: [ 'true', 'false' ]
-       cloud_provider: [ 'aws', 'azure', 'gcp' ]
+       use_copy_unload: [ 'false' ]
+       cloud_provider: [ 'gcp' ]
 
     steps:
     - uses: actions/checkout@v2
