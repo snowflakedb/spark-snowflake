@@ -2,17 +2,26 @@ package net.snowflake.spark.snowflake.io
 
 import java.sql.ResultSet
 import java.util.Properties
+
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues}
+import net.snowflake.spark.snowflake.{
+  Conversions,
+  ProxyInfo,
+  SnowflakeConnectorException,
+  SnowflakeTelemetry,
+  SparkConnectorContext,
+  TelemetryConstValues
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Partition, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
@@ -42,8 +51,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
       queryID,
-      sfFullURL,
-      sc.getConf
+      sfFullURL
     )
   }
 
@@ -60,8 +68,7 @@ case class ResultIterator[T: ClassTag](
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String,
-  sparkConf: SparkConf
+  sfFullURL: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -123,10 +130,6 @@ case class ResultIterator[T: ClassTag](
   val mapper: ObjectMapper = new ObjectMapper()
   var currentRowNotConsumedYet: Boolean = false
   var resultSetIsClosed: Boolean = false
-  var isJava8Time: Boolean = sparkConf.getBoolean(
-    "spark.sql.datetime.java8API.enabled",
-    defaultValue = false
-  )
 
   TaskContext.get().addTaskCompletionListener[Unit](_ => closeResultSet())
 
@@ -218,8 +221,7 @@ case class ResultIterator[T: ClassTag](
           case _: ArrayType | _: MapType | _: StructType =>
             Conversions.jsonStringToRow[T](
               mapper.readTree(data.getString(index + 1)),
-              schema.fields(index).dataType,
-              isJava8Time
+              schema.fields(index).dataType
             )
           case BinaryType =>
             // if (isIR) UTF8String.fromString(data.getString(index + 1))
@@ -230,7 +232,7 @@ case class ResultIterator[T: ClassTag](
               DateTimeUtils.fromJavaDate(data.getDate(index + 1))
             } else {
               val date = data.getDate(index + 1)
-              if (isJava8Time) {
+              if (SQLConf.get.datetimeJava8ApiEnabled) {
                 DateTimeUtils.daysToLocalDate(DateTimeUtils.anyToDays(date))
               } else {
                 date
@@ -245,7 +247,7 @@ case class ResultIterator[T: ClassTag](
               DateTimeUtils.fromJavaTimestamp(data.getTimestamp(index + 1))
             } else {
               val timestamp = data.getTimestamp(index + 1)
-              if (isJava8Time) {
+              if (SQLConf.get.datetimeJava8ApiEnabled) {
                 DateTimeUtils.microsToInstant(DateTimeUtils.anyToMicros(timestamp))
               } else {
                 timestamp

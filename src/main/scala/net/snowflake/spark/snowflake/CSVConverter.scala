@@ -17,7 +17,6 @@
 
 package net.snowflake.spark.snowflake
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.types.StructType
 
 import scala.collection.mutable.ArrayBuffer
@@ -30,10 +29,9 @@ object CSVConverter {
 
   private[snowflake] def convert[T: ClassTag](
     partition: Iterator[String],
-    resultSchema: StructType,
-    isJava8Time: Boolean
+    resultSchema: StructType
   ): Iterator[T] = {
-    val converter = Conversions.createRowConverter[T](resultSchema, isJava8Time)
+    val converter = Conversions.createRowConverter[T](resultSchema)
     partition.map(s => {
       val fields = ArrayBuffer.empty[String]
       var buff = new StringBuilder

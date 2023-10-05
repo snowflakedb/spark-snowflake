@@ -17,13 +17,13 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types._
-import org.scalatest.FunSuite
-
 import java.sql.{Date, Timestamp}
 import java.time.{LocalDate, LocalDateTime, ZoneOffset}
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
+import org.scalatest.FunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 /**
   * Unit test for data type conversions
@@ -33,7 +33,7 @@ class ConversionsSuite extends FunSuite {
   val mapper = new ObjectMapper()
 
   test("Data should be correctly converted") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, isJava8Time = false)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
@@ -111,7 +111,7 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Row conversion handles null values") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, isJava8Time = false)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
     val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
@@ -119,8 +119,7 @@ class ConversionsSuite extends FunSuite {
 
   test("Dates are correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", DateType))),
-      isJava8Time = false
+      StructType(Seq(StructField("a", DateType)))
     )
     assert(
       convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9))
@@ -132,9 +131,9 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Dates are correctly converted to Java 8 dates") {
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "true")
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", DateType))),
-      isJava8Time = true
+      StructType(Seq(StructField("a", DateType)))
     )
     assert(
       convertRow(Array("2015-07-09")) === Row(LocalDate.of(2015, 7, 9))
@@ -143,12 +142,12 @@ class ConversionsSuite extends FunSuite {
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
     }
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "false")
   }
 
   test("Timestamps are correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", TimestampType))),
-      isJava8Time = false
+      StructType(Seq(StructField("a", TimestampType)))
     )
     assert(
       convertRow(Array("2013-04-05 18:01:02.123")) === Row(
@@ -162,9 +161,9 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Timestamps are correctly converted to Java 8 dates") {
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "true")
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", TimestampType))),
-      isJava8Time = true
+      StructType(Seq(StructField("a", TimestampType)))
     )
     assert(
       convertRow(Array("Z 2013-04-05 18:01:02.123")) === Row(
@@ -175,6 +174,7 @@ class ConversionsSuite extends FunSuite {
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-timestamp"))
     }
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "false")
   }
 
   test("json string to row conversion") {
@@ -228,7 +228,7 @@ class ConversionsSuite extends FunSuite {
 
     val result: Row =
       Conversions
-        .jsonStringToRow[Row](mapper.readTree(str), schema, isJava8Time = false)
+        .jsonStringToRow[Row](mapper.readTree(str), schema)
         .asInstanceOf[Row]
 
     // scalastyle:off println
