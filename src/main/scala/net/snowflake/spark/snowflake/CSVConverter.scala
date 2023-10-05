@@ -18,7 +18,6 @@
 package net.snowflake.spark.snowflake
 
 import org.apache.spark.sql.types.StructType
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
