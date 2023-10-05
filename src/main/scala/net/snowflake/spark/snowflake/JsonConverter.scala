@@ -12,7 +12,7 @@ object JsonConverter {
 
   private[snowflake] def convert[T: ClassTag](
     partition: Iterator[String],
-    resultSchema: StructType,
+    resultSchema: StructType
   ): Iterator[T] =
     partition.map(convertRow[T](resultSchema, _))
 

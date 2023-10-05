@@ -22,6 +22,7 @@ import java.text._
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.{Date, TimeZone}
+
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -142,7 +143,7 @@ private[snowflake] object Conversions {
     * the given schema to Row instances
     */
   def createRowConverter[T: ClassTag](
-    schema: StructType,
+    schema: StructType
   ): Array[String] => T = {
     convertRow[T](schema, _: Array[String])
   }

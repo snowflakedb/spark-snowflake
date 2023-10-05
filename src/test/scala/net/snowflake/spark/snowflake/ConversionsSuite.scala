@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 import java.time.{LocalDate, LocalDateTime, ZoneOffset}
+
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
 import org.apache.spark.sql.Row
