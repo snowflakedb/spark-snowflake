@@ -27,6 +27,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 
+import scala.util.{Failure, Success, Try}
+
 /**
   * Functions to write data to Snowflake.
   *
@@ -70,7 +72,12 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     }
 
     val output: DataFrame = removeUselessColumns(data, params)
-    val strRDD = dataFrameToRDD(sqlContext, output, params, format)
+    val strRDD: RDD[String] = Try {
+      dataFrameToRDD(sqlContext, output, params, format)
+    } match {
+      case Success(success) => success
+      case Failure(error) => throw error
+    }
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
@@ -110,7 +117,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
   }
 
   private def prepareSchemaForJson(schema: StructType): StructType =
-    StructType.apply(schema.map{
+    StructType.apply(schema.map {
       // Binary types will be converted to String type before COPY
       case field: StructField if field.dataType == BinaryType =>
         StructField(field.name, StringType, field.nullable, field.metadata)
