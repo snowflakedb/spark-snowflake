@@ -25,7 +25,7 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, StructType, TimestampType}
 import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
@@ -190,6 +190,8 @@ class WriteTableState(conn: ServerConnection) {
 private[io] object StageWriter {
 
   private[io] val log = LoggerFactory.getLogger(getClass)
+
+  private val DEFAULT_TIMESTAMP_FORMAT: String = "TZHTZM YYYY-MM-DD HH24:MI:SS.FF9"
 
   def writeToStage(sqlContext: SQLContext,
                    rdd: RDD[String],
@@ -892,6 +894,21 @@ private[io] object StageWriter {
 
     val mappingFromString = getMappingFromString(mappingList, fromString)
 
+    val hasTimestampColumn: Boolean =
+      schema.exists(field => field.dataType == TimestampType)
+
+    val timestampFormat: String =
+      if (params.getStringTimestampFormat.isEmpty) {
+        DEFAULT_TIMESTAMP_FORMAT
+      } else if (hasTimestampColumn) {
+        log.error("The source Dataframe contains timestamp columns, "
+          + "the parameter `string_timestamp_format` has been ignored.")
+        DEFAULT_TIMESTAMP_FORMAT
+      } else {
+        params.getStringTimestampFormat.get
+      }
+
+
     val formatString =
       format match {
         case SupportedFormat.CSV =>
@@ -901,7 +918,7 @@ private[io] object StageWriter {
                |    FIELD_DELIMITER='|'
                |    NULL_IF=()
                |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-               |    TIMESTAMP_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
+               |    TIMESTAMP_FORMAT='$timestampFormat'
                |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
                |    BINARY_FORMAT=BASE64
                |  )

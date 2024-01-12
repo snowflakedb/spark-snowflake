@@ -16,14 +16,13 @@
 
 package net.snowflake.spark.snowflake
 
-import java.sql.Timestamp
+import java.sql.{SQLException, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-
 import org.apache.spark.sql.{Row, SaveMode}
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DateType, TimestampType}
+import org.apache.spark.sql.types.{DateType, StringType, StructField, StructType, TimestampType}
 
 /**
   * Created by mzukowski on 8/12/16.
@@ -96,6 +95,50 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
         Row(3, null)
       )
     )
+  }
+
+  test("change timestamp format") {
+    jdbcUpdate(s"CREATE OR REPLACE TABLE $test_table (START_TIME TIMESTAMP)")
+
+    val spark = sparkSession
+    import spark.implicits._
+
+    val df1 = Seq("2023-11-28 10:23:59.123456").toDF()
+    df1.write.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable).option("dbtable", test_table)
+      .option(Parameters.PARAM_STRING_TIMESTAMP_FORMAT, "YYYY-MM-DD HH24:MI:SS.FF9")
+      .mode(SaveMode.Append).save()
+
+    val df = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable).option("dbtable", test_table).load()
+    assert(df.collect().head.getTimestamp(0).toString.equals("2023-11-28 10:23:59.123456"))
+
+    // it doesn't work if source dataframe has timestamp column
+    val dateFormat: DateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss.SSS")
+    val time: Timestamp =
+      new Timestamp(dateFormat.parse("28/10/1996 00:00:00.000").getTime)
+
+    val data = sc.parallelize(Seq(
+      Row(time, "2023-11-28 10:23:59.123456")
+    ))
+
+    val schema = new StructType(
+      Array(
+        StructField("time", TimestampType),
+        StructField("str", StringType)
+      )
+    )
+
+    jdbcUpdate(s"CREATE OR REPLACE TABLE $test_table (START_TIME TIMESTAMP, END_TIME TIMESTAMP)")
+
+    val df2 = sparkSession.createDataFrame(data, schema)
+
+    assertThrows[SQLException]{
+      df2.write.format(SNOWFLAKE_SOURCE_NAME).options(connectorOptionsNoTable)
+        .options(connectorOptionsNoTable).option("dbtable", test_table)
+        .option(Parameters.PARAM_STRING_TIMESTAMP_FORMAT, "YYYY-MM-DD HH24:MI:SS.FF9")
+        .mode(SaveMode.Append).save()
+    }
   }
 
   test("insert timestamp into date") {

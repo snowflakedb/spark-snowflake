@@ -114,6 +114,9 @@ object Parameters {
   val PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT: String = knownParam("timestamp_ntz_output_format")
   val PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT: String = knownParam("timestamp_ltz_output_format")
   val PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT: String = knownParam("timestamp_tz_output_format")
+  // changed the timestamp format when copy data from string column to timestamp column.
+  // it only works when source dataframe doesn't have timestamp columns.
+  val PARAM_STRING_TIMESTAMP_FORMAT: String = knownParam("string_timestamp_format")
   val TIMESTAMP_OUTPUT_FORMAT_SF_CURRENT: String = "sf_current"
   val PARAM_JDBC_QUERY_RESULT_FORMAT: String = knownParam(
     "jdbc_query_result_format"
@@ -1016,6 +1019,9 @@ object Parameters {
           "ignore"
       }
     }
+
+    def getStringTimestampFormat: Option[String] =
+      parameters.get(PARAM_STRING_TIMESTAMP_FORMAT)
 
     def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
 
