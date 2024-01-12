@@ -60,7 +60,7 @@ object Utils {
   /**
     * The certified JDBC version to work with this spark connector version.
     */
-  val CERTIFIED_JDBC_VERSION = "3.13.30"
+  val CERTIFIED_JDBC_VERSION = "3.14.4"
 
   /**
     * Important:
