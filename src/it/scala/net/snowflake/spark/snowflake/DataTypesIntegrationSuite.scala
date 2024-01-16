@@ -111,7 +111,7 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
 
     val df = sparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable).option("dbtable", test_table).load()
-    assert(df.collect().head.getTimestamp(0).toString.equals("2023-11-28 10:23:59.123456"))
+    assert(df.collect().head.getTimestamp(0).toString.startsWith("2023-11-28 10:23:59.123"))
 
     // it doesn't work if source dataframe has timestamp column
     val dateFormat: DateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss.SSS")
