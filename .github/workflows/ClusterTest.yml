@@ -18,7 +18,7 @@ jobs:
         cloud_provider: [ 'gcp' ]
     env:
         SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
-        TEST_SPARK_VERSION: '3.4'
+        TEST_SPARK_VERSION: '3.3'
         DOCKER_IMAGE_TAG: 'snowflakedb/spark-base:3.3.2'
         TEST_SCALA_VERSION: '2.12'
         TEST_COMPILE_SCALA_VERSION: '2.12.11'
