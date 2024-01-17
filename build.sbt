@@ -89,8 +89,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     Test / fork := true,
     Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
 
-    // Release settings
-    // usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
     Global / pgpPassphrase := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(_.toCharArray),
 
     publishMavenStyle := true,
