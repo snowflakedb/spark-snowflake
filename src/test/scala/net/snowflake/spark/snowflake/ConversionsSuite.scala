@@ -18,11 +18,13 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
+
+import scala.:+
+import scala.collection.immutable.HashMap
 
 /**
   * Unit test for data type conversions
@@ -31,8 +33,19 @@ class ConversionsSuite extends FunSuite {
 
   val mapper = new ObjectMapper()
 
+  val commonOptions = Map("dbtable" -> "test_table",
+    "sfurl" -> "account.snowflakecomputing.com:443",
+    "sfuser" -> "username",
+    "sfpassword" -> "password")
+
+  val notSupportMicro: Parameters.MergedParameters = Parameters.mergeParameters(commonOptions ++
+    Map(Parameters.PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD-> "false"))
+
+  val supportMicro: Parameters.MergedParameters = Parameters.mergeParameters(commonOptions ++
+    Map(Parameters.PARAM_INTERNAL_SUPPORT_MICRO_SECOND_DURING_UNLOAD-> "true"))
+
   test("Data should be correctly converted") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, notSupportMicro)
     val doubleMin = Double.MinValue.toString
     val longMax = Long.MaxValue.toString
     // scalastyle:off
@@ -110,7 +123,7 @@ class ConversionsSuite extends FunSuite {
   }
 
   test("Row conversion handles null values") {
-    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema)
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, notSupportMicro)
     val emptyRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     val nullsRow = List.fill(TestUtils.testSchema.length)(null).toArray[String]
     assert(convertRow(emptyRow) === Row(nullsRow: _*))
@@ -118,7 +131,7 @@ class ConversionsSuite extends FunSuite {
 
   test("Dates are correctly converted") {
     val convertRow = Conversions.createRowConverter[Row](
-      StructType(Seq(StructField("a", DateType)))
+      StructType(Seq(StructField("a", DateType))), notSupportMicro
     )
     assert(
       convertRow(Array("2015-07-09")) === Row(TestUtils.toDate(2015, 6, 9))
@@ -192,5 +205,89 @@ class ConversionsSuite extends FunSuite {
         "2015-07-01 00:00:00.001,[1,2,3,4,5],keys: [a,b,c], values: [1,2,3],[123,str1]]"
 
     assert(expect == result.toString())
+  }
+
+  test("Data with micro-seconds and nano-seconds precision should be correctly converted"){
+    val convertRow = Conversions.createRowConverter[Row](TestUtils.testSchema, supportMicro)
+    val doubleMin = Double.MinValue.toString
+    val longMax = Long.MaxValue.toString
+    // scalastyle:off
+    val unicodeString = "Unicode是樂趣"
+    // scalastyle:on
+
+    val timestampString = "2014-03-01 00:00:01.123456"
+
+    val expectedTimestampMicro: Timestamp = java.sql.Timestamp.valueOf(timestampString)
+
+    val dateString = "2015-07-01"
+    val expectedDate = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
+
+
+
+    val timestampString2 = "2014-03-01 00:00:01.123456789"
+
+    val expectedTimestampMicro2: Timestamp = java.sql.Timestamp.valueOf(timestampString2)
+
+    val dateString2 = "2015-07-01"
+    val expectedDate2 = TestUtils.toMillis(2015, 6, 1, 0, 0, 0)
+
+    val convertedRow = convertRow(
+      Array(
+        "1",
+        dateString,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestampString
+      )
+    )
+
+    val expectedRow = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDate),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      expectedTimestampMicro
+    )
+
+    val convertedRow2 = convertRow(
+      Array(
+        "1",
+        dateString2,
+        "123.45",
+        doubleMin,
+        "1.0",
+        "42",
+        longMax,
+        "23",
+        unicodeString,
+        timestampString2
+      )
+    )
+
+    val expectedRow2 = Row(
+      1.asInstanceOf[Byte],
+      new Date(expectedDate2),
+      new java.math.BigDecimal("123.45"),
+      Double.MinValue,
+      1.0f,
+      42,
+      Long.MaxValue,
+      23.toShort,
+      unicodeString,
+      expectedTimestampMicro2
+    )
+
+    assert(convertedRow == expectedRow)
+    assert(convertedRow2 == expectedRow2)
   }
 }
