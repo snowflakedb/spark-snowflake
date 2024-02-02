@@ -277,4 +277,28 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("Disable retry after application closed") {
+
+    val newSparkSession = createDefaultSparkSession
+    val sc = newSparkSession.sparkContext
+    val appId = sc.applicationId
+
+    import scala.concurrent.ExecutionContext.Implicits.global
+    Future {
+      newSparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", "select count(*) from table(generator(timelimit=>100))")
+        .load().show()
+    }
+    Thread.sleep(10000)
+    var queries = SparkConnectorContext.getRunningQueries.get(appId)
+    assert(queries.isDefined)
+    assert(queries.get.size == 1)
+    newSparkSession.stop()
+    Thread.sleep(10000)
+    queries = SparkConnectorContext.getRunningQueries.get(appId)
+    SparkConnectorContext.closedApplicationIDs.contains(appId)
+    assert(queries.isEmpty)
+  }
+
 }
