@@ -287,6 +287,7 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     Future {
       newSparkSession.read.format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_SUPPORT_SHARE_CONNECTION, "false")
         .option("query", "select count(*) from table(generator(timelimit=>100))")
         .load().show()
     }
