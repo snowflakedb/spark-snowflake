@@ -153,10 +153,19 @@ private[snowflake] case class SnowflakeRelation(
   // without first executing it.
   private def getRDD[T: ClassTag](statement: SnowflakeSQLStatement,
                                   resultSchema: StructType): RDD[T] = {
-    if (params.useCopyUnload) {
-      getSnowflakeRDD(statement, resultSchema)
+    val appId = sqlContext.sparkContext.applicationId
+    if (SparkConnectorContext.closedApplicationIDs.contains(appId)) {
+      // don't execute any snowflake queries if the Spark application was closed.
+      // Spark trigger `onApplicationEnd` listener early than stop tasks.
+      // Connector cancels all running sql queries in the `onApplicationEnd` listener.
+      // spark will re-run canceled Snowflake SQL queries in retries.
+      throw new IllegalStateException(s"Spark Application ($appId) was closed")
     } else {
-      getSnowflakeResultSetRDD(statement, resultSchema)
+      if (params.useCopyUnload) {
+        getSnowflakeRDD(statement, resultSchema)
+      } else {
+        getSnowflakeResultSetRDD(statement, resultSchema)
+      }
     }
   }
 

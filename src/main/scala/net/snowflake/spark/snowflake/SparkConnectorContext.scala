@@ -32,6 +32,9 @@ object SparkConnectorContext {
   // The key is the application ID, the value is the set of running queries.
   private val runningQueries = mutable.Map[String, mutable.Set[RunningQuery]]()
 
+  // save all closed applications' ID, and skip Spark's retries after application closed.
+  private[snowflake] val closedApplicationIDs = mutable.HashSet.empty[String]
+
   private[snowflake] def getRunningQueries = runningQueries
 
   // Register spark listener to cancel any running queries if application fails.
@@ -44,6 +47,10 @@ object SparkConnectorContext {
         runningQueries.put(appId, mutable.Set.empty)
         sparkContext.addSparkListener(new SparkListener {
           override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+            // add application ID to the block list.
+            // when Spark retries these closed applications,
+            // Spark connector will skip those queries.
+            closedApplicationIDs.add(appId)
             try {
               cancelRunningQueries(appId)
               // Close all cached connections

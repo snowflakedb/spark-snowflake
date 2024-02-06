@@ -243,7 +243,11 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
 
       // Stop the application, it will trigger the Application End event.
       sparkSession.stop()
-      Thread.sleep(5000)
+      Thread.sleep(10000)
+
+      // no query can be retried after session closed
+      assert(SparkConnectorContext.closedApplicationIDs.contains(appId))
+      assert(!SparkConnectorContext.getRunningQueries.contains(appId))
 
       var (message, queryText) = getQueryMessage(conn, queryID, sessionID)
       var tryCount: Int = 0
@@ -276,5 +280,4 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       Await.ready(f2, Duration.Inf)
     }
   }
-
 }
