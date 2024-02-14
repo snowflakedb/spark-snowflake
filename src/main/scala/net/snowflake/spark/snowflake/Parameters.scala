@@ -85,6 +85,7 @@ object Parameters {
   val PARAM_COLUMN_MAP: String = knownParam("columnmap")
   val PARAM_TRUNCATE_COLUMNS: String = knownParam("truncate_columns")
   val PARAM_PURGE: String = knownParam("purge")
+  val PARAM_TRIM_SPACE: String = knownParam("trim_space")
 
   val PARAM_TRUNCATE_TABLE: String = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR: String = knownParam("continue_on_error")
@@ -288,7 +289,8 @@ object Parameters {
     PARAM_USE_AWS_MULTIPLE_PARTS_UPLOAD -> "true",
     PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
-    PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3"
+    PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
+    PARAM_TRIM_SPACE -> "false"
   )
 
   /**
@@ -836,6 +838,13 @@ object Parameters {
       */
     def useStagingTable: Boolean =
       isTrue(parameters(PARAM_USE_STAGING_TABLE))
+
+    /**
+     * Boolean that specifies whether to remove white space from String fields
+     * Defaults to false
+     */
+    def trimSpace: Boolean =
+      isTrue(parameters(PARAM_TRIM_SPACE))
 
     /**
       * Extra options to append to the Snowflake COPY command (e.g. "MAXERROR 100").

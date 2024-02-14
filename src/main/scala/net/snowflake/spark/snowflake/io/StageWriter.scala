@@ -908,6 +908,7 @@ private[io] object StageWriter {
         params.getStringTimestampFormat.get
       }
 
+    val trimSpace: String = if (params.trimSpace) "TRUE" else "FALSE"
 
     val formatString =
       format match {
