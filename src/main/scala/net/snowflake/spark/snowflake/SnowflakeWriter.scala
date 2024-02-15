@@ -165,11 +165,6 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
   def genConversionFunctions(schema: StructType, params: MergedParameters): Array[Any => Any] =
     schema.fields.map { field =>
       field.dataType match {
-        case StringType =>
-          (v: Any) =>
-            if (params.trimSpace) {
-              v.toString.trim
-            } else v
         case DateType =>
           (v: Any) =>
             v match {
@@ -187,7 +182,12 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           (v: Any) =>
             {
               if (v == null) ""
-              else Conversions.formatString(v.asInstanceOf[String])
+              else {
+                val trimmed = if (params.trimSpace) {
+                  v.toString.trim
+                } else v
+                Conversions.formatString(trimmed.asInstanceOf[String])
+              }
             }
         case BinaryType =>
           (v: Any) =>
