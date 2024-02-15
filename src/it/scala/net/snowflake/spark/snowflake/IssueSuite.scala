@@ -26,7 +26,7 @@ class IssueSuite extends IntegrationSuiteBase {
     )
     val tt: String = s"tt_$randomSuffix"
     try {
-      sparkSession
+      val df = sparkSession
         .createDataFrame(
           sparkSession.sparkContext.parallelize(
             Seq(
@@ -37,7 +37,7 @@ class IssueSuite extends IntegrationSuiteBase {
           ),
           st1
         )
-        .write
+        df.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
@@ -45,13 +45,32 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadDf = sparkSession.read
+      var loadDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
         .load()
 
       assert(loadDf.collect().forall(row => row.toSeq.head.toString.length == 4))
+
+      // disabled by default
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+      val result = loadDf.collect()
+      assert(result.head.toSeq.head.toString.length == 4)
+      assert(result(1).toSeq.head.toString.length == 5)
+      assert(result(2).toSeq.head.toString.length == 6)
+
 
     } finally {
       jdbcUpdate(s"drop table if exists $tt")
@@ -67,7 +86,7 @@ class IssueSuite extends IntegrationSuiteBase {
     )
     val tt: String = s"tt_$randomSuffix"
     try {
-      sparkSession
+      val df = sparkSession
         .createDataFrame(
           sparkSession.sparkContext.parallelize(
             Seq(
@@ -78,7 +97,7 @@ class IssueSuite extends IntegrationSuiteBase {
           ),
           st1
         )
-        .write
+        df.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
@@ -86,13 +105,31 @@ class IssueSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Overwrite)
         .save()
 
-      val loadDf = sparkSession.read
+      var loadDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option("dbtable", tt)
         .load()
 
       assert(loadDf.select("str").collect().forall(row => row.toSeq.head.toString.length == 4))
+
+      // disabled by default
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+      val result = loadDf.select("str").collect()
+      assert(result.head.toSeq.head.toString.length == 4)
+      assert(result(1).toSeq.head.toString.length == 5)
+      assert(result(2).toSeq.head.toString.length == 6)
 
     } finally {
       jdbcUpdate(s"drop table if exists $tt")
