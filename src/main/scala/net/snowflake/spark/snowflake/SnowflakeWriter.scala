@@ -18,9 +18,8 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.rdd.RDD
@@ -83,7 +82,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
     format match {
       case SupportedFormat.CSV =>
-        val conversionFunction = genConversionFunctions(data.schema)
+        val conversionFunction = genConversionFunctions(data.schema, params)
         data.rdd.map(row => {
           row.toSeq
             .zip(conversionFunction)
@@ -95,7 +94,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       case SupportedFormat.JSON =>
         // convert binary (Array of Byte) to encoded base64 String before COPY
         val newSchema: StructType = prepareSchemaForJson(data.schema)
-        val conversionsFunction = genConversionFunctionsForJson(data.schema)
+        val conversionsFunction = genConversionFunctionsForJson(data.schema, params)
         val newData: RDD[Row] = data.rdd.map(row => {
           Row.fromSeq(
             row.toSeq
@@ -118,9 +117,15 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     })
 
 
-  private def genConversionFunctionsForJson(schema: StructType): Array[Any => Any] =
+  private def genConversionFunctionsForJson(schema: StructType,
+                                            params: MergedParameters): Array[Any => Any] =
     schema.fields.map(field =>
       field.dataType match {
+        case StringType =>
+          (v: Any) =>
+            if (params.trimSpace) {
+              v.toString.trim
+            } else v
         case BinaryType =>
           (v: Any) =>
             v match {
@@ -157,7 +162,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     }
 
   // Prepare a set of conversion functions, based on the schema
-  def genConversionFunctions(schema: StructType): Array[Any => Any] =
+  def genConversionFunctions(schema: StructType, params: MergedParameters): Array[Any => Any] =
     schema.fields.map { field =>
       field.dataType match {
         case DateType =>
@@ -177,7 +182,12 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           (v: Any) =>
             {
               if (v == null) ""
-              else Conversions.formatString(v.asInstanceOf[String])
+              else {
+                val trimmed = if (params.trimSpace) {
+                  v.toString.trim
+                } else v
+                Conversions.formatString(trimmed.asInstanceOf[String])
+              }
             }
         case BinaryType =>
           (v: Any) =>

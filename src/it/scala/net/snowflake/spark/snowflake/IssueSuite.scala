@@ -20,6 +20,122 @@ class IssueSuite extends IntegrationSuiteBase {
     super.beforeEach()
   }
 
+  test("trim space - csv") {
+    val st1 = new StructType(
+      Array(StructField("str", StringType, nullable = false))
+    )
+    val tt: String = s"tt_$randomSuffix"
+    try {
+      val df = sparkSession
+        .createDataFrame(
+          sparkSession.sparkContext.parallelize(
+            Seq(
+              Row("ab c"),
+              Row(" a bc"),
+              Row("abdc  ")
+            )
+          ),
+          st1
+        )
+        df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .option(Parameters.PARAM_TRIM_SPACE, "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      var loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+
+      assert(loadDf.collect().forall(row => row.toSeq.head.toString.length == 4))
+
+      // disabled by default
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+      val result = loadDf.collect()
+      assert(result.head.toSeq.head.toString.length == 4)
+      assert(result(1).toSeq.head.toString.length == 5)
+      assert(result(2).toSeq.head.toString.length == 6)
+
+
+    } finally {
+      jdbcUpdate(s"drop table if exists $tt")
+    }
+  }
+
+  test("trim space - json") {
+    val st1 = new StructType(
+      Array(
+        StructField("str", StringType, nullable = false),
+        StructField("arr", ArrayType(IntegerType), nullable = false)
+      )
+    )
+    val tt: String = s"tt_$randomSuffix"
+    try {
+      val df = sparkSession
+        .createDataFrame(
+          sparkSession.sparkContext.parallelize(
+            Seq(
+              Row("ab c", Array(1, 2, 3)),
+              Row(" a bc", Array(2, 2, 3)),
+              Row("abdc  ", Array(3, 2, 3))
+            )
+          ),
+          st1
+        )
+        df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .option(Parameters.PARAM_TRIM_SPACE, "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      var loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+
+      assert(loadDf.select("str").collect().forall(row => row.toSeq.head.toString.length == 4))
+
+      // disabled by default
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      loadDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptions)
+        .option("dbtable", tt)
+        .load()
+      val result = loadDf.select("str").collect()
+      assert(result.head.toSeq.head.toString.length == 4)
+      assert(result(1).toSeq.head.toString.length == 5)
+      assert(result(2).toSeq.head.toString.length == 6)
+
+    } finally {
+      jdbcUpdate(s"drop table if exists $tt")
+    }
+  }
+
   test("csv delimiter character should not break rows") {
     val st1 = new StructType(
       Array(

@@ -908,7 +908,6 @@ private[io] object StageWriter {
         params.getStringTimestampFormat.get
       }
 
-
     val formatString =
       format match {
         case SupportedFormat.CSV =>
