@@ -35,7 +35,7 @@ trait SFTestSessionBase extends IntegrationEnv {
     super.beforeAll()
     // Run ported test in WARN level to avoid large log volume
     if (USE_LOG4J2_PROPERTIES) {
-      reconfigureLog4j2LogLevel(Level.WARN)
+      assert(false)
     } else {
       reconfigureLogFile(PORTED_TEST_LOG4J_PROPERTY)
     }
@@ -56,7 +56,7 @@ trait SFTestSessionBase extends IntegrationEnv {
     try {
       // Reset test log level to default.
       if (USE_LOG4J2_PROPERTIES) {
-        reconfigureLog4j2LogLevel(Level.INFO)
+        assert(false)
       } else {
         reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
       }
