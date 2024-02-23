@@ -2,7 +2,6 @@ package org.apache.spark.sql.snowflake
 
 import net.snowflake.spark.snowflake.{IntegrationEnv, Parameters}
 import org.apache.spark.sql.SparkSession
-import org.apache.logging.log4j.Level
 
 import scala.language.implicitConversions
 import scala.util.Random
