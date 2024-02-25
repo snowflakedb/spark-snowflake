@@ -157,17 +157,19 @@ private[snowflake] object ServerConnection {
     // Obligatory properties
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
-    jdbcProperties.put("user", params.sfUser)
 
     params.privateKey match {
       case Some(privateKey) =>
+        jdbcProperties.put("user", params.sfUser)
         jdbcProperties.put("privateKey", privateKey)
       case None =>
-        // Adding OAuth Token parameter
+        // Adding OAuth Token parameter. User parameter is not required in this case
         params.sfToken match {
           case Some(value) =>
             jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
+          case None =>
+            jdbcProperties.put("user", params.sfUser)
+            jdbcProperties.put("password", params.sfPassword)
         }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
