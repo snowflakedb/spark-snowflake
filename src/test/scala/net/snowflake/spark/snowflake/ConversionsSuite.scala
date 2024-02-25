@@ -18,10 +18,12 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import org.scalatest.FunSuite
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -127,6 +129,53 @@ class ConversionsSuite extends FunSuite {
     intercept[java.text.ParseException] {
       convertRow(Array("not-a-date"))
     }
+  }
+
+  test("Dates are correctly converted to Java 8 dates") {
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "true")
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", DateType)))
+    )
+    assert(
+      convertRow(Array("2015-07-09")) === Row(LocalDate.of(2015, 7, 9))
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-date"))
+    }
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "false")
+  }
+
+  test("Timestamps are correctly converted") {
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", TimestampType)))
+    )
+    assert(
+      convertRow(Array("2013-04-05 18:01:02.123")) === Row(
+        TestUtils.toTimestamp(2013, 3, 5, 18, 1, 2, 123)
+      )
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-timestamp"))
+    }
+  }
+
+  test("Timestamps are correctly converted to Java 8 dates") {
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "true")
+    val convertRow = Conversions.createRowConverter[Row](
+      StructType(Seq(StructField("a", TimestampType)))
+    )
+    assert(
+      convertRow(Array("Z 2013-04-05 18:01:02.123")) === Row(
+        LocalDateTime.of(2013, 4, 5, 18, 1, 2, 123000000).toInstant(ZoneOffset.UTC)
+      )
+    )
+    assert(convertRow(Array(null)) === Row(null))
+    intercept[java.text.ParseException] {
+      convertRow(Array("not-a-timestamp"))
+    }
+    SQLConf.get.setConfString("spark.sql.datetime.java8API.enabled", "false")
   }
 
   test("json string to row conversion") {

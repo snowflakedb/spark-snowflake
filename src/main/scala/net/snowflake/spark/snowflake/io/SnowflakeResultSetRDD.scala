@@ -18,6 +18,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
@@ -230,7 +231,12 @@ case class ResultIterator[T: ClassTag](
             if (isIR) {
               DateTimeUtils.fromJavaDate(data.getDate(index + 1))
             } else {
-              data.getDate(index + 1)
+              val date = data.getDate(index + 1)
+              if (SQLConf.get.datetimeJava8ApiEnabled) {
+                DateTimeUtils.daysToLocalDate(DateTimeUtils.anyToDays(date))
+              } else {
+                date
+              }
             }
           case ByteType => data.getByte(index + 1)
           case FloatType => data.getFloat(index + 1)
@@ -240,7 +246,12 @@ case class ResultIterator[T: ClassTag](
             if (isIR) {
               DateTimeUtils.fromJavaTimestamp(data.getTimestamp(index + 1))
             } else {
-              data.getTimestamp(index + 1)
+              val timestamp = data.getTimestamp(index + 1)
+              if (SQLConf.get.datetimeJava8ApiEnabled) {
+                DateTimeUtils.microsToInstant(DateTimeUtils.anyToMicros(timestamp))
+              } else {
+                timestamp
+              }
             }
           case ShortType => data.getShort(index + 1)
           case _ =>

@@ -27,6 +27,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -194,8 +195,13 @@ private[snowflake] object Conversions {
     */
   private def parseTimestamp(s: String, isInternalRow: Boolean): Any = {
     val res = new Timestamp(snowflakeTimestampFormat.parse(s).getTime)
-    if (isInternalRow) DateTimeUtils.fromJavaTimestamp(res)
-    else res
+    if (isInternalRow) {
+      DateTimeUtils.fromJavaTimestamp(res)
+    } else if (SQLConf.get.datetimeJava8ApiEnabled) {
+      DateTimeUtils.microsToInstant(DateTimeUtils.anyToMicros(res))
+    } else {
+      res
+    }
   }
 
   /**
@@ -203,8 +209,13 @@ private[snowflake] object Conversions {
     */
   private def parseDate(s: String, isInternalRow: Boolean): Any = {
     val d = new java.sql.Date(snowflakeDateFormat.get().parse(s).getTime)
-    if (isInternalRow) DateTimeUtils.fromJavaDate(d)
-    else d
+    if (isInternalRow) {
+      DateTimeUtils.fromJavaDate(d)
+    } else if (SQLConf.get.datetimeJava8ApiEnabled) {
+      DateTimeUtils.daysToLocalDate(DateTimeUtils.anyToDays(d))
+    } else {
+      d
+    }
   }
 
   private def parseBoolean(s: String): Boolean = {
