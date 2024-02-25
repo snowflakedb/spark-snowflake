@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
+
 import java.io.{PrintWriter, StringWriter}
-import java.util.NoSuchElementException
 
 import net.snowflake.spark.snowflake.{
   ConnectionCacheKey,
@@ -305,6 +305,15 @@ private[snowflake] object QueryBuilder {
 
     qb.tryBuild.map { executedBuilder =>
       (executedBuilder.getOutput, executedBuilder.rdd)
+    }
+  }
+
+  def getSnowflakeScanExecPlan(plan: LogicalPlan):
+    Option[(Seq[Attribute], SnowflakeSQLStatement, SnowflakeRelation)] = {
+    val qb = new QueryBuilder(plan)
+
+    qb.tryBuild.map { executedBuilder =>
+      (executedBuilder.getOutput, executedBuilder.statement, executedBuilder.source.relation)
     }
   }
 }
