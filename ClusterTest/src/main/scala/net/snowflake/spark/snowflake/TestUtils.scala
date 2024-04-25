@@ -161,7 +161,7 @@ object TestUtils {
     */
   def getJDBCConnection(params: MergedParameters): Connection = {
     // Derive class name
-    try Class.forName("com.snowflake.client.jdbc.SnowflakeDriver")
+    try Class.forName("net.snowflake.client.jdbc.SnowflakeDriver")
     catch {
       case _: ClassNotFoundException =>
         System.err.println("Driver not found")

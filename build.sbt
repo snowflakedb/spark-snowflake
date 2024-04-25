@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.4"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.4.0")
+val sparkVersion = "3.5"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -41,7 +41,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.4",
+    version := s"${sparkConnectorVersion}-spark_3.5",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.2 supports scala 2.12 and 2.13
     crossScalaVersions := Seq("2.12.11", "2.13.9"),
@@ -60,7 +60,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
-      "net.snowflake" % "snowflake-jdbc" % "3.14.4",
+      "net.snowflake" % "snowflake-jdbc" % "3.15.0",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",

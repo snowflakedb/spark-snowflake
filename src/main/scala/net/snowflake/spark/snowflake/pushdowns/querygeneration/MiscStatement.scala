@@ -122,7 +122,7 @@ private[querygeneration] object MiscStatement {
       // Spark 3.4 introduce join hint. The join hint doesn't affect correctness.
       // So it can be ignored in the pushdown process
       // https://github.com/apache/spark/commit/0fa9c554fc0b3940a47c3d1c6a5a17ca9a8cee8e
-      case ScalarSubquery(subquery, _, _, joinCond, _) if joinCond.isEmpty =>
+      case ScalarSubquery(subquery, _, _, joinCond, _, _) if joinCond.isEmpty =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>
