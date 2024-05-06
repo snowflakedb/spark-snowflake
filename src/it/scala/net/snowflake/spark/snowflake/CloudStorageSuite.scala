@@ -88,6 +88,26 @@ class CloudStorageSuite extends IntegrationSuiteBase {
       .load()
       .count()
 
+  // manual test for the proxy protocol
+  ignore ("snow-1359291") {
+    val spark = sparkSession
+    import spark.implicits._
+    val df = Seq(1, 2, 3, 4).toDF()
+    df.show()
+    val proxyConfig = Map[String, String](
+      "use_proxy" -> "true",
+      "proxy_host" -> "127.0.0.1",
+      "proxy_port" -> "8080",
+      "proxy_protocol" -> "http"
+    )
+    df.write.format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .options(proxyConfig)
+      .option("dbtable", "test12345")
+      .mode(SaveMode.Overwrite)
+      .save()
+  }
+
   test("write a small DataFrame to GCS with down-scoped-token") {
     // Only run this test on GCS
     if ("gcp".equals(System.getenv("SNOWFLAKE_TEST_ACCOUNT"))) {
