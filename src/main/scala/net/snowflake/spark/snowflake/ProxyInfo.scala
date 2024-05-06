@@ -112,7 +112,7 @@ private[snowflake] class ProxyInfo(proxyProtocol: Option[String],
     proxyProtocol match {
       case Some(optionValue) =>
         val protocol = if (optionValue.equalsIgnoreCase("https")) Protocol.HTTPS else Protocol.HTTP
-        s3client.setProtocol(protocol)
+        s3client.setProxyProtocol(protocol)
       case None =>
     }
     proxyUser match {
