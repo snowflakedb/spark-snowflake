@@ -175,7 +175,7 @@ class MiscSuite01 extends FunSuite with Matchers {
         proxyInfo.setProxyForS3(clientConfig)
         val protocol =
           if (protocolString.equalsIgnoreCase("https")) Protocol.HTTPS else Protocol.HTTP
-        assert(clientConfig.getProtocol.equals(protocol))
+        assert(clientConfig.getProxyProtocol.equals(protocol))
     }
 
     // negative test for JDBC properties
