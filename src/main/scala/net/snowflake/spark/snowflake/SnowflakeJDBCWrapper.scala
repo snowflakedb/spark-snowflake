@@ -281,7 +281,6 @@ private[snowflake] class JDBCWrapper {
     // Snowflake-todo: Verify all types.
     val answer = sqlType match {
       // scalastyle:off
-      case java.sql.Types.ARRAY => null
       case java.sql.Types.BIGINT =>
         if (signed) {
           LongType
@@ -340,6 +339,8 @@ private[snowflake] class JDBCWrapper {
       //      case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR => StringType
       case java.sql.Types.BINARY  => BinaryType
+      case java.sql.Types.STRUCT  => StringType
+      case java.sql.Types.ARRAY   => StringType
       case _                      => null
       // scalastyle:on
     }

@@ -37,11 +37,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
-      "net.snowflake" % "snowflake-jdbc" % "3.13.30",
-      // "net.snowflake" %% "spark-snowflake" % "2.8.0-spark_3.0",
-      // "com.google.guava" % "guava" % "14.0.1" % Test,
-      // "org.scalatest" %% "scalatest" % "3.0.5" % Test,
-      // "org.mockito" % "mockito-core" % "1.10.19" % Test,
+      "net.snowflake" % "snowflake-jdbc" % "3.16.0",
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided, runtime",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",

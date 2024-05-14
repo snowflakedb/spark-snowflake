@@ -16,3 +16,8 @@ ClusterTest/target/
 ClusterTest/project/target
 ClusterTest/src/main/python/*.pyc
 .bsp/
+.bloop/
+.metals/
+.vscode/
+project/metals.sbt
+project/project
