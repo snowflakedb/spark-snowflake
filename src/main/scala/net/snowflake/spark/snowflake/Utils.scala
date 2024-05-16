@@ -345,7 +345,19 @@ object Utils {
   // date/timestamp formats we want.
   // Since we want to distinguish TIMESTAMP_NTZ from others, we can't use
   // the TIMESTAMP_FORMAT option of COPY.
+  // Session parameters override is also applied by returned sql query
   private[snowflake] def genPrologueSql(
+    params: MergedParameters
+  ): SnowflakeSQLStatement = {
+    val timeZonePrologue = genTimeZoneSettingPrologueSql(params)
+    val sessionVariablesPrologue = genSessionParametersPrologueSql(params)
+    timeZonePrologue.getOrElse(EmptySnowflakeSQLStatement()) + sessionVariablesPrologue
+  }
+
+  /**
+   * Method generates SQL query that should set timezone session parameters
+   */
+  private[snowflake] def genTimeZoneSettingPrologueSql(
     params: MergedParameters
   ): Option[SnowflakeSQLStatement] = {
     // Determine the timezone we want to use
@@ -376,13 +388,25 @@ object Utils {
       log.info("Timezone and timestamp output formats are sf_current, so skip setting them.")
       None
     } else if (timezoneSetString.isEmpty) {
-      Some(ConstantString(s"alter session set $timestampSetString ;")!)
+      Some(ConstantString(s"alter session set $timestampSetString ;") !)
     } else if (timestampSettings.isEmpty) {
-      Some(ConstantString(s"alter session set $timezoneSetString ;")!)
+      Some(ConstantString(s"alter session set $timezoneSetString ;") !)
     } else {
-      Some(ConstantString(s"alter session set $timezoneSetString , $timestampSetString ;")!)
+      Some(ConstantString(s"alter session set $timezoneSetString , $timestampSetString ;") !)
     }
   }
+
+  /**
+   * Method generates SQL query that should set session parameters
+   * for current session before query execution
+   */
+  private[snowflake] def genSessionParametersPrologueSql(
+    params: MergedParameters
+  ) = {
+    val abortDetachedQuery: Boolean = params.abortDetachedQuerySessionVariable
+    ConstantString(s"alter session set ABORT_DETACHED_QUERY=$abortDetachedQuery ;") !
+  }
+
   // Issue a set of changes reverting genPrologueSql
   private[snowflake] def genEpilogueSql(
     params: MergedParameters
@@ -398,7 +422,8 @@ object Utils {
          |date_output_format,
          |timestamp_ntz_output_format,
          |timestamp_ltz_output_format,
-         |timestamp_tz_output_format;
+         |timestamp_tz_output_format,
+         |ABORT_DETACHED_QUERY;
        """.stripMargin)
   }
 

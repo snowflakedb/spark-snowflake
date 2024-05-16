@@ -392,10 +392,11 @@ class MiscSuite01 extends FunSuite with Matchers {
     var param = Parameters.MergedParameters(sfOptions)
     // test default values
     var setString = Utils.genPrologueSql(param)
-    assert(setString.get.toString.equals("alter session set timezone = 'GMT' , " +
+    assert(setString.toString.equals("alter session set timezone = 'GMT' , " +
       "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF3', " +
       "timestamp_ltz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3', " +
-      "timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3' ;"))
+      "timestamp_tz_output_format = 'TZHTZM YYYY-MM-DD HH24:MI:SS.FF3' ; " +
+      "alter session set ABORT_DETACHED_QUERY=false ;"))
 
     sfOptions = Map(
       Parameters.PARAM_SF_TIMEZONE -> "UTC",
@@ -406,10 +407,11 @@ class MiscSuite01 extends FunSuite with Matchers {
     param = Parameters.MergedParameters(sfOptions)
     // test normal settings
     setString = Utils.genPrologueSql(param)
-    assert(setString.get.toString.equals("alter session set timezone = 'UTC' , " +
+    assert(setString.toString.equals("alter session set timezone = 'UTC' , " +
       "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
       "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5', " +
-      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ; " +
+      "alter session set ABORT_DETACHED_QUERY=false ;"))
 
     sfOptions = Map(
       Parameters.PARAM_SF_TIMEZONE -> "sf_current",
@@ -420,10 +422,11 @@ class MiscSuite01 extends FunSuite with Matchers {
     param = Parameters.MergedParameters(sfOptions)
     // test timezone is sf_current
     setString = Utils.genPrologueSql(param)
-    assert(setString.get.toString.equals("alter session set " +
+    assert(setString.toString.equals("alter session set " +
       "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
       "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5', " +
-      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ; " +
+      "alter session set ABORT_DETACHED_QUERY=false ;"))
 
     sfOptions = Map(
       Parameters.PARAM_SF_TIMEZONE -> "UTC",
@@ -434,9 +437,10 @@ class MiscSuite01 extends FunSuite with Matchers {
     param = Parameters.MergedParameters(sfOptions)
     // test timestamp_ltz_output_format is sf_current
     setString = Utils.genPrologueSql(param)
-    assert(setString.get.toString.equals("alter session set timezone = 'UTC' , " +
+    assert(setString.toString.equals("alter session set timezone = 'UTC' , " +
       "timestamp_ntz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF4', " +
-      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ;"))
+      "timestamp_tz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF6' ; " +
+      "alter session set ABORT_DETACHED_QUERY=false ;"))
 
     sfOptions = Map(
       Parameters.PARAM_SF_TIMEZONE -> "sf_current",
@@ -448,8 +452,9 @@ class MiscSuite01 extends FunSuite with Matchers {
     param = Parameters.MergedParameters(sfOptions)
     // test timezone, timestamp_ntz_output_format and timestamp_tz_output_format are sf_current
     setString = Utils.genPrologueSql(param)
-    assert(setString.get.toString.equals("alter session set " +
-      "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5' ;"))
+    assert(setString.toString.equals("alter session set " +
+      "timestamp_ltz_output_format = 'YYYY-MM-DD HH24:MI:SS.FF5' ; " +
+      "alter session set ABORT_DETACHED_QUERY=false ;"))
 
     sfOptions = Map(
       Parameters.PARAM_SF_TIMEZONE -> "sf_current",
@@ -459,9 +464,22 @@ class MiscSuite01 extends FunSuite with Matchers {
     )
 
     param = Parameters.MergedParameters(sfOptions)
-    // test all are sf_current
+    // test all are sf_current, only session parameters query should be returned
     setString = Utils.genPrologueSql(param)
-    assert(setString.isEmpty)
+    assert(setString.toString.equals("alter session set ABORT_DETACHED_QUERY=false ;"))
+
+    sfOptions = Map(
+      Parameters.PARAM_SF_TIMEZONE -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "sf_current",
+      Parameters.PARAM_ABORT_DETACHED_QUERY_SESSION_VARIABLE -> "true"
+    )
+
+    param = Parameters.MergedParameters(sfOptions)
+    // test all are sf_current, but with abort_detached_query=true
+    setString = Utils.genPrologueSql(param)
+    assert(setString.toString.equals("alter session set ABORT_DETACHED_QUERY=true ;"))
   }
 
   test("test getQueryIDUrl") {

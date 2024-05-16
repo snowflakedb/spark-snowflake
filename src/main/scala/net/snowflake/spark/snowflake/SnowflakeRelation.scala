@@ -193,7 +193,7 @@ private[snowflake] case class SnowflakeRelation(
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
     try {
-      Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
+      Utils.genPrologueSql(params).execute(bindVariableEnabled = false)(conn)
       Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
       Utils.setLastSelect(statement.toString)
       log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")

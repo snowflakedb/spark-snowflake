@@ -241,6 +241,10 @@ object Parameters {
     "force_skip_pre_post_action_check_for_session_sharing"
   )
 
+  val PARAM_ABORT_DETACHED_QUERY_SESSION_VARIABLE: String = knownParam(
+    "abort_detached_query_session_variable"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -1049,6 +1053,9 @@ object Parameters {
           )
       }
     }
+
+    def abortDetachedQuerySessionVariable: Boolean =
+      isTrue(parameters.getOrElse(PARAM_ABORT_DETACHED_QUERY_SESSION_VARIABLE, "false"))
   }
 }
 
