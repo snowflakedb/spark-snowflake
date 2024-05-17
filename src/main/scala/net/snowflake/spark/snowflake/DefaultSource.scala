@@ -17,11 +17,8 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.spark.snowflake.streaming.SnowflakeSink
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
-import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
@@ -38,7 +35,6 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider
-    with StreamSinkProvider
     with DataSourceRegister {
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
@@ -145,10 +141,4 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     createRelation(sqlContext, parameters)
   }
-
-  override def createSink(sqlContext: SQLContext,
-                          parameters: Map[String, String],
-                          partitionColumns: Seq[String],
-                          outputMode: OutputMode): Sink =
-    new SnowflakeSink(sqlContext, parameters, partitionColumns, outputMode)
 }
