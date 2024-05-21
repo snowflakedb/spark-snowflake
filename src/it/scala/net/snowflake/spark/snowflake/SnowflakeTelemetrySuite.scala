@@ -43,8 +43,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
   }
 
   test("unit test: SnowflakeTelemetry.detectSparkLanguage") {
@@ -499,7 +497,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
   // To run this test manually, need to start postgresql server
   ignore("manual test: read from postgresql with JDBC") {
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     try {
       val jdbcDF = sparkSession.read
         .format("jdbc")
@@ -515,7 +512,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
   // To run this test manually, need to start postgresql server
   ignore("manual test: write to postgresql with JDBC") {
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     try {
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -540,7 +536,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table2")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 

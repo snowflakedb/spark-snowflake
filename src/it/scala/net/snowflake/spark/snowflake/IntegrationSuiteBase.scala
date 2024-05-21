@@ -18,10 +18,8 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
 
 import scala.util.matching.Regex
 
@@ -47,90 +45,6 @@ trait IntegrationSuiteBase
         s"fs.azure.sas.$container.$account.$endpoint"
       case _ => throw new IllegalArgumentException(s"invalid wasb url: $input")
     }
-  }
-
-  /**
-    * Verify that the pushdown was done by looking at the generated SQL,
-    * and check the results are as expected
-    */
-  private def testPushdownBasic(references: Seq[String],
-                                result: DataFrame,
-                                expectedAnswer: Seq[Row],
-                                bypass: Boolean = false,
-                                printSqlText: Boolean = false): Unit = {
-
-    // Verify the query issued is what we expect
-    checkAnswer(result, expectedAnswer)
-
-    // It is used to retrieve expected query text.
-    if (printSqlText) {
-      // scalastyle:off println
-      println(Utils.getLastSelect)
-      // scalastyle:on println
-    }
-
-    if (!bypass) {
-      val potentialQueries = references.map {
-        _.trim.replaceAll("\\s+", "").toLowerCase
-      }
-      assert(potentialQueries.contains(Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase)
-      )
-    }
-  }
-
-  /**
-    * Verify that the pushdown was done by looking at the generated SQL,
-    * and check the results are as expected.
-    * It also reads the DataFrame after disabling the pushdown.
-    * The test result should be as expected too.
-    */
-  def testPushdown(reference: String,
-                   result: DataFrame,
-                   expectedAnswer: Seq[Row],
-                   bypass: Boolean = false,
-                   printSqlText: Boolean = false,
-                   testPushdownOff: Boolean = true): Unit =
-    testPushdownMultiplefQueries(Seq(reference), result, expectedAnswer,
-      bypass, printSqlText, testPushdownOff)
-
-  /**
-    * Verify that the pushdown was done by looking at the generated SQL,
-    * and check the results are as expected.
-    * It also reads the DataFrame after disabling the pushdown.
-    * The test result should be as expected too.
-    */
-  def testPushdownMultiplefQueries(references: Seq[String],
-                                   result: DataFrame,
-                                   expectedAnswer: Seq[Row],
-                                   bypass: Boolean = false,
-                                   printSqlText: Boolean = false,
-                                   testPushdownOff: Boolean = true): Unit = {
-    testPushdownBasic(references, result, expectedAnswer, bypass, printSqlText)
-
-    // Disable pushdown and rerun the dataframe, the result should match
-    if (testPushdownOff && isPushdownEnabled(result.sparkSession)) {
-      try {
-        SnowflakeConnectorUtils.disablePushdownSession(result.sparkSession)
-        // Re-read the DataFrame but don't check the executed query text.
-        // 'result' has been compiled, so spark plan with pushdown could have been cached.
-        // So, use 'result.select("*")' to make sure snowflake pushdown is not used.
-        testPushdownBasic(references, result.select("*"), expectedAnswer,
-          bypass = true, printSqlText)
-      } catch {
-        case th: Throwable => {
-          // scalastyle:off println
-          println(s"Fail to read DataFrame with pushdown disabled. ${th.getMessage}")
-          // scalastyle:on println
-          throw th
-        }
-      } finally {
-        SnowflakeConnectorUtils.enablePushdownSession(result.sparkSession)
-      }
-    }
-  }
-
-  private def isPushdownEnabled(session: SparkSession): Boolean = {
-    session.experimental.extraStrategies.exists( s => s.isInstanceOf[SnowflakeStrategy])
   }
 
   /**

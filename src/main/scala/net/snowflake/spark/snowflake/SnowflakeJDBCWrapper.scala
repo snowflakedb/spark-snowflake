@@ -582,6 +582,21 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
 }
 
+private[snowflake] object SnowflakeSQLStatement {
+  final def mkStatement(
+                         seq: Seq[SnowflakeSQLStatement],
+                         delimiter: SnowflakeSQLStatement
+                       ): SnowflakeSQLStatement =
+    seq.foldLeft(EmptySnowflakeSQLStatement()) {
+      case (left, stmt) =>
+        if (left.isEmpty) stmt else left + delimiter + stmt
+    }
+
+  final def mkStatement(seq: Seq[SnowflakeSQLStatement],
+                        delimiter: String): SnowflakeSQLStatement =
+    mkStatement(seq, ConstantString(delimiter) !)
+}
+
 // scalastyle:off
 /**
   * SQL string wrapper

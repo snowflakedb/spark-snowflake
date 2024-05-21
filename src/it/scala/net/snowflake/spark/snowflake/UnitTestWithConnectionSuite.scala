@@ -76,8 +76,6 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    SnowflakeConnectorUtils.setPushdownSession(sparkSession, true)
-
     setupLargeResultTable(connectorOptionsNoTable)
   }
 
@@ -86,7 +84,6 @@ class UnitTestWithConnectionSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table_large_result")
     } finally {
       TestHook.disableTestHook()
-      SnowflakeConnectorUtils.setPushdownSession(sparkSession, false)
       super.afterAll()
     }
   }

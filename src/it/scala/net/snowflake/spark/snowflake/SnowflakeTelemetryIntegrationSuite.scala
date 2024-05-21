@@ -22,9 +22,6 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
-
     val st1 = new StructType(
       Array(
         StructField("id", IntegerType, nullable = true),
@@ -281,7 +278,6 @@ class SnowflakeTelemetryIntegrationSuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table2")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 

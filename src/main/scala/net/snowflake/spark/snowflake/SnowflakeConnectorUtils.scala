@@ -21,8 +21,6 @@ package net.snowflake.spark.snowflake
 import java.nio.file.Paths
 import java.security.InvalidKeyException
 
-import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
-import org.apache.spark.sql.SparkSession
 import org.slf4j.{Logger, LoggerFactory}
 
 /** Connector utils, including what needs to be invoked to enable pushdowns. */
@@ -36,50 +34,7 @@ object SnowflakeConnectorUtils {
     */
   val SUPPORT_SPARK_VERSION = "3.4"
 
-  def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
-    if (session.version.startsWith(SUPPORT_SPARK_VERSION)) {
-      enablePushdownSession(session)
-      true
-    } else {
-      log.warn("Query pushdown is not supported because you are using " +
-        s"Spark ${session.version} with a connector designed to support Spark " +
-        s"$SUPPORT_SPARK_VERSION. Either use the version of Spark supported by " +
-        s"the connector or install a version of the connector that supports " +
-        s"your version of Spark.")
-      disablePushdownSession(session)
-      false
-    }
 
-  /** Enable more advanced query pushdowns to Snowflake.
-    *
-    * @param session The SparkSession for which pushdowns are to be enabled.
-    */
-  def enablePushdownSession(session: SparkSession): Unit = {
-    if (!session.experimental.extraStrategies.exists(
-          s => s.isInstanceOf[SnowflakeStrategy]
-        )) {
-      session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
-    }
-  }
-
-  /** Disable more advanced query pushdowns to Snowflake.
-    *
-    * @param session The SparkSession for which pushdowns are to be disabled.
-    */
-  def disablePushdownSession(session: SparkSession): Unit = {
-    session.experimental.extraStrategies = session.experimental.extraStrategies
-      .filterNot(strategy => strategy.isInstanceOf[SnowflakeStrategy])
-  }
-
-  def setPushdownSession(session: SparkSession, enabled: Boolean): Unit = {
-    if (enabled) {
-      enablePushdownSession(session)
-    } else {
-      disablePushdownSession(session)
-    }
-  }
-
-  // TODO: Improve error handling with retries, etc.
 
   @throws[SnowflakeConnectorException]
   def handleS3Exception(ex: Exception): Unit = {
@@ -132,8 +87,6 @@ object SnowflakeConnectorUtils {
 }
 
 class SnowflakeConnectorException(message: String) extends Exception(message)
-class SnowflakePushdownException(message: String)
-  extends SnowflakeConnectorException(message)
 class SnowflakeConnectorFeatureNotSupportException(message: String)
   extends Exception(message)
 
