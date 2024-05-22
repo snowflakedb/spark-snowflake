@@ -22,10 +22,10 @@ import java.text._
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.{Date, TimeZone}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData.toScalaMap
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -281,7 +281,7 @@ private[snowflake] object Conversions {
         val result = new Array[Any](data.size())
         (0 until data.size())
           .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
-        new GenericArrayData(result)
+        if (isIR) new GenericArrayData(result) else result
       case StructType(fields) =>
         val converted = fields.map(field => {
           val value = data.findValue(field.name)
@@ -295,17 +295,26 @@ private[snowflake] object Conversions {
       // String key only
       case MapType(_, dt, _) =>
         val keys = data.fieldNames()
-        var keyList: List[UTF8String] = Nil
-        var valueList: List[Any] = Nil
-        while (keys.hasNext) {
-          val key = keys.next()
-          keyList = UTF8String.fromString(key) :: keyList
-          valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+        if (isIR) {
+          var keyList: List[UTF8String] = Nil
+          var valueList: List[Any] = Nil
+          while (keys.hasNext) {
+            val key = keys.next()
+            keyList = UTF8String.fromString(key) :: keyList
+            valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+          }
+          new ArrayBasedMapData(
+            new GenericArrayData(keyList.reverse.toArray),
+            new GenericArrayData(valueList.reverse.toArray)
+          )
+        } else {
+          val result = scala.collection.mutable.HashMap.empty[String, Any]
+          while (keys.hasNext) {
+            val key = keys.next()
+            result.put(key, jsonStringToRow[T](data.get(key), dt))
+          }
+          result
         }
-        new ArrayBasedMapData(
-          new GenericArrayData(keyList.reverse.toArray),
-          new GenericArrayData(valueList.reverse.toArray)
-        )
       case _ =>
         if (isIR) UTF8String.fromString(data.toString) else data.toString
     }

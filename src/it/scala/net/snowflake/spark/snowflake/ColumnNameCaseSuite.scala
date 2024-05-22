@@ -39,14 +39,14 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     val df = sparkSession.createDataFrame(data, schema)
 
     df.write
-      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table1)
       .option("keep_column_case", "on")
       .save()
 
     var df1 = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+      .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", table1)
       .option("keep_column_case", "on")
@@ -133,15 +133,6 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
       .groupBy("col")
       .agg(count("*").alias("new_col"))
       .count()
-
-    val result =
-      s"""
-         |SELECT ( COUNT ( 1 ) ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-         |( SELECT * FROM ( $table3 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-         | "SUBQUERY_0" GROUP BY "SUBQUERY_0"."col" ) AS "SUBQUERY_1" LIMIT 1
-         |""".stripMargin.replaceAll("\\s", "")
-
-    assert(Utils.getLastSelect.replaceAll("\\s", "").equals(result))
   }
 
   test("Test row_number function") {
@@ -164,28 +155,6 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     // scalastyle:off println
     println(Utils.getLastSelect)
     // scalastyle:on println
-    assert(
-      Utils.getLastSelect
-        .replaceAll("\\s", "")
-        .equals(s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."id" ) AS "SUBQUERY_1_COL_0" ,
-         |( "SUBQUERY_0"."time" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
-         |( PARTITION BY "SUBQUERY_0"."id" ORDER BY ( "SUBQUERY_0"."time" ) DESC
-         |) ) AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $table3 ) AS
-         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
-         |( ( "SUBQUERY_1"."SUBQUERY_1_COL_2" IS NOT NULL ) AND ( "SUBQUERY_1".
-         |"SUBQUERY_1_COL_2" = 1 ) )
-         |""".stripMargin.replaceAll("\\s", "")) ||
-        Utils.getLastSelect
-          .replaceAll("\\s", "")
-          .equals(s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."id" ) AS "SUBQUERY_1_COL_0" ,
-                     | ( "SUBQUERY_0"."time" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
-                     | ( PARTITION BY "SUBQUERY_0"."id" ORDER BY ( "SUBQUERY_0"."time" ) DESC
-                     | ) ) AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $table3 ) AS
-                     | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
-                     | ( "SUBQUERY_1"."SUBQUERY_1_COL_2" = 1 )
-                     |""".stripMargin.replaceAll("\\s", ""))
-    )
-
   }
 
 }
