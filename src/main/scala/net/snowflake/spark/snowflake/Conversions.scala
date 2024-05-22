@@ -270,7 +270,7 @@ private[snowflake] object Conversions {
       case DateType => parseDate(data.asText(), isIR)
       case DoubleType => data.asDouble()
       case FloatType => data.asDouble().toFloat
-      case DecimalType() => Decimal(data.decimalValue())
+      case DecimalType() => data.decimalValue()
       case IntegerType => data.asInt()
       case LongType => data.asLong()
       case ShortType => data.shortValue()
@@ -281,7 +281,7 @@ private[snowflake] object Conversions {
         val result = new Array[Any](data.size())
         (0 until data.size())
           .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
-        if (isIR) new GenericArrayData(result) else result
+        if (isIR) new GenericArrayData(result) else result.toSeq
       case StructType(fields) =>
         val converted = fields.map(field => {
           val value = data.findValue(field.name)
