@@ -218,10 +218,15 @@ case class ResultIterator[T: ClassTag](
           case DoubleType => data.getDouble(index + 1)
           case BooleanType => data.getBoolean(index + 1)
           case _: ArrayType | _: MapType | _: StructType =>
-            Conversions.jsonStringToRow[T](
-              mapper.readTree(data.getString(index + 1)),
-              schema.fields(index).dataType
-            )
+            if (isIR) {
+              Conversions.jsonStringToRow[T](
+                mapper.readTree(data.getString(index + 1)),
+                schema.fields(index).dataType
+              )
+            } else {
+              null
+            }
+
           case BinaryType =>
             // if (isIR) UTF8String.fromString(data.getString(index + 1))
             // else data.getString(index + 1)

@@ -81,7 +81,6 @@ object Parameters {
   val PARAM_AWS_ACCESS_KEY: String = knownParam("awsaccesskey")
   val PARAM_USE_STAGING_TABLE: String = knownParam("usestagingtable")
   val PARAM_EXTRA_COPY_OPTIONS: String = knownParam("extracopyoptions")
-  val PARAM_AUTO_PUSHDOWN: String = knownParam("autopushdown")
   val PARAM_COLUMN_MAP: String = knownParam("columnmap")
   val PARAM_TRUNCATE_COLUMNS: String = knownParam("truncate_columns")
   val PARAM_PURGE: String = knownParam("purge")
@@ -273,7 +272,6 @@ object Parameters {
     PARAM_TRUNCATE_TABLE -> "off",
     PARAM_PREACTIONS -> "",
     PARAM_POSTACTIONS -> "",
-    PARAM_AUTO_PUSHDOWN -> "on",
     PARAM_SF_SSL -> "on",
     PARAM_KEEP_COLUMN_CASE -> "off",
     PARAM_BIND_VARIABLE -> "on",
@@ -641,11 +639,6 @@ object Parameters {
     def sfCompress: Boolean =
       isTrue(parameters.getOrElse(PARAM_SF_COMPRESS, "on"))
 
-    /**
-      * Snowflake automatically enable/disable pushdown function
-      */
-    def autoPushdown: Boolean =
-      isTrue(parameters.getOrElse(PARAM_AUTO_PUSHDOWN, "on"))
 
     /**
       * Snowflake role - optional
