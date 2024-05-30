@@ -515,4 +515,12 @@ class MiscSuite01 extends FunSuite with Matchers {
     assert(queryURL.startsWith("Cannot generate queryID URL for https://unrecognized_url"))
   }
 
+  test("abort_detached_query") {
+    val param = Parameters.MergedParameters(Map.empty)
+    assert(!param.abortDetachedQuery)
+
+    val param1 = Parameters.MergedParameters(Map("abort_detached_query" -> "true"))
+    assert(param1.abortDetachedQuery)
+  }
+
 }

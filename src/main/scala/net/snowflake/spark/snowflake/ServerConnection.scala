@@ -256,6 +256,11 @@ private[snowflake] object ServerConnection {
       }
     }
 
+    // abort_detached_query
+    conn.createStatement().execute(
+      s"alter session set ABORT_DETACHED_QUERY = ${params.abortDetachedQuery}"
+    )
+
     // Setup query result format explicitly because this option is not supported
     // to be set with JDBC properties
     if (params.supportAWSStageEndPoint) {

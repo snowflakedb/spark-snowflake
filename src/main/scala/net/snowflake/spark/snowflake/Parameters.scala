@@ -233,6 +233,11 @@ object Parameters {
     "support_share_connection"
   )
 
+  // enable/disable ABORT_DETACHED_QUERY in the session level
+  val PARAM_ABORT_DETACHED_QUERY: String = knownParam(
+    "abort_detached_query"
+  )
+
   // preactions and postactions may affect the session level setting, so connection sharing
   // may be enabled only when the queries in preactions and postactions are in a white list.
   // force_skip_pre_post_action_check_for_session_sharing is introduced if users are sure that
@@ -718,6 +723,9 @@ object Parameters {
     }
     def supportShareConnection: Boolean = {
       isTrue(parameters.getOrElse(PARAM_SUPPORT_SHARE_CONNECTION, "true"))
+    }
+    def abortDetachedQuery: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_ABORT_DETACHED_QUERY, "false"))
     }
     def forceSkipPrePostActionsCheck: Boolean = {
       isTrue(parameters.getOrElse(
