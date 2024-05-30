@@ -36,7 +36,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-jdbc" % "3.16.0",
+      "net.snowflake" % "snowflake-jdbc" % "3.16.1",
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided, runtime",
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, runtime",
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, runtime",
