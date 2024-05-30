@@ -386,4 +386,42 @@ class ShareConnectionSuite extends IntegrationSuiteBase {
     assert(ServerConnection.jdbcConnectionCount.get() == oldJdbcConnectionCount)
     assert(ServerConnection.serverConnectionCount.get() > oldServerConnectionCount)
   }
+
+  test("abort_detached_query") {
+    // run dummy query to create session
+    sparkSession
+      .read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", "select 1")
+      .load()
+      .show()
+    val conn1 = ServerConnection
+      .getServerConnection(Parameters.mergeParameters(connectorOptions))
+    val result1 = conn1.jdbcConnection
+      .prepareStatement("show parameters like 'abort_detached_query'")
+      .executeQuery()
+    assert(result1.next())
+    assert(result1.getString(1).equals("ABORT_DETACHED_QUERY"))
+    assert(!result1.getBoolean(2))
+
+    // run dummy query to create session
+    sparkSession
+      .read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("abort_detached_query", "true")
+      .option("query", "select 1")
+      .load()
+      .show()
+    val conn2 = ServerConnection
+      .getServerConnection(Parameters
+        .mergeParameters(connectorOptions + ("abort_detached_query" -> "true")))
+    val result2 = conn2.jdbcConnection
+      .prepareStatement("show parameters like 'abort_detached_query'")
+      .executeQuery()
+    assert(result2.next())
+    assert(result2.getString(1).equals("ABORT_DETACHED_QUERY"))
+    assert(result2.getBoolean(2))
+  }
 }
