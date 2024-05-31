@@ -16,8 +16,8 @@
 
 val sparkConnectorVersion = "2.16.0"
 val scalaVersionMajor = "2.12"
-val sparkVersionMajor = "3.3"
-val sparkVersion = s"${sparkVersionMajor}.2"
+val sparkVersionMajor = "3.2"
+val sparkVersion = s"${sparkVersionMajor}.4"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
 unmanagedJars in Compile += file(s"../target/scala-${scalaVersionMajor}/" +
