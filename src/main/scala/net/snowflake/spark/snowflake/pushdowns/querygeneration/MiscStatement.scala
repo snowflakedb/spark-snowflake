@@ -8,7 +8,6 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
-import org.apache.spark.sql.catalyst.expressions.EvalMode.LEGACY
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Ascending,
@@ -54,7 +53,7 @@ private[querygeneration] object MiscStatement {
       // - New Type: evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)
       // Currently, there are 3 modes: LEGACY, ANSI, TRY
       // support to pushdown, if the mode is LEGACY.
-      case Cast(child, t, _, evalMode) if evalMode == LEGACY =>
+      case Cast(child, t, _, ansiEnable) if ! ansiEnable =>
         getCastType(t) match {
           case Some(cast) =>
             // For known unsupported data conversion, raise exception to break the
@@ -122,7 +121,7 @@ private[querygeneration] object MiscStatement {
       // Spark 3.4 introduce join hint. The join hint doesn't affect correctness.
       // So it can be ignored in the pushdown process
       // https://github.com/apache/spark/commit/0fa9c554fc0b3940a47c3d1c6a5a17ca9a8cee8e
-      case ScalarSubquery(subquery, _, _, joinCond, _) if joinCond.isEmpty =>
+      case ScalarSubquery(subquery, _, _, joinCond) if joinCond.isEmpty =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>
