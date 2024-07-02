@@ -321,12 +321,12 @@ object Parameters {
           "' parameter, e.g. 'accountname.snowflakecomputing.com:443'"
       )
     }
-    if (!userParameters.contains(PARAM_SF_USER)) {
+    val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
+    if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty) {
       throw new IllegalArgumentException(
         "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
       )
     }
-    val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
     if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
       (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
       //  if OAuth token not provided
@@ -621,7 +621,8 @@ object Parameters {
     /**
       * Snowflake user
       */
-    def sfUser: String = parameters(PARAM_SF_USER)
+    def sfUser: String = parameters.getOrElse(PARAM_SF_USER, null)
+
 
     /**
       * Snowflake password

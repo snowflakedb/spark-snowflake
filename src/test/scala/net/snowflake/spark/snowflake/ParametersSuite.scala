@@ -108,6 +108,7 @@ class ParametersSuite extends FunSuite with Matchers {
     params += "sfauthenticator" -> "oauth"
     params += "sftoken" -> "mytoken"
     params.remove("sfpassword")
+    params.remove("sfuser")
     val mergedParams = Parameters.mergeParameters(params.toMap)
     mergedParams.sfAuthenticator shouldBe Some("oauth")
     mergedParams.sfToken shouldBe Some("mytoken")
