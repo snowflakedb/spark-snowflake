@@ -159,10 +159,8 @@ private[snowflake] object ServerConnection {
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     if (params.sfUser != null) {
       // user is optional when using Oauth token
-      jdbcProperties.put("account", params.sfAccount.get)
+      jdbcProperties.put("user", params.sfUser)
     }
-    jdbcProperties.put("user", params.sfUser)
-
     params.privateKey match {
       case Some(privateKey) =>
         jdbcProperties.put("privateKey", privateKey)

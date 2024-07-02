@@ -177,7 +177,7 @@ object TestUtils {
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     if (params.sfUser != null) {
       // user is optional when using Oauth token
-      jdbcProperties.put("account", params.sfAccount.get)
+      jdbcProperties.put("user", params.sfUser)
     }
 
     params.privateKey match {
