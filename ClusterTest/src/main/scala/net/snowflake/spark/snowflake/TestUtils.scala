@@ -175,7 +175,10 @@ object TestUtils {
     // Obligatory properties
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
-    jdbcProperties.put("user", params.sfUser)
+    if (params.sfUser != null) {
+      // user is optional when using Oauth token
+      jdbcProperties.put("user", params.sfUser)
+    }
 
     params.privateKey match {
       case Some(privateKey) =>
