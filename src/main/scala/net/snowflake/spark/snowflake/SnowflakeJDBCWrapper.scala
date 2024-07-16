@@ -39,11 +39,13 @@ import scala.util.Try
   * Shim which exposes some JDBC helper functions. Most of this code is copied from Spark SQL, with
   * minor modifications for Snowflake-specific features and limitations.
   */
-private[snowflake] class JDBCWrapper {
+private[snowflake] class JDBCWrapper extends Serializable {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private val ec: ExecutionContext = {
+  // Note: marking field `implicit transient lazy` this allows spark to
+  //  recreate upon de-serialization
+  @transient implicit private lazy val ec: ExecutionContext = {
     log.debug("Creating a new ExecutionContext")
     val threadFactory: ThreadFactory = new ThreadFactory {
       private[this] val count = new AtomicInteger()
@@ -354,7 +356,7 @@ private[snowflake] class JDBCWrapper {
     TelemetryClient.createTelemetry(conn.jdbcConnection)
 }
 
-private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
+private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper with Serializable {
 
   private val LOGGER = LoggerFactory.getLogger(getClass.getName)
 
@@ -589,7 +591,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 private[snowflake] class SnowflakeSQLStatement(
   val numOfVar: Int = 0,
   val list: List[StatementElement] = Nil
-) {
+) extends Serializable {
 
   private val log = LoggerFactory.getLogger(getClass)
 

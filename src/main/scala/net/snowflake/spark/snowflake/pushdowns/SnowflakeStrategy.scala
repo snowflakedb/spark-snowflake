@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.SnowflakeConnectorFeatureNotSupportException
+import net.snowflake.spark.snowflake.{SnowflakeConnectorFeatureNotSupportException, Utils}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -38,9 +38,18 @@ class SnowflakeStrategy extends Strategy {
     * @return An Option of Seq[SnowflakePlan] that contains the PhysicalPlan if
     *         query generation was successful, None if not.
     */
-  private def buildQueryRDD(plan: LogicalPlan): Option[Seq[SnowflakePlan]] =
-    QueryBuilder.getRDDFromPlan(plan).map {
-      case (output: Seq[Attribute], rdd: RDD[InternalRow]) =>
-        Seq(SnowflakePlan(output, rdd))
+  private def buildQueryRDD(plan: LogicalPlan): Option[Seq[SparkPlan]] = {
+    if (Utils.lazyMode) {
+      logInfo("Using lazy mode for push down")
+      QueryBuilder.getSnowflakeScanExecPlan(plan).map {
+        case (projection, snowflakeSQL, relation) =>
+          Seq(SnowflakeScanExec(projection, snowflakeSQL, relation))
+      }
+    } else {
+      QueryBuilder.getRDDFromPlan(plan).map {
+        case (output: Seq[Attribute], rdd: RDD[InternalRow]) =>
+          Seq(SnowflakePlan(output, rdd))
+      }
     }
+  }
 }

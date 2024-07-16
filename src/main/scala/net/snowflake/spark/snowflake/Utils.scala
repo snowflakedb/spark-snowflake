@@ -20,7 +20,6 @@ package net.snowflake.spark.snowflake
 import java.net.URI
 import java.sql.{Connection, ResultSet}
 import java.util.{Properties, UUID}
-
 import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.{SPARK_VERSION, SparkContext, SparkEnv}
@@ -37,6 +36,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.LoggerFactory
 
@@ -77,6 +77,10 @@ object Utils {
   } else {
     ""
   }
+  private[snowflake] lazy val lazyMode = SparkSession.active
+      .conf
+      .get("spark.snowflakedb.lazyModeForAQE", "true")
+      .toBoolean
   private[snowflake] lazy val scalaVersion =
     util.Properties.versionNumberString
   private[snowflake] lazy val javaVersion =
