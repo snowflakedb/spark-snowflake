@@ -44,7 +44,6 @@ import org.slf4j.LoggerFactory
   * Various arbitrary helper functions
   */
 object Utils {
-
   /**
     * Literal to be used with the Spark DataFrame's .format method
     */
