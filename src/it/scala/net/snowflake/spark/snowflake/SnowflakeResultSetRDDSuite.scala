@@ -1012,7 +1012,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   test("testReadWriteSomePartitionsEmpty") {
     setupLargeResultTable
     if (!skipBigDataTest) {
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
       val originalDF = sparkSession
         .sql(s"select * from test_table_large_result")
 
@@ -1048,8 +1047,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       resultSet = readBackDF.collect()
       assert(resultSet.length == sourceLength)
-
-      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     }
   }
 
