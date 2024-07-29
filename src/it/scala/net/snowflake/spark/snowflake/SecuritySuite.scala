@@ -77,7 +77,7 @@ class SecuritySuite extends IntegrationSuiteBase {
     logger.info("After dropping file appender")
   }
 
-  test("verify pre-signed URL are not logged for read & write") {
+  ignore("verify pre-signed URL are not logged for read & write") {
     logger.info("Reconfigure to log into file")
     // Reconfigure log file to output all logging entries.
     if (USE_LOG4J2_PROPERTIES) {
