@@ -208,16 +208,10 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       val param = Parameters.MergedParameters(connectorOptions)
       val conn = TestUtils.getServerConnection(param)
 
-      val schema = StructType(
-        List(
-          StructField("str1", StringType)
-        )
-      )
       val query = "SELECT SYSTEM$WAIT(1, 'MINUTES')"
       // Execute a 2 minutes query with DataFrame in a Future
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
-        .schema(schema)
         .options(connectorOptionsNoTable)
         .option("query", query)
         .load()
