@@ -112,40 +112,13 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
-    if (requiredColumns.isEmpty) {
-      // In the special case where no columns were requested, issue a `count(*)` against Snowflake
-      // rather than unloading data.
-      val whereClause = FilterPushdown.buildWhereStatement(schema, filters)
-      val tableNameOrSubquery: SnowflakeSQLStatement =
-        params.query
-          .map(ConstantString("(") + _ + ")")
-          .getOrElse(params.table.get.toStatement !)
-      val countQuery =
-        ConstantString("SELECT count(*) FROM") + tableNameOrSubquery + whereClause
-      log.debug(Utils.sanitizeQueryText(countQuery.statementString))
-      val conn = jdbcWrapper.getConnector(params)
-      try {
-        val results = countQuery.execute(params.bindVariableEnabled)(conn)
-        if (results.next()) {
-          val numRows = results.getLong(1)
-          val parallelism =
-            sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
-          val emptyRow = Row.empty
-          sqlContext.sparkContext
-            .range(start = 0L, end = numRows, numSlices = parallelism)
-            .map(_ => emptyRow)
-        } else {
-          throw new IllegalStateException("Could not read count from Snowflake")
-        }
-      } finally {
-        conn.close()
-      }
+    val prunedSchema = pruneSchema(schema, requiredColumns)
+    val columns = if (requiredColumns.isEmpty) {
+      schema.map(_.name).toArray
     } else {
-      // Unload data from Snowflake into a temporary directory in S3:
-      val prunedSchema = pruneSchema(schema, requiredColumns)
-
-      getRDD[Row](standardStatement(requiredColumns, filters), prunedSchema)
+      requiredColumns
     }
+    getRDD[Row](standardStatement(columns, filters), prunedSchema)
   }
 
   // Get an RDD from a statement. Provide result schema because

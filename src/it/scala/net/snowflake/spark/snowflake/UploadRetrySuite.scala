@@ -234,7 +234,6 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
       sc.stop()
       sparkSession.stop()
     }

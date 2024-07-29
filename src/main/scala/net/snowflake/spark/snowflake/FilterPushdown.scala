@@ -42,7 +42,7 @@ private[snowflake] object FilterPushdown {
     keepNameCase: Boolean = false
   ): SnowflakeSQLStatement = {
     val filterStatement =
-      pushdowns.querygeneration
+      SnowflakeSQLStatement
         .mkStatement(
           filters.flatMap(buildFilterStatement(schema, _, keepNameCase)),
           "AND"
@@ -145,7 +145,7 @@ private[snowflake] object FilterPushdown {
       case In(attr, values: Array[Any]) =>
         val dataType = getTypeForAttribute(schema, attr).get
         val valueStrings =
-          pushdowns.querygeneration
+          SnowflakeSQLStatement
             .mkStatement(values.map(v => buildValueWithType(dataType, v)), ", ")
         Some(
           ConstantString("(") + wrap(attr) + "IN" + "(" + valueStrings + "))"

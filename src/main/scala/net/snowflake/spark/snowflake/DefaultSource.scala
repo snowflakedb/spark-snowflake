@@ -53,14 +53,6 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   override def createRelation(sqlContext: SQLContext,
                               parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    // check spark version for push down
-    if (params.autoPushdown) {
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
-        sqlContext.sparkSession
-      )
-    }
-    // pass parameters to pushdown functions
-    pushdowns.setGlobalParameter(params)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
 
@@ -71,14 +63,6 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
                               parameters: Map[String, String],
                               schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    // check spark version for push down
-    if (params.autoPushdown) {
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
-        sqlContext.sparkSession
-      )
-    }
-    // pass parameters to pushdown functions
-    pushdowns.setGlobalParameter(params)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
 
@@ -91,14 +75,6 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
                               data: DataFrame): BaseRelation = {
 
     val params = Parameters.mergeParameters(parameters)
-    // check spark version for push down
-    if (params.autoPushdown) {
-      SnowflakeConnectorUtils.checkVersionAndEnablePushdown(
-        sqlContext.sparkSession
-      )
-    }
-    // pass parameters to pushdown functions
-    pushdowns.setGlobalParameter(params)
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
         "For save operations you must specify a Snowfake table name with the 'dbtable' parameter"

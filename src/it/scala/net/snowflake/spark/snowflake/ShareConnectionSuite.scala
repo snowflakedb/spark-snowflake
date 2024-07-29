@@ -36,7 +36,6 @@ class ShareConnectionSuite extends IntegrationSuiteBase {
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 
