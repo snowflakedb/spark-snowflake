@@ -16,17 +16,8 @@
 
 package net.snowflake.spark.snowflake
 
-import java.io.File
-
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake._
-import org.apache.spark.sql._
-import org.apache.spark.sql.types._
-import org.scalactic.source.Position
-import org.scalatest.Tag
 
 import scala.util.Random
 

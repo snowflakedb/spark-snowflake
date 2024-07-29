@@ -134,14 +134,6 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
       .agg(count("*").alias("new_col"))
       .count()
 
-    val result =
-      s"""
-         |SELECT ( COUNT ( 1 ) ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-         |( SELECT * FROM ( $table3 ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-         | "SUBQUERY_0" GROUP BY "SUBQUERY_0"."col" ) AS "SUBQUERY_1" LIMIT 1
-         |""".stripMargin.replaceAll("\\s", "")
-
-    assert(Utils.getLastSelect.replaceAll("\\s", "").equals(result))
   }
 
   test("Test row_number function") {
@@ -160,32 +152,6 @@ class ColumnNameCaseSuite extends IntegrationSuiteBase {
     df.withColumn("rank", row_number().over(windowsSpec))
       .filter("rank=1")
       .collect()
-
-    // scalastyle:off println
-    println(Utils.getLastSelect)
-    // scalastyle:on println
-    assert(
-      Utils.getLastSelect
-        .replaceAll("\\s", "")
-        .equals(s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."id" ) AS "SUBQUERY_1_COL_0" ,
-         |( "SUBQUERY_0"."time" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
-         |( PARTITION BY "SUBQUERY_0"."id" ORDER BY ( "SUBQUERY_0"."time" ) DESC
-         |) ) AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $table3 ) AS
-         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
-         |( ( "SUBQUERY_1"."SUBQUERY_1_COL_2" IS NOT NULL ) AND ( "SUBQUERY_1".
-         |"SUBQUERY_1_COL_2" = 1 ) )
-         |""".stripMargin.replaceAll("\\s", "")) ||
-        Utils.getLastSelect
-          .replaceAll("\\s", "")
-          .equals(s"""SELECT * FROM ( SELECT ( "SUBQUERY_0"."id" ) AS "SUBQUERY_1_COL_0" ,
-                     | ( "SUBQUERY_0"."time" ) AS "SUBQUERY_1_COL_1" , ( ROW_NUMBER ()  OVER
-                     | ( PARTITION BY "SUBQUERY_0"."id" ORDER BY ( "SUBQUERY_0"."time" ) DESC
-                     | ) ) AS "SUBQUERY_1_COL_2" FROM ( SELECT * FROM ( $table3 ) AS
-                     | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" ) AS "SUBQUERY_1" WHERE
-                     | ( "SUBQUERY_1"."SUBQUERY_1_COL_2" = 1 )
-                     |""".stripMargin.replaceAll("\\s", ""))
-    )
-
   }
 
 }

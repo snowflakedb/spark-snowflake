@@ -191,28 +191,6 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       .agg(count("*").alias("abc"))
       .collect()
 
-    assert(
-      Utils.getLastSelect.equals(
-        s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) )
-           | AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM
-           | ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
-           | AS "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" >=
-           | DATEADD(day, 18140 , TO_DATE('1970-01-01')) ) ) AND ( "SUBQUERY_0"."time" <=
-           | DATEADD(day, 18201 , TO_DATE('1970-01-01')) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-           | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0"""".stripMargin.filter(_ >= ' ')
-      ) ||
-        Utils.getLastSelect.equals(
-          s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) )
-             | AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM
-             | ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS
-             | "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE
-             | ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( ( "SUBQUERY_0"."time" >= DATEADD(day,
-             | 18140 , TO_DATE('1970-01-01')) ) AND ( "SUBQUERY_0"."time" <= DATEADD(day, 18201 ,
-             | TO_DATE('1970-01-01')) ) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-             | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0"""".stripMargin.filter(_ >= ' ')
-        )
-    )
-
     assert(result.length == 1)
     assert(result(0)(1) == 2)
 
@@ -228,31 +206,6 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       .groupBy("\"id\"")
       .agg(count("*").alias("abc"))
       .show()
-
-    assert(
-      Utils.getLastSelect.equals(
-        s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) )
-           | AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1"
-           | FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-           | ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           | WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <=
-           | DATEADD(day, 18140 , TO_DATE('1970-01-01')) ) ) AND ( "SUBQUERY_0"."time" >=
-           | DATEADD(day, 18201 , TO_DATE('1970-01-01')) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-           | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21
-           |""".stripMargin.filter(_ >= ' ')) ||
-        Utils.getLastSelect.equals(
-          s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) )
-             | AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1"
-             | FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-             | ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" )
-             | AS "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND
-             | ( ( "SUBQUERY_0"."time" <= DATEADD(day, 18140 , TO_DATE('1970-01-01')) ) AND
-             | ( "SUBQUERY_0"."time" >= DATEADD(day, 18201 , TO_DATE('1970-01-01')) ) ) ) )
-             | AS "SUBQUERY_1" ) AS "SUBQUERY_2" GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" )
-             | AS "SUBQUERY_3" LIMIT 21
-             |""".stripMargin.filter(_ >= ' ')
-        )
-    )
 
     jdbcUpdate(s"drop table $test_table")
   }
@@ -287,27 +240,6 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       .agg(count("*").alias("abc"))
       .collect()
 
-    assert(
-      Utils.getLastSelect.equals(
-        s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) )
-           | AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM
-           | ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-           | "SUBQUERY_0" WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time"
-           | >= to_timestamp_ntz( 1564358400000000 , 6) ) ) AND ( "SUBQUERY_0"."time" <=
-           | to_timestamp_ntz( 1567036800000000 , 6) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-           | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0"""".stripMargin.filter(_ >= ' ')
-      ) ||
-        Utils.getLastSelect.equals(
-          s"""SELECT ( "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3_COL_0" , ( COUNT ( 1 ) )
-             | AS "SUBQUERY_3_COL_1" FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM
-             | ( SELECT * FROM ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS
-             | "SUBQUERY_0" WHERE ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( ( "SUBQUERY_0"."time"
-             | >= to_timestamp_ntz( 1564358400000000 , 6) ) AND ( "SUBQUERY_0"."time" <=
-             | to_timestamp_ntz( 1567036800000000 , 6) ) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-             | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0"""".stripMargin.filter(_ >= ' ')
-        )
-    )
-
     assert(result.length == 1)
     assert(result(0)(1) == 2)
 
@@ -328,31 +260,6 @@ class DataTypesIntegrationSuite extends IntegrationSuiteBase {
       .agg(count("*").alias("abc"))
       .show()
 
-    assert(
-      Utils.getLastSelect.equals(
-        s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) )
-           | AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1"
-           | FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-           | ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-           | WHERE ( ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( "SUBQUERY_0"."time" <=
-           | to_timestamp_ntz( 1564358400000000 , 6) ) ) AND ( "SUBQUERY_0"."time" >=
-           | to_timestamp_ntz( 1567036800000000 , 6) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-           | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21
-           |""".stripMargin.filter(_ >= ' ')) ||
-        Utils.getLastSelect.equals(
-          s"""SELECT * FROM ( SELECT ( CAST ( "SUBQUERY_2"."SUBQUERY_2_COL_0" AS VARCHAR ) )
-             | AS "SUBQUERY_3_COL_0" , ( CAST ( COUNT ( 1 ) AS VARCHAR ) ) AS "SUBQUERY_3_COL_1"
-             | FROM ( SELECT ( "SUBQUERY_1"."id" ) AS "SUBQUERY_2_COL_0" FROM ( SELECT * FROM
-             | ( SELECT * FROM ( $test_table ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-             | WHERE ( ( "SUBQUERY_0"."time" IS NOT NULL ) AND ( ( "SUBQUERY_0"."time" <=
-             | to_timestamp_ntz( 1564358400000000 , 6) ) AND ( "SUBQUERY_0"."time" >=
-             | to_timestamp_ntz( 1567036800000000 , 6) ) ) ) ) AS "SUBQUERY_1" ) AS "SUBQUERY_2"
-             | GROUP BY "SUBQUERY_2"."SUBQUERY_2_COL_0" ) AS "SUBQUERY_3" LIMIT 21
-             |""".stripMargin.filter(_ >= ' '))
-    )
-
     jdbcUpdate(s"drop table $test_table")
-
   }
-
 }

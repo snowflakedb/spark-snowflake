@@ -18,7 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import java.io.File
-import java.sql.{Connection, Timestamp}
+import java.sql.Timestamp
 import java.time.{LocalDateTime, ZonedDateTime}
 import java.util.TimeZone
 
