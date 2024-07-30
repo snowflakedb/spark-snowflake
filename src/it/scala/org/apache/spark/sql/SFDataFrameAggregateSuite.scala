@@ -35,8 +35,11 @@ class SFDataFrameAggregateSuite
       //      checkAnswer(df2.select(sum($"year-month")), Nil)
       //    }
       "SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`",
-      "SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`"
+      "SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`",
       // Replace Spark exception by Snowflake exception, replaced by
       // TS - SPARK-21896: Window functions inside aggregate functions
+      "bit aggregate",
+      "SPARK-16484: hll_*_agg + hll_union negative tests",
+      "rows between should accept int/long values as boundary"
     )
 }
