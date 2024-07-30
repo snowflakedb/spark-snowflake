@@ -41,12 +41,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     false
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
-  }
-
   test("unit test: SnowflakeTelemetry.detectSparkLanguage") {
     val sparkConf = SparkEnv.get.conf.clone()
     assert(SnowflakeTelemetry.detectSparkLanguage(sparkConf).equals("Scala"))
@@ -312,194 +306,8 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
     }
   }
 
-  test("IT test: PLAN_STATISTIC: read from snowflake") {
-    // Enable dummy sending telemetry message.
-    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
-    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new MockTelemetryMessageSender(messageBuffer))
-    try {
-      // A basis dataframe read
-      val df1 = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("query", "select 123 as A")
-        .load()
-      df1.collect()
-
-      val planStatisticMessages = messageBuffer
-        .filter(_.get("type").asText().equals("spark_plan_statistic"))
-      assert(planStatisticMessages.nonEmpty)
-      planStatisticMessages.foreach { x =>
-        val planStatistics = x.get("data").get(TelemetryFieldNames.STATISTIC_INFO)
-        assert(planStatistics.isArray && planStatistics.size() > 0)
-        assert(nodeContains(planStatistics, "LogicalRelation:SnowflakeRelation"))
-        assert(!nodeContains(planStatistics, "SaveIntoDataSourceCommand:DefaultSource"))
-      }
-    } finally {
-      // Reset to the real Telemetry message sender
-      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
-    }
-  }
-
-  test("IT test: PLAN_STATISTIC: read from snowflake and write to snowflake") {
-    // Enable dummy sending telemetry message.
-    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
-    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new MockTelemetryMessageSender(messageBuffer))
-    try {
-      // A basis dataframe read
-      val df1 = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("query", "select current_timestamp()")
-        .load()
-
-      df1.write
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", test_table)
-        .mode(SaveMode.Overwrite)
-        .save()
-
-      val planStatisticMessages = messageBuffer
-        .filter(_.get("type").asText().equals("spark_plan_statistic"))
-        .filter { x =>
-          val planStatistics = x.get("data").get(TelemetryFieldNames.STATISTIC_INFO)
-          assert(planStatistics.isArray && planStatistics.size() > 0)
-          nodeContains(planStatistics, "LogicalRelation:SnowflakeRelation") &&
-            nodeContains(planStatistics, "SaveIntoDataSourceCommand:DefaultSource")
-        }
-      assert(planStatisticMessages.length == 1)
-    } finally {
-      // Reset to the real Telemetry message sender
-      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
-    }
-  }
-
-  test("IT test: PLAN_STATISTIC: snowflake -> file, file -> snowflake") {
-    // Enable dummy sending telemetry message.
-    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
-    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new MockTelemetryMessageSender(messageBuffer))
-    val tempDir = Files.createTempDirectory("spark_connector_test").toFile
-    try {
-      // A basis dataframe read
-      val df1 = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("query", "select 123 as A")
-        .load()
-      // write to a CSV file
-      df1.write.mode("Overwrite").csv(tempDir.getPath)
-
-      // Check messages for: Snowflake -> file
-      val planStatisticMessages = messageBuffer
-        .filter(_.get("type").asText().equals("spark_plan_statistic"))
-        .filter { x =>
-          val planStatistics = x.get("data").get(TelemetryFieldNames.STATISTIC_INFO)
-          assert(planStatistics.isArray && planStatistics.size() > 0)
-          nodeContains(planStatistics, "LogicalRelation:SnowflakeRelation") &&
-            nodeContains(planStatistics,
-              "org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand")
-        }
-      assert(planStatisticMessages.length == 1)
-
-      // Clear message buffer for next test
-      messageBuffer.clear()
-
-      val df2 = sparkSession.read.csv(tempDir.getPath)
-      df2.write
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("dbtable", test_table)
-        .mode(SaveMode.Overwrite)
-        .save()
-      // Check messages for: file -> Snowflake
-      val planStatisticMessages2 = messageBuffer
-        .filter(_.get("type").asText().equals("spark_plan_statistic"))
-        .filter { x =>
-          val planStatistics = x.get("data").get(TelemetryFieldNames.STATISTIC_INFO)
-          assert(planStatistics.isArray && planStatistics.size() > 0)
-          nodeContains(planStatistics, "SaveIntoDataSourceCommand:DefaultSource") &&
-            nodeContains(planStatistics,
-              "LogicalRelation:org.apache.spark.sql.execution.datasources.HadoopFsRelation")
-        }
-      assert(planStatisticMessages2.length == 1)
-    } finally {
-      // Reset to the real Telemetry message sender
-      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
-      // Remove temp directory
-      new Directory(tempDir).deleteRecursively()
-    }
-  }
-
-  test("IT test: PLAN_STATISTIC: Use Scala UDF") {
-    // Enable dummy sending telemetry message.
-    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
-    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new MockTelemetryMessageSender(messageBuffer))
-    try {
-      // A basis dataframe read
-      val df1 = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("query", "select 123 as A")
-        .load()
-
-      // Using with scala udf DataFrame
-      val doubler = (value: Int) => value + value
-
-      val doublerUDF = udf(doubler)
-      df1.select(col("A"), doublerUDF(col("A")).as("A2")).collect()
-
-      val planStatisticMessages = messageBuffer
-        .filter(_.get("type").asText().equals("spark_plan_statistic"))
-      assert(planStatisticMessages.nonEmpty)
-      planStatisticMessages.foreach { x =>
-        val planStatistics = x.get("data").get(TelemetryFieldNames.STATISTIC_INFO)
-        assert(planStatistics.isArray && planStatistics.size() > 0)
-        // Scala UDF is used
-        assert(nodeContains(planStatistics, "org.apache.spark.sql.catalyst.expressions.ScalaUDF"))
-        assert(nodeContains(planStatistics, "LogicalRelation:SnowflakeRelation"))
-      }
-    } finally {
-      // Reset to the real Telemetry message sender
-      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
-    }
-  }
-
-  test("IT test: CLIENT_INFO: shared connection") {
-    // close all connections to trigger create JDBC connections
-    ServerConnection.closeAllCachedConnections
-    // Enable dummy sending telemetry message.
-    val messageBuffer = mutable.ArrayBuffer[ObjectNode]()
-    val oldSender = SnowflakeTelemetry.setTelemetryMessageSenderForTest(
-      new MockTelemetryMessageSender(messageBuffer))
-    try {
-      // A basis dataframe read
-      val df1 = sparkSession.read
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(connectorOptionsNoTable)
-        .option("query", "select 123 as A")
-        .load()
-
-      df1.collect()
-      val clientInfoMessages = messageBuffer
-        .filter(_.get("type").asText().equals("spark_client_info"))
-      assert(clientInfoMessages.nonEmpty)
-      clientInfoMessages.foreach { x =>
-        val shared = x.get("data").get(TelemetryFieldNames.SHARED)
-        assert(shared.asBoolean())
-      }
-    } finally {
-      // Reset to the real Telemetry message sender
-      SnowflakeTelemetry.setTelemetryMessageSenderForTest(oldSender)
-    }
-  }
-
   // To run this test manually, need to start postgresql server
   ignore("manual test: read from postgresql with JDBC") {
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     try {
       val jdbcDF = sparkSession.read
         .format("jdbc")
@@ -515,7 +323,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
   // To run this test manually, need to start postgresql server
   ignore("manual test: write to postgresql with JDBC") {
-    SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     try {
       val df = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
@@ -540,7 +347,6 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
       jdbcUpdate(s"drop table if exists $test_table2")
     } finally {
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 

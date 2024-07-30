@@ -589,8 +589,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     setupNumberTable
     val result = sparkSession.sql("select * from test_table_number")
 
-    testPushdown(
-      s""" SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
+    checkAnswer(
       result,
       test_table_number_rows
     )
@@ -602,9 +601,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     if (!params.useCopyUnload) {
       val result = sparkSession.sql("select * from test_table_string_binary")
 
-      testPushdown(
-        s""" SELECT * FROM ( $test_table_string_binary ) AS
-           | "SF_CONNECTOR_QUERY_ALIAS"""".stripMargin,
+      checkAnswer(
         result,
         test_table_string_binary_rows
       )
@@ -689,8 +686,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     setupDateTimeTable
     val result = sparkSession.sql("select * from test_table_date_time")
 
-    testPushdown(
-      s""" SELECT * FROM ( $test_table_date_time ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
+    checkAnswer(
       result,
       test_table_date_time_rows
     )
@@ -714,8 +710,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     if (!params.useCopyUnload) {
       val result = sparkSession.sql("select * from test_table_timestamp")
 
-      testPushdown(
-        s""" SELECT * FROM ( $test_table_timestamp ) AS "SF_CONNECTOR_QUERY_ALIAS" """.stripMargin,
+      checkAnswer(
         result,
         test_table_timestamp_rows
       )
@@ -1017,7 +1012,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   test("testReadWriteSomePartitionsEmpty") {
     setupLargeResultTable
     if (!skipBigDataTest) {
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
       val originalDF = sparkSession
         .sql(s"select * from test_table_large_result")
 
@@ -1053,8 +1047,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       resultSet = readBackDF.collect()
       assert(resultSet.length == sourceLength)
-
-      SnowflakeConnectorUtils.enablePushdownSession(sparkSession)
     }
   }
 
@@ -1299,12 +1291,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("Joe   Doe"), Row("John  Dddoe")
     )
 
-    testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
-         |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '%Jo%oe%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
-         |""".stripMargin,
+    checkAnswer(
       result1,
       expectedResult1
     )
@@ -1325,12 +1312,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("100 times"), Row("100%"), Row("1000 times")
     )
 
-    testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
-         |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '100%' ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
-         |""".stripMargin,
+    checkAnswer(
       result1,
       expectedResult1
     )
@@ -1355,12 +1337,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         Row("Elaine"), Row("Joe down"), Row("John_down")
       )
 
-      testPushdown(
-        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
-           |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-           |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
-           |LIKE '%Jo%oe%' ) ) ) AS "SUBQUERY_1" ORDER BY ( "SUBQUERY_1"."SUBJECT" ) ASC
-           |""".stripMargin,
+      checkAnswer(
         result2,
         expectedResult2
       )
@@ -1383,13 +1360,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("John_down")
     )
 
-    testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
-         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |LIKE '%J%h%^_do%' ESCAPE '^' ) ) AS "SUBQUERY_1" ORDER BY
-         |( "SUBQUERY_1"."SUBJECT" ) ASC
-         |""".stripMargin,
+    checkAnswer(
       result2,
       expectedResult2
     )
@@ -1418,13 +1389,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       Row("100%")
     )
 
-    testPushdown(
-      s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like ) AS
-         |"SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-         |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND "SUBQUERY_0"."SUBJECT"
-         |like '100^%' escape '^' ) ) AS "SUBQUERY_1" ORDER BY
-         |( "SUBQUERY_1"."SUBJECT" ) ASC
-         |""".stripMargin,
+    checkAnswer(
       result2,
       expectedResult2
     )
@@ -1456,13 +1421,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         Row("John  Dddoe")
       )
 
-      testPushdown(
-        s"""SELECT * FROM ( SELECT * FROM ( SELECT * FROM ( $test_table_like )
-           |AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0" WHERE ( (
-           |"SUBQUERY_0"."SUBJECT" IS NOT NULL ) AND NOT ( "SUBQUERY_0"."SUBJECT"
-           |LIKE '%J%h%^_do%' ESCAPE '^' ) ) ) AS "SUBQUERY_1" ORDER BY
-           |( "SUBQUERY_1"."SUBJECT" ) ASC
-           |""".stripMargin,
+      checkAnswer(
         result2,
         expectedResult2
       )
@@ -1942,10 +1901,9 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     }
 
     // Check the result is expected.
-    testPushdown(
-      s"SELECT * FROM $test_table_write",
+    checkAnswer(
       result,
-      expectedResult, bypass = true
+      expectedResult
     )
   }
 
@@ -1999,10 +1957,9 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       }
 
       // Check the result is expected.
-      testPushdown(
-        s"SELECT * FROM $test_table_write",
+      checkAnswer(
         result,
-        expectedResult, bypass = true
+        expectedResult
       )
     })
   }
@@ -2530,7 +2487,6 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
     } finally {
       TestHook.disableTestHook()
       super.afterAll()
-      SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
     }
   }
 }

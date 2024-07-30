@@ -187,10 +187,21 @@ class ConversionsSuite extends FunSuite {
     println(result)
     // scalastyle:on println
 
-    val expect =
-      "[1,true,2015-07-09,1234.56,678.98,9999999999999999,1234,123123123,123,test string," +
-        "2015-07-01 00:00:00.001,[1,2,3,4,5],keys: [a,b,c], values: [1,2,3],[123,str1]]"
+    assert(result.size == schema.size)
+    assert(result.getByte(0) == 1)
+    assert(result.getBoolean(1))
+    assert(result.getDate(2) == Date.valueOf("2015-07-09"))
+    assert(result.getDouble(3) == 1234.56)
+    assert(result.getFloat(4) == 678.98f)
+    assert(result.getDecimal(5) == java.math.BigDecimal.valueOf(9999999999999999L))
+    assert(result.getInt(6) == 1234)
+    assert(result.getLong(7) == 123123123L)
+    assert(result.getShort(8) == 123.toShort)
+    assert(result.getString(9) == "test string")
+    assert(result.getTimestamp(10) == Timestamp.valueOf("2015-07-01 00:00:00.001"))
+    assert(result.getSeq(11) sameElements Array(1, 2, 3, 4, 5))
+    assert(result.getMap(12) == Map("b" -> 2, "a" -> 1, "c" -> 3))
+    assert(result.getStruct(13) == Row(123, "str1"))
 
-    assert(expect == result.toString())
   }
 }

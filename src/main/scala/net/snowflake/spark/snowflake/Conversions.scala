@@ -270,7 +270,7 @@ private[snowflake] object Conversions {
       case DateType => parseDate(data.asText(), isIR)
       case DoubleType => data.asDouble()
       case FloatType => data.asDouble().toFloat
-      case DecimalType() => Decimal(data.decimalValue())
+      case DecimalType() => data.decimalValue()
       case IntegerType => data.asInt()
       case LongType => data.asLong()
       case ShortType => data.shortValue()
@@ -281,7 +281,7 @@ private[snowflake] object Conversions {
         val result = new Array[Any](data.size())
         (0 until data.size())
           .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
-        new GenericArrayData(result)
+        if (isIR) new GenericArrayData(result) else result.toSeq
       case StructType(fields) =>
         val converted = fields.map(field => {
           val value = data.findValue(field.name)
@@ -295,17 +295,26 @@ private[snowflake] object Conversions {
       // String key only
       case MapType(_, dt, _) =>
         val keys = data.fieldNames()
-        var keyList: List[UTF8String] = Nil
-        var valueList: List[Any] = Nil
-        while (keys.hasNext) {
-          val key = keys.next()
-          keyList = UTF8String.fromString(key) :: keyList
-          valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+        if (isIR) {
+          var keyList: List[UTF8String] = Nil
+          var valueList: List[Any] = Nil
+          while (keys.hasNext) {
+            val key = keys.next()
+            keyList = UTF8String.fromString(key) :: keyList
+            valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+          }
+          new ArrayBasedMapData(
+            new GenericArrayData(keyList.reverse.toArray),
+            new GenericArrayData(valueList.reverse.toArray)
+          )
+        } else {
+          val result = scala.collection.mutable.HashMap.empty[String, Any]
+          while (keys.hasNext) {
+            val key = keys.next()
+            result.put(key, jsonStringToRow[T](data.get(key), dt))
+          }
+          result
         }
-        new ArrayBasedMapData(
-          new GenericArrayData(keyList.reverse.toArray),
-          new GenericArrayData(valueList.reverse.toArray)
-        )
       case _ =>
         if (isIR) UTF8String.fromString(data.toString) else data.toString
     }
