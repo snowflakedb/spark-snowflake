@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-val sparkConnectorVersion = "2.16.0"
+val sparkConnectorVersion = "3.0.0"
 val scalaVersionMajor = "2.12"
-val sparkVersionMajor = "3.4"
+val sparkVersionMajor = "3.5"
 val sparkVersion = s"${sparkVersionMajor}.0"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 
