@@ -44,16 +44,6 @@ if [ -z "$GITHUB_TAG_1" ]; then
   exit 1
 fi
 
-if [ -z "$GITHUB_TAG_2" ]; then
-  echo "[ERROR] 'GITHUB_TAG_2' is not specified!"
-  exit 1
-fi
-
-if [ -z "$GITHUB_TAG_3" ]; then
-  echo "[ERROR] 'GITHUB_TAG_3 ' is not specified!"
-  exit 1
-fi
-
 mkdir -p ~/.ivy2
 
 STR=$'realm=Sonatype Nexus Repository Manager
@@ -97,24 +87,32 @@ else
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
 fi
 
-echo publishing previous_spark_version branch...
-git checkout tags/$GITHUB_TAG_2
-if [ "$PUBLISH" = true ]; then
-  sbt +publishSigned
-else
-  echo "publish to $PUBLISH_S3_URL"
-  rm -rf ~/.ivy2/local/
-  sbt +publishLocalSigned
-  aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_2}/ --recursive
+if [ -n "$GITHUB_TAG_2" ]; then
+  echo publishing previous_spark_version branch...
+  git checkout tags/$GITHUB_TAG_2
+  if [ "$PUBLISH" = true ]; then
+    sbt +publishSigned
+  else
+    echo "publish to $PUBLISH_S3_URL"
+    rm -rf ~/.ivy2/local/
+    sbt +publishLocalSigned
+    aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_2}/ --recursive
+  fi
 fi
 
-echo publishing previous_spark_version branch...
-git checkout tags/$GITHUB_TAG_3
-if [ "$PUBLISH" = true ]; then
-  sbt +publishSigned
-else
-  echo "publish to $PUBLISH_S3_URL"
-  rm -rf ~/.ivy2/local/
-  sbt +publishLocalSigned
-  aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_3}/ --recursive
+if [ -n "$GITHUB_TAG_3" ]; then
+  echo publishing previous_spark_version branch...
+  git checkout tags/$GITHUB_TAG_3
+  if [ "$PUBLISH" = true ]; then
+    sbt +publishSigned
+  else
+    echo "publish to $PUBLISH_S3_URL"
+    rm -rf ~/.ivy2/local/
+    sbt +publishLocalSigned
+    aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_3}/ --recursive
+  fi
 fi
+
+
+
+
