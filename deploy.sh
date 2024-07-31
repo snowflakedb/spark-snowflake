@@ -112,7 +112,3 @@ if [ -n "$GITHUB_TAG_3" ]; then
     aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_3}/ --recursive
   fi
 fi
-
-
-
-
