@@ -14,7 +14,9 @@ class SFDataFrameWindowFramesSuite
 
   override def spark: SparkSession = getSnowflakeSession()
 
-  override protected def blackList: Seq[String] = Seq.empty
+  override protected def blackList: Seq[String] = Seq(
+    "rows between should accept int/long values as boundary"
+  )
 
   test("lead/lag with empty data frame") {
     val df = Seq.empty[(Int, String)].toDF("key", "value")

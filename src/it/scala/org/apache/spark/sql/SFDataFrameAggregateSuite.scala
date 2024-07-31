@@ -39,7 +39,6 @@ class SFDataFrameAggregateSuite
       // Replace Spark exception by Snowflake exception, replaced by
       // TS - SPARK-21896: Window functions inside aggregate functions
       "bit aggregate",
-      "SPARK-16484: hll_*_agg + hll_union negative tests",
-      "rows between should accept int/long values as boundary"
+      "SPARK-16484: hll_*_agg + hll_union negative tests"
     )
 }
