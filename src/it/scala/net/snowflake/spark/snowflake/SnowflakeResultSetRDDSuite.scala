@@ -875,7 +875,8 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
   }
 
   // Negative Test
-  test("test COPY missing files and fails") {
+  // disabled since Spark 3.5, since the test DF has only one partation
+  ignore("test COPY missing files and fails") {
     setupLargeResultTable
     // Don't run this test for use_copy_unload=true
     // because there are only 3 files (2 partitions) for this data size.

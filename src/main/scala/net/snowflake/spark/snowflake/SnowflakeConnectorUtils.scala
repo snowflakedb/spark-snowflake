@@ -28,12 +28,6 @@ object SnowflakeConnectorUtils {
 
   @transient lazy val log: Logger = LoggerFactory.getLogger(getClass.getName)
 
-  /**
-    * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
-    * otherwise disable it.
-    */
-  val SUPPORT_SPARK_VERSION = "3.4"
-
   // TODO: Improve error handling with retries, etc.
 
   @throws[SnowflakeConnectorException]

@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.4"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.4.0")
+val sparkVersion = "3.5"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -26,7 +26,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.4.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.16.0"
+val sparkConnectorVersion = "3.0.0"
 
 lazy val ItTest = config("it") extend Test
 
@@ -41,7 +41,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}-spark_3.4",
+    version := s"${sparkConnectorVersion}",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.2 supports scala 2.12 and 2.13
     crossScalaVersions := Seq("2.12.11", "2.13.9"),
@@ -118,11 +118,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
             <id>binglihub</id>
             <name>Bing Li</name>
             <url>https://github.com/binglihub</url>
-          </developer>
-          <developer>
-            <id>Mingli-Rui</id>
-            <name>Mingli Rui</name>
-            <url>https://github.com/Mingli-Rui</url>
           </developer>
         </developers>,
 
