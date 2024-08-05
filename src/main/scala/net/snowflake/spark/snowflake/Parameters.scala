@@ -245,6 +245,8 @@ object Parameters {
     "force_skip_pre_post_action_check_for_session_sharing"
   )
 
+  val PARAM_CONNECTION_ID: String = knownParam("connection_id")
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -305,80 +307,86 @@ object Parameters {
       case (key, value) => (key.toLowerCase, value)
     }
 
+    if (!userParameters.contains(PARAM_CONNECTION_ID)) {
+      if (!userParameters.contains(PARAM_SF_URL)) {
+        throw new IllegalArgumentException(
+          "A snowflake URL must be provided with '" + PARAM_SF_URL +
+            "' parameter, e.g. 'accountname.snowflakecomputing.com:443'"
+        )
+      }
+
+      val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
+      if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty) {
+        throw new IllegalArgumentException(
+          "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
+        )
+      }
+      if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
+        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
+        //  if OAuth token not provided
+        (tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "A snowflake password or private key path or OAuth token must be provided with '" +
+            PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
+            PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
+        )
+      }
+      //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
+      val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
+      if ((authenticatorVal.contains("oauth")) &&
+        (tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "An OAuth token is required if the authenticator mode is '" +
+            PARAM_AUTHENTICATOR + "'"
+        )
+      }
+      //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
+      if (!(authenticatorVal.contains("oauth")) &&
+        (!tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR +
+            ", the authentication mode must be 'oauth' when specifying OAuth token"
+        )
+      }
+
+      if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
+        PARAM_SF_QUERY
+      )) {
+        throw new IllegalArgumentException(
+          "You must specify a Snowflake table name with the '" + PARAM_SF_DBTABLE +
+            "' parameter or a query with the '" + PARAM_SF_QUERY + "' parameter."
+        )
+      }
+
+      if (userParameters.contains(PARAM_SF_DBTABLE) && userParameters.contains(
+        PARAM_SF_QUERY
+      )) {
+        throw new IllegalArgumentException(
+          "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY +
+            "' parameters at the same time."
+        )
+      }
+
+      // Check temp keys
+      var tempParams = 0
+      if (userParameters.contains(PARAM_TEMP_KEY_ID)) tempParams += 1
+      if (userParameters.contains(PARAM_TEMP_KEY_SECRET)) tempParams += 1
+      if (userParameters.contains(PARAM_TEMP_SESSION_TOKEN)) tempParams += 1
+      if (tempParams != 0 && tempParams != 3) {
+        throw new IllegalArgumentException(s"""If you specify one of
+                                              |$PARAM_TEMP_KEY_ID, $PARAM_TEMP_KEY_SECRET and
+                                              |$PARAM_TEMP_SESSION_TOKEN,
+                                              |you must specify all 3 of them."""
+          .stripMargin.replace("\n", " "))
+      }
+    }
+
     if (userParameters.contains(PARAM_TEMPDIR)) {
       log.warn(
         "Use of an external S3/Azure storage for staging is deprecated" +
           " and will be removed in a future version. " +
           "Unset your 'tempDir' parameter to use the Snowflake internal stage instead."
       )
-    }
-    // Snowflake-todo Add more parameter checking
-    if (!userParameters.contains(PARAM_SF_URL)) {
-      throw new IllegalArgumentException(
-        "A snowflake URL must be provided with '" + PARAM_SF_URL +
-          "' parameter, e.g. 'accountname.snowflakecomputing.com:443'"
-      )
-    }
-    val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
-    if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty) {
-      throw new IllegalArgumentException(
-        "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
-      )
-    }
-    if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-      (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
-      //  if OAuth token not provided
-      (tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "A snowflake password or private key path or OAuth token must be provided with '" +
-          PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
-          PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
-      )
-    }
-    //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
-    val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
-    if ((authenticatorVal.contains("oauth")) &&
-      (tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "An OAuth token is required if the authenticator mode is '" +
-          PARAM_AUTHENTICATOR + "'"
-      )
-    }
-    //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
-    if (!(authenticatorVal.contains("oauth")) &&
-      (!tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR +
-          ", the authentication mode must be 'oauth' when specifying OAuth token"
-      )
-    }
-    if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
-          PARAM_SF_QUERY
-        )) {
-      throw new IllegalArgumentException(
-        "You must specify a Snowflake table name with the '" + PARAM_SF_DBTABLE +
-          "' parameter or a query with the '" + PARAM_SF_QUERY + "' parameter."
-      )
-    }
-    if (userParameters.contains(PARAM_SF_DBTABLE) && userParameters.contains(
-          PARAM_SF_QUERY
-        )) {
-      throw new IllegalArgumentException(
-        "You cannot specify both the '" + PARAM_SF_DBTABLE + "' and '" + PARAM_SF_QUERY +
-          "' parameters at the same time."
-      )
-    }
-
-    // Check temp keys
-    var tempParams = 0
-    if (userParameters.contains(PARAM_TEMP_KEY_ID)) tempParams += 1
-    if (userParameters.contains(PARAM_TEMP_KEY_SECRET)) tempParams += 1
-    if (userParameters.contains(PARAM_TEMP_SESSION_TOKEN)) tempParams += 1
-    if (tempParams != 0 && tempParams != 3) {
-      throw new IllegalArgumentException(s"""If you specify one of
-           |$PARAM_TEMP_KEY_ID, $PARAM_TEMP_KEY_SECRET and
-           |$PARAM_TEMP_SESSION_TOKEN,
-           |you must specify all 3 of them.""".stripMargin.replace("\n", " "))
     }
 
     val s3maxfilesizeStr = userParameters.get(PARAM_S3_MAX_FILE_SIZE)
@@ -973,6 +981,10 @@ object Parameters {
       */
     def getQueryResultFormat: Option[String] = {
       parameters.get(PARAM_JDBC_QUERY_RESULT_FORMAT)
+    }
+
+    private[snowflake] def getConnectionId: Option[String] = {
+      parameters.get(PARAM_CONNECTION_ID)
     }
 
     /**

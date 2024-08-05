@@ -274,6 +274,31 @@ private[snowflake] object ServerConnection {
     jdbcConnectionCount.incrementAndGet()
     conn
   }
+
+  object providedConnections {
+    // use provided JDBC connection
+    private val providedConn = mutable.Map[String, Connection]()
+    def register(conn: Connection): String = this.synchronized {
+      // use current timestamp to be the key
+      var timeStamp = System.currentTimeMillis().toString
+      while(providedConn.keySet.contains(timeStamp)) {
+        Thread.sleep(1)
+        timeStamp = System.currentTimeMillis().toString
+      }
+      providedConn.put(timeStamp, conn)
+      timeStamp
+    }
+    def hasConnectionID(id: String): Boolean =
+      providedConn.contains(id)
+
+    def getConnection(id: String): Option[Connection] = this.synchronized {
+      val result = providedConn.get(id)
+      if (result.isDefined) {
+        providedConn.remove(id)
+      }
+      result
+    }
+  }
 }
 
 /*
