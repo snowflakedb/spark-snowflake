@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.core.{SFBaseSession, SFSession, SFSessionProperty}
 import net.snowflake.client.jdbc.SnowflakeConnectionV1
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Parameters.{MergedParameters, PARAM_SF_URL, PARAM_SF_USER}
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.slf4j.LoggerFactory
@@ -310,8 +310,15 @@ private[snowflake] object ServerConnection {
       result
     }
 
-    def url(id: String): Option[String] =
-      providedConn.get(id).map(_.asInstanceOf[SnowflakeConnectionV1].getSfSession.getUrl)
+    def getParameters(id: String): Map[String, String] =
+      providedConn.get(id) match {
+        case Some(sfConn: SnowflakeConnectionV1) =>
+          val map = mutable.Map[String, String]()
+          map.put(PARAM_SF_URL, sfConn.getSfSession.getUrl)
+          map.put(PARAM_SF_USER, sfConn.getSfSession.getUser)
+          map.toMap
+        case _ => Map.empty
+      }
   }
 }
 

@@ -411,7 +411,11 @@ object Parameters {
       }
     }
 
-    MergedParameters(DEFAULT_PARAMETERS ++ userParameters)
+    val parametersFromSnowpark = userParameters.get(PARAM_CONNECTION_ID) match {
+      case Some(id) => ServerConnection.providedConnections.getParameters(id)
+      case _ => Map.empty
+    }
+    MergedParameters(DEFAULT_PARAMETERS ++ userParameters ++ parametersFromSnowpark)
   }
 
   /**

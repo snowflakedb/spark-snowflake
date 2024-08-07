@@ -21,7 +21,7 @@ import net.snowflake.client.jdbc.SnowflakeConnectionV1
 import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 class ShareConnectionSuite extends IntegrationSuiteBase {
 
@@ -439,11 +439,12 @@ class ShareConnectionSuite extends IntegrationSuiteBase {
     val id2 = ServerConnection.providedConnections.register(conn1)
     // should be same session id
     assert(id2 == id1)
-//    sparkSession
-//      .read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .option(Parameters.PARAM_CONNECTION_ID, id2)
-//      .option("query", "select 1")
-//      .load().show()
+    val result = sparkSession
+      .read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .option(Parameters.PARAM_CONNECTION_ID, id2)
+      .option("query", "select 1")
+      .load()
+    checkAnswer(result, Seq(Row(1)))
   }
 }
