@@ -294,15 +294,10 @@ private[snowflake] object ServerConnection {
   object providedConnections {
     // use provided JDBC connection
     private val providedConn = mutable.Map[String, Connection]()
-    def register(conn: Connection): String = this.synchronized {
-      // use current timestamp to be the key
-      var timeStamp = System.currentTimeMillis().toString
-      while(providedConn.keySet.contains(timeStamp)) {
-        Thread.sleep(1)
-        timeStamp = System.currentTimeMillis().toString
-      }
-      providedConn.put(timeStamp, conn)
-      timeStamp
+    def register(conn: Connection): String = {
+      val sessionId: String = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      providedConn.put(sessionId, conn)
+      sessionId
     }
     def hasConnectionID(id: String): Boolean =
       providedConn.contains(id)
@@ -314,6 +309,9 @@ private[snowflake] object ServerConnection {
       }
       result
     }
+
+    def url(id: String): Option[String] =
+      providedConn.get(id).map(_.asInstanceOf[SnowflakeConnectionV1].getSfSession.getUrl)
   }
 }
 
