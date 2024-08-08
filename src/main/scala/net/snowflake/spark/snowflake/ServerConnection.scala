@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.client.core.{SFBaseSession, SFSession, SFSessionProperty}
 import net.snowflake.client.jdbc.SnowflakeConnectionV1
-import net.snowflake.spark.snowflake.Parameters.MergedParameters
+import net.snowflake.spark.snowflake.Parameters.{MergedParameters, PARAM_SF_URL, PARAM_SF_USER}
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.slf4j.LoggerFactory
@@ -109,19 +109,35 @@ private[snowflake] object ServerConnection {
   def getServerConnection(parameters: MergedParameters, useCache: Boolean = true)
   : ServerConnection = synchronized {
     val connectionCacheKey = new ConnectionCacheKey(parameters)
-    val enableCache = useCache && connectionCacheKey.isConnectionCacheSupported
+    // when use connection from Snowpark, always reuse cached the connection
+    // since the Snowpark connection in the staging area will be purged after get.
+    val enableCache = (useCache || parameters.getConnectionId.isDefined) &&
+      connectionCacheKey.isConnectionCacheSupported
     val (jdbcConnection, newConnection) =
       if (enableCache && cachedJdbcConnections.keySet.contains(connectionCacheKey)) {
         (cachedJdbcConnections(connectionCacheKey), false)
       } else {
-        val createdJdbcConnection = createJDBCConnection(parameters)
-        if (enableCache) {
-          log.debug(s"Cache the new created JDBCConnection")
-          cachedJdbcConnections.put(connectionCacheKey, createdJdbcConnection)
+        val newConnection: Connection = parameters.getConnectionId match {
+          case Some(connectionId) =>
+            val snowparkConnection =
+              ServerConnection.providedConnections.getConnection(connectionId).getOrElse{
+                throw new RuntimeException("Internal Error: Can't find the Snowpark Session")
+              }
+            log.debug(s"Reuse connection from Snowpark")
+            cachedJdbcConnections.put(connectionCacheKey, snowparkConnection)
+            snowparkConnection
+          case _ =>
+            val createdJdbcConnection = createJDBCConnection(parameters)
+            if (enableCache) {
+              log.debug(s"Cache the new created JDBCConnection")
+              cachedJdbcConnections.put(connectionCacheKey, createdJdbcConnection)
+            }
+            createdJdbcConnection
         }
-        (createdJdbcConnection, true)
+        (newConnection, true)
       }
     val serverConnection = ServerConnection(jdbcConnection, enableCache)
+
     log.info(s"Create ServerConnection with ${if (newConnection) "new" else "cached"}" +
       s" JDBC connection: ${serverConnection.getSessionID}")
 
@@ -273,6 +289,36 @@ private[snowflake] object ServerConnection {
 
     jdbcConnectionCount.incrementAndGet()
     conn
+  }
+
+  object providedConnections {
+    // use provided JDBC connection
+    private val providedConn = mutable.Map[String, Connection]()
+    def register(conn: Connection): String = {
+      val sessionId: String = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      providedConn.put(sessionId, conn)
+      sessionId
+    }
+    def hasConnectionID(id: String): Boolean =
+      providedConn.contains(id)
+
+    def getConnection(id: String): Option[Connection] = this.synchronized {
+      val result = providedConn.get(id)
+      if (result.isDefined) {
+        providedConn.remove(id)
+      }
+      result
+    }
+
+    def getParameters(id: String): Map[String, String] =
+      providedConn.get(id) match {
+        case Some(sfConn: SnowflakeConnectionV1) =>
+          val map = mutable.Map[String, String]()
+          map.put(PARAM_SF_URL, sfConn.getSfSession.getUrl)
+          map.put(PARAM_SF_USER, sfConn.getSfSession.getUser)
+          map.toMap
+        case _ => Map.empty
+      }
   }
 }
 

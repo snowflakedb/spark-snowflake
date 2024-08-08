@@ -16,10 +16,12 @@
 
 package net.snowflake.spark.snowflake
 
+import net.snowflake.client.jdbc.SnowflakeConnectionV1
+
 import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 class ShareConnectionSuite extends IntegrationSuiteBase {
 
@@ -422,5 +424,27 @@ class ShareConnectionSuite extends IntegrationSuiteBase {
     assert(result2.next())
     assert(result2.getString(1).equals("ABORT_DETACHED_QUERY"))
     assert(result2.getBoolean(2))
+  }
+
+  test("use provided connections") {
+    val conn1 =
+      ServerConnection
+        .getServerConnection(Parameters.mergeParameters(connectorOptions)).jdbcConnection
+    val id1 = ServerConnection.providedConnections.register(conn1)
+    assert(ServerConnection.providedConnections.hasConnectionID(id1))
+    val conn2 = ServerConnection.providedConnections.getConnection(id1).get
+    assert(conn1 == conn2)
+    // should remove after get
+    assert(!ServerConnection.providedConnections.hasConnectionID(id1))
+    val id2 = ServerConnection.providedConnections.register(conn1)
+    // should be same session id
+    assert(id2 == id1)
+    val result = sparkSession
+      .read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .option(Parameters.PARAM_CONNECTION_ID, id2)
+      .option("query", "select 1")
+      .load()
+    checkAnswer(result, Seq(Row(1)))
   }
 }
