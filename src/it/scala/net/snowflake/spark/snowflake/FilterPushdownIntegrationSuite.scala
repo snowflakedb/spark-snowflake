@@ -89,6 +89,21 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
     testFilter("i IN ( 2, 3)", s"""( I IN ( 2 , 3 ))""", Seq(row2, row3))
   }
 
+  test("Test filtering in query with trailing comments") {
+    Seq(
+      "// an inline slash comment",
+      "-- an inline dash comment",
+      "/* a contained comment */"
+    ).foreach { comment =>
+      testFilterWithQuery(
+        s"select * from $test_table $comment",
+        "i IN ( 2, 3)",
+        s"( I IN ( 2 , 3 ))",
+        Seq(row2, row3)
+      )
+    }
+  }
+
   override def afterAll(): Unit = {
     try {
       jdbcUpdate(s"drop table if exists $test_table")
@@ -116,6 +131,31 @@ class FilterPushdownIntegrationSuite extends IntegrationSuiteBase {
     // Verify the query issued is what we expect
     val expectedQuery =
       s"""SELECT "I", "S" FROM $test_table WHERE $expectedWhere"""
+    assert(Utils.getLastSelect == expectedQuery)
+  }
+
+  /**
+    * Verify that the filter is pushed down by looking at the generated SQL
+    * over the passed query, and check the results are as expected
+    */
+  def testFilterWithQuery(query: String,
+                 filter: String,
+                 expectedWhere: String,
+                 expectedAnswer: Seq[Row]): Unit = {
+    val loadedDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("query", query)
+      .option("autopushdown", "off")
+      .load()
+      .filter(filter)
+      .sort("i")
+    checkAnswer(loadedDf, expectedAnswer)
+    // Verify the query issued is what we expect
+    val expectedQuery =
+      s"""SELECT "I", "S" FROM (
+      |$query
+      |) WHERE $expectedWhere""".stripMargin
     assert(Utils.getLastSelect == expectedQuery)
   }
 }

@@ -57,7 +57,7 @@ private[snowflake] case class SnowflakeRelation(
   override lazy val schema: StructType = {
     userSchema.getOrElse {
       val tableNameOrSubquery =
-        params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
+        params.query.map(q => s"(\n $q \n)").orElse(params.table.map(_.toString)).get
       val conn = jdbcWrapper.getConnector(params)
       try {
         jdbcWrapper.resolveTable(conn, tableNameOrSubquery, params)
@@ -344,7 +344,7 @@ private[snowflake] case class SnowflakeRelation(
     val tableNameOrSubquery: StatementElement =
       params.table
         .map(_.toStatement)
-        .getOrElse(ConstantString("(" + params.query.get + ")"))
+        .getOrElse(ConstantString("(\n" + params.query.get + "\n)"))
     ConstantString("SELECT") + columnList + "FROM" + tableNameOrSubquery + whereClause
   }
 }
