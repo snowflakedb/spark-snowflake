@@ -245,6 +245,9 @@ object Parameters {
     "force_skip_pre_post_action_check_for_session_sharing"
   )
 
+  // swith between downscope token and pre-signed url
+  val PARAM_USE_GCS_PRESIGNED_URL: String = knownParam("use_gcs_presigned_url")
+
   val PARAM_CONNECTION_ID: String = knownParam("connection_id")
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
@@ -295,7 +298,9 @@ object Parameters {
     PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
-    PARAM_TRIM_SPACE -> "false"
+    PARAM_TRIM_SPACE -> "false",
+    // todo: change it to false
+    PARAM_USE_GCS_PRESIGNED_URL -> "true"
   )
 
   /**
@@ -985,6 +990,13 @@ object Parameters {
       */
     def getQueryResultFormat: Option[String] = {
       parameters.get(PARAM_JDBC_QUERY_RESULT_FORMAT)
+    }
+
+    /**
+     * use presigned url on the GCP deployment
+     */
+    def useGcsPresignedUrl: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_USE_GCS_PRESIGNED_URL, "false"))
     }
 
     private[snowflake] def getConnectionId: Option[String] = {

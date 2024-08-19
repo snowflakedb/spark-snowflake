@@ -261,13 +261,18 @@ object CloudStorageOperations {
 
     stageManager.stageType match {
       case StageType.S3 =>
-        InternalS3Storage(param, stageName, conn)
+        InternalS3Storage(param, stageName, conn, stageManager)
 
       case StageType.AZURE =>
-        InternalAzureStorage(param, stageName, conn)
+        InternalAzureStorage(param, stageName, conn, stageManager)
 
       case StageType.GCS =>
-        InternalGcsStorage(param, stageName, conn, stageManager)
+        if (param.useGcsPresignedUrl) {
+          InternalGcsStorage(param, stageName, conn, stageManager)
+        } else {
+          TokenGcsStorage(param, stageName, conn, stageManager)
+        }
+
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -934,20 +939,13 @@ sealed trait CloudStorage {
 
 case class InternalAzureStorage(override val param: MergedParameters,
                                 stageName: String,
-                                @transient override val connection: ServerConnection)
+                                @transient override val connection: ServerConnection,
+                                stageManager: SFInternalStage)
     extends CloudStorage {
   override protected def getStageInfo(
     isWrite: Boolean,
     fileName: String = ""
   ): (Map[String, String], List[String]) = {
-    @transient val stageManager =
-      new SFInternalStage(
-        isWrite,
-        param,
-        stageName,
-        connection,
-        fileName
-      )
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]()
@@ -1307,6 +1305,7 @@ case class ExternalAzureStorage(override val param: MergedParameters,
 case class InternalS3Storage(override val param: MergedParameters,
                              stageName: String,
                              @transient override val connection: ServerConnection,
+                             stageManager: SFInternalStage,
                              parallelism: Int =
                                CloudStorageOperations.DEFAULT_PARALLELISM)
     extends CloudStorage {
@@ -1315,14 +1314,6 @@ case class InternalS3Storage(override val param: MergedParameters,
     isWrite: Boolean,
     fileName: String = ""
   ): (Map[String, String], List[String]) = {
-    @transient val stageManager =
-      new SFInternalStage(
-        isWrite,
-        param,
-        stageName,
-        connection,
-        fileName
-      )
     @transient val keyIds = stageManager.getKeyIds
 
     var storageInfo: Map[String, String] = new HashMap[String, String]
@@ -1695,6 +1686,61 @@ case class ExternalS3Storage(override val param: MergedParameters,
         }
       })
 
+}
+
+case class TokenGcsStorage(override val param: MergedParameters,
+                           stageName: String,
+                           @transient override val connection: ServerConnection,
+                           @transient stageManager: SFInternalStage
+                          ) extends CloudStorage {
+  override def getStageInfo(isWrite: Boolean, fileName: String
+                           ): (Map[String, String], List[String]) = {
+    null
+  }
+
+  override protected def createUploadStream(fileName: String,
+                                            dir: Option[String],
+                                            compress: Boolean,
+                                            storageInfo: Map[String, String]): OutputStream = {
+    null
+  }
+
+  // GCS doesn't support streaming yet
+  def download(sc: SparkContext,
+               format: SupportedFormat = SupportedFormat.CSV,
+               compress: Boolean = true,
+               subDir: String = ""): RDD[String] = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: download() should not be called for GCS")
+  }
+
+  // GCS doesn't support reading from snowflake with COPY UNLOAD
+  override protected def createDownloadStream(
+                                               fileName: String,
+                                               compress: Boolean,
+                                               storageInfo: Map[String, String]
+                                             ): InputStream = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: createDownloadStream() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def deleteFile(fileName: String): Unit = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: deleteFile() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def deleteFiles(fileNames: List[String]): Unit = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: deleteFiles() should not be called for GCS")
+  }
+
+  // GCS doesn't support streaming yet
+  override def fileExists(fileName: String): Boolean = {
+    throw new SnowflakeConnectorFeatureNotSupportException(
+      "Internal error: fileExists() should not be called for GCS")
+  }
 }
 
 
