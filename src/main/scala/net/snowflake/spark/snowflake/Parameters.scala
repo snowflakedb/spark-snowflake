@@ -558,7 +558,7 @@ object Parameters {
       * Use parquet form in download by default
       */
     def useParquetInWrite(): Boolean = {
-      isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, true))
+      isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "true"))
     }
 
     /**
