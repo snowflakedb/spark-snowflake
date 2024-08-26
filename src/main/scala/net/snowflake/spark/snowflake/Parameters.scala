@@ -262,6 +262,9 @@ object Parameters {
   val BOOLEAN_VALUES_FALSE: Set[String] =
     Set("off", "no", "false", "0", "disabled")
 
+  // enable parquet format
+  val PARAM_USE_PARQUET_IN_WRITE: String = knownParam("use_parquet_in_write ")
+
   /**
     * Helper method to check if a given string represents some form
     * of "true" value, see BOOLEAN_VALUES_TRUE
@@ -295,7 +298,8 @@ object Parameters {
     PARAM_TIMESTAMP_NTZ_OUTPUT_FORMAT -> "YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
-    PARAM_TRIM_SPACE -> "false"
+    PARAM_TRIM_SPACE -> "false",
+    PARAM_USE_PARQUET_IN_WRITE -> "false"
   )
 
   /**
@@ -549,6 +553,13 @@ object Parameters {
       * Creates a per-query subdirectory in the [[rootTempDir]], with a random UUID.
       */
     def createPerQueryTempDir(): String = Utils.makeTempPath(rootTempDir)
+
+    /**
+      * Use parquet form in download by default
+      */
+    def useParquetInWrite(): Boolean = {
+      isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "false"))
+    }
 
     /**
       * The Snowflake table to be used as the target when loading or writing data.

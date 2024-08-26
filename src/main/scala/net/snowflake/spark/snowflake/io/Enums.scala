@@ -24,5 +24,5 @@ object SupportedSource extends Enumeration {
 
 object SupportedFormat extends Enumeration {
   type SupportedFormat = Value
-  val CSV, JSON = Value
+  val CSV, JSON, PARQUET = Value
 }
