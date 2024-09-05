@@ -89,42 +89,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     SchemaConverters.convertStructToAvro(data, builder, "redundant")
   }
 
-  class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {
-    private val outputStream = stream
 
-    override def supportsBlockSize(): Boolean = false
-
-    def toByteArray: Array[Byte] = outputStream.toByteArray
-
-    override def create(blockSizeHint: Long): PositionOutputStream = createPositionOutputStream()
-
-    override def createOrOverwrite(blockSizeHint: Long): PositionOutputStream = {
-      createPositionOutputStream()
-    }
-
-    override def defaultBlockSize(): Long = 0
-
-    private def createPositionOutputStream(): PositionOutputStream = {
-      var pos = 0
-      new PositionOutputStream {
-        override def getPos: Long = pos
-
-        override def write(b: Int): Unit = {
-          outputStream.write(b)
-          pos+=1
-        }
-
-        override def flush(): Unit = outputStream.flush()
-
-        override def close(): Unit = outputStream.close()
-
-        override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-          outputStream.write(b, off, len)
-          pos+=len
-        }
-      }
-    }
-  }
 
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
@@ -132,29 +97,67 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                      format: SupportedFormat): RDD[Any] = {
     val spark = sqlContext.sparkSession
     import spark.implicits._ // for toJson conversion
+    val schema: Schema = convertFieldToAvro(data.schema)
 
     format match {
       case SupportedFormat.PARQUET =>
-        val schema: Schema = convertFieldToAvro(data.schema)
-        // create parquet writer
-        val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
-        val writer = AvroParquetWriter.builder[GenericData.Record](out)
-          .withSchema(schema)
-          .build()
-        try{
-          data.rdd.mapPartitions(par => {
+        class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {
+          private val outputStream = stream
+
+          override def supportsBlockSize(): Boolean = false
+
+          def toByteArray: Array[Byte] = outputStream.toByteArray
+
+          override def create(blockSizeHint: Long): PositionOutputStream = {
+            createPositionOutputStream()
+          }
+
+          override def createOrOverwrite(blockSizeHint: Long): PositionOutputStream = {
+            createPositionOutputStream()
+          }
+
+          override def defaultBlockSize(): Long = 0
+
+          private def createPositionOutputStream(): PositionOutputStream = {
+            var pos = 0
+            new PositionOutputStream {
+              override def getPos: Long = pos
+
+              override def write(b: Int): Unit = {
+                outputStream.write(b)
+                pos+=1
+              }
+
+              override def flush(): Unit = outputStream.flush()
+
+              override def close(): Unit = outputStream.close()
+
+              override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+                outputStream.write(b, off, len)
+                pos+=len
+              }
+            }
+          }
+        }
+        val columnNames = data.schema.names
+        data.rdd.mapPartitions(par => {
+          val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
+          val writer = AvroParquetWriter.builder[GenericData.Record](out)
+            .withSchema(schema)
+            .build()
+          try {
             val record = new GenericData.Record(schema)
             par.foreach(row => {
-              data.columns.zip(row.toSeq).foreach {
+              columnNames.zip(row.toSeq).foreach {
                 case (colName, value) => record.put(colName, value)
               }
             })
             writer.write(record)
-            Iterator(out.toByteArray)
-          })
-        } finally {
-          writer.close()
-        }
+          } finally {
+            writer.close()
+          }
+          Iterator(out.toByteArray)
+        })
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
         data.rdd.map(row => {

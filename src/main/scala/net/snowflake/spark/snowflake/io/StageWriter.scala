@@ -779,6 +779,22 @@ private[io] object StageWriter {
       list: Option[List[(Int, String)]]
     ): SnowflakeSQLStatement =
       format match {
+        case SupportedFormat.PARQUET =>
+          if (list.isEmpty || list.get.isEmpty) {
+            EmptySnowflakeSQLStatement()
+          } else {
+            ConstantString("(") +
+              list.get
+                .map(
+                  x =>
+                    if (params.keepOriginalColumnNameCase) {
+                      Utils.quotedNameIgnoreCase(x._2)
+                    } else {
+                      Utils.ensureQuoted(x._2)
+                    }
+                )
+                .mkString(", ") + ")"
+          }
         case SupportedFormat.JSON =>
           val tableSchema =
             DefaultJDBCWrapper.resolveTable(conn, table.name, params)
@@ -833,6 +849,14 @@ private[io] object StageWriter {
       from: SnowflakeSQLStatement
     ): SnowflakeSQLStatement =
       format match {
+        case SupportedFormat.PARQUET =>
+          if (list.isEmpty || list.get.isEmpty) {
+            from
+          } else {
+            ConstantString("from (select") +
+              list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ") +
+              from + "tmp)"
+          }
         case SupportedFormat.JSON =>
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
@@ -910,6 +934,14 @@ private[io] object StageWriter {
 
     val formatString =
       format match {
+        case SupportedFormat.PARQUET =>
+          ConstantString(s"""
+               |FILE_FORMAT = (
+               |    TYPE=PARQUET
+               |    USE_VECTORIZED_SCANNER=TRUE
+               |  )
+               |  MATCH_BY_COLUMN_NAME = CASE_SENSITIVE
+           """.stripMargin) !
         case SupportedFormat.CSV =>
           ConstantString(s"""
                |FILE_FORMAT = (

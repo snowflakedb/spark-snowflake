@@ -386,7 +386,7 @@ object CloudStorageOperations {
     * @return a list of file name
     */
   def saveToStorage(
-    data: RDD[String],
+    data: RDD[Any],
     format: SupportedFormat = SupportedFormat.CSV,
     dir: Option[String] = None,
     compress: Boolean = true
@@ -606,13 +606,15 @@ sealed trait CloudStorage {
     checkUploadMetadata(storageInfo, fileTransferMetadata)
 
     try {
-      rows match {
-        case r: Iterator[String] =>
-          doUploadPartition(r, format, compress, directory, partitionID,
+      rows.toSeq match {
+        case r if r.nonEmpty && r.head.isInstanceOf[String] =>
+          doUploadPartition(rows.asInstanceOf[Iterator[String]],
+            format, compress, directory, partitionID,
             storageInfo, fileTransferMetadata)
         // one row and one column in r
-        case r: Iterator[Array[Byte]] =>
-          doUploadPartition(r.next(), format, compress, directory, partitionID,
+        case r =>
+          doUploadPartition(r.head.asInstanceOf[Array[Byte]],
+            format, compress, directory, partitionID,
             storageInfo, fileTransferMetadata)
 
       }
@@ -698,12 +700,11 @@ sealed trait CloudStorage {
         // Defer to create the upload stream to avoid empty files.
       if (uploadStream.isEmpty) {
         uploadStream = Some(createUploadStream(
-          fileName, Some(directory), compress, storageInfo.get))
+          fileName, Some(directory), compress = false, storageInfo.get))
       }
       uploadStream.get.write(rows)
-      uploadStream.get.write('\n')
-      rowCount += 1
-      dataSize += (rows.length + 1)
+//      rowCount += 1
+//      dataSize += (rows.length + 1)
       if (uploadStream.isDefined) {
         uploadStream.get.close()
       }
@@ -721,13 +722,13 @@ sealed trait CloudStorage {
       )
     }
 
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Finish writing partition ID:$partitionID $fileName
-         | write row count is $rowCount.
-         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
-         | $processTimeInfo
-         |""".stripMargin.filter(_ >= ' '))
+//    CloudStorageOperations.log.info(
+//      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+//         | Finish writing partition ID:$partitionID $fileName
+//         | write row count is $rowCount.
+//         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
+//         | $processTimeInfo
+//         |""".stripMargin.filter(_ >= ' '))
 
     new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
   }
@@ -873,7 +874,6 @@ sealed trait CloudStorage {
 
         // Log system configuration if not yet.
         SparkConnectorContext.recordConfig()
-//  TODO: upload Array[Byte] instead of rows
         // Convert and upload the partition with the StorageInfo
         uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
 
@@ -1810,7 +1810,7 @@ case class InternalGcsStorage(param: MergedParameters,
   // Generate file transfer metadata objects for file upload. On GCS,
   // the file transfer metadata is pre-signed URL and related metadata.
   // This function is called on Master node.
-  private def generateFileTransferMetadatas(data: RDD[String],
+  private def generateFileTransferMetadatas(data: RDD[Any],
                                             format: SupportedFormat,
                                             compress: Boolean,
                                             dir: String,
@@ -1879,7 +1879,7 @@ case class InternalGcsStorage(param: MergedParameters,
 
   // The RDD upload on GCS is different to AWS and Azure
   // so override it separately.
-  override def upload(data: RDD[String],
+  override def upload(data: RDD[Any],
                       format: SupportedFormat = SupportedFormat.CSV,
                       dir: Option[String],
                       compress: Boolean = true): List[FileUploadResult] = {

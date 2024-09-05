@@ -4,19 +4,10 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder._
 import org.apache.spark.sql.types._
 
-/**
- * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
- * versa.
- */
 object SchemaConverters {
 
   class IncompatibleSchemaException(msg: String, ex: Throwable = null) extends Exception(msg, ex)
 
-  case class SchemaType(dataType: DataType, nullable: Boolean)
-  /**
-   * This function converts sparkSQL StructType into avro schema. This method uses two other
-   * converter methods in order to do the conversion.
-   */
   def convertStructToAvro[T](
                               structType: StructType,
                               schemaBuilder: RecordBuilder[T],
@@ -36,10 +27,6 @@ object SchemaConverters {
     fieldsAssembler.endRecord()
   }
 
-  /**
-   * This function is used to convert some sparkSQL type to avro type. Note that this function won't
-   * be used to construct fields of avro record (convertFieldTypeToAvro is used for that).
-   */
   private def convertTypeToAvro[T](
                                     dataType: DataType,
                                     schemaBuilder: BaseTypeBuilder[T],
@@ -79,11 +66,6 @@ object SchemaConverters {
     }
   }
 
-  /**
-   * This function is used to construct fields of the avro record, where schema of the field is
-   * specified by avro representation of dataType. Since builders for record fields are different
-   * from those for everything else, we have to use a separate method.
-   */
   private def convertFieldTypeToAvro[T](
                                          dataType: DataType,
                                          newFieldBuilder: BaseFieldTypeBuilder[T],

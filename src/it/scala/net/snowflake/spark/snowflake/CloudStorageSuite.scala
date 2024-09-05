@@ -21,12 +21,12 @@ import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder.RecordBuilder
 import org.apache.avro.generic.GenericData
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, File, FileOutputStream, FileWriter}
 
 // scalastyle:off println
 class CloudStorageSuite extends IntegrationSuiteBase {
@@ -244,6 +244,12 @@ class CloudStorageSuite extends IntegrationSuiteBase {
         }
       }
     }
+    def show(): Unit = {
+//      print(outputStream.toString("UTF-8"))
+      val file = new FileOutputStream("output.parquet")
+      file.write(outputStream.toByteArray)
+      file.close()
+    }
   }
 
   test("write dataframe to parquet file in aws") {
@@ -269,6 +275,31 @@ class CloudStorageSuite extends IntegrationSuiteBase {
       writer.write(record)
       writer.close()
     }
+    out.show()
+  }
+  test("read parquet") {
+    val schema = StructType(Array(
+      StructField("stringField", StringType, nullable = true),
+      StructField("intField", IntegerType, nullable = true),
+      StructField("doubleField", DoubleType, nullable = true),
+      StructField("booleanField", BooleanType, nullable = true),
+      StructField("dateField", DateType, nullable = true),
+      StructField("timestampField", TimestampType, nullable = true)
+    ))
+  }
+  test("test parquet") {
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table1)
+      .load()
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_write)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+      .mode(SaveMode.Overwrite)
+      .save()
   }
 }
 // scalastyle:on println
