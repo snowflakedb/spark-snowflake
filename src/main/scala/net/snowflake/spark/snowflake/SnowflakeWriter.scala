@@ -22,9 +22,16 @@ import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.SchemaBuilder.RecordBuilder
+import org.apache.avro.generic.GenericData
+import org.apache.parquet.avro.AvroParquetWriter
+import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+
+import java.io.ByteArrayOutputStream
 
 /**
   * Functions to write data to Snowflake.
@@ -53,8 +60,12 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
            saveMode: SaveMode,
            params: MergedParameters): Unit = {
     val format: SupportedFormat =
-      if (Utils.containVariant(data.schema)) SupportedFormat.JSON
-      else SupportedFormat.CSV
+      if (params.useParquetInWrite()) {
+        SupportedFormat.PARQUET
+      } else {
+        if (Utils.containVariant(data.schema)) SupportedFormat.JSON
+        else SupportedFormat.CSV
+      }
 
     if (params.columnMap.isEmpty && params.columnMapping == "name") {
       val conn = jdbcWrapper.getConnector(params)
@@ -73,14 +84,77 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
+  def convertFieldToAvro(data: StructType): Schema = {
+    val builder: RecordBuilder[Schema] = SchemaBuilder.record("record").namespace("redundant")
+    SchemaConverters.convertStructToAvro(data, builder, "redundant")
+  }
+
+  class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {
+    private val outputStream = stream
+
+    override def supportsBlockSize(): Boolean = false
+
+    def toByteArray: Array[Byte] = outputStream.toByteArray
+
+    override def create(blockSizeHint: Long): PositionOutputStream = createPositionOutputStream()
+
+    override def createOrOverwrite(blockSizeHint: Long): PositionOutputStream = {
+      createPositionOutputStream()
+    }
+
+    override def defaultBlockSize(): Long = 0
+
+    private def createPositionOutputStream(): PositionOutputStream = {
+      var pos = 0
+      new PositionOutputStream {
+        override def getPos: Long = pos
+
+        override def write(b: Int): Unit = {
+          outputStream.write(b)
+          pos+=1
+        }
+
+        override def flush(): Unit = outputStream.flush()
+
+        override def close(): Unit = outputStream.close()
+
+        override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+          outputStream.write(b, off, len)
+          pos+=len
+        }
+      }
+    }
+  }
+
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
-                     format: SupportedFormat): RDD[String] = {
+                     format: SupportedFormat): RDD[Any] = {
     val spark = sqlContext.sparkSession
     import spark.implicits._ // for toJson conversion
 
     format match {
+      case SupportedFormat.PARQUET =>
+        val schema: Schema = convertFieldToAvro(data.schema)
+        // create parquet writer
+        val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
+        val writer = AvroParquetWriter.builder[GenericData.Record](out)
+          .withSchema(schema)
+          .build()
+        try{
+          data.rdd.mapPartitions(par => {
+            val record = new GenericData.Record(schema)
+            par.foreach(row => {
+              data.columns.zip(row.toSeq).foreach {
+                case (colName, value) => record.put(colName, value)
+              }
+            })
+            writer.write(record)
+            Iterator(out.toByteArray)
+          })
+        } finally {
+          writer.close()
+        }
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
         data.rdd.map(row => {
@@ -104,7 +178,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               }
           )
         })
-        spark.createDataFrame(newData, newSchema).toJSON.map(_.toString).rdd
+        spark.createDataFrame(newData, newSchema).toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]]
     }
   }
 

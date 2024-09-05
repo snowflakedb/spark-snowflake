@@ -299,7 +299,7 @@ object Parameters {
     PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TRIM_SPACE -> "false",
-    PARAM_USE_PARQUET_IN_WRITE -> "false"
+    PARAM_USE_PARQUET_IN_WRITE -> "true"
   )
 
   /**
@@ -558,7 +558,7 @@ object Parameters {
       * Use parquet form in download by default
       */
     def useParquetInWrite(): Boolean = {
-      isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "false"))
+      isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "true"))
     }
 
     /**

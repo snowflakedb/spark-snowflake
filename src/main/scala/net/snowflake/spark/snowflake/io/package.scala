@@ -43,7 +43,7 @@ package object io {
     */
   def writeRDD(sqlContext: SQLContext,
                params: MergedParameters,
-               rdd: RDD[String],
+               rdd: RDD[Any],
                schema: StructType,
                saveMode: SaveMode,
                format: SupportedFormat = SupportedFormat.CSV,

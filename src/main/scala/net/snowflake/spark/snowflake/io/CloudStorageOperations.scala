@@ -559,7 +559,7 @@ sealed trait CloudStorage {
              compress: Boolean): OutputStream =
     createUploadStream(fileName, dir, compress, getStageInfo(isWrite = true)._1)
 
-  def upload(data: RDD[String],
+  def upload(data: RDD[Any],
              format: SupportedFormat = SupportedFormat.CSV,
              dir: Option[String],
              compress: Boolean = true): List[FileUploadResult] =
@@ -591,7 +591,7 @@ sealed trait CloudStorage {
   // issue, it is necessary to use exponential sleep time
   // (but spark doesn't support it). So, we introduce extra exponential
   // sleep time based on the task's attempt number.
-  protected def uploadPartition(rows: Iterator[String],
+  protected def uploadPartition(rows: Iterator[Any],
                                 format: SupportedFormat,
                                 compress: Boolean,
                                 directory: String,
@@ -606,9 +606,17 @@ sealed trait CloudStorage {
     checkUploadMetadata(storageInfo, fileTransferMetadata)
 
     try {
+      rows match {
+        case r: Iterator[String] =>
+          doUploadPartition(r, format, compress, directory, partitionID,
+            storageInfo, fileTransferMetadata)
+        // one row and one column in r
+        case r: Iterator[Array[Byte]] =>
+          doUploadPartition(r.next(), format, compress, directory, partitionID,
+            storageInfo, fileTransferMetadata)
+
+      }
       // Read data and upload to cloud storage
-      doUploadPartition(rows, format, compress, directory, partitionID,
-                        storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
       case th: Throwable => {
@@ -660,6 +668,70 @@ sealed trait CloudStorage {
       }
     }
   }
+
+  // Read parquet data and upload to cloud storage
+  private def doUploadPartition(rows: Array[Byte],
+                                format: SupportedFormat,
+                                compress: Boolean,
+                                directory: String,
+                                partitionID: Int,
+                                storageInfo: Option[Map[String, String]],
+                                fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
+                               )
+  : SingleElementIterator = {
+    val fileName = getFileName(partitionID, format, compress)
+
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+         | Start writing partition ID:$partitionID as $fileName
+         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
+         |""".stripMargin.filter(_ >= ' '))
+
+    // Read data and upload to cloud storage
+    var rowCount: Long = 0
+    var dataSize: Long = 0
+    var processTimeInfo = ""
+    val startTime = System.currentTimeMillis()
+    if (storageInfo.isDefined) {
+      // For AWS and Azure, the rows are written to OutputStream as they are read.
+      var uploadStream: Option[OutputStream] = None
+        // Defer to create the upload stream to avoid empty files.
+      if (uploadStream.isEmpty) {
+        uploadStream = Some(createUploadStream(
+          fileName, Some(directory), compress, storageInfo.get))
+      }
+      uploadStream.get.write(rows)
+      uploadStream.get.write('\n')
+      rowCount += 1
+      dataSize += (rows.length + 1)
+      if (uploadStream.isDefined) {
+        uploadStream.get.close()
+      }
+
+      val endTime = System.currentTimeMillis()
+      processTimeInfo =
+        s"""read_and_upload_time:
+           | ${Utils.getTimeString(endTime - startTime)}
+           |""".stripMargin.filter(_ >= ' ')
+    }
+    if (TaskContext.get().attemptNumber() < 2) {
+      TestHook.raiseExceptionIfTestFlagEnabled(
+        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
+        "Negative test to raise error when uploading data for the first two attempts"
+      )
+    }
+
+    CloudStorageOperations.log.info(
+      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+         | Finish writing partition ID:$partitionID $fileName
+         | write row count is $rowCount.
+         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
+         | $processTimeInfo
+         |""".stripMargin.filter(_ >= ' '))
+
+    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
+  }
+
 
   // Read data and upload to cloud storage
   private def doUploadPartition(rows: Iterator[String],
@@ -771,7 +843,7 @@ sealed trait CloudStorage {
     new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
   }
 
-  protected def uploadRDD(data: RDD[String],
+  protected def uploadRDD(data: RDD[Any],
                           format: SupportedFormat = SupportedFormat.CSV,
                           dir: Option[String],
                           compress: Boolean = true,
@@ -801,7 +873,7 @@ sealed trait CloudStorage {
 
         // Log system configuration if not yet.
         SparkConnectorContext.recordConfig()
-
+//  TODO: upload Array[Byte] instead of rows
         // Convert and upload the partition with the StorageInfo
         uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
 

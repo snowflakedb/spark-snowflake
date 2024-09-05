@@ -18,7 +18,15 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
+import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.SchemaBuilder.RecordBuilder
+import org.apache.avro.generic.GenericData
+import org.apache.spark.sql.types.StructType
+import org.apache.parquet.avro.AvroParquetWriter
+import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.sql.{DataFrame, SaveMode}
+
+import java.io.ByteArrayOutputStream
 
 // scalastyle:off println
 class CloudStorageSuite extends IntegrationSuiteBase {
@@ -194,6 +202,72 @@ class CloudStorageSuite extends IntegrationSuiteBase {
     } else {
       println("skip test for non-GCS platform: " +
         "write a empty DataFrame to GCS with down-scoped-token")
+    }
+  }
+  def convertFieldToAvro(data: StructType): Schema = {
+    val builder: RecordBuilder[Schema] = SchemaBuilder.record("record").namespace("redundant")
+    SchemaConverters.convertStructToAvro(data, builder, "redundant")
+  }
+
+  class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {
+    private val outputStream = stream
+
+    override def supportsBlockSize(): Boolean = false
+
+    def toByteArray: Array[Byte] = outputStream.toByteArray
+
+    override def create(blockSizeHint: Long): PositionOutputStream = createPositionOutputStream()
+
+    override def createOrOverwrite(blockSizeHint: Long): PositionOutputStream = {
+      createPositionOutputStream()
+    }
+
+    override def defaultBlockSize(): Long = 0
+
+    private def createPositionOutputStream(): PositionOutputStream = {
+      var pos = 0
+      new PositionOutputStream {
+        override def getPos: Long = pos
+
+        override def write(b: Int): Unit = {
+          outputStream.write(b)
+          pos+=1
+        }
+
+        override def flush(): Unit = outputStream.flush()
+
+        override def close(): Unit = outputStream.close()
+
+        override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+          outputStream.write(b, off, len)
+          pos+=len
+        }
+      }
+    }
+  }
+
+  test("write dataframe to parquet file in aws") {
+    val df = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table1)
+      .load()
+
+    val schema = convertFieldToAvro(df.schema)
+    // create parquet writer
+    val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
+    val writer = AvroParquetWriter.builder[GenericData.Record](out)
+      .withSchema(schema)
+      //      .withCompressionCodec(CompressionCodecName.GZIP)
+      .build()
+    try {
+      // generate Avro Record and write
+      val record = new GenericData.Record(schema)
+
+      record.put("C1", "1")
+      record.put("C2", "2")
+      writer.write(record)
+      writer.close()
     }
   }
 }

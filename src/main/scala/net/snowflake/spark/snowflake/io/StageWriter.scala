@@ -194,7 +194,7 @@ private[io] object StageWriter {
   private val DEFAULT_TIMESTAMP_FORMAT: String = "TZHTZM YYYY-MM-DD HH24:MI:SS.FF9"
 
   def writeToStage(sqlContext: SQLContext,
-                   rdd: RDD[String],
+                   rdd: RDD[Any],
                    schema: StructType,
                    saveMode: SaveMode,
                    params: MergedParameters,
