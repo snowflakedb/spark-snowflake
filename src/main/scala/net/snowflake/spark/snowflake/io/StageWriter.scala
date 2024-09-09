@@ -940,7 +940,7 @@ private[io] object StageWriter {
                |    TYPE=PARQUET
                |    USE_VECTORIZED_SCANNER=TRUE
                |  )
-               |  MATCH_BY_COLUMN_NAME = CASE_SENSITIVE
+               |  MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
            """.stripMargin) !
         case SupportedFormat.CSV =>
           ConstantString(s"""

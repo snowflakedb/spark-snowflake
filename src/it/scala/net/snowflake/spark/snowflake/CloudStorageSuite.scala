@@ -21,12 +21,14 @@ import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder.RecordBuilder
 import org.apache.avro.generic.GenericData
-import org.apache.spark.sql.types.{BooleanType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.io.{OutputFile, PositionOutputStream}
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream, FileWriter}
+import java.sql.{Date, Timestamp}
+import scala.util.Random
 
 // scalastyle:off println
 class CloudStorageSuite extends IntegrationSuiteBase {
@@ -278,14 +280,34 @@ class CloudStorageSuite extends IntegrationSuiteBase {
     out.show()
   }
   test("read parquet") {
-    val schema = StructType(Array(
-      StructField("stringField", StringType, nullable = true),
-      StructField("intField", IntegerType, nullable = true),
-      StructField("doubleField", DoubleType, nullable = true),
-      StructField("booleanField", BooleanType, nullable = true),
-      StructField("dateField", DateType, nullable = true),
-      StructField("timestampField", TimestampType, nullable = true)
-    ))
+    // Define the schema
+
+    val arrayColumns = (1 to 80).map(i =>
+      StructField(s"arrayField$i", ArrayType(IntegerType), nullable = true))
+    val otherColumns = (81 to 550).map(i => StructField(s"field$i", DoubleType, nullable = true))
+    val schema = StructType(arrayColumns ++ otherColumns)
+
+    // Generate random data
+    val data = (1 to 10000).map { _ =>
+      val arrayValues = (1 to 80).map(_ =>
+        (1 to 100).map(_ => Random.nextInt(100)).toArray) // Random arrays of size 100
+      val otherValues = (81 to 550).map(_ =>
+        Random.nextDouble()) // Random strings of 10 characters
+      Row.fromSeq(arrayValues ++ otherValues)
+    }
+    val rdd = sparkSession.sparkContext.parallelize(data)
+    val df = sparkSession.createDataFrame(rdd, schema)
+    val start = System.currentTimeMillis()
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_parquet")
+//      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+      .mode(SaveMode.Overwrite)
+      .save()
+    val end = System.currentTimeMillis()
+    print(end - start)
+
   }
   test("test parquet") {
     val df = sparkSession.read
@@ -297,7 +319,7 @@ class CloudStorageSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_table_write)
-      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+//      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
       .mode(SaveMode.Overwrite)
       .save()
   }

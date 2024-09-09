@@ -26,12 +26,14 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder.RecordBuilder
 import org.apache.avro.generic.GenericData
 import org.apache.parquet.avro.AvroParquetWriter
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, FileOutputStream}
+import scala.collection.mutable
 
 /**
   * Functions to write data to Snowflake.
@@ -144,15 +146,20 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
           val writer = AvroParquetWriter.builder[GenericData.Record](out)
             .withSchema(schema)
+            .withCompressionCodec(CompressionCodecName.SNAPPY)
             .build()
           try {
-            val record = new GenericData.Record(schema)
+
             par.foreach(row => {
+              val record = new GenericData.Record(schema)
               columnNames.zip(row.toSeq).foreach {
-                case (colName, value) => record.put(colName, value)
+                case (colName, value: mutable.WrappedArray[Any]) =>
+                  record.put(colName, value.toArray)
+                case (colName, value) =>
+                  record.put(colName, value)
               }
+              writer.write(record)
             })
-            writer.write(record)
           } finally {
             writer.close()
           }
