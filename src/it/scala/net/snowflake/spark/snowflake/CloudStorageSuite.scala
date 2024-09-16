@@ -17,6 +17,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.io.ParquetUtils
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder.RecordBuilder
@@ -208,7 +209,7 @@ class CloudStorageSuite extends IntegrationSuiteBase {
   }
   def convertFieldToAvro(data: StructType): Schema = {
     val builder: RecordBuilder[Schema] = SchemaBuilder.record("record").namespace("redundant")
-    SchemaConverters.convertStructToAvro(data, builder, "redundant")
+    ParquetUtils.convertStructToAvro(data, builder, "redundant")
   }
 
   class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {

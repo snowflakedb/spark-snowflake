@@ -258,12 +258,12 @@ private[io] object StageWriter {
       val endTime = System.currentTimeMillis()
 
       log.info(
-          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-             | Total job time is ${Utils.getTimeString(endTime - startTime)}
-             | including read & upload time:
-             | ${Utils.getTimeString(startCopyInto - startTime)}
-             | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
-             |""".stripMargin.filter(_ >= ' '))
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+           | Total job time is ${Utils.getTimeString(endTime - startTime)}
+           | including read & upload time:
+           | ${Utils.getTimeString(startCopyInto - startTime)}
+           | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
+           |""".stripMargin.filter(_ >= ' '))
     } finally {
       SnowflakeTelemetry.send(conn.getTelemetry)
       conn.close()
@@ -272,8 +272,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table
-    */
+   * load data from stage to table
+   */
   private def writeToTable(sqlContext: SQLContext,
                            conn: ServerConnection,
                            schema: StructType,
@@ -293,8 +293,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table without staging table
-    */
+   * load data from stage to table without staging table
+   */
   private def writeToTableWithoutStagingTable(sqlContext: SQLContext,
                                               conn: ServerConnection,
                                               schema: StructType,
@@ -367,9 +367,9 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table with staging table
-    * This function is deprecated.
-    */
+   * load data from stage to table with staging table
+   * This function is deprecated.
+   */
   private def writeToTableWithStagingTable(sqlContext: SQLContext,
                                            conn: ServerConnection,
                                            schema: StructType,
@@ -478,15 +478,15 @@ private[io] object StageWriter {
   }
 
   /**
-    * Execute COPY INTO table command.
-    * Firstly, it executes COPY INTO table commands without FILES clause.
-    * Internally, snowflake uses LIST to get files for a prefix.
-    * In rare cases, some files may be missing because the cloud service's
-    * eventually consistency.
-    * So it the return result for COPY command is checked. If any files are
-    * missed, an additional COPY INTO table with FILES clause is used to load
-    * the missed files.
-    */
+   * Execute COPY INTO table command.
+   * Firstly, it executes COPY INTO table commands without FILES clause.
+   * Internally, snowflake uses LIST to get files for a prefix.
+   * In rare cases, some files may be missing because the cloud service's
+   * eventually consistency.
+   * So it the return result for COPY command is checked. If any files are
+   * missed, an additional COPY INTO table with FILES clause is used to load
+   * the missed files.
+   */
   private[io] def executeCopyIntoTable(sqlContext: SQLContext,
                                        conn: ServerConnection,
                                        schema: StructType,
@@ -590,12 +590,12 @@ private[io] object StageWriter {
         // Only load part of missed files.
         // Exception is raised for the failure.
         val secondCopyFileSet: Option[mutable.Set[String]] =
-        if (TestHook.isTestFlagEnabled(
-          TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
-          Some(missedFileSet.grouped(2).toList.head)
-        } else {
-          Some(missedFileSet)
-        }
+          if (TestHook.isTestFlagEnabled(
+            TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
+            Some(missedFileSet.grouped(2).toList.head)
+          } else {
+            Some(missedFileSet)
+          }
 
         // Generate copy command with missed files only
         useFilesClause = true
@@ -756,8 +756,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * Generate the COPY SQL command
-    */
+   * Generate the COPY SQL command
+   */
   private[io] def copySql(schema: StructType,
                           saveMode: SaveMode,
                           params: MergedParameters,
@@ -776,8 +776,8 @@ private[io] object StageWriter {
     }
 
     def getMappingToString(
-      list: Option[List[(Int, String)]]
-    ): SnowflakeSQLStatement =
+                            list: Option[List[(Int, String)]]
+                          ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
           if (list.isEmpty || list.get.isEmpty) {
@@ -845,9 +845,9 @@ private[io] object StageWriter {
       }
 
     def getMappingFromString(
-      list: Option[List[(Int, String)]],
-      from: SnowflakeSQLStatement
-    ): SnowflakeSQLStatement =
+                              list: Option[List[(Int, String)]],
+                              from: SnowflakeSQLStatement
+                            ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
           if (list.isEmpty || list.get.isEmpty) {
@@ -936,30 +936,30 @@ private[io] object StageWriter {
       format match {
         case SupportedFormat.PARQUET =>
           ConstantString(s"""
-               |FILE_FORMAT = (
-               |    TYPE=PARQUET
-               |    USE_VECTORIZED_SCANNER=TRUE
-               |  )
-               |  MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+                            |FILE_FORMAT = (
+                            |    TYPE=PARQUET
+                            |    USE_VECTORIZED_SCANNER=TRUE
+                            |  )
+                            |  MATCH_BY_COLUMN_NAME = CASE_SENSITIVE
            """.stripMargin) !
         case SupportedFormat.CSV =>
           ConstantString(s"""
-               |FILE_FORMAT = (
-               |    TYPE=CSV
-               |    FIELD_DELIMITER='|'
-               |    NULL_IF=()
-               |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-               |    TIMESTAMP_FORMAT='$timestampFormat'
-               |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
-               |    BINARY_FORMAT=BASE64
-               |  )
+                            |FILE_FORMAT = (
+                            |    TYPE=CSV
+                            |    FIELD_DELIMITER='|'
+                            |    NULL_IF=()
+                            |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+                            |    TIMESTAMP_FORMAT='$timestampFormat'
+                            |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
+                            |    BINARY_FORMAT=BASE64
+                            |  )
            """.stripMargin) !
         case SupportedFormat.JSON =>
           ConstantString(s"""
-               |FILE_FORMAT = (
-               |    TYPE = JSON
-               |    BINARY_FORMAT=BASE64
-               |)
+                            |FILE_FORMAT = (
+                            |    TYPE = JSON
+                            |    BINARY_FORMAT=BASE64
+                            |)
            """.stripMargin) !
       }
 

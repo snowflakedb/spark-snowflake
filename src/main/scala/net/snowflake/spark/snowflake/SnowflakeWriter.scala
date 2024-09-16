@@ -22,52 +22,51 @@ import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.SchemaBuilder.RecordBuilder
 import org.apache.avro.generic.GenericData
-import org.apache.parquet.avro.AvroParquetWriter
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 
-import java.io.{ByteArrayOutputStream, FileOutputStream}
+import java.nio.ByteBuffer
 import scala.collection.mutable
 
 /**
-  * Functions to write data to Snowflake.
-  *
-  * At a high level, writing data back to Snowflake involves the following steps:
-  *
-  *   - Use an RDD to save DataFrame content as strings, using customized
-  *     formatting functions from Conversions
+ * Functions to write data to Snowflake.
+ *
+ * At a high level, writing data back to Snowflake involves the following steps:
+ *
+ *   - Use an RDD to save DataFrame content as strings, using customized
+ *     formatting functions from Conversions
 
-  *   - Use JDBC to issue any CREATE TABLE commands, if required.
-  *
-  *   - If there is data to be written (i.e. not all partitions were empty),
-  *     copy all the files sharing the prefix we exported to into Snowflake.
-  *
-  *     This is done by issuing a COPY command over JDBC that
-  *     instructs Snowflake to load the CSV data into the appropriate table.
-  *
-  *     If the Overwrite SaveMode is being used, then by default the data
-  *     will be loaded into a temporary staging table,
-  *     which later will atomically replace the original table using SWAP.
-  */
+ *   - Use JDBC to issue any CREATE TABLE commands, if required.
+ *
+ *   - If there is data to be written (i.e. not all partitions were empty),
+ *     copy all the files sharing the prefix we exported to into Snowflake.
+ *
+ *     This is done by issuing a COPY command over JDBC that
+ *     instructs Snowflake to load the CSV data into the appropriate table.
+ *
+ *     If the Overwrite SaveMode is being used, then by default the data
+ *     will be loaded into a temporary staging table,
+ *     which later will atomically replace the original table using SWAP.
+ */
 private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
   def save(sqlContext: SQLContext,
            data: DataFrame,
            saveMode: SaveMode,
            params: MergedParameters): Unit = {
-    val format: SupportedFormat =
+    val format: SupportedFormat = {
       if (params.useParquetInWrite()) {
         SupportedFormat.PARQUET
-      } else {
-        if (Utils.containVariant(data.schema)) SupportedFormat.JSON
-        else SupportedFormat.CSV
+      } else if (Utils.containVariant(data.schema)){
+        SupportedFormat.JSON
       }
+      else {
+        SupportedFormat.CSV
+      }
+    }
 
     if (params.columnMap.isEmpty && params.columnMapping == "name") {
       val conn = jdbcWrapper.getConnector(params)
@@ -86,84 +85,27 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
-  def convertFieldToAvro(data: StructType): Schema = {
-    val builder: RecordBuilder[Schema] = SchemaBuilder.record("record").namespace("redundant")
-    SchemaConverters.convertStructToAvro(data, builder, "redundant")
-  }
-
-
-
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
                      format: SupportedFormat): RDD[Any] = {
     val spark = sqlContext.sparkSession
     import spark.implicits._ // for toJson conversion
-    val schema: Schema = convertFieldToAvro(data.schema)
 
     format match {
       case SupportedFormat.PARQUET =>
-        class ByteArrayOutputFile(stream: ByteArrayOutputStream) extends OutputFile {
-          private val outputStream = stream
-
-          override def supportsBlockSize(): Boolean = false
-
-          def toByteArray: Array[Byte] = outputStream.toByteArray
-
-          override def create(blockSizeHint: Long): PositionOutputStream = {
-            createPositionOutputStream()
+        val schema = io.ParquetUtils.convertStructToAvro(data.schema)
+        val colNames = data.schema.names
+        data.rdd.map (row => {
+          val record = new GenericData.Record(schema)
+          row.toSeq.zip(colNames).foreach {
+            case (arr: mutable.WrappedArray[Any], name) =>
+              record.put(name, arr.toArray)
+            case (decimal: java.math.BigDecimal, name) =>
+              record.put(name, ByteBuffer.wrap(decimal.toBigInteger.toByteArray))
+            case (value, name) => record.put(name, value)
           }
-
-          override def createOrOverwrite(blockSizeHint: Long): PositionOutputStream = {
-            createPositionOutputStream()
-          }
-
-          override def defaultBlockSize(): Long = 0
-
-          private def createPositionOutputStream(): PositionOutputStream = {
-            var pos = 0
-            new PositionOutputStream {
-              override def getPos: Long = pos
-
-              override def write(b: Int): Unit = {
-                outputStream.write(b)
-                pos+=1
-              }
-
-              override def flush(): Unit = outputStream.flush()
-
-              override def close(): Unit = outputStream.close()
-
-              override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-                outputStream.write(b, off, len)
-                pos+=len
-              }
-            }
-          }
-        }
-        val columnNames = data.schema.names
-        data.rdd.mapPartitions(par => {
-          val out = new ByteArrayOutputFile(new ByteArrayOutputStream())
-          val writer = AvroParquetWriter.builder[GenericData.Record](out)
-            .withSchema(schema)
-            .withCompressionCodec(CompressionCodecName.SNAPPY)
-            .build()
-          try {
-
-            par.foreach(row => {
-              val record = new GenericData.Record(schema)
-              columnNames.zip(row.toSeq).foreach {
-                case (colName, value: mutable.WrappedArray[Any]) =>
-                  record.put(colName, value.toArray)
-                case (colName, value) =>
-                  record.put(colName, value)
-              }
-              writer.write(record)
-            })
-          } finally {
-            writer.close()
-          }
-          Iterator(out.toByteArray)
+          record
         })
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
@@ -221,8 +163,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     )
 
   /**
-    * If column mapping is enable, remove all useless columns from the input DataFrame
-    */
+   * If column mapping is enable, remove all useless columns from the input DataFrame
+   */
   private def removeUselessColumns(dataFrame: DataFrame,
                                    params: MergedParameters): DataFrame =
     params.columnMap match {
@@ -258,21 +200,21 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             }
         case TimestampType =>
           (v: Any) =>
-            {
-              if (v == null) ""
-              else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
-            }
+          {
+            if (v == null) ""
+            else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+          }
         case StringType =>
           (v: Any) =>
-            {
-              if (v == null) ""
-              else {
-                val trimmed = if (params.trimSpace) {
-                  v.toString.trim
-                } else v
-                Conversions.formatString(trimmed.asInstanceOf[String])
-              }
+          {
+            if (v == null) ""
+            else {
+              val trimmed = if (params.trimSpace) {
+                v.toString.trim
+              } else v
+              Conversions.formatString(trimmed.asInstanceOf[String])
             }
+          }
         case BinaryType =>
           (v: Any) =>
             v match {
