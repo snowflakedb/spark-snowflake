@@ -55,7 +55,7 @@ object ParquetUtils {
           .endInt()
       case TimestampType | TimestampNTZType =>
         builder.longBuilder()
-          .prop("logicalType", " timestamp-micros")
+          .prop("logicalType", " timestamp-nanos")
           .endLong()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
@@ -109,7 +109,7 @@ object ParquetUtils {
           .endInt()
       case TimestampType | TimestampNTZType =>
         builder.longBuilder()
-          .prop("logicalType", "timestamp-micros")
+          .prop("logicalType", "timestamp-nanos")
           .endLong()
       case ArrayType(elementType, nullable) =>
         builder.array().items(

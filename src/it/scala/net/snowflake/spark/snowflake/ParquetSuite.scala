@@ -167,7 +167,6 @@ class ParquetSuite extends IntegrationSuiteBase {
     ))
     val rdd = sparkSession.sparkContext.parallelize(data)
     val df = sparkSession.createDataFrame(rdd, schema)
-    val start = System.currentTimeMillis()
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -175,8 +174,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
       .mode(SaveMode.Overwrite)
       .save()
-    val end = System.currentTimeMillis()
-    print(end - start)
+
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -184,6 +182,5 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", "test_parquet")
       .load()
     newDf.show()
-    print(newDf.schema)
   }
 }
