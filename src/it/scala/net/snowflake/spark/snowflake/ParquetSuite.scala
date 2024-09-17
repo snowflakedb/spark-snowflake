@@ -134,6 +134,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     cached.write.json("json.out")
     // scalastyle:on println
   }
+
   test("test parquet with all type") {
     val data = Seq(
       Row(
@@ -175,6 +176,74 @@ class ParquetSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
 
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_parquet")
+      .load()
+    newDf.show()
+  }
+
+  test("test parquet name conversion without column map"){
+    val data = Seq(
+      Row(1, 2, 3),
+    )
+
+    val schema = StructType(List(
+      StructField("UPPER_CLASS_COL", IntegerType, true),
+      StructField("lower_class_col", IntegerType, true),
+      StructField("Mix_Class_Col", IntegerType, true),
+    ))
+    val rdd = sparkSession.sparkContext.parallelize(data)
+    val df = sparkSession.createDataFrame(rdd, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_parquet")
+      //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_parquet")
+      .load()
+
+    val nullCount = newDf.columns.map { colName =>
+      newDf.filter(col(colName).isNull).count()
+    }.sum
+    assert(nullCount == 0)
+  }
+
+  test("test parquet name conversion with column map"){
+    jdbcUpdate(
+      s"create or replace table test_parquet_column_map (ONE int, TWO int, THREE int)"
+    )
+
+    val data = Seq(
+      Row(1, 2, 3),
+    )
+
+    val schema = StructType(List(
+      StructField("UPPER_CLASS_COL", IntegerType, true),
+      StructField("lower_class_col", IntegerType, true),
+      StructField("Mix_Class_Col", IntegerType, true),
+    ))
+    val rdd = sparkSession.sparkContext.parallelize(data)
+    val df = sparkSession.createDataFrame(rdd, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", "test_parquet_column_map")
+      .option("columnmap", Map(
+        "UPPER_CLASS_COL" -> "ONE",
+        "lower_class_col" -> "TWO",
+        "Mix_Class_Col" -> "THREE",
+      ).toString())
+      .mode(SaveMode.Append)
+      .save()
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)

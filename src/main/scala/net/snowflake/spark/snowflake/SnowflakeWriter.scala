@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
+import net.snowflake.client.jdbc.internal.software.amazon.ion.impl.PrivateScalarConversions.ValueNotSetException
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -87,6 +88,42 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
+  def toSnowflakeSchemaName(schema: StructType,
+                            params: MergedParameters
+                           ): StructType = {
+    if (params.columnMap.isEmpty) {
+      val conn = jdbcWrapper.getConnector(params)
+      val snowflakeSchema: Option[StructType] = Some(
+        Utils.removeQuote(
+          jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+        )
+      )
+        if (snowflakeSchema.orNull.nonEmpty) {
+          StructType(snowflakeSchema.orNull.zip(schema).map {
+            case (snowflakeField, sparkField) =>
+              StructField(
+                snowflakeField.name,
+                sparkField.dataType,
+                sparkField.nullable,
+                sparkField.metadata
+              )
+          })
+        } else {
+          schema
+        }
+    } else {
+      StructType(schema.map {
+        sparkField =>
+          StructField(
+            params.columnMap.get(sparkField.name),
+            sparkField.dataType,
+            sparkField.nullable,
+            sparkField.metadata
+          )
+      })
+    }
+  }
+
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
@@ -96,8 +133,9 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
     format match {
       case SupportedFormat.PARQUET =>
-        val schema = io.ParquetUtils.convertStructToAvro(data.schema)
-        val colNames = data.schema.names
+        val snowflakeStyleSchema = toSnowflakeSchemaName(data.schema, params)
+        val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
+        val colNames = snowflakeStyleSchema.names
         data.rdd.map (row => {
           val record = new GenericData.Record(schema)
           row.toSeq.zip(colNames).foreach {
