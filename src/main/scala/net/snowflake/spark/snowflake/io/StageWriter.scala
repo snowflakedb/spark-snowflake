@@ -780,21 +780,7 @@ private[io] object StageWriter {
                           ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
-          if (list.isEmpty || list.get.isEmpty) {
-            EmptySnowflakeSQLStatement()
-          } else {
-            ConstantString("(") +
-              list.get
-                .map(
-                  x =>
-                    if (params.keepOriginalColumnNameCase) {
-                      Utils.quotedNameIgnoreCase(x._2)
-                    } else {
-                      Utils.ensureQuoted(x._2)
-                    }
-                )
-                .mkString(", ") + ")"
-          }
+          EmptySnowflakeSQLStatement()
         case SupportedFormat.JSON =>
           val tableSchema =
             DefaultJDBCWrapper.resolveTable(conn, table.name, params)
@@ -850,13 +836,7 @@ private[io] object StageWriter {
                             ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
-          if (list.isEmpty || list.get.isEmpty) {
-            from
-          } else {
-            ConstantString("from (select") +
-              list.get.map(x => "tmp.$".concat(x._1.toString)).mkString(", ") +
-              from + "tmp)"
-          }
+          from
         case SupportedFormat.JSON =>
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {

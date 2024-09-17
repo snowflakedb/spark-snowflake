@@ -248,7 +248,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet")
+      .option("dbtable", "test_parquet_column_map")
       .load()
     newDf.show()
   }
