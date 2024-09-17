@@ -40,17 +40,23 @@ object ParquetUtils {
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       // todo: should have a special handler
-      case _: DecimalType =>
+      case dc: DecimalType =>
         builder.bytesBuilder()
           .prop("logicalType", "decimal")
-          .prop("precision", 38)
-          .prop("scale", 0)
+          .prop("precision", dc.precision)
+          .prop("scale", dc.scale)
           .endBytes()
       case StringType => builder.stringType()
       case BinaryType => builder.bytesType()
       case BooleanType => builder.booleanType()
-      // todo: should have a special handler
-      case TimestampType | TimestampNTZType | DateType => builder.longType()
+      case DateType =>
+        builder.intBuilder()
+          .prop("logicalType", "date")
+          .endInt()
+      case TimestampType | TimestampNTZType =>
+        builder.longBuilder()
+          .prop("logicalType", " timestamp-micros")
+          .endLong()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
           convertTypeToAvro(
@@ -88,17 +94,23 @@ object ParquetUtils {
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       // todo: should have a special handler
-      case _: DecimalType =>
+      case dc: DecimalType =>
         builder.bytesBuilder()
           .prop("logicalType", "decimal")
-          .prop("precision", 38)
-          .prop("scale", 0)
+          .prop("precision", dc.precision)
+          .prop("scale", dc.scale)
           .endBytes()
       case StringType => builder.stringType()
       case BinaryType => builder.bytesType()
       case BooleanType => builder.booleanType()
-      // todo: should have a special handler
-      case TimestampType | TimestampNTZType | DateType => builder.longType()
+      case DateType =>
+        builder.intBuilder()
+          .prop("logicalType", "date")
+          .endInt()
+      case TimestampType | TimestampNTZType =>
+        builder.longBuilder()
+          .prop("logicalType", "timestamp-micros")
+          .endLong()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
           convertTypeToAvro(

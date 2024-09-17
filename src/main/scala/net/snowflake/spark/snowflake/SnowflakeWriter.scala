@@ -29,6 +29,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 
 import java.nio.ByteBuffer
+import java.time.ZoneOffset
+import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 /**
@@ -102,7 +104,13 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             case (arr: mutable.WrappedArray[Any], name) =>
               record.put(name, arr.toArray)
             case (decimal: java.math.BigDecimal, name) =>
-              record.put(name, ByteBuffer.wrap(decimal.toBigInteger.toByteArray))
+              record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
+            case (date: java.time.LocalDateTime, name) =>
+              record.put(name, date.toEpochSecond(ZoneOffset.UTC))
+            case (timestamp: java.sql.Timestamp, name) =>
+              record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
+            case (date: java.sql.Date, name) =>
+              record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
             case (value, name) => record.put(name, value)
           }
           record
