@@ -147,7 +147,6 @@ class ParquetSuite extends IntegrationSuiteBase {
         Array("one", "two", "three"),
         Array(1, 2, 3),
         Timestamp.valueOf("2023-09-16 10:15:30"),
-//        LocalDateTime.now(),
         Date.valueOf("2023-01-01")
       ),
     )
@@ -164,7 +163,6 @@ class ParquetSuite extends IntegrationSuiteBase {
         ArrayType(StringType, containsNull = true), nullable = true),
       StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
       StructField("TIMESTAMP_COL", TimestampType, true),
-//      StructField("timestampntz_col", TimestampNTZType, true),
       StructField("DATE_COL", DateType, true)
     ))
     val rdd = sparkSession.sparkContext.parallelize(data)
