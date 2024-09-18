@@ -7,132 +7,15 @@ import org.apache.spark.sql.functions.{col, to_json}
 
 import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
+import scala.collection.Seq
 import scala.util.Random
 
 class ParquetSuite extends IntegrationSuiteBase {
-  test("create table") {
-    val rowNum = 100000
-    val colNum = 550
-    val arrColNum = 80
-    val schema = StructType(
-      (0 until (colNum - arrColNum)).map(x => {
-        StructField(s"COL$x", StringType)
-      }) ++ ((colNum - arrColNum) until colNum).map(x => {
-        StructField(s"COL$x", StringType)
-      })
-    )
+  val tes_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
-    val rows = sparkSession.sparkContext.parallelize((0 until rowNum).map(_ => {
-      Row((0 until (colNum - arrColNum))
-        .map(_ => Random.alphanumeric.take(20).mkString) ++
-        ((colNum - arrColNum) until colNum)
-          .map(_ => (1 to 10)
-            .map(_ => Random.nextInt()).mkString("[", ",", "]"))
-        : _*)
-    }))
-
-    val df = sparkSession.createDataFrame(rows, schema)
-    df.write.parquet("mix2")
-    //    df.write.format(Utils.SNOWFLAKE_SOURCE_NAME)
-    //      .mode(SaveMode.Overwrite)
-    //      .options(connectorOptionsNoTable)
-    //      .option("dbtable", name)
-    //      .save()
-
-    df.schema.printTreeString()
-  }
-
-  test("test csv") {
-    val df = sparkSession.read.parquet("integer")
-    val cached = df.cache()
-    cached.schema.printTreeString()
-    val t1 = System.currentTimeMillis()
-    cached.write.format(Utils.SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
-      .option("dbtable", "parquet_test1")
-      .mode(SaveMode.Overwrite)
-      .save()
-    val t2 = System.currentTimeMillis()
-    // scalastyle:off println
-    println(
-      s"""
-         |XXXXXXXXXX
-         |time: ${t2 - t1}
-         |XXXXXXXXXX
-         |""".stripMargin
-    )
-    // scalastyle:on println
-  }
-  test("test csv 2") {
-    val df = sparkSession.read.parquet("arr2")
-    val cached = df.cache()
-    cached.schema.printTreeString()
-    // scalastyle:off println
-    println(cached.count())
-    val t0 = System.currentTimeMillis()
-    val newDf = cached.select(
-      ((0 until 470).map(x => col(s"COL$x")) ++
-        (470 until 550).map(x => to_json(col(s"COL$x")).as(s"COL$x"))): _*
-    )
-    val newCached = newDf.cache()
-    newCached.schema.printTreeString()
-    println(newCached.count())
-    val t1 = System.currentTimeMillis()
-    newCached.write.format(Utils.SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
-      .option("dbtable", "parquet_test1")
-      .mode(SaveMode.Overwrite)
-      .save()
-    val t2 = System.currentTimeMillis()
-
-    println(
-      s"""
-         |XXXXXXXXXX
-         |time1: ${t1 - t0}
-         |time: ${t2 - t1}
-         |XXXXXXXXXX
-         |""".stripMargin
-    )
-    // scalastyle:on println
-  }
-
-  test("test parquet") {
-    val df = sparkSession.read.parquet("arr2")
-    val cached = df.cache()
-    cached.schema.printTreeString()
-    cached.count()
-    val t1 = System.currentTimeMillis()
-    cached.write.format(Utils.SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", "parquet_test1")
-      .mode(SaveMode.Overwrite)
-      .save()
-    val t2 = System.currentTimeMillis()
-    // scalastyle:off println
-    println(
-      s"""
-         |XXXXXXXXXX
-         |time: ${t2 - t1}
-         |XXXXXXXXXX
-         |""".stripMargin
-    )
-    // scalastyle:on println
-  }
-
-  test("test file") {
-    val df = sparkSession.read.format(Utils.SNOWFLAKE_SOURCE_NAME)
-      .options(connectorOptionsNoTable)
-      .option("dbtable", "parquet_test")
-      .load()
-
-    val cached = df.cache()
-    cached.write.parquet("parquet.out")
-    cached.write.csv("csv.out")
-    cached.write.json("json.out")
-    // scalastyle:on println
+  override def afterAll(): Unit = {
+    runSql(s"drop table if exists $tes_parquet_table")
+    super.afterAll()
   }
 
   test("test parquet with all type") {
@@ -171,8 +54,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet")
-      //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+      .option("dbtable", tes_parquet_table)
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -180,9 +62,20 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet")
+      .option("dbtable", tes_parquet_table)
       .load()
-    newDf.show()
+
+    val res = """1,string value,123456789,123.45,123.44999694824219,true,12345.6789000000,[
+                |  "one",
+                |  "two",
+                |  "three"
+                |],[
+                |  1,
+                |  2,
+                |  3
+                |],2023-09-16 10:15:30.0,2023-01-01""".stripMargin
+    print(newDf.first().toSeq.mkString(","))
+    assert(newDf.first().toSeq.mkString(",") == res)
   }
 
   test("test parquet name conversion without column map"){
@@ -200,7 +93,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet")
+      .option("dbtable", tes_parquet_table)
       //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
       .mode(SaveMode.Overwrite)
       .save()
@@ -208,18 +101,14 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet")
+      .option("dbtable", tes_parquet_table)
       .load()
-
-    val nullCount = newDf.columns.map { colName =>
-      newDf.filter(col(colName).isNull).count()
-    }.sum
-    assert(nullCount == 0)
+    assert(newDf.first().toSeq.mkString(",") == Seq(1, 2, 3).mkString(","))
   }
 
   test("test parquet name conversion with column map"){
     jdbcUpdate(
-      s"create or replace table test_parquet_column_map (ONE int, TWO int, THREE int)"
+      s"create or replace table test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
     )
 
     val data = Seq(
@@ -250,6 +139,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", "test_parquet_column_map")
       .load()
-    newDf.show()
+    assert(newDf.first().toSeq.mkString(",") == Seq(1, 2, 3, null).mkString(","))
+    assert(newDf.schema.map(field => field.name)
+      .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
 }

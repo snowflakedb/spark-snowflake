@@ -20,7 +20,9 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
 import net.snowflake.client.jdbc.internal.software.amazon.ion.impl.PrivateScalarConversions.ValueNotSetException
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.snowflakeStyleSchema
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
+import net.snowflake.spark.snowflake.Utils.ensureUnquoted
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.avro.generic.GenericData
@@ -88,39 +90,32 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
-  def toSnowflakeSchemaName(schema: StructType,
+  def afterColumnMapping(schema: StructType,
                             params: MergedParameters
                            ): StructType = {
-    if (params.columnMap.isEmpty) {
-      val conn = jdbcWrapper.getConnector(params)
-      val snowflakeSchema: Option[StructType] = Some(
-        Utils.removeQuote(
-          jdbcWrapper.resolveTable(conn, params.table.get.name, params)
-        )
-      )
-        if (snowflakeSchema.orNull.nonEmpty) {
-          StructType(snowflakeSchema.orNull.zip(schema).map {
-            case (snowflakeField, sparkField) =>
-              StructField(
-                snowflakeField.name,
-                sparkField.dataType,
-                sparkField.nullable,
-                sparkField.metadata
-              )
-          })
-        } else {
-          schema
-        }
-    } else {
-      StructType(schema.map {
-        sparkField =>
-          StructField(
-            params.columnMap.get(sparkField.name),
-            sparkField.dataType,
-            sparkField.nullable,
-            sparkField.metadata
-          )
-      })
+    params.columnMap match {
+      case Some(map) =>
+        StructType(schema.map {
+          sparkField =>
+            StructField(
+              map.getOrElse(sparkField.name, sparkField.name),
+              sparkField.dataType,
+              sparkField.nullable,
+              sparkField.metadata
+            )
+        })
+      case _ =>
+        val newSchema = snowflakeStyleSchema(schema, params)
+        StructType(newSchema.map {
+          sparkField =>
+            StructField(
+              // unquote field name because avro does not allow quote in field name
+              ensureUnquoted(sparkField.name),
+              sparkField.dataType,
+              sparkField.nullable,
+              sparkField.metadata
+            )
+        })
     }
   }
 
@@ -133,7 +128,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
     format match {
       case SupportedFormat.PARQUET =>
-        val snowflakeStyleSchema = toSnowflakeSchemaName(data.schema, params)
+        val snowflakeStyleSchema = afterColumnMapping(data.schema, params)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
         val colNames = snowflakeStyleSchema.names
         data.rdd.map (row => {

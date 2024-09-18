@@ -539,6 +539,13 @@ object Utils {
   }
 
   /**
+   * Unquote a name
+   */
+  def ensureUnquoted(name: String): String = {
+    if (isQuoted(name)) name.stripPrefix("\"").stripSuffix("\"") else name
+  }
+
+  /**
     * wrap a name with double quotes
     */
   def quotedName(name: String): String = {
