@@ -660,18 +660,49 @@ sealed trait CloudStorage {
     // partition can be empty, can't generate empty parquet file,
     // so skip the empty partition.
     if (input.nonEmpty) {
-      val uploadStream = createUploadStream(
-        fileName,
-        Some(directory),
-        //      compress,
-        if (format == SupportedFormat.PARQUET) false else compress,
-        storageInfo.get)
-      try {
+      if (storageInfo.isDefined) {
+        val uploadStream = createUploadStream(
+          fileName,
+          Some(directory),
+          //      compress,
+          if (format == SupportedFormat.PARQUET) false else compress,
+          storageInfo.get)
+        try {
+          format match {
+            case SupportedFormat.PARQUET =>
+              val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
+              val writer = AvroParquetWriter.builder[GenericData.Record](
+                  new ParquetUtils.StreamOutputFile(uploadStream)
+                ).withSchema(rows.head.getSchema)
+                .withCompressionCodec(CompressionCodecName.SNAPPY)
+                .build()
+              rows.foreach(writer.write)
+              writer.close()
+            case _ =>
+              val rows = input.asInstanceOf[Iterator[String]]
+              while (rows.hasNext) {
+                val oneRow = rows.next.getBytes("UTF-8")
+                uploadStream.write(oneRow)
+                uploadStream.write('\n')
+                rowCount += 1
+                dataSize += (oneRow.size + 1)
+              }
+          }
+        } finally {
+          uploadStream.close()
+        }
+        val endTime = System.currentTimeMillis()
+        processTimeInfo =
+          s"""read_and_upload_time:
+             | ${Utils.getTimeString(endTime - startTime)}
+             |""".stripMargin.filter(_ >= ' ')
+      } else if (fileTransferMetadata.isDefined) {
+        val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
         format match {
           case SupportedFormat.PARQUET =>
             val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
             val writer = AvroParquetWriter.builder[GenericData.Record](
-                new ParquetUtils.StreamOutputFile(uploadStream)
+                new ParquetUtils.StreamOutputFile(outputStream)
               ).withSchema(rows.head.getSchema)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
@@ -681,23 +712,49 @@ sealed trait CloudStorage {
             val rows = input.asInstanceOf[Iterator[String]]
             while (rows.hasNext) {
               val oneRow = rows.next.getBytes("UTF-8")
-              uploadStream.write(oneRow)
-              uploadStream.write('\n')
+              outputStream.write(oneRow)
+              outputStream.write('\n')
               rowCount += 1
               dataSize += (oneRow.size + 1)
             }
         }
-      } finally {
-        uploadStream.close()
+        val data = outputStream.toByteArray
+        dataSize = data.size
+        outputStream.close()
+
+        // Set up proxy info if it is configured.
+        val proxyProperties = new Properties()
+        proxyInfo match {
+          case Some(proxyInfoValue) =>
+            proxyInfoValue.setProxyForJDBC(proxyProperties)
+          case None =>
+        }
+
+        // Upload data with FileTransferMetadata
+        val startUploadTime = System.currentTimeMillis()
+        val inStream = new ByteArrayInputStream(data)
+        SnowflakeFileTransferAgent.uploadWithoutConnection(
+          SnowflakeFileTransferConfig.Builder.newInstance()
+            .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+            .setUploadStream(inStream)
+            .setRequireCompress(compress)
+            .setDestFileName(fileName)
+            .setOcspMode(OCSPMode.FAIL_OPEN)
+            .setProxyProperties(proxyProperties)
+            .build())
+
+        val endTime = System.currentTimeMillis()
+        processTimeInfo =
+          s"""read_and_upload_time:
+             | ${Utils.getTimeString(endTime - startTime)}
+             | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
+             | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
+             |""".stripMargin.filter(_ >= ' ')
       }
     } else {
       logger.info(s"Empty partition, skipped file $fileName")
     }
-    val endTime = System.currentTimeMillis()
-    processTimeInfo =
-      s"""read_and_upload_time:
-         | ${Utils.getTimeString(endTime - startTime)}
-         |""".stripMargin.filter(_ >= ' ')
+
 
     // todo: handle GCP
     // When attempt number is smaller than 2, throw exception
