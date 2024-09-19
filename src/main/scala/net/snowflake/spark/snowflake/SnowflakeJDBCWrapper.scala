@@ -114,7 +114,7 @@ private[snowflake] class JDBCWrapper {
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
   def schemaString(schema: StructType, param: MergedParameters): String = {
-    schema.fields
+      snowflakeStyleSchema(schema, param).fields
       .map(field => {
         val name: String =
           if (param.keepOriginalColumnNameCase) {
@@ -127,6 +127,21 @@ private[snowflake] class JDBCWrapper {
         s"""$name ${`type`} $nullable"""
       })
       .mkString(",")
+  }
+
+  def snowflakeStyleSchema(schema: StructType, param: MergedParameters): StructType = {
+    StructType(schema.fields.map(field => {
+      StructField(
+        if (param.keepOriginalColumnNameCase) {
+          Utils.quotedNameIgnoreCase(field.name)
+        } else {
+          Utils.ensureQuoted(field.name)
+        },
+        field.dataType,
+        field.nullable,
+        field.metadata
+      )
+    }))
   }
 
   /**
