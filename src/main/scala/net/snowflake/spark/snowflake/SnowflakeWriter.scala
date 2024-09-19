@@ -90,7 +90,10 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
   }
 
-  def afterColumnMapping(schema: StructType,
+  /**
+   * function that map spark style column name to snowflake style column name
+  */
+  def mapColumn(schema: StructType,
                             params: MergedParameters
                            ): StructType = {
     params.columnMap match {
@@ -128,7 +131,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
     format match {
       case SupportedFormat.PARQUET =>
-        val snowflakeStyleSchema = afterColumnMapping(data.schema, params)
+        val snowflakeStyleSchema = mapColumn(data.schema, params)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
         val colNames = snowflakeStyleSchema.names
         data.rdd.map (row => {

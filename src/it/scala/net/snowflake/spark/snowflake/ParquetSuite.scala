@@ -11,10 +11,10 @@ import scala.collection.Seq
 import scala.util.Random
 
 class ParquetSuite extends IntegrationSuiteBase {
-  val tes_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
-    runSql(s"drop table if exists $tes_parquet_table")
+    runSql(s"drop table if exists $test_parquet_table")
     super.afterAll()
   }
 
@@ -54,7 +54,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", tes_parquet_table)
+      .option("dbtable", test_parquet_table)
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -62,20 +62,34 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", tes_parquet_table)
+      .option("dbtable", test_parquet_table)
       .load()
-
-    val res = """1,string value,123456789,123.45,123.44999694824219,true,12345.6789000000,[
-                |  "one",
-                |  "two",
-                |  "three"
-                |],[
-                |  1,
-                |  2,
-                |  3
-                |],2023-09-16 10:15:30.0,2023-01-01""".stripMargin
-    print(newDf.first().toSeq.mkString(","))
-    assert(newDf.first().toSeq.mkString(",") == res)
+    checkAnswer(
+      newDf,
+      Seq(
+        Row(
+          1,
+          "string value",
+          123456789,
+          123.45,
+          123.44999694824219,
+          true,
+          BigDecimal("12345.6789").bigDecimal,
+          """[
+            |  "one",
+            |  "two",
+            |  "three"
+            |]""".stripMargin,
+          """[
+            |  1,
+            |  2,
+            |  3
+            |]""".stripMargin,
+          Timestamp.valueOf("2023-09-16 10:15:30"),
+          Date.valueOf("2023-01-01")
+        ),
+      )
+    )
   }
 
   test("test parquet name conversion without column map"){
@@ -93,7 +107,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", tes_parquet_table)
+      .option("dbtable", test_parquet_table)
       //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
       .mode(SaveMode.Overwrite)
       .save()
@@ -101,9 +115,14 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", tes_parquet_table)
+      .option("dbtable", test_parquet_table)
       .load()
-    assert(newDf.first().toSeq.mkString(",") == Seq(1, 2, 3).mkString(","))
+    checkAnswer(
+      newDf,
+      Seq(
+        Row(1, 2, 3),
+      )
+    )
   }
 
   test("test parquet name conversion with column map"){
@@ -139,7 +158,12 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", "test_parquet_column_map")
       .load()
-    assert(newDf.first().toSeq.mkString(",") == Seq(1, 2, 3, null).mkString(","))
+    checkAnswer(
+      newDf,
+      Seq(
+        Row(1, 2, 3, null),
+      )
+    )
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
