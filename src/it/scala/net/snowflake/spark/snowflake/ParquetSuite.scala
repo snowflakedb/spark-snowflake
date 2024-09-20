@@ -3,10 +3,8 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
-import org.apache.spark.sql.functions.{col, to_json}
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
 import scala.collection.Seq
 import scala.util.Random
 
@@ -87,6 +85,88 @@ class ParquetSuite extends IntegrationSuiteBase {
             |]""".stripMargin,
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
+        ),
+      )
+    )
+  }
+
+  test("test parquet with all type and multiple lines"){
+    val data = Seq(
+      Row(1, "string value", 123456789L, 123.45, 123.45f, true,
+        BigDecimal("12345.6789").bigDecimal,
+        Array("one", "two", "three"),
+        Array(1, 2, 3),
+        Timestamp.valueOf("2023-09-16 10:15:30"),
+        Date.valueOf("2023-01-01")
+      ),
+      Row(2, "another string", 123456789L, 123.45, 123.45f, false,
+        BigDecimal("12345.6789").bigDecimal,
+        Array("one", "two", "three"),
+        Array(1, 2, 3),
+        Timestamp.valueOf("2024-09-16 10:15:30"),
+        Date.valueOf("2024-01-01")
+      ),
+    )
+
+    val schema = StructType(List(
+      StructField("INT_COL", IntegerType, true),
+      StructField("STRING_COL", StringType, true),
+      StructField("LONG_COL", LongType, true),
+      StructField("DOUBLE_COL", DoubleType, true),
+      StructField("FLOAT_COL", FloatType, true),
+      StructField("BOOLEAN_COL", BooleanType, true),
+      StructField("DECIMAL_COL", DecimalType(20, 10), true),
+      StructField("ARRAY_STRING_FIELD",
+        ArrayType(StringType, containsNull = true), nullable = true),
+      StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("TIMESTAMP_COL", TimestampType, true),
+      StructField("DATE_COL", DateType, true)
+    ))
+    val rdd = sparkSession.sparkContext.parallelize(data)
+    val df = sparkSession.createDataFrame(rdd, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_table)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_table)
+      .load()
+    checkAnswer(
+      newDf,
+      Seq(
+        Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+          true, BigDecimal("12345.6789").bigDecimal,
+          """[
+            |  "one",
+            |  "two",
+            |  "three"
+            |]""".stripMargin,
+          """[
+            |  1,
+            |  2,
+            |  3
+            |]""".stripMargin,
+          Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
+        ),
+        Row(2, "another string", 123456789, 123.45, 123.44999694824219,
+          false, BigDecimal("12345.6789").bigDecimal,
+          """[
+            |  "one",
+            |  "two",
+            |  "three"
+            |]""".stripMargin,
+          """[
+            |  1,
+            |  2,
+            |  3
+            |]""".stripMargin,
+          Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
         ),
       )
     )
