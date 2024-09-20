@@ -32,7 +32,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           Array(1, 2, 3),
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
-        ),
+        )
       )
     )
 
@@ -86,7 +86,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           |]""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"),
         Date.valueOf("2023-01-01")
-      ),
+      )
     )
 
     checkAnswer(newDf, expectedAnswer)
@@ -108,7 +108,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           Array(1, 2, 3),
           Timestamp.valueOf("2024-09-16 10:15:30"),
           Date.valueOf("2024-01-01")
-        ),
+        )
       )
     )
 
@@ -169,7 +169,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           |  3
           |]""".stripMargin,
         Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
-      ),
+      )
     )
 
     checkAnswer(newDf, expectedAnswer)
@@ -199,7 +199,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_parquet_table)
       .load()
     val expectedAnswer: Seq[Row] = Seq(
-      Row(1, 2, 3),
+      Row(1, 2, 3)
     )
     checkAnswer(newDf, expectedAnswer)
   }
@@ -238,7 +238,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer: Seq[Row] = Seq(
-      Row(1, 2, 3, null),
+      Row(1, 2, 3, null)
     )
 
     checkAnswer(newDf, expectedAnswer)
