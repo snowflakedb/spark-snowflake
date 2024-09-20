@@ -700,48 +700,46 @@ sealed trait CloudStorage {
         format match {
           case SupportedFormat.PARQUET =>
             val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
-            rows.foreach{row =>
-              val outputStream = new ByteArrayOutputStream()
-              val writer = AvroParquetWriter.builder[GenericData.Record](
-                  new ParquetUtils.StreamOutputFile(outputStream)
-                ).withSchema(rows.head.getSchema)
-                .withCompressionCodec(CompressionCodecName.SNAPPY)
-                .build()
-              writer.write(row)
-              writer.close()
+            val outputStream = new ByteArrayOutputStream()
+            val writer = AvroParquetWriter.builder[GenericData.Record](
+                new ParquetUtils.StreamOutputFile(outputStream)
+              ).withSchema(rows.head.getSchema)
+              .withCompressionCodec(CompressionCodecName.SNAPPY)
+              .build()
+            rows.foreach(writer.write)
+            writer.close()
 
-              val data = outputStream.toByteArray
-              dataSize = data.size
-              outputStream.close()
+            val data = outputStream.toByteArray
+            dataSize = data.size
+            outputStream.close()
 
-              // Set up proxy info if it is configured.
-              val proxyProperties = new Properties()
-              proxyInfo match {
-                case Some(proxyInfoValue) =>
-                  proxyInfoValue.setProxyForJDBC(proxyProperties)
-                case None =>
-              }
-
-              // Upload data with FileTransferMetadata
-              val startUploadTime = System.currentTimeMillis()
-              val inStream = new ByteArrayInputStream(data)
-              SnowflakeFileTransferAgent.uploadWithoutConnection(
-                SnowflakeFileTransferConfig.Builder.newInstance()
-                  .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-                  .setUploadStream(inStream)
-                  .setRequireCompress(false)
-                  .setDestFileName(fileName)
-                  .setOcspMode(OCSPMode.FAIL_OPEN)
-                  .setProxyProperties(proxyProperties)
-                  .build())
-              val endTime = System.currentTimeMillis()
-              processTimeInfo =
-                s"""read_and_upload_time:
-                   | ${Utils.getTimeString(endTime - startTime)}
-                   | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-                   | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-                   |""".stripMargin.filter(_ >= ' ')
+            // Set up proxy info if it is configured.
+            val proxyProperties = new Properties()
+            proxyInfo match {
+              case Some(proxyInfoValue) =>
+                proxyInfoValue.setProxyForJDBC(proxyProperties)
+              case None =>
             }
+
+            // Upload data with FileTransferMetadata
+            val startUploadTime = System.currentTimeMillis()
+            val inStream = new ByteArrayInputStream(data)
+            SnowflakeFileTransferAgent.uploadWithoutConnection(
+              SnowflakeFileTransferConfig.Builder.newInstance()
+                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+                .setUploadStream(inStream)
+                .setRequireCompress(false)
+                .setDestFileName(fileName)
+                .setOcspMode(OCSPMode.FAIL_OPEN)
+                .setProxyProperties(proxyProperties)
+                .build())
+            val endTime = System.currentTimeMillis()
+            processTimeInfo =
+              s"""read_and_upload_time:
+                 | ${Utils.getTimeString(endTime - startTime)}
+                 | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
+                 | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
+                 |""".stripMargin.filter(_ >= ' ')
 
           case _ =>
             val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
