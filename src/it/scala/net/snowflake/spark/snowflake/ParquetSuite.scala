@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
 import java.sql.{Date, Timestamp}
 import scala.collection.Seq
@@ -47,7 +47,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
-    val rdd = sparkSession.sparkContext.parallelize(data)
+    val rdd = sparkSession.sparkContext.parallelize[Row](data)
     val df = sparkSession.createDataFrame(rdd, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -122,7 +122,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
-    val rdd = sparkSession.sparkContext.parallelize(data)
+    val rdd = sparkSession.sparkContext.parallelize[Row](data)
     val df = sparkSession.createDataFrame(rdd, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -182,7 +182,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("lower_class_col", IntegerType, true),
       StructField("Mix_Class_Col", IntegerType, true),
     ))
-    val rdd = sparkSession.sparkContext.parallelize(data)
+    val rdd = sparkSession.sparkContext.parallelize[Row](data)
     val df = sparkSession.createDataFrame(rdd, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -219,7 +219,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("lower_class_col", IntegerType, true),
       StructField("Mix_Class_Col", IntegerType, true),
     ))
-    val rdd = sparkSession.sparkContext.parallelize(data)
+    val rdd = sparkSession.sparkContext.parallelize[Row](data)
     val df = sparkSession.createDataFrame(rdd, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
