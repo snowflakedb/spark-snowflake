@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
@@ -17,20 +18,22 @@ class ParquetSuite extends IntegrationSuiteBase {
   }
 
   test("test parquet with all type") {
-    val data = Seq(
-      Row(
-        1,
-        "string value",
-        123456789L,
-        123.45,
-        123.45f,
-        true,
-        BigDecimal("12345.6789").bigDecimal,
-        Array("one", "two", "three"),
-        Array(1, 2, 3),
-        Timestamp.valueOf("2023-09-16 10:15:30"),
-        Date.valueOf("2023-01-01")
-      ),
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          1,
+          "string value",
+          123456789L,
+          123.45,
+          123.45f,
+          true,
+          BigDecimal("12345.6789").bigDecimal,
+          Array("one", "two", "three"),
+          Array(1, 2, 3),
+          Timestamp.valueOf("2023-09-16 10:15:30"),
+          Date.valueOf("2023-01-01")
+        ),
+      )
     )
 
     val schema = StructType(List(
@@ -47,8 +50,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
-    val rdd = sparkSession.sparkContext.parallelize[Row](data)
-    val df = sparkSession.createDataFrame(rdd, schema)
+    val df = sparkSession.createDataFrame(data, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -91,21 +93,23 @@ class ParquetSuite extends IntegrationSuiteBase {
   }
 
   test("test parquet with all type and multiple lines"){
-    val data = Seq(
-      Row(1, "string value", 123456789L, 123.45, 123.45f, true,
-        BigDecimal("12345.6789").bigDecimal,
-        Array("one", "two", "three"),
-        Array(1, 2, 3),
-        Timestamp.valueOf("2023-09-16 10:15:30"),
-        Date.valueOf("2023-01-01")
-      ),
-      Row(2, "another string", 123456789L, 123.45, 123.45f, false,
-        BigDecimal("12345.6789").bigDecimal,
-        Array("one", "two", "three"),
-        Array(1, 2, 3),
-        Timestamp.valueOf("2024-09-16 10:15:30"),
-        Date.valueOf("2024-01-01")
-      ),
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(1, "string value", 123456789L, 123.45, 123.45f, true,
+          BigDecimal("12345.6789").bigDecimal,
+          Array("one", "two", "three"),
+          Array(1, 2, 3),
+          Timestamp.valueOf("2023-09-16 10:15:30"),
+          Date.valueOf("2023-01-01")
+        ),
+        Row(2, "another string", 123456789L, 123.45, 123.45f, false,
+          BigDecimal("12345.6789").bigDecimal,
+          Array("one", "two", "three"),
+          Array(1, 2, 3),
+          Timestamp.valueOf("2024-09-16 10:15:30"),
+          Date.valueOf("2024-01-01")
+        ),
+      )
     )
 
     val schema = StructType(List(
@@ -122,8 +126,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
-    val rdd = sparkSession.sparkContext.parallelize[Row](data)
-    val df = sparkSession.createDataFrame(rdd, schema)
+    val df = sparkSession.createDataFrame(data, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -173,17 +176,15 @@ class ParquetSuite extends IntegrationSuiteBase {
   }
 
   test("test parquet name conversion without column map"){
-    val data = Seq(
-      Row(1, 2, 3),
+    val data: RDD[Row] = sc.makeRDD(
+      List(Row(1, 2, 3))
     )
-
     val schema = StructType(List(
       StructField("UPPER_CLASS_COL", IntegerType, true),
       StructField("lower_class_col", IntegerType, true),
       StructField("Mix_Class_Col", IntegerType, true),
     ))
-    val rdd = sparkSession.sparkContext.parallelize[Row](data)
-    val df = sparkSession.createDataFrame(rdd, schema)
+    val df = sparkSession.createDataFrame(data, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -210,17 +211,16 @@ class ParquetSuite extends IntegrationSuiteBase {
       s"create or replace table test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
     )
 
-    val data = Seq(
-      Row(1, 2, 3),
-    )
 
     val schema = StructType(List(
       StructField("UPPER_CLASS_COL", IntegerType, true),
       StructField("lower_class_col", IntegerType, true),
       StructField("Mix_Class_Col", IntegerType, true),
     ))
-    val rdd = sparkSession.sparkContext.parallelize[Row](data)
-    val df = sparkSession.createDataFrame(rdd, schema)
+    val data: RDD[Row] = sc.makeRDD(
+      List(Row(1, 2, 3))
+    )
+    val df = sparkSession.createDataFrame(data, schema)
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
