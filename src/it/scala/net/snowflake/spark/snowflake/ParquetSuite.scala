@@ -3,10 +3,8 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
-import org.apache.spark.sql.functions.{col, to_json}
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
 import scala.collection.Seq
 import scala.util.Random
 
