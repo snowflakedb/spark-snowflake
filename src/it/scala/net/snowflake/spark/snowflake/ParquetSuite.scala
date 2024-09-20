@@ -64,32 +64,32 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
       .load()
-    checkAnswer(
-      newDf,
-      Seq(
-        Row(
-          1,
-          "string value",
-          123456789,
-          123.45,
-          123.44999694824219,
-          true,
-          BigDecimal("12345.6789").bigDecimal,
-          """[
-            |  "one",
-            |  "two",
-            |  "three"
-            |]""".stripMargin,
-          """[
-            |  1,
-            |  2,
-            |  3
-            |]""".stripMargin,
-          Timestamp.valueOf("2023-09-16 10:15:30"),
-          Date.valueOf("2023-01-01")
-        ),
-      )
+
+    val expectedAnswer: Seq[Row] = Seq(
+      Row(
+        1,
+        "string value",
+        123456789,
+        123.45,
+        123.44999694824219,
+        true,
+        BigDecimal("12345.6789").bigDecimal,
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        Timestamp.valueOf("2023-09-16 10:15:30"),
+        Date.valueOf("2023-01-01")
+      ),
     )
+
+    checkAnswer(newDf, expectedAnswer)
   }
 
   test("test parquet with all type and multiple lines"){
@@ -140,39 +140,39 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
       .load()
-    checkAnswer(
-      newDf,
-      Seq(
-        Row(1, "string value", 123456789, 123.45, 123.44999694824219,
-          true, BigDecimal("12345.6789").bigDecimal,
-          """[
-            |  "one",
-            |  "two",
-            |  "three"
-            |]""".stripMargin,
-          """[
-            |  1,
-            |  2,
-            |  3
-            |]""".stripMargin,
-          Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
-        ),
-        Row(2, "another string", 123456789, 123.45, 123.44999694824219,
-          false, BigDecimal("12345.6789").bigDecimal,
-          """[
-            |  "one",
-            |  "two",
-            |  "three"
-            |]""".stripMargin,
-          """[
-            |  1,
-            |  2,
-            |  3
-            |]""".stripMargin,
-          Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
-        ),
-      )
+
+    val expectedAnswer: Seq[Row] = Seq(
+      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+        true, BigDecimal("12345.6789").bigDecimal,
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
+      ),
+      Row(2, "another string", 123456789, 123.45, 123.44999694824219,
+        false, BigDecimal("12345.6789").bigDecimal,
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
+      ),
     )
+
+    checkAnswer(newDf, expectedAnswer)
   }
 
   test("test parquet name conversion without column map"){
@@ -198,12 +198,10 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
       .load()
-    checkAnswer(
-      newDf,
-      Seq(
-        Row(1, 2, 3),
-      )
+    val expectedAnswer: Seq[Row] = Seq(
+      Row(1, 2, 3),
     )
+    checkAnswer(newDf, expectedAnswer)
   }
 
   test("test parquet name conversion with column map"){
@@ -238,12 +236,12 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", "test_parquet_column_map")
       .load()
-    checkAnswer(
-      newDf,
-      Seq(
-        Row(1, 2, 3, null),
-      )
+
+    val expectedAnswer: Seq[Row] = Seq(
+      Row(1, 2, 3, null),
     )
+
+    checkAnswer(newDf, expectedAnswer)
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
