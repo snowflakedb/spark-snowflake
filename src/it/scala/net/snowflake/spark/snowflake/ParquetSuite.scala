@@ -11,9 +11,11 @@ import scala.util.Random
 
 class ParquetSuite extends IntegrationSuiteBase {
   val test_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_parquet_column_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     runSql(s"drop table if exists $test_parquet_table")
+    runSql(s"drop table if exists $test_parquet_column_map")
     super.afterAll()
   }
 
@@ -206,7 +208,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("test parquet name conversion with column map"){
     jdbcUpdate(
-      s"create or replace table test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
     )
 
 
@@ -222,7 +224,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet_column_map")
+      .option("dbtable", test_parquet_column_map)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .option("columnmap", Map(
         "UPPER_CLASS_COL" -> "ONE",
@@ -235,7 +237,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", "test_parquet_column_map")
+      .option("dbtable", test_parquet_column_map)
       .load()
 
     checkAnswer(newDf, List(Row(1, 2, 3, null)))

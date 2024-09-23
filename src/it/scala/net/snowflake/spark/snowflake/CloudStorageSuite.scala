@@ -17,19 +17,9 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
-import net.snowflake.spark.snowflake.io.ParquetUtils
 import net.snowflake.spark.snowflake.test.TestHook
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.SchemaBuilder.RecordBuilder
-import org.apache.avro.generic.GenericData
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType}
-import org.apache.parquet.avro.AvroParquetWriter
-import org.apache.parquet.io.{OutputFile, PositionOutputStream}
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
-import java.io.{ByteArrayOutputStream, File, FileOutputStream, FileWriter}
-import java.sql.{Date, Timestamp}
-import scala.util.Random
 
 // scalastyle:off println
 class CloudStorageSuite extends IntegrationSuiteBase {
