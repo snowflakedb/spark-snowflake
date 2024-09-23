@@ -198,10 +198,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
       .load()
-    val expectedAnswer: Seq[Row] = Seq(
-      Row(1, 2, 3)
-    )
-    checkAnswer(newDf, expectedAnswer)
+
+    checkAnswer(newDf, Seq(Row(1, 2, 3)))
   }
 
   test("test parquet name conversion with column map"){
@@ -237,11 +235,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", "test_parquet_column_map")
       .load()
 
-    val expectedAnswer: Seq[Row] = Seq(
-      Row(1, 2, 3, null)
-    )
-
-    checkAnswer(newDf, expectedAnswer)
+    checkAnswer(newDf, Seq(Row(1, 2, 3, null)))
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
