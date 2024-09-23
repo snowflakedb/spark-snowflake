@@ -65,7 +65,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_parquet_table)
       .load()
 
-    val expectedAnswer: Seq[Row] = Seq(
+    val expectedAnswer: Seq[Row] = List(
       Row(
         1,
         "string value",
@@ -141,7 +141,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_parquet_table)
       .load()
 
-    val expectedAnswer: Seq[Row] = Seq(
+    val expectedAnswer: Seq[Row] = List(
       Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal,
         """[
@@ -199,7 +199,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_parquet_table)
       .load()
 
-    checkAnswer(newDf, Seq(Row(1, 2, 3)))
+    checkAnswer(newDf, List(Row(1, 2, 3)))
   }
 
   test("test parquet name conversion with column map"){
@@ -235,7 +235,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", "test_parquet_column_map")
       .load()
 
-    checkAnswer(newDf, Seq(Row(1, 2, 3, null)))
+    checkAnswer(newDf, List(Row(1, 2, 3, null)))
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
