@@ -54,6 +54,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .option("dbtable", test_parquet_table)
       .mode(SaveMode.Overwrite)
       .save()
@@ -131,6 +132,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -189,7 +191,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", test_parquet_table)
-      //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "false")
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -221,6 +223,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", "test_parquet_column_map")
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .option("columnmap", Map(
         "UPPER_CLASS_COL" -> "ONE",
         "lower_class_col" -> "TWO",
