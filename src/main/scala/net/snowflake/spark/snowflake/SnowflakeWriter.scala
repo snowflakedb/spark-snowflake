@@ -83,6 +83,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         )
         params.setColumnMap(Option(data.schema), toSchema)
       } finally conn.close()
+    } else if (params.columnMap.isDefined){
+      // TODO: check if map is legal
     }
 
     val output: DataFrame = removeUselessColumns(data, params)
@@ -94,35 +96,6 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
    * function that map spark style column name to snowflake style column name
   */
   def mapColumn(schema: StructType,
-                            params: MergedParameters
-                           ): StructType = {
-    params.columnMap match {
-      case Some(map) =>
-        StructType(schema.map {
-          sparkField =>
-            StructField(
-              map.getOrElse(sparkField.name, sparkField.name),
-              sparkField.dataType,
-              sparkField.nullable,
-              sparkField.metadata
-            )
-        })
-      case _ =>
-        val newSchema = snowflakeStyleSchema(schema, params)
-        StructType(newSchema.map {
-          sparkField =>
-            StructField(
-              // unquote field name because avro does not allow quote in field name
-              ensureUnquoted(sparkField.name),
-              sparkField.dataType,
-              sparkField.nullable,
-              sparkField.metadata
-            )
-        })
-    }
-  }
-
-  def mapColumn1(schema: StructType,
                 params: MergedParameters
                ): StructType = {
     params.columnMap match {
@@ -200,7 +173,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                 case (timestamp: java.sql.Timestamp, name) =>
                   record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
                 case (date: java.sql.Date, name) =>
-                  record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
+                  record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime + 1))
                 case (date: java.time.LocalDateTime, name) =>
                   record.put(name, date.toEpochSecond(ZoneOffset.UTC))
                 case (value, name) => record.put(name, value)

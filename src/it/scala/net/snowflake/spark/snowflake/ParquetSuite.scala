@@ -71,11 +71,21 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.449996948,
+      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal.setScale(10),
-        """["one","two","three"]""".stripMargin,
-        """[1,2,3]""".stripMargin,
-        """{"a":1}""".stripMargin,
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        """{
+          |  "a": 1
+          |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       )
     )
@@ -136,7 +146,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.449996948,
+      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal,
         """[
           |  "one",
@@ -153,7 +163,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       ),
-      Row(2, "another string", 123456789, 123.45, 123.449996948,
+      Row(2, "another string", 123456789, 123.45, 123.44999694824219,
         false, BigDecimal("12345.6789").bigDecimal,
         """[
           |  "one",
@@ -240,45 +250,4 @@ class ParquetSuite extends IntegrationSuiteBase {
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
-
-//  test("test date time"){
-//
-//
-//    val data: RDD[Row] = sc.makeRDD(
-//      List(
-//        Row(
-//          Timestamp.valueOf("0001-12-30 10:15:30"),
-//          Date.valueOf("0001-03-01")
-//        )
-//      )
-//    )
-//
-//    val schema = StructType(List(
-//      StructField("TIMESTAMP_COL", TimestampType, true),
-//      StructField("DATE_COL", DateType, true)
-//    ))
-//
-//    val df = sparkSession.createDataFrame(data, schema)
-//
-//    df.show()
-//
-//    df.write
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(connectorOptionsNoTable)
-//      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-//      .option("dbtable", test_parquet_table)
-//      .mode(SaveMode.Overwrite)
-//      .save()
-//
-//
-////      sparkSession.read
-////        .parquet("output.parquet").show()
-//    val newDf = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(connectorOptionsNoTable)
-//      .option("dbtable", test_parquet_table)
-//      .load()
-//    newDf.show()
-//
-//  }
 }
