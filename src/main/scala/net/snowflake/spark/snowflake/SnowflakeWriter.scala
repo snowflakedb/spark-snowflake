@@ -87,7 +87,22 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         params.setColumnMap(Option(data.schema), toSchema)
       } finally conn.close()
     } else if (params.columnMap.isDefined){
-      // TODO: check if map is legal
+      val conn = jdbcWrapper.getConnector(params)
+      try {
+        val toSchema = Utils.removeQuote(
+            jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+          )
+        params.columnMap match {
+          case Some(map) =>
+            map.values.foreach{
+              value =>
+                if (!toSchema.fieldNames.contains(value)){
+                  throw new IllegalArgumentException(
+                    s"Column with name $value does not match any column in snowflake table")
+                }
+            }
+        }
+      } finally conn.close()
     }
 
     val output: DataFrame = removeUselessColumns(data, params)

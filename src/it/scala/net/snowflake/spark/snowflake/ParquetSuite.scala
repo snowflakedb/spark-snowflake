@@ -1,11 +1,11 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
+import net.snowflake.spark.snowflake.Utils.{SNOWFLAKE_SOURCE_NAME, SNOWFLAKE_SOURCE_SHORT_NAME}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, SQLException, Timestamp}
 import scala.collection.Seq
 import scala.util.Random
 
@@ -263,7 +263,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       val df = sparkSession
         .createDataFrame(
           sparkSession.sparkContext.parallelize(
-            Seq(
+            List(
               Row("ab c", Array(1, 2, 3)),
               Row(" a bc", Array(2, 2, 3)),
               Row("abdc  ", Array(3, 2, 3))
@@ -349,5 +349,58 @@ class ParquetSuite extends IntegrationSuiteBase {
         Date.valueOf("0001-03-01")
       )
     ))
+  }
+
+  test("Test columnMap") {
+    jdbcUpdate(
+      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+    )
+
+
+    val schema = StructType(List(
+      StructField("UPPER_CLASS_COL", IntegerType, true),
+      StructField("lower_class_col", IntegerType, true),
+      StructField("Mix_Class_Col", IntegerType, true),
+    ))
+    val data: RDD[Row] = sc.makeRDD(
+      List(Row(1, 2, 3))
+    )
+    val df = sparkSession.createDataFrame(data, schema)
+
+    // throw exception because only support SaveMode.Append
+    assertThrows[UnsupportedOperationException] {
+      df.write
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+        .option("dbtable", test_parquet_column_map)
+        .option("columnmap", Map("UPPER_CLASS_COL" -> "ONE", "lower_class_col" -> "FOUR").toString())
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+
+    // throw exception because "aaa" is not a column name of DF
+    assertThrows[IllegalArgumentException] {
+      df.write
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+        .option("dbtable", test_parquet_column_map)
+        .option("columnmap", Map("aaa" -> "ONE", "Mix_Class_Col" -> "FOUR").toString())
+        .mode(SaveMode.Append)
+        .save()
+    }
+
+    // throw exception because "AAA" is not a column name of table in snowflake database
+    assertThrows[IllegalArgumentException] {
+      df.write
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+        .option("dbtable", test_parquet_column_map)
+        .option("columnmap", Map("UPPER_CLASS_COL" -> "AAA", "Mix_Class_Col" -> "FOUR").toString())
+        .mode(SaveMode.Append)
+        .save()
+    }
   }
 }
