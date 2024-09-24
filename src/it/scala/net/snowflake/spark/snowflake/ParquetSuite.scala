@@ -71,7 +71,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+      Row(1, "string value", 123456789, 123.45, 123.449996948,
         true, BigDecimal("12345.6789").bigDecimal.setScale(10),
         """["one","two","three"]""".stripMargin,
         """[1,2,3]""".stripMargin,
@@ -136,7 +136,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+      Row(1, "string value", 123456789, 123.45, 123.449996948,
         true, BigDecimal("12345.6789").bigDecimal,
         """[
           |  "one",
@@ -153,7 +153,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       ),
-      Row(2, "another string", 123456789, 123.45, 123.44999694824219,
+      Row(2, "another string", 123456789, 123.45, 123.449996948,
         false, BigDecimal("12345.6789").bigDecimal,
         """[
           |  "one",
