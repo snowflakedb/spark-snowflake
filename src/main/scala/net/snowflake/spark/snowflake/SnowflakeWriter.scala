@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.snowflakeStyleSchema
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
+import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
 import net.snowflake.spark.snowflake.Utils.ensureUnquoted
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -30,6 +31,8 @@ import org.apache.avro.generic.GenericData
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.slf4j.LoggerFactory
 
 import java.nio.ByteBuffer
 import java.time.{LocalDate, ZoneId, ZoneOffset}
@@ -171,9 +174,12 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                 case (decimal: java.math.BigDecimal, name) =>
                   record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
                 case (timestamp: java.sql.Timestamp, name) =>
-                  record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
+                  record.put(name, TimeUnit.MICROSECONDS.toSeconds(
+                    RebaseDateTime.rebaseJulianToGregorianMicros(
+                      TimeUnit.MILLISECONDS.toMicros(timestamp.getTime))))
                 case (date: java.sql.Date, name) =>
-                  record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime + 1))
+                  record.put(name, RebaseDateTime.
+                    rebaseJulianToGregorianDays(TimeUnit.MILLISECONDS.toDays(date.getTime).toInt))
                 case (date: java.time.LocalDateTime, name) =>
                   record.put(name, date.toEpochSecond(ZoneOffset.UTC))
                 case (value, name) => record.put(name, value)
