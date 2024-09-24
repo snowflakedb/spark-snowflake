@@ -17,22 +17,22 @@
 
 package net.snowflake.spark.snowflake
 
+import scala.collection.JavaConverters._
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
-import net.snowflake.client.jdbc.internal.software.amazon.ion.impl.PrivateScalarConversions.ValueNotSetException
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.snowflakeStyleSchema
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.Utils.ensureUnquoted
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
 
 import java.nio.ByteBuffer
-import java.time.ZoneOffset
+import java.time.{LocalDate, ZoneId, ZoneOffset}
 import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
@@ -122,6 +122,47 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     }
   }
 
+  def mapColumn1(schema: StructType,
+                params: MergedParameters
+               ): StructType = {
+    params.columnMap match {
+      case Some(map) =>
+        StructType(schema.map {
+          sparkField =>
+            StructField(
+              map.getOrElse(sparkField.name, sparkField.name),
+              sparkField.dataType match {
+                case datatype: StructType =>
+                  mapColumn(datatype, params)
+                case _ =>
+                  sparkField.dataType
+              },
+              sparkField.nullable,
+              sparkField.metadata
+            )
+        })
+      case _ =>
+        val newSchema = snowflakeStyleSchema(schema, params)
+        StructType(newSchema.map {
+          sparkField =>
+            StructField(
+              // unquote field name because avro does not allow quote in field name
+              ensureUnquoted(sparkField.name),
+              sparkField.dataType match {
+                case datatype: StructType =>
+                  mapColumn(datatype, params)
+                case _ =>
+                  sparkField.dataType
+              },
+              sparkField.nullable,
+              sparkField.metadata
+            )
+        })
+    }
+  }
+
+
+
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
@@ -132,24 +173,61 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     format match {
       case SupportedFormat.PARQUET =>
         val snowflakeStyleSchema = mapColumn(data.schema, params)
+        val testVal = mapColumn1(data.schema, params)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
-        val colNames = snowflakeStyleSchema.names
         data.rdd.map (row => {
-          val record = new GenericData.Record(schema)
-          row.toSeq.zip(colNames).foreach {
-            case (arr: mutable.WrappedArray[Any], name) =>
-              record.put(name, arr.toArray)
-            case (decimal: java.math.BigDecimal, name) =>
-              record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
-            case (date: java.time.LocalDateTime, name) =>
-              record.put(name, date.toEpochSecond(ZoneOffset.UTC))
-            case (timestamp: java.sql.Timestamp, name) =>
-              record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
-            case (date: java.sql.Date, name) =>
-              record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
-            case (value, name) => record.put(name, value)
-          }
-          record
+//          val record = new GenericData.Record(schema)
+//          row.toSeq.zip(snowflakeStyleSchema.names).foreach {
+//            case (map: scala.collection.immutable.Map[Any, Any], name) =>
+//              record.put(name, map.asJava)
+//            case (str: String, name) =>
+//              record.put(name, if (params.trimSpace) str.trim else str)
+//            case (arr: mutable.WrappedArray[Any], name) =>
+//              record.put(name, arr.toArray)
+//            case (decimal: java.math.BigDecimal, name) =>
+//              record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
+//            case (date: java.time.LocalDateTime, name) =>
+//              record.put(name, date.toEpochSecond(ZoneOffset.UTC))
+//            case (timestamp: java.sql.Timestamp, name) =>
+//              record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
+//            case (date: java.sql.Date, name) =>
+//              record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
+//            case (value, name) => record.put(name, value)
+//          }
+//          record
+            def rowToAvroRecord(row: Row,
+                                schema: Schema,
+                                snowflakeStyleSchema: StructType,
+                                params: MergedParameters): GenericData.Record = {
+              val record = new GenericData.Record(schema)
+              row.toSeq.zip(snowflakeStyleSchema.names).foreach {
+                case (row: Row, name) =>
+                  record.put(name,
+                    rowToAvroRecord(
+                      row,
+                      schema.getField(name).schema().getTypes.get(0),
+                      snowflakeStyleSchema(name).dataType.asInstanceOf[StructType],
+                      params
+                    ))
+                case (map: scala.collection.immutable.Map[Any, Any], name) =>
+                  record.put(name, map.asJava)
+                case (str: String, name) =>
+                  record.put(name, if (params.trimSpace) str.trim else str)
+                case (arr: mutable.WrappedArray[Any], name) =>
+                  record.put(name, arr.toArray)
+                case (decimal: java.math.BigDecimal, name) =>
+                  record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
+                case (timestamp: java.sql.Timestamp, name) =>
+                  record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
+                case (date: java.sql.Date, name) =>
+                  record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
+                case (date: java.time.LocalDateTime, name) =>
+                  record.put(name, date.toEpochSecond(ZoneOffset.UTC))
+                case (value, name) => record.put(name, value)
+              }
+              record
+            }
+          rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
         })
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)

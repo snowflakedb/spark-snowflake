@@ -3,7 +3,7 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 
 import java.sql.{Date, Timestamp}
 import scala.collection.Seq
@@ -32,6 +32,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           BigDecimal("12345.6789").bigDecimal,
           Array("one", "two", "three"),
           Array(1, 2, 3),
+          Map("a" -> 1),
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
         )
@@ -49,6 +50,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("ARRAY_STRING_FIELD",
         ArrayType(StringType, containsNull = true), nullable = true),
       StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("MAP", MapType(StringType, IntegerType), nullable = false),
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
@@ -77,16 +79,9 @@ class ParquetSuite extends IntegrationSuiteBase {
         123.44999694824219,
         true,
         BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
+        """["one","two","three"]""",
+        """[1,2,3]""",
+        """{"a":1}""",
         Timestamp.valueOf("2023-09-16 10:15:30"),
         Date.valueOf("2023-01-01")
       )
@@ -102,6 +97,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           BigDecimal("12345.6789").bigDecimal,
           Array("one", "two", "three"),
           Array(1, 2, 3),
+          Map("a" -> 1),
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
         ),
@@ -109,6 +105,7 @@ class ParquetSuite extends IntegrationSuiteBase {
           BigDecimal("12345.6789").bigDecimal,
           Array("one", "two", "three"),
           Array(1, 2, 3),
+          Map("b" -> 2),
           Timestamp.valueOf("2024-09-16 10:15:30"),
           Date.valueOf("2024-01-01")
         )
@@ -126,6 +123,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("ARRAY_STRING_FIELD",
         ArrayType(StringType, containsNull = true), nullable = true),
       StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("MAP", MapType(StringType, IntegerType), nullable = false),
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
@@ -148,30 +146,16 @@ class ParquetSuite extends IntegrationSuiteBase {
     val expectedAnswer = List(
       Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
+        """["one","two","three"]""",
+        """[1,2,3]""",
+        """{"a":1}""",
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       ),
       Row(2, "another string", 123456789, 123.45, 123.44999694824219,
         false, BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
+        """["one","two","three"]""",
+        """[1,2,3]""",
+        """{"b":2}""",
         Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
       )
     )
@@ -244,4 +228,48 @@ class ParquetSuite extends IntegrationSuiteBase {
     assert(newDf.schema.map(field => field.name)
       .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
   }
+
+//  test("test date time"){
+//    sparkSession.read.parquet("0.parquet").show()
+//    val data: RDD[Row] = sc.makeRDD(
+//      List(
+//        Row(
+//          Timestamp.valueOf("0001-12-30 10:15:30"),
+//          Date.valueOf("0001-01-01")
+//        )
+//      )
+//    )
+//
+//    val schema = StructType(List(
+//      StructField("TIMESTAMP_COL", TimestampType, true),
+//      StructField("DATE_COL", DateType, true)
+//    ))
+//    val df = sparkSession.createDataFrame(data, schema)
+//
+//    df.show()
+//    df.write
+//      .format(SNOWFLAKE_SOURCE_NAME)
+//      .options(connectorOptionsNoTable)
+//      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+//      .option("dbtable", test_parquet_table)
+//      .mode(SaveMode.Overwrite)
+//      .save()
+//
+//
+//    val newDf = sparkSession.read
+//      .format(SNOWFLAKE_SOURCE_NAME)
+//      .options(connectorOptionsNoTable)
+//      .option("dbtable", test_parquet_table)
+//      .load()
+//
+//    val expectedAnswer = List(
+//      Row(
+//        Timestamp.valueOf("2023-09-16 10:15:30"),
+//        Date.valueOf("2023-01-01")
+//      )
+//    )
+//    newDf.show()
+
+//    checkAnswer(newDf, expectedAnswer)
+//  }
 }
