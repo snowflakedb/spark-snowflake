@@ -351,7 +351,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     ))
   }
 
-  test("Test columnMap") {
+  test("Test columnMap with parquet") {
     jdbcUpdate(
       s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
     )

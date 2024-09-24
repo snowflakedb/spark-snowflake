@@ -86,7 +86,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         )
         params.setColumnMap(Option(data.schema), toSchema)
       } finally conn.close()
-    } else if (params.columnMap.isDefined){
+    } else if (params.columnMap.isDefined && params.useParquetInWrite()){
       val conn = jdbcWrapper.getConnector(params)
       try {
         val toSchema = Utils.removeQuote(
@@ -96,7 +96,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           case Some(map) =>
             map.values.foreach{
               value =>
-                if (!toSchema.fieldNames.contains(value)){
+                if (!toSchema.fieldNames.contains(value) &&
+                  !toSchema.fieldNames.contains(value.toUpperCase)){
                   throw new IllegalArgumentException(
                     s"Column with name $value does not match any column in snowflake table")
                 }
