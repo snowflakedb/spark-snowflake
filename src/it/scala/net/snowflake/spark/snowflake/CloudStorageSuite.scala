@@ -20,7 +20,6 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
-
 // scalastyle:off println
 class CloudStorageSuite extends IntegrationSuiteBase {
 
