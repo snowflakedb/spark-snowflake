@@ -72,14 +72,13 @@ class ParquetSuite extends IntegrationSuiteBase {
 
     val expectedAnswer = List(
       Row(1, "string value", 123456789, 123.45, 123.44999694824219,
-        true, BigDecimal("12345.6789").bigDecimal,
+        true, BigDecimal("12345.6789").bigDecimal.setScale(10),
         """["one","two","three"]""".stripMargin,
         """[1,2,3]""".stripMargin,
         """{"a":1}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       )
     )
-
     checkAnswer(newDf, expectedAnswer)
   }
 
