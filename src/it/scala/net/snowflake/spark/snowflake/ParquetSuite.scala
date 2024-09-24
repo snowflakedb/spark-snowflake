@@ -71,19 +71,22 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(
-        1,
-        "string value",
-        123456789,
-        123.45,
-        123.44999694824219,
-        true,
-        BigDecimal("12345.6789").bigDecimal,
-        """["one","two","three"]""",
-        """[1,2,3]""",
-        """{"a":1}""",
-        Timestamp.valueOf("2023-09-16 10:15:30"),
-        Date.valueOf("2023-01-01")
+      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+        true, BigDecimal("12345.6789").bigDecimal,
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        """{
+          |  "a": 1
+          |}""".stripMargin,
+        Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       )
     )
 
@@ -146,16 +149,36 @@ class ParquetSuite extends IntegrationSuiteBase {
     val expectedAnswer = List(
       Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal,
-        """["one","two","three"]""",
-        """[1,2,3]""",
-        """{"a":1}""",
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        """{
+          |  "a": 1
+          |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       ),
       Row(2, "another string", 123456789, 123.45, 123.44999694824219,
         false, BigDecimal("12345.6789").bigDecimal,
-        """["one","two","three"]""",
-        """[1,2,3]""",
-        """{"b":2}""",
+        """[
+          |  "one",
+          |  "two",
+          |  "three"
+          |]""".stripMargin,
+        """[
+          |  1,
+          |  2,
+          |  3
+          |]""".stripMargin,
+        """{
+          |  "b": 2
+          |}""".stripMargin,
         Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
       )
     )
@@ -230,7 +253,8 @@ class ParquetSuite extends IntegrationSuiteBase {
   }
 
 //  test("test date time"){
-//    sparkSession.read.parquet("0.parquet").show()
+//
+//
 //    val data: RDD[Row] = sc.makeRDD(
 //      List(
 //        Row(
@@ -250,18 +274,25 @@ class ParquetSuite extends IntegrationSuiteBase {
 //    df.write
 //      .format(SNOWFLAKE_SOURCE_NAME)
 //      .options(connectorOptionsNoTable)
+//      .option("datetimeRebaseMode", "CORRECTED")
 //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
 //      .option("dbtable", test_parquet_table)
 //      .mode(SaveMode.Overwrite)
 //      .save()
-//
-//
+
+//      sparkSession.read
+//        .option("datetimeRebaseMode", "LEGACY")
+//        .parquet("output.parquet").show()
+//      sparkSession.read
+//        .option("datetimeRebaseMode", "CORRECTED")
+//        .parquet("output.parquet").show()
 //    val newDf = sparkSession.read
 //      .format(SNOWFLAKE_SOURCE_NAME)
+//      .option("datetimeRebaseMode", "CORRECTED")
 //      .options(connectorOptionsNoTable)
 //      .option("dbtable", test_parquet_table)
 //      .load()
-//
+
 //    val expectedAnswer = List(
 //      Row(
 //        Timestamp.valueOf("2023-09-16 10:15:30"),
@@ -271,5 +302,5 @@ class ParquetSuite extends IntegrationSuiteBase {
 //    newDf.show()
 
 //    checkAnswer(newDf, expectedAnswer)
-//  }
+  }
 }

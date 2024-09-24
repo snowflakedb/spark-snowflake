@@ -173,28 +173,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     format match {
       case SupportedFormat.PARQUET =>
         val snowflakeStyleSchema = mapColumn(data.schema, params)
-        val testVal = mapColumn1(data.schema, params)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
         data.rdd.map (row => {
-//          val record = new GenericData.Record(schema)
-//          row.toSeq.zip(snowflakeStyleSchema.names).foreach {
-//            case (map: scala.collection.immutable.Map[Any, Any], name) =>
-//              record.put(name, map.asJava)
-//            case (str: String, name) =>
-//              record.put(name, if (params.trimSpace) str.trim else str)
-//            case (arr: mutable.WrappedArray[Any], name) =>
-//              record.put(name, arr.toArray)
-//            case (decimal: java.math.BigDecimal, name) =>
-//              record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
-//            case (date: java.time.LocalDateTime, name) =>
-//              record.put(name, date.toEpochSecond(ZoneOffset.UTC))
-//            case (timestamp: java.sql.Timestamp, name) =>
-//              record.put(name, TimeUnit.MILLISECONDS.toSeconds(timestamp.getTime))
-//            case (date: java.sql.Date, name) =>
-//              record.put(name, TimeUnit.MILLISECONDS.toDays(date.getTime))
-//            case (value, name) => record.put(name, value)
-//          }
-//          record
             def rowToAvroRecord(row: Row,
                                 schema: Schema,
                                 snowflakeStyleSchema: StructType,
