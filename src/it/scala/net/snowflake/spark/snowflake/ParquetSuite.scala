@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 
 import java.sql.{Date, Timestamp}
@@ -73,19 +73,9 @@ class ParquetSuite extends IntegrationSuiteBase {
     val expectedAnswer = List(
       Row(1, "string value", 123456789, 123.45, 123.44999694824219,
         true, BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
-        """{
-          |  "a": 1
-          |}""".stripMargin,
+        """["one","two","three"]""".stripMargin,
+        """[1,2,3]""".stripMargin,
+        """{"a":1}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       )
     )
@@ -259,7 +249,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 //      List(
 //        Row(
 //          Timestamp.valueOf("0001-12-30 10:15:30"),
-//          Date.valueOf("0001-01-01")
+//          Date.valueOf("0001-03-01")
 //        )
 //      )
 //    )
@@ -268,39 +258,28 @@ class ParquetSuite extends IntegrationSuiteBase {
 //      StructField("TIMESTAMP_COL", TimestampType, true),
 //      StructField("DATE_COL", DateType, true)
 //    ))
+//
 //    val df = sparkSession.createDataFrame(data, schema)
 //
 //    df.show()
+//
 //    df.write
 //      .format(SNOWFLAKE_SOURCE_NAME)
 //      .options(connectorOptionsNoTable)
-//      .option("datetimeRebaseMode", "CORRECTED")
 //      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
 //      .option("dbtable", test_parquet_table)
 //      .mode(SaveMode.Overwrite)
 //      .save()
-
-//      sparkSession.read
-//        .option("datetimeRebaseMode", "LEGACY")
-//        .parquet("output.parquet").show()
-//      sparkSession.read
-//        .option("datetimeRebaseMode", "CORRECTED")
-//        .parquet("output.parquet").show()
+//
+//
+////      sparkSession.read
+////        .parquet("output.parquet").show()
 //    val newDf = sparkSession.read
 //      .format(SNOWFLAKE_SOURCE_NAME)
-//      .option("datetimeRebaseMode", "CORRECTED")
 //      .options(connectorOptionsNoTable)
 //      .option("dbtable", test_parquet_table)
 //      .load()
-
-//    val expectedAnswer = List(
-//      Row(
-//        Timestamp.valueOf("2023-09-16 10:15:30"),
-//        Date.valueOf("2023-01-01")
-//      )
-//    )
 //    newDf.show()
-
-//    checkAnswer(newDf, expectedAnswer)
+//
 //  }
 }
