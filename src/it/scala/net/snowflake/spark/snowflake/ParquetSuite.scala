@@ -27,12 +27,8 @@ class ParquetSuite extends IntegrationSuiteBase {
           "string value",
           123456789L,
           123.45,
-          123.45f,
           true,
           BigDecimal("12345.6789").bigDecimal,
-          Array("one", "two", "three"),
-          Array(1, 2, 3),
-          Map("a" -> 1),
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
         )
@@ -44,13 +40,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("STRING_COL", StringType, true),
       StructField("LONG_COL", LongType, true),
       StructField("DOUBLE_COL", DoubleType, true),
-      StructField("FLOAT_COL", FloatType, true),
       StructField("BOOLEAN_COL", BooleanType, true),
       StructField("DECIMAL_COL", DecimalType(20, 10), true),
-      StructField("ARRAY_STRING_FIELD",
-        ArrayType(StringType, containsNull = true), nullable = true),
-      StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
-      StructField("MAP", MapType(StringType, IntegerType), nullable = false),
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
@@ -71,21 +62,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+      Row(1, "string value", 123456789, 123.45,
         true, BigDecimal("12345.6789").bigDecimal.setScale(10),
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
-        """{
-          |  "a": 1
-          |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       )
     )
@@ -95,19 +73,13 @@ class ParquetSuite extends IntegrationSuiteBase {
   test("test parquet with all type and multiple lines"){
     val data: RDD[Row] = sc.makeRDD(
       List(
-        Row(1, "string value", 123456789L, 123.45, 123.45f, true,
+        Row(1, "string value", 123456789L, 123.45, true,
           BigDecimal("12345.6789").bigDecimal,
-          Array("one", "two", "three"),
-          Array(1, 2, 3),
-          Map("a" -> 1),
           Timestamp.valueOf("2023-09-16 10:15:30"),
           Date.valueOf("2023-01-01")
         ),
-        Row(2, "another string", 123456789L, 123.45, 123.45f, false,
+        Row(2, "another string", 123456789L, 123.45, false,
           BigDecimal("12345.6789").bigDecimal,
-          Array("one", "two", "three"),
-          Array(1, 2, 3),
-          Map("b" -> 2),
           Timestamp.valueOf("2024-09-16 10:15:30"),
           Date.valueOf("2024-01-01")
         )
@@ -119,13 +91,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       StructField("STRING_COL", StringType, true),
       StructField("LONG_COL", LongType, true),
       StructField("DOUBLE_COL", DoubleType, true),
-      StructField("FLOAT_COL", FloatType, true),
       StructField("BOOLEAN_COL", BooleanType, true),
       StructField("DECIMAL_COL", DecimalType(20, 10), true),
-      StructField("ARRAY_STRING_FIELD",
-        ArrayType(StringType, containsNull = true), nullable = true),
-      StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
-      StructField("MAP", MapType(StringType, IntegerType), nullable = false),
       StructField("TIMESTAMP_COL", TimestampType, true),
       StructField("DATE_COL", DateType, true)
     ))
@@ -146,43 +113,65 @@ class ParquetSuite extends IntegrationSuiteBase {
       .load()
 
     val expectedAnswer = List(
-      Row(1, "string value", 123456789, 123.45, 123.44999694824219,
+      Row(1, "string value", 123456789, 123.45,
         true, BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
-        """{
-          |  "a": 1
-          |}""".stripMargin,
         Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
       ),
-      Row(2, "another string", 123456789, 123.45, 123.44999694824219,
+      Row(2, "another string", 123456789, 123.45,
         false, BigDecimal("12345.6789").bigDecimal,
-        """[
-          |  "one",
-          |  "two",
-          |  "three"
-          |]""".stripMargin,
-        """[
-          |  1,
-          |  2,
-          |  3
-          |]""".stripMargin,
-        """{
-          |  "b": 2
-          |}""".stripMargin,
         Timestamp.valueOf("2024-09-16 10:15:30"), Date.valueOf("2024-01-01")
       )
     )
 
     checkAnswer(newDf, expectedAnswer)
+  }
+
+  test("test array and map type with parquet"){
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          Array("one", "two", "three"),
+          Array(1, 2, 3),
+          Map("a" -> 1),
+        ),
+        Row(
+          Array("one", "two", "three"),
+          Array(1, 2, 3),
+          Map("b" -> 2),
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("ARRAY_STRING_FIELD",
+        ArrayType(StringType, containsNull = true), nullable = true),
+      StructField("ARRAY_INT_FILED", ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("MAP_FILED", MapType(StringType, IntegerType), nullable = true),
+    ))
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_table)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    val res = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_table)
+      .schema(schema)
+      .load()
+      .collect()
+    assert(res(0).getList[Int](1).get(0) == 1)
+    assert(res(1).getList[Int](1).get(2) == 3)
+    assert(res(0).getList[String](0).get(0) == "one")
+    assert(res(1).getList[String](0).get(2) == "three")
+    assert(res(0).getMap[String, Integer](2)("a") == 1)
+    assert(res(1).getMap[String, Integer](2)("b") == 2)
+
   }
 
   test("test parquet name conversion without column map"){

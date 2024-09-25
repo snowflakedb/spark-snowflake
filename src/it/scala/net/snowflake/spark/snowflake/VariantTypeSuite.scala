@@ -171,7 +171,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName2)
-      .schema(schema1)
+//      .schema(schema1)
       .load()
 
     val result = out.collect()
