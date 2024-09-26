@@ -202,6 +202,42 @@ class ParquetSuite extends IntegrationSuiteBase {
     checkAnswer(newDf, List(Row(1, 2, 3)))
   }
 
+  test("test parquet name conversion with column map by name"){
+    jdbcUpdate(
+      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+    )
+
+
+    val schema = StructType(List(
+      StructField("TWO", IntegerType, true),
+      StructField("ONE", IntegerType, true),
+      StructField("FOUR", IntegerType, true),
+      StructField("THREE", IntegerType, true),
+    ))
+    val data: RDD[Row] = sc.makeRDD(
+      List(Row(1, 2, 3, 4))
+    )
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_column_map)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("column_mapping", "name")
+      .mode(SaveMode.Append)
+      .save()
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_column_map)
+      .load()
+
+    checkAnswer(newDf, List(Row(2, 1, 4, 3)))
+    assert(newDf.schema.map(field => field.name)
+      .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
+  }
+
   test("test parquet name conversion with column map"){
     jdbcUpdate(
       s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"

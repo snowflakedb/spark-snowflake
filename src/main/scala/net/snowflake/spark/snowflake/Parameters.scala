@@ -27,6 +27,8 @@ import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.mutable
+
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
   * defaults.
@@ -426,59 +428,59 @@ object Parameters {
 
     private var generatedColumnMap: Option[Map[String, String]] = None
 
-    var filteredToSnowflakeColumnMap: Map[String, String] = Map()
-    var snowfalkeToFilteredColumnMap: Map[String, String] = Map()
-    var snowflakeTableSchema: StructType = _
+    private[snowflake] val stagingToSnowflakeColumnMap: mutable.Map[String, String] = mutable.Map()
+    private[snowflake] val snowflakeToStagingColumnMap: mutable.Map[String, String] = mutable.Map()
+    private[snowflake] var snowflakeTableSchema: StructType = _
 
     def setSnowflakeTableSchema(schema: StructType): Unit = {
       snowflakeTableSchema = schema
     }
 
-    def getSnowflakeTableSchema(): StructType = {
+    def getSnowflakeTableSchema: StructType = {
       snowflakeTableSchema
     }
 
     def replaceSpecialCharacter(name: String): String = {
-      var res = name.replaceAll("[^a-zA-Z0-9_]", "_")
-      while(filteredToSnowflakeColumnMap.contains(res)){
+      var res = name.replaceAll("(^\\d|[^a-zA-Z0-9_])", "_")
+      while(stagingToSnowflakeColumnMap.contains(res)){
         res += "_"
       }
       res = res.toUpperCase
-      snowfalkeToFilteredColumnMap += (name -> res)
-      filteredToSnowflakeColumnMap += (res -> name)
+      snowflakeToStagingColumnMap += (name -> res)
+      stagingToSnowflakeColumnMap += (res -> name)
       res
     }
 
-    def toFiltered(schema: StructType): StructType = {
-      StructType(schema.map {
-        sparkField =>
+    def toStagingSchema(snowflakeSchema: StructType): StructType = {
+      StructType(snowflakeSchema.map {
+        case StructField(name, dataType, nullable, metadata) =>
           StructField(
-            snowfalkeToFilteredColumnMap.getOrElse(sparkField.name, sparkField.name),
-            sparkField.dataType match {
+            snowflakeToStagingColumnMap.getOrElse(name, name),
+            dataType match {
               case datatype: StructType =>
-                toFiltered(datatype)
+                toStagingSchema(datatype)
               case _ =>
-                sparkField.dataType
+                dataType
             },
-            sparkField.nullable,
-            sparkField.metadata
+            nullable,
+            metadata
           )
       })
     }
 
-    def toSnowflakeStyle(schema: StructType): StructType = {
-      StructType(schema.map {
-        sparkField =>
+    def toSnowflakeSchema(stagingSchema: StructType): StructType = {
+      StructType(stagingSchema.map {
+        case StructField(name, dataType, nullable, metadata) =>
           StructField(
-            filteredToSnowflakeColumnMap.getOrElse(sparkField.name, sparkField.name),
-            sparkField.dataType match {
+            stagingToSnowflakeColumnMap.getOrElse(name, name),
+            dataType match {
               case datatype: StructType =>
-                toSnowflakeStyle(datatype)
+                toSnowflakeSchema(datatype)
               case _ =>
-                sparkField.dataType
+                dataType
             },
-            sparkField.nullable,
-            sparkField.metadata
+            nullable,
+            metadata
           )
       })
     }

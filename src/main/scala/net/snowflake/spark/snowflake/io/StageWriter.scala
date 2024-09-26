@@ -400,7 +400,7 @@ private[io] object StageWriter {
         getStageTableName(table.name)
       }
     )
-
+    assert(!params.useParquetInWrite() || params.useStagingTable)
     val targetTable =
       if ((saveMode == SaveMode.Overwrite && params.useStagingTable) ||
       params.useParquetInWrite()) {
@@ -427,16 +427,16 @@ private[io] object StageWriter {
         } else if (tableExists){
           conn.createTableSelectFrom(
             tempTable.name,
-            params.toFiltered(params.getSnowflakeTableSchema()),
+            params.toStagingSchema(params.getSnowflakeTableSchema),
             table.name,
-            params.getSnowflakeTableSchema(),
+            params.getSnowflakeTableSchema,
             params,
             overwrite = true,
             temporary = false
           )
         } else if (!tableExists){
           conn.createTable(targetTable.name,
-            params.toFiltered(params.getSnowflakeTableSchema()), params,
+            schema, params,
             overwrite = false, temporary = false)
         }
 
@@ -495,7 +495,7 @@ private[io] object StageWriter {
         if (params.useParquetInWrite()){
           conn.createTableSelectFrom(
             relayTable.name,
-            params.toSnowflakeStyle(schema),
+            params.toSnowflakeSchema(schema),
             targetTable.name,
             schema,
             params,
@@ -515,9 +515,9 @@ private[io] object StageWriter {
         if (params.useParquetInWrite()){
           conn.createTableSelectFrom(
             relayTable.name,
-            params.getSnowflakeTableSchema(),
+            if (tableExists) params.getSnowflakeTableSchema else params.toSnowflakeSchema(schema),
             tempTable.name,
-            params.toFiltered(params.getSnowflakeTableSchema()),
+            if (tableExists) params.toStagingSchema(params.getSnowflakeTableSchema) else schema,
             params,
             overwrite = true,
             temporary = false

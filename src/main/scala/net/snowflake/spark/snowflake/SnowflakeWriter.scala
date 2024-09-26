@@ -106,11 +106,13 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       } finally conn.close()
     }
 
-    if (saveMode != SaveMode.Overwrite){
+    if (params.useParquetInWrite() && saveMode != SaveMode.Overwrite){
       val conn = jdbcWrapper.getConnector(params)
       try{
-        val toSchema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
-        params.setSnowflakeTableSchema(toSchema)
+        if (jdbcWrapper.tableExists(params, params.table.get.name)){
+          val toSchema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+          params.setSnowflakeTableSchema(toSchema)
+        }
       } finally conn.close()
     }
 
@@ -129,34 +131,33 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     params.columnMap match {
       case Some(map) =>
         StructType(schema.map {
-          sparkField =>
+          case StructField(name, dataType, nullable, metadata) =>
             StructField(
-              params.replaceSpecialCharacter(map.getOrElse(sparkField.name, sparkField.name)),
-              sparkField.dataType match {
+              params.replaceSpecialCharacter(map.getOrElse(name, name)),
+              dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params)
                 case _ =>
-                  sparkField.dataType
+                  dataType
               },
-              sparkField.nullable,
-              sparkField.metadata
+              nullable,
+              metadata
             )
         })
       case _ =>
         val newSchema = snowflakeStyleSchema(schema, params)
         StructType(newSchema.map {
-          sparkField =>
+          case StructField(name, dataType, nullable, metadata) =>
             StructField(
-              // unquote field name because avro does not allow quote in field name
-              params.replaceSpecialCharacter(sparkField.name),
-              sparkField.dataType match {
+              params.replaceSpecialCharacter(name),
+              dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params)
                 case _ =>
-                  sparkField.dataType
+                  dataType
               },
-              sparkField.nullable,
-              sparkField.metadata
+              nullable,
+              metadata
             )
         })
     }

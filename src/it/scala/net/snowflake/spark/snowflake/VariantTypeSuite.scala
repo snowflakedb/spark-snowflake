@@ -255,8 +255,8 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       val result = out.collect()
       assert(result.length == 3)
 
-      val bin = new String(result(0).get(0).asInstanceOf[Array[Byte]])
-      assert(bin.equals("binary1"))
+      val bin = result(0).get(0).asInstanceOf[Array[Byte]]
+      assert(new String(bin).equals("binary1"))
       assert(result(0).getList[Int](1).get(0) == 1)
       assert(result(1).getList[Int](1).get(1) == 5)
       assert(result(2).getList[Int](1).get(2) == 9)
