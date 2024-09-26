@@ -12,6 +12,7 @@ import scala.util.Random
 class ParquetSuite extends IntegrationSuiteBase {
   val test_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_parquet_column_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_special_character: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     runSql(s"drop table if exists $test_parquet_table")
@@ -378,6 +379,51 @@ class ParquetSuite extends IntegrationSuiteBase {
       )
     ))
     assert(newDf.schema.fieldNames.contains("\"timestamp.()col\""))
+  }
+
+  test("test parquet with special character to existing table"){
+    jdbcUpdate(
+      s"""create or replace table $test_special_character
+         |("timestamp1.()col" timestamp, "date1.()col" date)""".stripMargin
+    )
+
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          Timestamp.valueOf("0001-12-30 10:15:30"),
+          Date.valueOf("0001-03-01")
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("\"timestamp1.()col\"", TimestampType, true),
+      StructField("date1.()col", DateType, true)
+    ))
+
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_special_character)
+      .mode(SaveMode.Append)
+      .save()
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_special_character)
+      .load()
+    newDf.show()
+
+    checkAnswer(newDf, List(
+      Row(
+        Timestamp.valueOf("0001-12-30 10:15:30"),
+        Date.valueOf("0001-03-01")
+      )
+    ))
+    assert(newDf.schema.fieldNames.contains("\"timestamp1.()col\""))
   }
 
   test("Test columnMap with parquet") {

@@ -426,7 +426,7 @@ private[io] object StageWriter {
             overwrite = false, temporary = false)
         } else if (tableExists){
           conn.createTableSelectFrom(
-            targetTable.name,
+            tempTable.name,
             params.toFiltered(params.getSnowflakeTableSchema()),
             table.name,
             params.getSnowflakeTableSchema(),
@@ -434,7 +434,12 @@ private[io] object StageWriter {
             overwrite = true,
             temporary = false
           )
+        } else if (!tableExists){
+          conn.createTable(targetTable.name,
+            params.toFiltered(params.getSnowflakeTableSchema()), params,
+            overwrite = false, temporary = false)
         }
+
       } else {
         // purge tables when overwriting
         if (saveMode == SaveMode.Overwrite && tableExists) {

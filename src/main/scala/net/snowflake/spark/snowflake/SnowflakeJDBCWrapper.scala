@@ -413,10 +413,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                               temporary: Boolean,
                               bindVariableEnabled: Boolean = true): Unit = {
       val columnNames = snowflakeStyleSchema(stagingTableSchema, params).fields
-        .map(field => {
-          val name: String = field.name
-          s"""$name"""
-        })
+        .map(_.name)
         .mkString(",")
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +

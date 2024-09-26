@@ -92,7 +92,6 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         val toSchema = Utils.removeQuote(
             jdbcWrapper.resolveTable(conn, params.table.get.name, params)
           )
-        params.setSnowflakeTableSchema(toSchema)
         params.columnMap match {
           case Some(map) =>
             map.values.foreach{
@@ -107,9 +106,18 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       } finally conn.close()
     }
 
+    if (saveMode != SaveMode.Overwrite){
+      val conn = jdbcWrapper.getConnector(params)
+      try{
+        val toSchema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+        params.setSnowflakeTableSchema(toSchema)
+      } finally conn.close()
+    }
+
+
     val output: DataFrame = removeUselessColumns(data, params)
-    val strRDDAndSchema = dataFrameToRDD(sqlContext, output, params, format)
-    io.writeRDD(sqlContext, params, strRDDAndSchema._1, strRDDAndSchema._2, saveMode, format)
+    val (strRDD, schema) = dataFrameToRDD(sqlContext, output, params, format)
+    io.writeRDD(sqlContext, params, strRDD, schema, saveMode, format)
   }
 
   /**
@@ -229,7 +237,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           )
         })
         (spark.createDataFrame(newData, newSchema)
-          .toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]], newSchema)
+          .toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]], data.schema)
     }
   }
 
