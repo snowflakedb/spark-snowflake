@@ -116,12 +116,7 @@ private[snowflake] class JDBCWrapper {
   def schemaString(schema: StructType, param: MergedParameters): String = {
       snowflakeStyleSchema(schema, param).fields
       .map(field => {
-        val name: String =
-          if (param.keepOriginalColumnNameCase) {
-            Utils.quotedNameIgnoreCase(field.name)
-          } else {
-            Utils.ensureQuoted(field.name)
-          }
+        val name: String = field.name
         val `type`: String = schemaConversion(field)
         val nullable: String = if (field.nullable) "" else "NOT NULL"
         s"""$name ${`type`} $nullable"""
@@ -407,6 +402,29 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       (ConstantString("create or replace table") + Identifier(newTable) +
         "like" + Identifier(originalTable))
         .execute(bindVariableEnabled)(connection)
+    }
+
+    def createTableSelectFrom(name: String,
+                              schema: StructType,
+                              stagingTableName: String,
+                              stagingTableSchema: StructType,
+                              params: MergedParameters,
+                              overwrite: Boolean,
+                              temporary: Boolean,
+                              bindVariableEnabled: Boolean = true): Unit = {
+      val columnNames = snowflakeStyleSchema(stagingTableSchema, params).fields
+        .map(field => {
+          val name: String = field.name
+          s"""$name"""
+        })
+        .mkString(",")
+      (ConstantString("create") +
+        (if (overwrite) "or replace" else "") +
+        (if (temporary) "temporary" else "") + "table" + Identifier(name) +
+        s"(${schemaString(schema, params)})" +
+        "as select" + s"$columnNames" +
+        "from" + Identifier(stagingTableName)
+        ).execute(bindVariableEnabled)(connection)
     }
 
     def truncateTable(table: String,

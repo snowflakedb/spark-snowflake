@@ -340,6 +340,46 @@ class ParquetSuite extends IntegrationSuiteBase {
     ))
   }
 
+  test("test parquet with special character"){
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          Timestamp.valueOf("0001-12-30 10:15:30"),
+          Date.valueOf("0001-03-01")
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("\"timestamp.()col\"", TimestampType, true),
+      StructField("date.()col", DateType, true)
+    ))
+
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_parquet_table)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_parquet_table)
+      .load()
+    newDf.show()
+
+    checkAnswer(newDf, List(
+      Row(
+        Timestamp.valueOf("0001-12-30 10:15:30"),
+        Date.valueOf("0001-03-01")
+      )
+    ))
+    assert(newDf.schema.fieldNames.contains("\"timestamp.()col\""))
+  }
+
   test("Test columnMap with parquet") {
     jdbcUpdate(
       s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"

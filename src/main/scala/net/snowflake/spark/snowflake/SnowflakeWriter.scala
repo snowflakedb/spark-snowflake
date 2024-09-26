@@ -92,6 +92,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         val toSchema = Utils.removeQuote(
             jdbcWrapper.resolveTable(conn, params.table.get.name, params)
           )
+        params.setSnowflakeTableSchema(toSchema)
         params.columnMap match {
           case Some(map) =>
             map.values.foreach{
@@ -107,8 +108,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     }
 
     val output: DataFrame = removeUselessColumns(data, params)
-    val strRDD = dataFrameToRDD(sqlContext, output, params, format)
-    io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
+    val strRDDAndSchema = dataFrameToRDD(sqlContext, output, params, format)
+    io.writeRDD(sqlContext, params, strRDDAndSchema._1, strRDDAndSchema._2, saveMode, format)
   }
 
   /**
@@ -122,7 +123,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         StructType(schema.map {
           sparkField =>
             StructField(
-              map.getOrElse(sparkField.name, sparkField.name),
+              params.replaceSpecialCharacter(map.getOrElse(sparkField.name, sparkField.name)),
               sparkField.dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params)
@@ -139,7 +140,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           sparkField =>
             StructField(
               // unquote field name because avro does not allow quote in field name
-              ensureUnquoted(sparkField.name),
+              params.replaceSpecialCharacter(sparkField.name),
               sparkField.dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params)
@@ -158,7 +159,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
-                     format: SupportedFormat): RDD[Any] = {
+                     format: SupportedFormat): (RDD[Any], StructType) = {
     val spark = sqlContext.sparkSession
     import spark.implicits._ // for toJson conversion
 
@@ -166,7 +167,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       case SupportedFormat.PARQUET =>
         val snowflakeStyleSchema = mapColumn(data.schema, params)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
-        data.rdd.map (row => {
+        (data.rdd.map (row => {
             def rowToAvroRecord(row: Row,
                                 schema: Schema,
                                 snowflakeStyleSchema: StructType,
@@ -203,17 +204,17 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               record
             }
           rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
-        })
+        }), snowflakeStyleSchema)
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
-        data.rdd.map(row => {
+        (data.rdd.map(row => {
           row.toSeq
             .zip(conversionFunction)
             .map {
               case (element, func) => func(element)
             }
             .mkString("|")
-        })
+        }), data.schema)
       case SupportedFormat.JSON =>
         // convert binary (Array of Byte) to encoded base64 String before COPY
         val newSchema: StructType = prepareSchemaForJson(data.schema)
@@ -227,7 +228,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               }
           )
         })
-        spark.createDataFrame(newData, newSchema).toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]]
+        (spark.createDataFrame(newData, newSchema)
+          .toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]], newSchema)
     }
   }
 

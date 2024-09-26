@@ -20,15 +20,11 @@ package net.snowflake.spark.snowflake
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 import java.util.Properties
-
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{
-  AWSCredentials,
-  BasicSessionCredentials
-}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
 /**
@@ -429,6 +425,63 @@ object Parameters {
   case class MergedParameters(parameters: Map[String, String]) {
 
     private var generatedColumnMap: Option[Map[String, String]] = None
+
+    var filteredToSnowflakeColumnMap: Map[String, String] = Map()
+    var snowfalkeToFilteredColumnMap: Map[String, String] = Map()
+    var snowflakeTableSchema: StructType = _
+
+    def setSnowflakeTableSchema(schema: StructType): Unit = {
+      snowflakeTableSchema = schema
+    }
+
+    def getSnowflakeTableSchema(): StructType = {
+      snowflakeTableSchema
+    }
+
+    def replaceSpecialCharacter(name: String): String = {
+      var res = name.replaceAll("[^a-zA-Z0-9_]", "_")
+      while(filteredToSnowflakeColumnMap.contains(res)){
+        res += "_"
+      }
+      res = res.toUpperCase
+      snowfalkeToFilteredColumnMap += (name -> res)
+      filteredToSnowflakeColumnMap += (res -> name)
+      res
+    }
+
+    def toFiltered(schema: StructType): StructType = {
+      StructType(schema.map {
+        sparkField =>
+          StructField(
+            snowfalkeToFilteredColumnMap.getOrElse(sparkField.name, sparkField.name),
+            sparkField.dataType match {
+              case datatype: StructType =>
+                toFiltered(datatype)
+              case _ =>
+                sparkField.dataType
+            },
+            sparkField.nullable,
+            sparkField.metadata
+          )
+      })
+    }
+
+    def toSnowflakeStyle(schema: StructType): StructType = {
+      StructType(schema.map {
+        sparkField =>
+          StructField(
+            filteredToSnowflakeColumnMap.getOrElse(sparkField.name, sparkField.name),
+            sparkField.dataType match {
+              case datatype: StructType =>
+                toSnowflakeStyle(datatype)
+              case _ =>
+                sparkField.dataType
+            },
+            sparkField.nullable,
+            sparkField.metadata
+          )
+      })
+    }
 
     override def toString: String = {
       "Snowflake Data Source"

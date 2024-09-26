@@ -283,7 +283,7 @@ private[io] object StageWriter {
                            tempStage: String,
                            format: SupportedFormat,
                            fileUploadResults: List[FileUploadResult]): Unit = {
-    if (params.useStagingTable || !params.truncateTable) {
+    if (params.useStagingTable || !params.truncateTable || params.useParquetInWrite()) {
       writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params,
         file, tempStage, format, fileUploadResults)
     } else {
@@ -390,8 +390,20 @@ private[io] object StageWriter {
         getStageTableName(table.name)
       }
     )
+
+    val relayTable = TableName(
+      if (params.stagingTableNameRemoveQuotesOnly) {
+        // NOTE: This is the staging table name generation for SC 2.8.1 and earlier.
+        // It is kept for back-compatibility and it will be removed later without any notice.
+        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
+      } else {
+        getStageTableName(table.name)
+      }
+    )
+
     val targetTable =
-      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+      if ((saveMode == SaveMode.Overwrite && params.useStagingTable) ||
+      params.useParquetInWrite()) {
         tempTable
       } else {
         table
@@ -407,24 +419,43 @@ private[io] object StageWriter {
       } else {
         DefaultJDBCWrapper.tableExists(params, table.toString)
       }
-      // purge tables when overwriting
-      if (saveMode == SaveMode.Overwrite && tableExists) {
-        if (params.useStagingTable) {
-          if (params.truncateTable) {
-            conn.createTableLike(tempTable.name, table.name)
-          }
-        } else if (params.truncateTable) conn.truncateTable(table.name)
-        else conn.dropTable(table.name)
+
+      if (params.useParquetInWrite()){
+        if (saveMode == SaveMode.Overwrite){
+          conn.createTable(targetTable.name, schema, params,
+            overwrite = false, temporary = false)
+        } else if (tableExists){
+          conn.createTableSelectFrom(
+            targetTable.name,
+            params.toFiltered(params.getSnowflakeTableSchema()),
+            table.name,
+            params.getSnowflakeTableSchema(),
+            params,
+            overwrite = true,
+            temporary = false
+          )
+        }
+      } else {
+        // purge tables when overwriting
+        if (saveMode == SaveMode.Overwrite && tableExists) {
+          if (params.useStagingTable) {
+            if (params.truncateTable) {
+              conn.createTableLike(tempTable.name, table.name)
+            }
+          } else if (params.truncateTable) conn.truncateTable(table.name)
+          else conn.dropTable(table.name)
+        }
+
+        // If the SaveMode is 'Append' and the target exists, skip
+        // CREATE TABLE IF NOT EXIST command. This command doesn't actually
+        // create a table but it needs CREATE TABLE privilege.
+        if (saveMode == SaveMode.Overwrite || !tableExists)
+        {
+          conn.createTable(targetTable.name, schema, params,
+            overwrite = false, temporary = false)
+        }
       }
 
-      // If the SaveMode is 'Append' and the target exists, skip
-      // CREATE TABLE IF NOT EXIST command. This command doesn't actually
-      // create a table but it needs CREATE TABLE privilege.
-      if (saveMode == SaveMode.Overwrite || !tableExists)
-      {
-        conn.createTable(targetTable.name, schema, params,
-          overwrite = false, temporary = false)
-      }
 
       // pre actions
       Utils.executePreActions(
@@ -456,13 +487,39 @@ private[io] object StageWriter {
       )
 
       if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+        if (params.useParquetInWrite()){
+          conn.createTableSelectFrom(
+            relayTable.name,
+            params.toSnowflakeStyle(schema),
+            targetTable.name,
+            schema,
+            params,
+            overwrite = true,
+            temporary = false
+          )
+        }
         if (tableExists) {
-          conn.swapTable(table.name, tempTable.name)
-          conn.dropTable(tempTable.name)
+          conn.swapTable(table.name,
+            if (params.useParquetInWrite()) relayTable.name else tempTable.name)
+          conn.dropTable(if (params.useParquetInWrite()) relayTable.name else tempTable.name)
         } else {
-          conn.renameTable(table.name, tempTable.name)
+          conn.renameTable(table.name,
+            if (params.useParquetInWrite()) relayTable.name else tempTable.name)
         }
       } else {
+        if (params.useParquetInWrite()){
+          conn.createTableSelectFrom(
+            relayTable.name,
+            params.getSnowflakeTableSchema(),
+            tempTable.name,
+            params.toFiltered(params.getSnowflakeTableSchema()),
+            params,
+            overwrite = true,
+            temporary = false
+          )
+          conn.swapTable(table.name, relayTable.name)
+          conn.dropTable(relayTable.name)
+        }
         conn.commit()
       }
     } catch {
@@ -878,7 +935,8 @@ private[io] object StageWriter {
 
     val fromString = ConstantString(s"FROM @$tempStage/$prefix/") !
 
-    val mappingList: Option[List[(Int, String)]] = params.columnMap match {
+    val mappingList: Option[List[(Int, String)]] =
+      if (params.useParquetInWrite()) None else params.columnMap match {
       case Some(map) =>
         Some(map.toList.map {
           case (key, value) =>
