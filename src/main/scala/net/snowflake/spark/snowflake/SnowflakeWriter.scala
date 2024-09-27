@@ -20,7 +20,7 @@ package net.snowflake.spark.snowflake
 import scala.collection.JavaConverters._
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
-import net.snowflake.spark.snowflake.DefaultJDBCWrapper.snowflakeStyleSchema
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.{snowflakeStyleSchema, snowflakeStyleString}
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
 import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
 import net.snowflake.spark.snowflake.Utils.ensureUnquoted
@@ -104,6 +104,21 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             }
         }
       } finally conn.close()
+    } else if (params.columnMap.isEmpty && params.useParquetInWrite() &&
+      jdbcWrapper.tableExists(params, params.table.get.name)){
+      val conn = jdbcWrapper.getConnector(params)
+      try {
+        val toSchema = Utils.removeQuote(
+          jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+        )
+        data.schema.zip(toSchema).foreach{
+          case (field1, field2) =>
+            if (field1.name.toUpperCase != field2.name.toUpperCase){
+              throw new IllegalArgumentException(
+                s"Column with name ${field1.name} does not match column name in snowflake table")
+            }
+        }
+      } finally conn.close()
     }
 
     if (params.useParquetInWrite() && saveMode != SaveMode.Overwrite){
@@ -133,7 +148,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         StructType(schema.map {
           case StructField(name, dataType, nullable, metadata) =>
             StructField(
-              params.replaceSpecialCharacter(map.getOrElse(name, name)),
+              params.replaceSpecialCharacter(
+                snowflakeStyleString(map.getOrElse(name, name), params)),
               dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params)

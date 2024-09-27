@@ -204,14 +204,15 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("test parquet name conversion with column map by name"){
     jdbcUpdate(
-      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+      s"""create or replace table $test_parquet_column_map
+        |(ONE int, TWO int, THREE int, "Fo.ur" int)""".stripMargin
     )
 
 
     val schema = StructType(List(
       StructField("TWO", IntegerType, true),
       StructField("ONE", IntegerType, true),
-      StructField("FOUR", IntegerType, true),
+      StructField("FO.UR", IntegerType, true),
       StructField("THREE", IntegerType, true),
     ))
     val data: RDD[Row] = sc.makeRDD(
@@ -235,7 +236,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
     checkAnswer(newDf, List(Row(2, 1, 4, 3)))
     assert(newDf.schema.map(field => field.name)
-      .mkString(",") == Seq("ONE", "TWO", "THREE", "FOUR").mkString(","))
+      .mkString(",") == Seq("ONE", "TWO", "THREE", """"Fo.ur"""").mkString(","))
   }
 
   test("test parquet name conversion with column map"){

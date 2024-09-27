@@ -124,14 +124,18 @@ private[snowflake] class JDBCWrapper {
       .mkString(",")
   }
 
-  def snowflakeStyleSchema(schema: StructType, param: MergedParameters): StructType = {
+  def snowflakeStyleString(fieldName: String, params: MergedParameters): String = {
+    if (params.keepOriginalColumnNameCase) {
+      Utils.quotedNameIgnoreCase(fieldName)
+    } else {
+      Utils.ensureQuoted(fieldName)
+    }
+  }
+
+  def snowflakeStyleSchema(schema: StructType, params: MergedParameters): StructType = {
     StructType(schema.fields.map(field => {
       StructField(
-        if (param.keepOriginalColumnNameCase) {
-          Utils.quotedNameIgnoreCase(field.name)
-        } else {
-          Utils.ensureQuoted(field.name)
-        },
+        snowflakeStyleString(field.name, params),
         field.dataType,
         field.nullable,
         field.metadata
