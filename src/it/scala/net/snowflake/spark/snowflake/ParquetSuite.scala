@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.Utils.{SNOWFLAKE_SOURCE_NAME, SNOWFLAKE_SOURCE_SHORT_NAME}
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
@@ -13,6 +14,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_parquet_column_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_special_character: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val dbtable1: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     runSql(s"drop table if exists $test_parquet_table")
@@ -511,6 +513,25 @@ class ParquetSuite extends IntegrationSuiteBase {
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_parquet_column_map)
         .option("columnmap", Map("UPPER_CLASS_COL" -> "AAA", "Mix_Class_Col" -> "FOUR").toString())
+        .mode(SaveMode.Append)
+        .save()
+    }
+  }
+
+  test("test error when column map does not match") {
+    jdbcUpdate(s"create or replace table $dbtable1 (num int, str string)")
+    // auto map
+    val schema1 = StructType(
+      List(StructField("str", StringType), StructField("NUM", IntegerType))
+    )
+    val data1: RDD[Row] = sc.makeRDD(List(Row("a", 1), Row("b", 2)))
+    val df1 = sparkSession.createDataFrame(data1, schema1)
+
+    assertThrows[SparkException]{
+      df1.write
+        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", dbtable1)
         .mode(SaveMode.Append)
         .save()
     }
