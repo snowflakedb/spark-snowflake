@@ -111,7 +111,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       try{
         if (jdbcWrapper.tableExists(params, params.table.get.name)){
           val toSchema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
-          params.setSnowflakeTableSchema(toSchema)
+          params.setSnowflakeTableSchema(snowflakeStyleSchema(toSchema, params))
         }
       } finally conn.close()
     }
