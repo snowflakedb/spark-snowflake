@@ -522,8 +522,13 @@ private[io] object StageWriter {
             overwrite = true,
             temporary = false
           )
-          conn.swapTable(table.name, relayTable.name)
-          conn.dropTable(relayTable.name)
+          if (tableExists){
+            conn.swapTable(table.name, relayTable.name)
+            conn.dropTable(relayTable.name)
+          } else {
+            conn.renameTable(table.name, relayTable.name)
+          }
+
         }
         conn.commit()
       }
