@@ -146,10 +146,19 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             )
         })
       case _ =>
-        val newSchema = if (params.snowflakeTableSchema.isEmpty) {
+        val newSchema = if (params.snowflakeTableSchema == null) {
           snowflakeStyleSchema(schema, params)
         } else {
-          params.snowflakeTableSchema
+          StructType(schema.zip(params.snowflakeTableSchema).map{
+            case (field1, field2) =>
+              StructField(
+                field2.name,
+                field1.dataType,
+                field1.nullable,
+                field1.metadata
+              )
+          }
+          )
         }
         StructType(newSchema.map {
           case StructField(name, dataType, nullable, metadata) =>

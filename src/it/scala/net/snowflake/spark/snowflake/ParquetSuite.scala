@@ -527,7 +527,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val data1: RDD[Row] = sc.makeRDD(List(Row("a", 1), Row("b", 2)))
     val df1 = sparkSession.createDataFrame(data1, schema1)
 
-    assertThrows[SparkException]{
+    assertThrows[SQLException]{
       df1.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
