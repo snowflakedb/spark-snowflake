@@ -104,24 +104,9 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             }
         }
       } finally conn.close()
-    } else if (params.columnMap.isEmpty && params.useParquetInWrite() &&
-      jdbcWrapper.tableExists(params, params.table.get.name)){
-      val conn = jdbcWrapper.getConnector(params)
-      try {
-        val toSchema = Utils.removeQuote(
-          jdbcWrapper.resolveTable(conn, params.table.get.name, params)
-        )
-        data.schema.zip(toSchema).foreach{
-          case (field1, field2) =>
-            if (field1.name.toUpperCase != field2.name.toUpperCase){
-              throw new IllegalArgumentException(
-                s"Column with name ${field1.name} does not match column name in snowflake table")
-            }
-        }
-      } finally conn.close()
     }
 
-    if (params.useParquetInWrite() && saveMode != SaveMode.Overwrite){
+    if (params.useParquetInWrite()){
       val conn = jdbcWrapper.getConnector(params)
       try{
         if (jdbcWrapper.tableExists(params, params.table.get.name)){
@@ -161,7 +146,11 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             )
         })
       case _ =>
-        val newSchema = snowflakeStyleSchema(schema, params)
+        val newSchema = if (params.snowflakeTableSchema.isEmpty) {
+          snowflakeStyleSchema(schema, params)
+        } else {
+          params.snowflakeTableSchema
+        }
         StructType(newSchema.map {
           case StructField(name, dataType, nullable, metadata) =>
             StructField(
