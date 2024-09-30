@@ -19,6 +19,8 @@ class ParquetSuite extends IntegrationSuiteBase {
   override def afterAll(): Unit = {
     runSql(s"drop table if exists $test_parquet_table")
     runSql(s"drop table if exists $test_parquet_column_map")
+    runSql(s"drop table if exists $test_special_character")
+    runSql(s"drop table if exists $dbtable1")
     super.afterAll()
   }
 
@@ -400,14 +402,14 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_special_character)
       .mode(SaveMode.Overwrite)
       .save()
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_special_character)
       .load()
     newDf.show()
 

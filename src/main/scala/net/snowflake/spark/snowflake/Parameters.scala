@@ -442,7 +442,7 @@ object Parameters {
 
     def replaceSpecialCharacter(name: String): String = {
       var res = name.replaceAll("(^\\d|[^a-zA-Z0-9_])", "_")
-      while(stagingToSnowflakeColumnMap.contains(res)){
+      while(stagingToSnowflakeColumnMap.contains(res.toUpperCase)){
         res += "_"
       }
       res = res.toUpperCase
