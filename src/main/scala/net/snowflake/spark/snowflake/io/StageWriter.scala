@@ -421,23 +421,22 @@ private[io] object StageWriter {
       }
 
       if (params.useParquetInWrite()){
+        // temporary table to store parquet file
+        conn.createTable(tempTable.name, schema, params,
+          overwrite = false, temporary = false)
+
         if (saveMode == SaveMode.Overwrite){
-          conn.createTable(targetTable.name, schema, params,
-            overwrite = false, temporary = false)
-        } else if (tableExists){
-          conn.createTableSelectFrom(
-            tempTable.name,
-            params.toStagingSchema(params.getSnowflakeTableSchema),
-            table.name,
-            params.getSnowflakeTableSchema,
-            params,
-            overwrite = true,
-            temporary = false
-          )
-        } else if (!tableExists){
-          conn.createTable(targetTable.name,
-            schema, params,
-            overwrite = false, temporary = false)
+          if (tableExists) {
+            conn.createTableLike(relayTable.name, table.name)
+          } else {
+            conn.createTable(relayTable.name, params.toSnowflakeSchema(schema), params,
+              overwrite = false, temporary = false)
+          }
+        } else {
+          if (!tableExists) {
+            conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
+              overwrite = false, temporary = false)
+          }
         }
 
       } else {
@@ -491,46 +490,32 @@ private[io] object StageWriter {
         Option(targetTable)
       )
 
-      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (params.useParquetInWrite()){
-          conn.createTableSelectFrom(
-            relayTable.name,
-            params.toSnowflakeSchema(schema),
-            targetTable.name,
-            schema,
-            params,
-            overwrite = true,
-            temporary = false
-          )
-        }
-        if (tableExists) {
-          conn.swapTable(table.name,
-            if (params.useParquetInWrite()) relayTable.name else tempTable.name)
-          conn.dropTable(if (params.useParquetInWrite()) relayTable.name else tempTable.name)
-        } else {
-          conn.renameTable(table.name,
-            if (params.useParquetInWrite()) relayTable.name else tempTable.name)
-        }
-      } else {
-        if (params.useParquetInWrite()){
-          conn.createTableSelectFrom(
-            relayTable.name,
-            if (tableExists) params.getSnowflakeTableSchema else params.toSnowflakeSchema(schema),
-            tempTable.name,
-            if (tableExists) params.toStagingSchema(params.getSnowflakeTableSchema) else schema,
-            params,
-            overwrite = true,
-            temporary = false
-          )
-          if (tableExists){
+      if (params.useParquetInWrite()) {
+        if (saveMode == SaveMode.Overwrite){
+          conn.insertIntoTable(relayTable.name, tempTable.name,
+            params.toSnowflakeSchema(schema), schema, params)
+          if (tableExists) {
             conn.swapTable(table.name, relayTable.name)
             conn.dropTable(relayTable.name)
           } else {
             conn.renameTable(table.name, relayTable.name)
           }
-
+        } else {
+          conn.insertIntoTable(table.name, tempTable.name,
+            params.toSnowflakeSchema(schema), schema, params)
+          conn.commit()
         }
-        conn.commit()
+      } else {
+        if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+          if (tableExists) {
+            conn.swapTable(table.name, tempTable.name)
+            conn.dropTable(tempTable.name)
+          } else {
+            conn.renameTable(table.name, tempTable.name)
+          }
+        } else {
+          conn.commit()
+        }
       }
     } catch {
       case e: Exception =>

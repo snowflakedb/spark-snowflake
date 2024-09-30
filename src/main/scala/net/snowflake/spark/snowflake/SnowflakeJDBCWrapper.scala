@@ -400,6 +400,33 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         s"(${schemaString(schema, params)})")
         .execute(bindVariableEnabled)(connection)
 
+    def createTableClone(newTableName: String,
+                         oldTableName: String,
+                         bindVariableEnabled: Boolean = true
+                        ): Unit =
+      (ConstantString("create or replace table") + Identifier(newTableName) +
+        "CLONE" + Identifier(oldTableName))
+        .execute(bindVariableEnabled)(connection)
+
+    def insertIntoTable(targetTableName: String,
+                        sourceTableName: String,
+                        targetTableSchema: StructType,
+                        sourceTableSchema: StructType,
+                        params: MergedParameters,
+                        bindVariableEnabled: Boolean = true
+                       ): Unit = {
+      val sourceColumnNames = sourceTableSchema.fields
+        .map(_.name)
+        .mkString(",")
+      val targetColumnNames = snowflakeStyleSchema(targetTableSchema, params).fields
+        .map(_.name)
+        .mkString(",")
+      (ConstantString("insert into") + Identifier(targetTableName) +
+        s"($targetColumnNames)" + "select" + s"$sourceColumnNames" +
+        "from" + Identifier(sourceTableName))
+        .execute(bindVariableEnabled)(connection)
+    }
+
     def createTableLike(newTable: String,
                         originalTable: String,
                         bindVariableEnabled: Boolean = true): Unit = {
@@ -514,7 +541,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
-        (if (temporary) "temporary" else "") + "stage" +
+        /* (if (temporary) "temporary" else "") + */ "stage" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
         (location match {
           case Some(path) =>
