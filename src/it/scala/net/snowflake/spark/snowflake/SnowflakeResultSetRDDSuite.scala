@@ -646,45 +646,31 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Append)
       .save()
 
-    sparkSession.read
+    // Write 5 rows with data for AUTOINCREMENT column
+    val df2 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", "select seq4(), 'test456', 1234 from table(generator(rowcount => 5))")
+      .load()
+    df2.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
       .option("dbtable", test_table_write)
+      .mode(SaveMode.Append)
+      .save()
+
+    // Verify result for AUTOINCREMENT column
+    val expectedAnswer = Array(
+      Row(100), Row(110), Row(120), Row(130), Row(140),
+      Row(1234), Row(1234), Row(1234), Row(1234), Row(1234)
+    )
+    val result = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("query", s"select ID_C from $test_table_write order by ID_C")
       .load()
-      .show()
-//
-//    // Write 5 rows with data for AUTOINCREMENT column
-//    val df2 = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("query", "select seq4(), 'test456', 1234 from table(generator(rowcount => 5))")
-//      .load()
-//    df2.write
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("dbtable", test_table_write)
-//      .mode(SaveMode.Append)
-//      .save()
-//
-//    sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("dbtable", test_table_write)
-//      .load()
-//      .show()
-//
-//    // Verify result for AUTOINCREMENT column
-//    val expectedAnswer = Array(
-//      Row(100), Row(110), Row(120), Row(130), Row(140),
-//      Row(1234), Row(1234), Row(1234), Row(1234), Row(1234)
-//    )
-//    val result = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("query", s"select ID_C from $test_table_write order by ID_C")
-//      .load()
-//
-//    checkAnswer(result, expectedAnswer)
+
+    checkAnswer(result, expectedAnswer)
   }
 
   test("test read write StringBinary") {
