@@ -347,7 +347,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val data: RDD[Row] = sc.makeRDD(
       List(
         Row(
-          Timestamp.valueOf("0001-12-30 10:15:30"),
+          Timestamp.valueOf("0001-12-30 10:15:30.111"),
           Date.valueOf("0001-03-01")
         )
       )
@@ -376,7 +376,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
     checkAnswer(newDf, List(
       Row(
-        Timestamp.valueOf("0001-12-30 10:15:30"),
+        Timestamp.valueOf("0001-12-30 10:15:30.111"),
         Date.valueOf("0001-03-01")
       )
     ))

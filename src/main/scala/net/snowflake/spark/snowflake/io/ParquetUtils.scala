@@ -50,13 +50,13 @@ object ParquetUtils {
       case BinaryType => builder.bytesType()
       case BooleanType => builder.booleanType()
       case DateType =>
-        builder.intBuilder()
+        builder.stringBuilder()
           .prop("logicalType", "date")
-          .endInt()
+          .endString()
       case TimestampType | TimestampNTZType =>
-        builder.longBuilder()
-          .prop("logicalType", " timestamp-nanos")
-          .endLong()
+        builder.stringBuilder()
+          .prop("logicalType", " timestamp-micros")
+          .endString()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
           convertTypeToAvro(
@@ -104,13 +104,13 @@ object ParquetUtils {
       case BinaryType => builder.bytesType()
       case BooleanType => builder.booleanType()
       case DateType =>
-        builder.intBuilder()
+        builder.stringBuilder()
           .prop("logicalType", "date")
-          .endInt()
+          .endString()
       case TimestampType | TimestampNTZType =>
-        builder.longBuilder()
-          .prop("logicalType", "timestamp-nanos")
-          .endLong()
+        builder.stringBuilder()
+          .prop("logicalType", "timestamp-micros")
+          .endString()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
           convertTypeToAvro(

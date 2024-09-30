@@ -214,12 +214,9 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                 case (decimal: java.math.BigDecimal, name) =>
                   record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
                 case (timestamp: java.sql.Timestamp, name) =>
-                  record.put(name, TimeUnit.MICROSECONDS.toSeconds(
-                    RebaseDateTime.rebaseJulianToGregorianMicros(
-                      TimeUnit.MILLISECONDS.toMicros(timestamp.getTime))))
+                  record.put(name, timestamp.toString)
                 case (date: java.sql.Date, name) =>
-                  record.put(name, RebaseDateTime.
-                    rebaseJulianToGregorianDays(TimeUnit.MILLISECONDS.toDays(date.getTime).toInt))
+                  record.put(name, date.toString)
                 case (date: java.time.LocalDateTime, name) =>
                   record.put(name, date.toEpochSecond(ZoneOffset.UTC))
                 case (value, name) => record.put(name, value)
