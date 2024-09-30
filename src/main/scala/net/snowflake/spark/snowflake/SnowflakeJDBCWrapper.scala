@@ -541,7 +541,7 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
 
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
-        /* (if (temporary) "temporary" else "") + */ "stage" +
+        (if (temporary) "temporary" else "") + "stage" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
         (location match {
           case Some(path) =>
