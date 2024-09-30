@@ -426,12 +426,8 @@ private[io] object StageWriter {
           overwrite = false, temporary = false)
 
         if (saveMode == SaveMode.Overwrite){
-          if (tableExists) {
-            conn.createTableLike(relayTable.name, table.name)
-          } else {
             conn.createTable(relayTable.name, params.toSnowflakeSchema(schema), params,
               overwrite = false, temporary = false)
-          }
         } else {
           if (!tableExists) {
             conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
