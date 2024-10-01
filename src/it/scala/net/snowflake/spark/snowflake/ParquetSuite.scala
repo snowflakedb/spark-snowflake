@@ -11,16 +11,32 @@ import scala.collection.Seq
 import scala.util.Random
 
 class ParquetSuite extends IntegrationSuiteBase {
-  val test_parquet_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
-  val test_parquet_column_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
-  val test_special_character: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
-  val dbtable1: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_all_type: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_all_type_multi_line: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_array_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_conversion: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_conversion_by_name: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_column_map: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_trim: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_date: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_special_char: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_special_char_to_exist: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_column_map_parquet: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_column_map_not_match: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
-    runSql(s"drop table if exists $test_parquet_table")
-    runSql(s"drop table if exists $test_parquet_column_map")
-    runSql(s"drop table if exists $test_special_character")
-    runSql(s"drop table if exists $dbtable1")
+    runSql(s"drop table if exists $test_all_type")
+    runSql(s"drop table if exists $test_all_type_multi_line")
+    runSql(s"drop table if exists $test_array_map")
+    runSql(s"drop table if exists $test_conversion")
+    runSql(s"drop table if exists $test_conversion_by_name")
+    runSql(s"drop table if exists $test_column_map")
+    runSql(s"drop table if exists $test_trim")
+    runSql(s"drop table if exists $test_date")
+    runSql(s"drop table if exists $test_special_char")
+    runSql(s"drop table if exists $test_special_char_to_exist")
+    runSql(s"drop table if exists $test_column_map_parquet")
+    runSql(s"drop table if exists $test_column_map_not_match")
     super.afterAll()
   }
 
@@ -55,7 +71,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_all_type)
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -63,7 +79,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_all_type)
       .load()
 
     val expectedAnswer = List(
@@ -105,7 +121,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_all_type_multi_line)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .mode(SaveMode.Overwrite)
       .save()
@@ -114,7 +130,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_all_type_multi_line)
       .load()
 
     val expectedAnswer = List(
@@ -157,7 +173,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_array_map)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .mode(SaveMode.Overwrite)
       .save()
@@ -166,7 +182,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val res = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_array_map)
       .schema(schema)
       .load()
       .collect()
@@ -192,7 +208,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_conversion)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .mode(SaveMode.Overwrite)
       .save()
@@ -200,7 +216,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_conversion)
       .load()
 
     checkAnswer(newDf, List(Row(1, 2, 3)))
@@ -208,7 +224,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("test parquet name conversion with column map by name"){
     jdbcUpdate(
-      s"""create or replace table $test_parquet_column_map
+      s"""create or replace table $test_conversion_by_name
         |(ONE int, TWO int, THREE int, "Fo.ur" int)""".stripMargin
     )
 
@@ -226,7 +242,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_column_map)
+      .option("dbtable", test_conversion_by_name)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .option("column_mapping", "name")
       .mode(SaveMode.Append)
@@ -235,7 +251,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_column_map)
+      .option("dbtable", test_conversion_by_name)
       .load()
 
     checkAnswer(newDf, List(Row(2, 1, 4, 3)))
@@ -245,7 +261,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("test parquet name conversion with column map"){
     jdbcUpdate(
-      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+      s"create or replace table $test_column_map (ONE int, TWO int, THREE int, Four int)"
     )
 
 
@@ -261,7 +277,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     df.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_column_map)
+      .option("dbtable", test_column_map)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
       .option("columnmap", Map(
         "UPPER_CLASS_COL" -> "ONE",
@@ -274,7 +290,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_column_map)
+      .option("dbtable", test_column_map)
       .load()
 
     checkAnswer(newDf, List(Row(1, 2, 3, null)))
@@ -289,7 +305,6 @@ class ParquetSuite extends IntegrationSuiteBase {
         StructField("arr", ArrayType(IntegerType), nullable = false)
       )
     )
-    val tt: String = s"tt_$randomSuffix"
     try {
       val df = sparkSession
         .createDataFrame(
@@ -306,7 +321,7 @@ class ParquetSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-        .option("dbtable", tt)
+        .option("dbtable", test_trim)
         .option(Parameters.PARAM_TRIM_SPACE, "true")
         .mode(SaveMode.Overwrite)
         .save()
@@ -314,7 +329,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       var loadDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
-        .option("dbtable", tt)
+        .option("dbtable", test_trim)
         .load()
 
       assert(loadDf.select("str").collect().forall(row => row.toSeq.head.toString.length == 4))
@@ -324,14 +339,14 @@ class ParquetSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-        .option("dbtable", tt)
+        .option("dbtable", test_trim)
         .mode(SaveMode.Overwrite)
         .save()
 
       loadDf = sparkSession.read
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptions)
-        .option("dbtable", tt)
+        .option("dbtable", test_trim)
         .load()
       val result = loadDf.select("str").collect()
       assert(result.head.toSeq.head.toString.length == 4)
@@ -339,7 +354,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       assert(result(2).toSeq.head.toString.length == 6)
 
     } finally {
-      jdbcUpdate(s"drop table if exists $tt")
+      jdbcUpdate(s"drop table if exists $test_trim")
     }
   }
 
@@ -363,14 +378,14 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_date)
       .mode(SaveMode.Overwrite)
       .save()
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_parquet_table)
+      .option("dbtable", test_date)
       .load()
     newDf.show()
 
@@ -402,14 +417,14 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", test_special_character)
+      .option("dbtable", test_special_char)
       .mode(SaveMode.Overwrite)
       .save()
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_special_character)
+      .option("dbtable", test_special_char)
       .load()
     newDf.show()
 
@@ -424,7 +439,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("test parquet with special character to existing table"){
     jdbcUpdate(
-      s"""create or replace table $test_special_character
+      s"""create or replace table $test_special_char_to_exist
          |("timestamp1.()col" timestamp, "date1.()col" date)""".stripMargin
     )
 
@@ -447,14 +462,14 @@ class ParquetSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
       .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-      .option("dbtable", test_special_character)
+      .option("dbtable", test_special_char_to_exist)
       .mode(SaveMode.Append)
       .save()
 
     val newDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
-      .option("dbtable", test_special_character)
+      .option("dbtable", test_special_char_to_exist)
       .load()
     newDf.show()
 
@@ -469,7 +484,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
   test("Test columnMap with parquet") {
     jdbcUpdate(
-      s"create or replace table $test_parquet_column_map (ONE int, TWO int, THREE int, Four int)"
+      s"create or replace table $test_column_map_parquet (ONE int, TWO int, THREE int, Four int)"
     )
 
 
@@ -489,7 +504,7 @@ class ParquetSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-        .option("dbtable", test_parquet_column_map)
+        .option("dbtable", test_column_map_parquet)
         .option("columnmap", Map("UPPER_CLASS_COL" -> "ONE", "lower_class_col" -> "FOUR").toString())
         .mode(SaveMode.Overwrite)
         .save()
@@ -501,7 +516,7 @@ class ParquetSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-        .option("dbtable", test_parquet_column_map)
+        .option("dbtable", test_column_map_parquet)
         .option("columnmap", Map("aaa" -> "ONE", "Mix_Class_Col" -> "FOUR").toString())
         .mode(SaveMode.Append)
         .save()
@@ -513,7 +528,7 @@ class ParquetSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
-        .option("dbtable", test_parquet_column_map)
+        .option("dbtable", test_column_map_parquet)
         .option("columnmap", Map("UPPER_CLASS_COL" -> "AAA", "Mix_Class_Col" -> "FOUR").toString())
         .mode(SaveMode.Append)
         .save()
@@ -521,7 +536,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   }
 
   test("test error when column map does not match") {
-    jdbcUpdate(s"create or replace table $dbtable1 (num int, str string)")
+    jdbcUpdate(s"create or replace table $test_column_map_not_match (num int, str string)")
     // auto map
     val schema1 = StructType(
       List(StructField("str", StringType), StructField("NUM", IntegerType))
@@ -533,7 +548,7 @@ class ParquetSuite extends IntegrationSuiteBase {
       df1.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
-        .option("dbtable", dbtable1)
+        .option("dbtable", test_column_map_not_match)
         .mode(SaveMode.Append)
         .save()
     }

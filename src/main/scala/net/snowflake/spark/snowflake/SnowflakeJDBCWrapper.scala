@@ -400,14 +400,6 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         s"(${schemaString(schema, params)})")
         .execute(bindVariableEnabled)(connection)
 
-    def createTableClone(newTableName: String,
-                         oldTableName: String,
-                         bindVariableEnabled: Boolean = true
-                        ): Unit =
-      (ConstantString("create or replace table") + Identifier(newTableName) +
-        "CLONE" + Identifier(oldTableName))
-        .execute(bindVariableEnabled)(connection)
-
     def insertIntoTable(targetTableName: String,
                         sourceTableName: String,
                         targetTableSchema: StructType,
@@ -433,26 +425,6 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
       (ConstantString("create or replace table") + Identifier(newTable) +
         "like" + Identifier(originalTable))
         .execute(bindVariableEnabled)(connection)
-    }
-
-    def createTableSelectFrom(name: String,
-                              schema: StructType,
-                              stagingTableName: String,
-                              stagingTableSchema: StructType,
-                              params: MergedParameters,
-                              overwrite: Boolean,
-                              temporary: Boolean,
-                              bindVariableEnabled: Boolean = true): Unit = {
-      val columnNames = snowflakeStyleSchema(stagingTableSchema, params).fields
-        .map(_.name)
-        .mkString(",")
-      (ConstantString("create") +
-        (if (overwrite) "or replace" else "") +
-        (if (temporary) "temporary" else "") + "table" + Identifier(name) +
-        s"(${schemaString(schema, params)})" +
-        "as select" + s"$columnNames" +
-        "from" + Identifier(stagingTableName)
-        ).execute(bindVariableEnabled)(connection)
     }
 
     def truncateTable(table: String,
