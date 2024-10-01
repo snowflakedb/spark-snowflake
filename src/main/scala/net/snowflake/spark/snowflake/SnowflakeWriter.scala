@@ -17,44 +17,64 @@
 
 package net.snowflake.spark.snowflake
 
+import scala.collection.JavaConverters._
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
+import net.snowflake.spark.snowflake.DefaultJDBCWrapper.{snowflakeStyleSchema, snowflakeStyleString}
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, mergeParameters}
+import net.snowflake.spark.snowflake.SparkConnectorContext.getClass
+import net.snowflake.spark.snowflake.Utils.ensureUnquoted
 import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericData
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.slf4j.LoggerFactory
+
+import java.nio.ByteBuffer
+import java.time.{LocalDate, ZoneId, ZoneOffset}
+import java.util.concurrent.TimeUnit
+import scala.collection.mutable
 
 /**
-  * Functions to write data to Snowflake.
-  *
-  * At a high level, writing data back to Snowflake involves the following steps:
-  *
-  *   - Use an RDD to save DataFrame content as strings, using customized
-  *     formatting functions from Conversions
+ * Functions to write data to Snowflake.
+ *
+ * At a high level, writing data back to Snowflake involves the following steps:
+ *
+ *   - Use an RDD to save DataFrame content as strings, using customized
+ *     formatting functions from Conversions
 
-  *   - Use JDBC to issue any CREATE TABLE commands, if required.
-  *
-  *   - If there is data to be written (i.e. not all partitions were empty),
-  *     copy all the files sharing the prefix we exported to into Snowflake.
-  *
-  *     This is done by issuing a COPY command over JDBC that
-  *     instructs Snowflake to load the CSV data into the appropriate table.
-  *
-  *     If the Overwrite SaveMode is being used, then by default the data
-  *     will be loaded into a temporary staging table,
-  *     which later will atomically replace the original table using SWAP.
-  */
+ *   - Use JDBC to issue any CREATE TABLE commands, if required.
+ *
+ *   - If there is data to be written (i.e. not all partitions were empty),
+ *     copy all the files sharing the prefix we exported to into Snowflake.
+ *
+ *     This is done by issuing a COPY command over JDBC that
+ *     instructs Snowflake to load the CSV data into the appropriate table.
+ *
+ *     If the Overwrite SaveMode is being used, then by default the data
+ *     will be loaded into a temporary staging table,
+ *     which later will atomically replace the original table using SWAP.
+ */
 private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
   def save(sqlContext: SQLContext,
            data: DataFrame,
            saveMode: SaveMode,
            params: MergedParameters): Unit = {
-    val format: SupportedFormat =
-      if (Utils.containVariant(data.schema)) SupportedFormat.JSON
-      else SupportedFormat.CSV
+    val format: SupportedFormat = {
+      if (params.useParquetInWrite()) {
+        SupportedFormat.PARQUET
+      } else if (Utils.containVariant(data.schema)){
+        SupportedFormat.JSON
+      }
+      else {
+        SupportedFormat.CSV
+      }
+    }
 
     if (params.columnMap.isEmpty && params.columnMapping == "name") {
       val conn = jdbcWrapper.getConnector(params)
@@ -66,31 +86,155 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         )
         params.setColumnMap(Option(data.schema), toSchema)
       } finally conn.close()
+    } else if (params.columnMap.isDefined && params.useParquetInWrite()){
+      val conn = jdbcWrapper.getConnector(params)
+      try {
+        val toSchema = Utils.removeQuote(
+            jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+          )
+        params.columnMap match {
+          case Some(map) =>
+            map.values.foreach{
+              value =>
+                if (!toSchema.fieldNames.contains(value) &&
+                  !toSchema.fieldNames.contains(value.toUpperCase)){
+                  throw new IllegalArgumentException(
+                    s"Column with name $value does not match any column in snowflake table")
+                }
+            }
+        }
+      } finally conn.close()
     }
 
+    if (params.useParquetInWrite()){
+      val conn = jdbcWrapper.getConnector(params)
+      try{
+        if (jdbcWrapper.tableExists(params, params.table.get.name)){
+          val toSchema = jdbcWrapper.resolveTable(conn, params.table.get.name, params)
+          params.setSnowflakeTableSchema(snowflakeStyleSchema(toSchema, params))
+        }
+      } finally conn.close()
+    }
+
+
     val output: DataFrame = removeUselessColumns(data, params)
-    val strRDD = dataFrameToRDD(sqlContext, output, params, format)
-    io.writeRDD(sqlContext, params, strRDD, output.schema, saveMode, format)
+    val (strRDD, schema) = dataFrameToRDD(sqlContext, output, params, format)
+    io.writeRDD(sqlContext, params, strRDD, schema, saveMode, format)
   }
+
+  /**
+   * function that map spark style column name to snowflake style column name
+  */
+  def mapColumn(schema: StructType,
+                params: MergedParameters
+               ): StructType = {
+    params.columnMap match {
+      case Some(map) =>
+        StructType(schema.map {
+          case StructField(name, dataType, nullable, metadata) =>
+            StructField(
+              params.replaceSpecialCharacter(
+                snowflakeStyleString(map.getOrElse(name, name), params)),
+              dataType match {
+                case datatype: StructType =>
+                  mapColumn(datatype, params)
+                case _ =>
+                  dataType
+              },
+              nullable,
+              metadata
+            )
+        })
+      case _ =>
+        val newSchema = if (params.snowflakeTableSchema == null) {
+          snowflakeStyleSchema(schema, params)
+        } else {
+          StructType(schema.zip(params.snowflakeTableSchema).map{
+            case (field1, field2) =>
+              StructField(
+                field2.name,
+                field1.dataType,
+                field1.nullable,
+                field1.metadata
+              )
+          }
+          )
+        }
+        StructType(newSchema.map {
+          case StructField(name, dataType, nullable, metadata) =>
+            StructField(
+              params.replaceSpecialCharacter(name),
+              dataType match {
+                case datatype: StructType =>
+                  mapColumn(datatype, params)
+                case _ =>
+                  dataType
+              },
+              nullable,
+              metadata
+            )
+        })
+    }
+  }
+
+
 
   def dataFrameToRDD(sqlContext: SQLContext,
                      data: DataFrame,
                      params: MergedParameters,
-                     format: SupportedFormat): RDD[String] = {
+                     format: SupportedFormat): (RDD[Any], StructType) = {
     val spark = sqlContext.sparkSession
     import spark.implicits._ // for toJson conversion
 
     format match {
+      case SupportedFormat.PARQUET =>
+        val snowflakeStyleSchema = mapColumn(data.schema, params)
+        val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
+        (data.rdd.map (row => {
+            def rowToAvroRecord(row: Row,
+                                schema: Schema,
+                                snowflakeStyleSchema: StructType,
+                                params: MergedParameters): GenericData.Record = {
+              val record = new GenericData.Record(schema)
+              row.toSeq.zip(snowflakeStyleSchema.names).foreach {
+                case (row: Row, name) =>
+                  record.put(name,
+                    rowToAvroRecord(
+                      row,
+                      schema.getField(name).schema().getTypes.get(0),
+                      snowflakeStyleSchema(name).dataType.asInstanceOf[StructType],
+                      params
+                    ))
+                case (map: scala.collection.immutable.Map[Any, Any], name) =>
+                  record.put(name, map.asJava)
+                case (str: String, name) =>
+                  record.put(name, if (params.trimSpace) str.trim else str)
+                case (arr: mutable.WrappedArray[Any], name) =>
+                  record.put(name, arr.toArray)
+                case (decimal: java.math.BigDecimal, name) =>
+                  record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
+                case (timestamp: java.sql.Timestamp, name) =>
+                  record.put(name, timestamp.toString)
+                case (date: java.sql.Date, name) =>
+                  record.put(name, date.toString)
+                case (date: java.time.LocalDateTime, name) =>
+                  record.put(name, date.toEpochSecond(ZoneOffset.UTC))
+                case (value, name) => record.put(name, value)
+              }
+              record
+            }
+          rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
+        }), snowflakeStyleSchema)
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
-        data.rdd.map(row => {
+        (data.rdd.map(row => {
           row.toSeq
             .zip(conversionFunction)
             .map {
               case (element, func) => func(element)
             }
             .mkString("|")
-        })
+        }), data.schema)
       case SupportedFormat.JSON =>
         // convert binary (Array of Byte) to encoded base64 String before COPY
         val newSchema: StructType = prepareSchemaForJson(data.schema)
@@ -104,7 +248,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               }
           )
         })
-        spark.createDataFrame(newData, newSchema).toJSON.map(_.toString).rdd
+        (spark.createDataFrame(newData, newSchema)
+          .toJSON.map(_.toString).rdd.asInstanceOf[RDD[Any]], data.schema)
     }
   }
 
@@ -137,8 +282,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     )
 
   /**
-    * If column mapping is enable, remove all useless columns from the input DataFrame
-    */
+   * If column mapping is enable, remove all useless columns from the input DataFrame
+   */
   private def removeUselessColumns(dataFrame: DataFrame,
                                    params: MergedParameters): DataFrame =
     params.columnMap match {
@@ -174,21 +319,21 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
             }
         case TimestampType =>
           (v: Any) =>
-            {
-              if (v == null) ""
-              else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
-            }
+          {
+            if (v == null) ""
+            else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+          }
         case StringType =>
           (v: Any) =>
-            {
-              if (v == null) ""
-              else {
-                val trimmed = if (params.trimSpace) {
-                  v.toString.trim
-                } else v
-                Conversions.formatString(trimmed.asInstanceOf[String])
-              }
+          {
+            if (v == null) ""
+            else {
+              val trimmed = if (params.trimSpace) {
+                v.toString.trim
+              } else v
+              Conversions.formatString(trimmed.asInstanceOf[String])
             }
+          }
         case BinaryType =>
           (v: Any) =>
             v match {

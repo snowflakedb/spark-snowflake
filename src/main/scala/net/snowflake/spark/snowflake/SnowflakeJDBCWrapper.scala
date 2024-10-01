@@ -114,19 +114,33 @@ private[snowflake] class JDBCWrapper {
     * Compute the SQL schema string for the given Spark SQL Schema.
     */
   def schemaString(schema: StructType, param: MergedParameters): String = {
-    schema.fields
+      snowflakeStyleSchema(schema, param).fields
       .map(field => {
-        val name: String =
-          if (param.keepOriginalColumnNameCase) {
-            Utils.quotedNameIgnoreCase(field.name)
-          } else {
-            Utils.ensureQuoted(field.name)
-          }
+        val name: String = field.name
         val `type`: String = schemaConversion(field)
         val nullable: String = if (field.nullable) "" else "NOT NULL"
         s"""$name ${`type`} $nullable"""
       })
       .mkString(",")
+  }
+
+  def snowflakeStyleString(fieldName: String, params: MergedParameters): String = {
+    if (params.keepOriginalColumnNameCase) {
+      Utils.quotedNameIgnoreCase(fieldName)
+    } else {
+      Utils.ensureQuoted(fieldName)
+    }
+  }
+
+  def snowflakeStyleSchema(schema: StructType, params: MergedParameters): StructType = {
+    StructType(schema.fields.map(field => {
+      StructField(
+        snowflakeStyleString(field.name, params),
+        field.dataType,
+        field.nullable,
+        field.metadata
+      )
+    }))
   }
 
   /**
@@ -385,6 +399,25 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
         s"(${schemaString(schema, params)})")
         .execute(bindVariableEnabled)(connection)
+
+    def insertIntoTable(targetTableName: String,
+                        sourceTableName: String,
+                        targetTableSchema: StructType,
+                        sourceTableSchema: StructType,
+                        params: MergedParameters,
+                        bindVariableEnabled: Boolean = true
+                       ): Unit = {
+      val sourceColumnNames = sourceTableSchema.fields
+        .map(_.name)
+        .mkString(",")
+      val targetColumnNames = snowflakeStyleSchema(targetTableSchema, params).fields
+        .map(_.name)
+        .mkString(",")
+      (ConstantString("insert into") + Identifier(targetTableName) +
+        s"($targetColumnNames)" + "select" + s"$sourceColumnNames" +
+        "from" + Identifier(sourceTableName))
+        .execute(bindVariableEnabled)(connection)
+    }
 
     def createTableLike(newTable: String,
                         originalTable: String,

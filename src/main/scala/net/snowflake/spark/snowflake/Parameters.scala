@@ -20,16 +20,14 @@ package net.snowflake.spark.snowflake
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 import java.util.Properties
-
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{
-  AWSCredentials,
-  BasicSessionCredentials
-}
+import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
 import org.apache.commons.codec.binary.Base64
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.{Logger, LoggerFactory}
+
+import scala.collection.mutable
 
 /**
   * All user-specifiable parameters for spark-snowflake, along with their validation rules and
@@ -300,6 +298,7 @@ object Parameters {
     PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TRIM_SPACE -> "false",
     PARAM_USE_PARQUET_IN_WRITE -> "false"
+
   )
 
   /**
@@ -428,6 +427,63 @@ object Parameters {
   case class MergedParameters(parameters: Map[String, String]) {
 
     private var generatedColumnMap: Option[Map[String, String]] = None
+
+    private[snowflake] val stagingToSnowflakeColumnMap: mutable.Map[String, String] = mutable.Map()
+    private[snowflake] val snowflakeToStagingColumnMap: mutable.Map[String, String] = mutable.Map()
+    private[snowflake] var snowflakeTableSchema: StructType = _
+
+    def setSnowflakeTableSchema(schema: StructType): Unit = {
+      snowflakeTableSchema = schema
+    }
+
+    def getSnowflakeTableSchema: StructType = {
+      snowflakeTableSchema
+    }
+
+    def replaceSpecialCharacter(name: String): String = {
+      var res = name.replaceAll("(^\\d|[^a-zA-Z0-9_])", "_")
+      while(stagingToSnowflakeColumnMap.contains(res.toUpperCase)){
+        res += "_"
+      }
+      res = res.toUpperCase
+      snowflakeToStagingColumnMap += (name -> res)
+      stagingToSnowflakeColumnMap += (res -> name)
+      res
+    }
+
+    def toStagingSchema(snowflakeSchema: StructType): StructType = {
+      StructType(snowflakeSchema.map {
+        case StructField(name, dataType, nullable, metadata) =>
+          StructField(
+            snowflakeToStagingColumnMap.getOrElse(name, name),
+            dataType match {
+              case datatype: StructType =>
+                toStagingSchema(datatype)
+              case _ =>
+                dataType
+            },
+            nullable,
+            metadata
+          )
+      })
+    }
+
+    def toSnowflakeSchema(stagingSchema: StructType): StructType = {
+      StructType(stagingSchema.map {
+        case StructField(name, dataType, nullable, metadata) =>
+          StructField(
+            stagingToSnowflakeColumnMap.getOrElse(name, name),
+            dataType match {
+              case datatype: StructType =>
+                toSnowflakeSchema(datatype)
+              case _ =>
+                dataType
+            },
+            nullable,
+            metadata
+          )
+      })
+    }
 
     override def toString: String = {
       "Snowflake Data Source"
@@ -559,6 +615,7 @@ object Parameters {
       */
     def useParquetInWrite(): Boolean = {
       isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "false"))
+
     }
 
     /**

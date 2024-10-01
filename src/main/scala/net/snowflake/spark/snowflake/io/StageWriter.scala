@@ -194,7 +194,7 @@ private[io] object StageWriter {
   private val DEFAULT_TIMESTAMP_FORMAT: String = "TZHTZM YYYY-MM-DD HH24:MI:SS.FF9"
 
   def writeToStage(sqlContext: SQLContext,
-                   rdd: RDD[String],
+                   rdd: RDD[Any],
                    schema: StructType,
                    saveMode: SaveMode,
                    params: MergedParameters,
@@ -258,12 +258,12 @@ private[io] object StageWriter {
       val endTime = System.currentTimeMillis()
 
       log.info(
-          s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-             | Total job time is ${Utils.getTimeString(endTime - startTime)}
-             | including read & upload time:
-             | ${Utils.getTimeString(startCopyInto - startTime)}
-             | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
-             |""".stripMargin.filter(_ >= ' '))
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+           | Total job time is ${Utils.getTimeString(endTime - startTime)}
+           | including read & upload time:
+           | ${Utils.getTimeString(startCopyInto - startTime)}
+           | and COPY time: ${Utils.getTimeString(endTime - startCopyInto)}.
+           |""".stripMargin.filter(_ >= ' '))
     } finally {
       SnowflakeTelemetry.send(conn.getTelemetry)
       conn.close()
@@ -272,8 +272,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table
-    */
+   * load data from stage to table
+   */
   private def writeToTable(sqlContext: SQLContext,
                            conn: ServerConnection,
                            schema: StructType,
@@ -283,7 +283,7 @@ private[io] object StageWriter {
                            tempStage: String,
                            format: SupportedFormat,
                            fileUploadResults: List[FileUploadResult]): Unit = {
-    if (params.useStagingTable || !params.truncateTable) {
+    if (params.useStagingTable || !params.truncateTable || params.useParquetInWrite()) {
       writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params,
         file, tempStage, format, fileUploadResults)
     } else {
@@ -293,8 +293,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table without staging table
-    */
+   * load data from stage to table without staging table
+   */
   private def writeToTableWithoutStagingTable(sqlContext: SQLContext,
                                               conn: ServerConnection,
                                               schema: StructType,
@@ -367,9 +367,9 @@ private[io] object StageWriter {
   }
 
   /**
-    * load data from stage to table with staging table
-    * This function is deprecated.
-    */
+   * load data from stage to table with staging table
+   * This function is deprecated.
+   */
   private def writeToTableWithStagingTable(sqlContext: SQLContext,
                                            conn: ServerConnection,
                                            schema: StructType,
@@ -390,8 +390,20 @@ private[io] object StageWriter {
         getStageTableName(table.name)
       }
     )
+
+    val relayTable = TableName(
+      if (params.stagingTableNameRemoveQuotesOnly) {
+        // NOTE: This is the staging table name generation for SC 2.8.1 and earlier.
+        // It is kept for back-compatibility and it will be removed later without any notice.
+        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
+      } else {
+        getStageTableName(table.name)
+      }
+    )
+    assert(!params.useParquetInWrite() || params.useStagingTable)
     val targetTable =
-      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+      if ((saveMode == SaveMode.Overwrite && params.useStagingTable) ||
+      params.useParquetInWrite()) {
         tempTable
       } else {
         table
@@ -407,24 +419,43 @@ private[io] object StageWriter {
       } else {
         DefaultJDBCWrapper.tableExists(params, table.toString)
       }
-      // purge tables when overwriting
-      if (saveMode == SaveMode.Overwrite && tableExists) {
-        if (params.useStagingTable) {
-          if (params.truncateTable) {
-            conn.createTableLike(tempTable.name, table.name)
+
+      if (params.useParquetInWrite()){
+        // temporary table to store parquet file
+        conn.createTable(tempTable.name, schema, params,
+          overwrite = false, temporary = false)
+
+        if (saveMode == SaveMode.Overwrite){
+            conn.createTable(relayTable.name, params.toSnowflakeSchema(schema), params,
+              overwrite = false, temporary = false)
+        } else {
+          if (!tableExists) {
+            conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
+              overwrite = false, temporary = false)
           }
-        } else if (params.truncateTable) conn.truncateTable(table.name)
-        else conn.dropTable(table.name)
+        }
+
+      } else {
+        // purge tables when overwriting
+        if (saveMode == SaveMode.Overwrite && tableExists) {
+          if (params.useStagingTable) {
+            if (params.truncateTable) {
+              conn.createTableLike(tempTable.name, table.name)
+            }
+          } else if (params.truncateTable) conn.truncateTable(table.name)
+          else conn.dropTable(table.name)
+        }
+
+        // If the SaveMode is 'Append' and the target exists, skip
+        // CREATE TABLE IF NOT EXIST command. This command doesn't actually
+        // create a table but it needs CREATE TABLE privilege.
+        if (saveMode == SaveMode.Overwrite || !tableExists)
+        {
+          conn.createTable(targetTable.name, schema, params,
+            overwrite = false, temporary = false)
+        }
       }
 
-      // If the SaveMode is 'Append' and the target exists, skip
-      // CREATE TABLE IF NOT EXIST command. This command doesn't actually
-      // create a table but it needs CREATE TABLE privilege.
-      if (saveMode == SaveMode.Overwrite || !tableExists)
-      {
-        conn.createTable(targetTable.name, schema, params,
-          overwrite = false, temporary = false)
-      }
 
       // pre actions
       Utils.executePreActions(
@@ -455,15 +486,32 @@ private[io] object StageWriter {
         Option(targetTable)
       )
 
-      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-        if (tableExists) {
-          conn.swapTable(table.name, tempTable.name)
-          conn.dropTable(tempTable.name)
+      if (params.useParquetInWrite()) {
+        if (saveMode == SaveMode.Overwrite){
+          conn.insertIntoTable(relayTable.name, tempTable.name,
+            params.toSnowflakeSchema(schema), schema, params)
+          if (tableExists) {
+            conn.swapTable(table.name, relayTable.name)
+            conn.dropTable(relayTable.name)
+          } else {
+            conn.renameTable(table.name, relayTable.name)
+          }
         } else {
-          conn.renameTable(table.name, tempTable.name)
+          conn.insertIntoTable(table.name, tempTable.name,
+            params.toSnowflakeSchema(schema), schema, params)
+          conn.commit()
         }
       } else {
-        conn.commit()
+        if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+          if (tableExists) {
+            conn.swapTable(table.name, tempTable.name)
+            conn.dropTable(tempTable.name)
+          } else {
+            conn.renameTable(table.name, tempTable.name)
+          }
+        } else {
+          conn.commit()
+        }
       }
     } catch {
       case e: Exception =>
@@ -478,15 +526,15 @@ private[io] object StageWriter {
   }
 
   /**
-    * Execute COPY INTO table command.
-    * Firstly, it executes COPY INTO table commands without FILES clause.
-    * Internally, snowflake uses LIST to get files for a prefix.
-    * In rare cases, some files may be missing because the cloud service's
-    * eventually consistency.
-    * So it the return result for COPY command is checked. If any files are
-    * missed, an additional COPY INTO table with FILES clause is used to load
-    * the missed files.
-    */
+   * Execute COPY INTO table command.
+   * Firstly, it executes COPY INTO table commands without FILES clause.
+   * Internally, snowflake uses LIST to get files for a prefix.
+   * In rare cases, some files may be missing because the cloud service's
+   * eventually consistency.
+   * So it the return result for COPY command is checked. If any files are
+   * missed, an additional COPY INTO table with FILES clause is used to load
+   * the missed files.
+   */
   private[io] def executeCopyIntoTable(sqlContext: SQLContext,
                                        conn: ServerConnection,
                                        schema: StructType,
@@ -590,12 +638,12 @@ private[io] object StageWriter {
         // Only load part of missed files.
         // Exception is raised for the failure.
         val secondCopyFileSet: Option[mutable.Set[String]] =
-        if (TestHook.isTestFlagEnabled(
-          TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
-          Some(missedFileSet.grouped(2).toList.head)
-        } else {
-          Some(missedFileSet)
-        }
+          if (TestHook.isTestFlagEnabled(
+            TestHookFlag.TH_COPY_INTO_TABLE_MISS_FILES_FAIL)) {
+            Some(missedFileSet.grouped(2).toList.head)
+          } else {
+            Some(missedFileSet)
+          }
 
         // Generate copy command with missed files only
         useFilesClause = true
@@ -756,8 +804,8 @@ private[io] object StageWriter {
   }
 
   /**
-    * Generate the COPY SQL command
-    */
+   * Generate the COPY SQL command
+   */
   private[io] def copySql(schema: StructType,
                           saveMode: SaveMode,
                           params: MergedParameters,
@@ -776,9 +824,11 @@ private[io] object StageWriter {
     }
 
     def getMappingToString(
-      list: Option[List[(Int, String)]]
-    ): SnowflakeSQLStatement =
+                            list: Option[List[(Int, String)]]
+                          ): SnowflakeSQLStatement =
       format match {
+        case SupportedFormat.PARQUET =>
+          EmptySnowflakeSQLStatement()
         case SupportedFormat.JSON =>
           val tableSchema =
             DefaultJDBCWrapper.resolveTable(conn, table.name, params)
@@ -829,10 +879,12 @@ private[io] object StageWriter {
       }
 
     def getMappingFromString(
-      list: Option[List[(Int, String)]],
-      from: SnowflakeSQLStatement
-    ): SnowflakeSQLStatement =
+                              list: Option[List[(Int, String)]],
+                              from: SnowflakeSQLStatement
+                            ): SnowflakeSQLStatement =
       format match {
+        case SupportedFormat.PARQUET =>
+          from
         case SupportedFormat.JSON =>
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
@@ -874,7 +926,8 @@ private[io] object StageWriter {
 
     val fromString = ConstantString(s"FROM @$tempStage/$prefix/") !
 
-    val mappingList: Option[List[(Int, String)]] = params.columnMap match {
+    val mappingList: Option[List[(Int, String)]] =
+      if (params.useParquetInWrite()) None else params.columnMap match {
       case Some(map) =>
         Some(map.toList.map {
           case (key, value) =>
@@ -910,24 +963,32 @@ private[io] object StageWriter {
 
     val formatString =
       format match {
+        case SupportedFormat.PARQUET =>
+          ConstantString(s"""
+                            |FILE_FORMAT = (
+                            |    TYPE=PARQUET
+                            |    USE_VECTORIZED_SCANNER=TRUE
+                            |  )
+                            |  MATCH_BY_COLUMN_NAME = CASE_SENSITIVE
+           """.stripMargin) !
         case SupportedFormat.CSV =>
           ConstantString(s"""
-               |FILE_FORMAT = (
-               |    TYPE=CSV
-               |    FIELD_DELIMITER='|'
-               |    NULL_IF=()
-               |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
-               |    TIMESTAMP_FORMAT='$timestampFormat'
-               |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
-               |    BINARY_FORMAT=BASE64
-               |  )
+                            |FILE_FORMAT = (
+                            |    TYPE=CSV
+                            |    FIELD_DELIMITER='|'
+                            |    NULL_IF=()
+                            |    FIELD_OPTIONALLY_ENCLOSED_BY='"'
+                            |    TIMESTAMP_FORMAT='$timestampFormat'
+                            |    DATE_FORMAT='TZHTZM YYYY-MM-DD HH24:MI:SS.FF9'
+                            |    BINARY_FORMAT=BASE64
+                            |  )
            """.stripMargin) !
         case SupportedFormat.JSON =>
           ConstantString(s"""
-               |FILE_FORMAT = (
-               |    TYPE = JSON
-               |    BINARY_FORMAT=BASE64
-               |)
+                            |FILE_FORMAT = (
+                            |    TYPE = JSON
+                            |    BINARY_FORMAT=BASE64
+                            |)
            """.stripMargin) !
       }
 
