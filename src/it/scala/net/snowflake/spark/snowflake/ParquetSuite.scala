@@ -559,7 +559,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   test("test nested dataframe"){
 
     val data = sc.parallelize(
-      Seq(
+      List(
         Row(123, Array(1, 2, 3), Map("a" -> 1), Row("abc")),
         Row(456, Array(4, 5, 6), Map("b" -> 2), Row("def")),
         Row(789, Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
