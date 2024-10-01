@@ -23,6 +23,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_special_char_to_exist: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_column_map_parquet: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_column_map_not_match: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_nested_dataframe: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     runSql(s"drop table if exists $test_all_type")
@@ -548,9 +549,61 @@ class ParquetSuite extends IntegrationSuiteBase {
       df1.write
         .format(SNOWFLAKE_SOURCE_SHORT_NAME)
         .options(connectorOptionsNoTable)
+        .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_not_match)
         .mode(SaveMode.Append)
         .save()
     }
+  }
+
+  test("test nested dataframe"){
+
+    val data = sc.parallelize(
+      Seq(
+        Row(123, Array(1, 2, 3), Map("a" -> 1), Row("abc")),
+        Row(456, Array(4, 5, 6), Map("b" -> 2), Row("def")),
+        Row(789, Array(7, 8, 9), Map("c" -> 3), Row("ghi"))
+      )
+    )
+
+    val schema1 = new StructType(
+      Array(
+        StructField("NUM", IntegerType, nullable = true),
+        StructField("ARR", ArrayType(IntegerType), nullable = true),
+        StructField("MAP", MapType(StringType, IntegerType), nullable = true),
+        StructField(
+          "OBJ",
+          StructType(Array(StructField("STR", StringType, nullable = true)))
+        )
+      )
+    )
+
+    val df = sparkSession.createDataFrame(data, schema1)
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_nested_dataframe)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val out = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_nested_dataframe)
+      .schema(schema1)
+      .load()
+
+    val result = out.collect()
+    assert(result.length == 3)
+
+    assert(result(0).getInt(0) == 123)
+    assert(result(0).getList[Int](1).get(0) == 1)
+    assert(result(1).getList[Int](1).get(1) == 5)
+    assert(result(2).getList[Int](1).get(2) == 9)
+    assert(result(1).getMap[String, Int](2)("b") == 2)
+    assert(result(2).getStruct(3).getString(0) == "ghi")
+
   }
 }

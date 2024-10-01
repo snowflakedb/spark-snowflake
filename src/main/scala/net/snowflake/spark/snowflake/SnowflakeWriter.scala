@@ -126,7 +126,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
    * function that map spark style column name to snowflake style column name
   */
   def mapColumn(schema: StructType,
-                params: MergedParameters
+                params: MergedParameters,
+                snowflakeStyle: Boolean
                ): StructType = {
     params.columnMap match {
       case Some(map) =>
@@ -134,10 +135,14 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           case StructField(name, dataType, nullable, metadata) =>
             StructField(
               params.replaceSpecialCharacter(
-                snowflakeStyleString(map.getOrElse(name, name), params)),
+                if (snowflakeStyle) {
+                  snowflakeStyleString(map.getOrElse(name, name), params)
+                } else {
+                  map.getOrElse(name, name)
+                }),
               dataType match {
                 case datatype: StructType =>
-                  mapColumn(datatype, params)
+                  mapColumn(datatype, params, snowflakeStyle = false)
                 case _ =>
                   dataType
               },
@@ -147,7 +152,11 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         })
       case _ =>
         val newSchema = if (params.snowflakeTableSchema == null) {
-          snowflakeStyleSchema(schema, params)
+          if (snowflakeStyle) {
+            snowflakeStyleSchema(schema, params)
+          } else {
+            schema
+          }
         } else {
           StructType(schema.zip(params.snowflakeTableSchema).map{
             case (field1, field2) =>
@@ -166,7 +175,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               params.replaceSpecialCharacter(name),
               dataType match {
                 case datatype: StructType =>
-                  mapColumn(datatype, params)
+                  mapColumn(datatype, params, snowflakeStyle = false)
                 case _ =>
                   dataType
               },
@@ -188,7 +197,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
 
     format match {
       case SupportedFormat.PARQUET =>
-        val snowflakeStyleSchema = mapColumn(data.schema, params)
+        val snowflakeStyleSchema = mapColumn(data.schema, params, snowflakeStyle = true)
         val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
         (data.rdd.map (row => {
             def rowToAvroRecord(row: Row,
