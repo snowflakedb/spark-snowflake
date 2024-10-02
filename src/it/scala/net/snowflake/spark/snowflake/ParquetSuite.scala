@@ -573,7 +573,7 @@ class ParquetSuite extends IntegrationSuiteBase {
         StructField("MAP", MapType(StringType, IntegerType), nullable = true),
         StructField(
           "OBJ",
-          StructType(Array(StructField("STR", StringType, nullable = true)))
+          StructType(Array(StructField("str", StringType, nullable = true)))
         )
       )
     )
@@ -594,7 +594,6 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_nested_dataframe)
       .schema(schema1)
       .load()
-
     val result = out.collect()
     assert(result.length == 3)
 
@@ -604,6 +603,6 @@ class ParquetSuite extends IntegrationSuiteBase {
     assert(result(2).getList[Int](1).get(2) == 9)
     assert(result(1).getMap[String, Int](2)("b") == 2)
     assert(result(2).getStruct(3).getString(0) == "ghi")
-
+    assert(result(2).getAs[Row]("OBJ").getAs[String]("str") == "ghi")
   }
 }

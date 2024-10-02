@@ -139,7 +139,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
                   snowflakeStyleString(map.getOrElse(name, name), params)
                 } else {
                   map.getOrElse(name, name)
-                }),
+                }, snowflakeStyle),
               dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params, snowflakeStyle = false)
@@ -172,7 +172,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         StructType(newSchema.map {
           case StructField(name, dataType, nullable, metadata) =>
             StructField(
-              params.replaceSpecialCharacter(name),
+              params.replaceSpecialCharacter(name, snowflakeStyle),
               dataType match {
                 case datatype: StructType =>
                   mapColumn(datatype, params, snowflakeStyle = false)
