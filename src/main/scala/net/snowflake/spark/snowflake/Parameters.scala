@@ -440,12 +440,14 @@ object Parameters {
       snowflakeTableSchema
     }
 
-    def replaceSpecialCharacter(name: String): String = {
+    def replaceSpecialCharacter(name: String, toUpperCase: Boolean): String = {
       var res = name.replaceAll("(^\\d|[^a-zA-Z0-9_])", "_")
       while(stagingToSnowflakeColumnMap.contains(res.toUpperCase)){
         res += "_"
       }
-      res = res.toUpperCase
+      if (toUpperCase) {
+        res = res.toUpperCase
+      }
       snowflakeToStagingColumnMap += (name -> res)
       stagingToSnowflakeColumnMap += (res -> name)
       res
