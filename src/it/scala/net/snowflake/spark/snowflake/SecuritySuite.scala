@@ -69,55 +69,6 @@ class SecuritySuite extends IntegrationSuiteBase {
     FileUtils.deleteQuietly(new File(TEST_LOG_FILE_NAME))
   }
 
-  ignore("manual test for addLog4j2FileAppender()/dropLog4j2FileAppender()") {
-    logger.info("Before adding file appender")
-    addLog4j2FileAppender(loggingFilePath, fileAppenderName)
-    logger.info("After adding file appender")
-    dropLog4j2FileAppender(fileAppenderName)
-    logger.info("After dropping file appender")
-  }
-
-  // in JDBC starts to log masked pre-signed url in 3.17.0
-  ignore("verify pre-signed URL are not logged for read & write") {
-    logger.info("Reconfigure to log into file")
-    // Reconfigure log file to output all logging entries.
-    if (USE_LOG4J2_PROPERTIES) {
-      addLog4j2FileAppender(loggingFilePath, fileAppenderName)
-    } else {
-      reconfigureLogFile(TEST_LOG4J_PROPERTY)
-    }
-
-    try {
-      // Read from one snowflake table and write to another snowflake table
-      sparkSession
-        .sql("select * from test_table_large_result order by int_c")
-        .write
-        .format(SNOWFLAKE_SOURCE_NAME)
-        .options(thisConnectorOptionsNoTable)
-        .option("dbtable", test_table_write)
-        .mode(SaveMode.Overwrite)
-        .save()
-
-      // Check pre-signed is used for the test
-      assert(searchInLogFile(".*Spark Connector.*"))
-
-      // Check pre-signed URL are NOT printed in the log
-      // by searching the pre-signed URL domain name.
-      assert(!searchInLogFile(".*https?://.*amazonaws.com.*"))
-      assert(!searchInLogFile(".*https?://.*core.windows.net.*"))
-      assert(!searchInLogFile(".*https?://.*googleapis.com.*"))
-    } finally {
-      // Reconfigure back to the default log file.
-      if (USE_LOG4J2_PROPERTIES) {
-        dropLog4j2FileAppender(fileAppenderName)
-      } else {
-        reconfigureLogFile(DEFAULT_LOG4J_PROPERTY)
-      }
-    }
-
-    logger.info("Restore back to log into STDOUT")
-  }
-
   override def beforeEach(): Unit = {
     super.beforeEach()
   }
