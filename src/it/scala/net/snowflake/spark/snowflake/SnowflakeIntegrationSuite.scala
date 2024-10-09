@@ -20,6 +20,7 @@ package net.snowflake.spark.snowflake
 import java.sql.SQLException
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
@@ -168,6 +169,25 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
     )
   }
 
+  test("DefaultSource can handle trailing comments") {
+    checkAnswer(
+      sparkSession.sql("select * from test_table -- inline comment"),
+      TestUtils.expectedData
+    )
+
+    checkAnswer(
+      sparkSession.sql("select * from test_table /* a contained comment */"),
+      TestUtils.expectedData
+    )
+
+    // Spark SQL parser doesn't accept double-slash inline comments
+    // despite Snowflake SQL accepting it
+    val e = intercept[ParseException] {
+      sparkSession.sql("select * from test_table // inline comment").collect()
+    }
+    assert(e.getMessage.contains("Syntax error at or near '/'"))
+  }
+
   test("count() on DataFrame created from a Snowflake table") {
     checkAnswer(
       sparkSession.sql("select count(*) from test_table"),
@@ -221,6 +241,22 @@ class SnowflakeIntegrationSuite extends IntegrationSuiteBase {
       .option("query", query)
       .load()
     checkAnswer(loadedDf, Seq(Row(2)))
+  }
+
+  test("Can load output when 'query' is specified with trailing comments") {
+    Seq(
+      "// an inline slash comment",
+      "-- an inline dash comment",
+      "/* a contained comment */"
+    ).foreach { comment =>
+      val query = s"select testbyte from $test_table where testfloat = 3.0 $comment"
+      val loadedDf = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("query", query)
+        .load()
+      checkAnswer(loadedDf, Seq(Row(2)))
+    }
   }
 
   test("Can load output of Snowflake aggregation queries") {

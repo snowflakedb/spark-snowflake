@@ -148,7 +148,7 @@ private[snowflake] object StageReader {
                  |    NULL_IF= ()
                  |  )
                  |  """.stripMargin) !,
-            ConstantString("FROM (") + statement + ")"
+            ConstantString("FROM (\n") + statement + "\n)"
           )
         case SupportedFormat.JSON =>
           (
@@ -158,7 +158,7 @@ private[snowflake] object StageReader {
                  |    COMPRESSION='$compression'
                  |)
                  |""".stripMargin) !,
-            ConstantString("FROM (SELECT object_construct(*) FROM (") + statement + "))"
+            ConstantString("FROM (SELECT object_construct(*) FROM (\n") + statement + "\n))"
           )
       }
 
