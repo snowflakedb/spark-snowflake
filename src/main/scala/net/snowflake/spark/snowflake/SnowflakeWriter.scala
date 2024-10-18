@@ -28,6 +28,7 @@ import net.snowflake.spark.snowflake.io.SupportedFormat
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
+import org.apache.avro.generic.GenericData.Record
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
@@ -198,8 +199,9 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     format match {
       case SupportedFormat.PARQUET =>
         val snowflakeStyleSchema = mapColumn(data.schema, params, snowflakeStyle = true)
-        val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
-        (data.rdd.map (row => {
+        (data.rdd.mapPartitions(rows => {
+          val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
+          rows.map(row => {
             def rowToAvroRecord(row: Row,
                                 schema: Schema,
                                 snowflakeStyleSchema: StructType,
@@ -232,7 +234,8 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
               }
               record
             }
-          rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
+            rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
+          })
         }), snowflakeStyleSchema)
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)

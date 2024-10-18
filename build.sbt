@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.5"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
+val sparkVersion = "3.1"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.1.1")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
