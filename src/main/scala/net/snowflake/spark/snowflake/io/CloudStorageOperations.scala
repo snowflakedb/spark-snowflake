@@ -46,6 +46,7 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.spark.{SparkContext, TaskContext}
@@ -671,9 +672,12 @@ sealed trait CloudStorage {
           format match {
             case SupportedFormat.PARQUET =>
               val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
+              val config = new Configuration()
+              config.setBoolean("parquet.avro.write-old-list-structure", false)
               val writer = AvroParquetWriter.builder[GenericData.Record](
                   new ParquetUtils.StreamOutputFile(uploadStream)
                 ).withSchema(rows.head.getSchema)
+                .withConf(config)
                 .withCompressionCodec(CompressionCodecName.SNAPPY)
                 .build()
               rows.foreach(writer.write)
@@ -701,9 +705,12 @@ sealed trait CloudStorage {
           case SupportedFormat.PARQUET =>
             val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
             val outputStream = new ByteArrayOutputStream()
+            val config = new Configuration()
+            config.setBoolean("parquet.avro.write-old-list-structure", false)
             val writer = AvroParquetWriter.builder[GenericData.Record](
                 new ParquetUtils.StreamOutputFile(outputStream)
               ).withSchema(rows.head.getSchema)
+              .withConf(config)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
             rows.foreach(writer.write)
@@ -786,117 +793,6 @@ sealed trait CloudStorage {
       }
     } else {
       logger.info(s"Empty partition, skipped file $fileName")
-    }
-
-
-    // todo: handle GCP
-    // When attempt number is smaller than 2, throw exception
-    if (TaskContext.get().attemptNumber() < 2) {
-      TestHook.raiseExceptionIfTestFlagEnabled(
-        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-        "Negative test to raise error when uploading data for the first two attempts"
-      )
-    }
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Finish writing partition ID:$partitionID $fileName
-         | write row count is $rowCount.
-         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
-         | $processTimeInfo
-         |""".stripMargin.filter(_ >= ' '))
-
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
-  }
-  // Read data and upload to cloud storage
-  private def doUploadPartitionV1(rows: Iterator[String],
-                                  format: SupportedFormat,
-                                  compress: Boolean,
-                                  directory: String,
-                                  partitionID: Int,
-                                  storageInfo: Option[Map[String, String]],
-                                  fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
-                                 )
-  : SingleElementIterator = {
-    val fileName = getFileName(partitionID, format, compress)
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Start writing partition ID:$partitionID as $fileName
-         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
-         |""".stripMargin.filter(_ >= ' '))
-
-    // Read data and upload to cloud storage
-    var rowCount: Long = 0
-    var dataSize: Long = 0
-    var processTimeInfo = ""
-    val startTime = System.currentTimeMillis()
-    if (storageInfo.isDefined) {
-      // For AWS and Azure, the rows are written to OutputStream as they are read.
-      var uploadStream: Option[OutputStream] = None
-      while (rows.hasNext) {
-        // Defer to create the upload stream to avoid empty files.
-        if (uploadStream.isEmpty) {
-          uploadStream = Some(createUploadStream(
-            fileName, Some(directory), compress, storageInfo.get))
-        }
-        val oneRow = rows.next.getBytes("UTF-8")
-        uploadStream.get.write(oneRow)
-        uploadStream.get.write('\n')
-        rowCount += 1
-        dataSize += (oneRow.size + 1)
-      }
-      if (uploadStream.isDefined) {
-        uploadStream.get.close()
-      }
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           |""".stripMargin.filter(_ >= ' ')
-    }
-    // For GCP, the rows are cached and then uploaded.
-    else if (fileTransferMetadata.isDefined) {
-      // cache the data in buffer
-      val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
-      while (rows.hasNext) {
-        outputStream.write(rows.next.getBytes("UTF-8"))
-        outputStream.write('\n')
-        rowCount += 1
-      }
-      val data = outputStream.toByteArray
-      dataSize = data.size
-      outputStream.close()
-
-      // Set up proxy info if it is configured.
-      val proxyProperties = new Properties()
-      proxyInfo match {
-        case Some(proxyInfoValue) =>
-          proxyInfoValue.setProxyForJDBC(proxyProperties)
-        case None =>
-      }
-
-      // Upload data with FileTransferMetadata
-      val startUploadTime = System.currentTimeMillis()
-      val inStream = new ByteArrayInputStream(data)
-      SnowflakeFileTransferAgent.uploadWithoutConnection(
-        SnowflakeFileTransferConfig.Builder.newInstance()
-          .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-          .setUploadStream(inStream)
-          .setRequireCompress(compress)
-          .setDestFileName(fileName)
-          .setOcspMode(OCSPMode.FAIL_OPEN)
-          .setProxyProperties(proxyProperties)
-          .build())
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-           | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-           |""".stripMargin.filter(_ >= ' ')
     }
 
     // When attempt number is smaller than 2, throw exception
