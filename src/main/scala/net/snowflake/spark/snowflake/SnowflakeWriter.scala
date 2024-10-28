@@ -199,44 +199,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
     format match {
       case SupportedFormat.PARQUET =>
         val snowflakeStyleSchema = mapColumn(data.schema, params, snowflakeStyle = true)
-        (data.rdd.mapPartitions(rows => {
-          val schema = io.ParquetUtils.convertStructToAvro(snowflakeStyleSchema)
-          rows.map(row => {
-            def rowToAvroRecord(row: Row,
-                                schema: Schema,
-                                snowflakeStyleSchema: StructType,
-                                params: MergedParameters): GenericData.Record = {
-              val record = new GenericData.Record(schema)
-              row.toSeq.zip(snowflakeStyleSchema.names).foreach {
-                case (row: Row, name) =>
-                  record.put(name,
-                    rowToAvroRecord(
-                      row,
-                      schema.getField(name).schema().getTypes.get(0),
-                      snowflakeStyleSchema(name).dataType.asInstanceOf[StructType],
-                      params
-                    ))
-                case (map: scala.collection.immutable.Map[Any, Any], name) =>
-                  record.put(name, map.asJava)
-                case (str: String, name) =>
-                  record.put(name, if (params.trimSpace) str.trim else str)
-                case (arr: mutable.WrappedArray[Any], name) =>
-                  record.put(name, arr.toArray)
-                case (decimal: java.math.BigDecimal, name) =>
-                  record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
-                case (timestamp: java.sql.Timestamp, name) =>
-                  record.put(name, timestamp.toString)
-                case (date: java.sql.Date, name) =>
-                  record.put(name, date.toString)
-                case (date: java.time.LocalDateTime, name) =>
-                  record.put(name, date.toEpochSecond(ZoneOffset.UTC))
-                case (value, name) => record.put(name, value)
-              }
-              record
-            }
-            rowToAvroRecord(row, schema, snowflakeStyleSchema, params)
-          })
-        }), snowflakeStyleSchema)
+        (data.rdd.asInstanceOf[RDD[Any]], snowflakeStyleSchema)
       case SupportedFormat.CSV =>
         val conversionFunction = genConversionFunctions(data.schema, params)
         (data.rdd.map(row => {
