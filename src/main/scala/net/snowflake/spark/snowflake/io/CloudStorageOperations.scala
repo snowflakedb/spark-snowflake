@@ -660,243 +660,73 @@ sealed trait CloudStorage {
     // partition can be empty, can't generate empty parquet file,
     // so skip the empty partition.
     if (input.nonEmpty) {
-      if (storageInfo.isDefined) {
-        val uploadStream = createUploadStream(
+      val uploadStream = if (storageInfo.isDefined) {
+        createUploadStream(
           fileName,
           Some(directory),
           //      compress,
           if (format == SupportedFormat.PARQUET) false else compress,
           storageInfo.get)
-        try {
-          format match {
-            case SupportedFormat.PARQUET =>
-              val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
-              val writer = AvroParquetWriter.builder[GenericData.Record](
-                  new ParquetUtils.StreamOutputFile(uploadStream)
-                ).withSchema(rows.head.getSchema)
-                .withCompressionCodec(CompressionCodecName.SNAPPY)
-                .build()
-              rows.foreach(writer.write)
-              writer.close()
-            case _ =>
-              val rows = input.asInstanceOf[Iterator[String]]
-              while (rows.hasNext) {
-                val oneRow = rows.next.getBytes("UTF-8")
-                uploadStream.write(oneRow)
-                uploadStream.write('\n')
-                rowCount += 1
-                dataSize += (oneRow.size + 1)
-              }
-          }
-        } finally {
-          uploadStream.close()
-        }
-        val endTime = System.currentTimeMillis()
-        processTimeInfo =
-          s"""read_and_upload_time:
-             | ${Utils.getTimeString(endTime - startTime)}
-             |""".stripMargin.filter(_ >= ' ')
-      } else if (fileTransferMetadata.isDefined) {
+      } else {
+        new ByteArrayOutputStream(4 * 1024 * 1024)
+      }
+      try {
         format match {
           case SupportedFormat.PARQUET =>
             val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
-            val outputStream = new ByteArrayOutputStream()
             val writer = AvroParquetWriter.builder[GenericData.Record](
-                new ParquetUtils.StreamOutputFile(outputStream)
+                new ParquetUtils.StreamOutputFile(uploadStream)
               ).withSchema(rows.head.getSchema)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
             rows.foreach(writer.write)
+            rowCount += rows.size
+            dataSize += writer.getDataSize
             writer.close()
-
-            val data = outputStream.toByteArray
-            dataSize = data.size
-            outputStream.close()
-
-            // Set up proxy info if it is configured.
-            val proxyProperties = new Properties()
-            proxyInfo match {
-              case Some(proxyInfoValue) =>
-                proxyInfoValue.setProxyForJDBC(proxyProperties)
-              case None =>
-            }
-
-            // Upload data with FileTransferMetadata
-            val startUploadTime = System.currentTimeMillis()
-            val inStream = new ByteArrayInputStream(data)
-            SnowflakeFileTransferAgent.uploadWithoutConnection(
-              SnowflakeFileTransferConfig.Builder.newInstance()
-                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-                .setUploadStream(inStream)
-                .setRequireCompress(false)
-                .setDestFileName(fileName)
-                .setOcspMode(OCSPMode.FAIL_OPEN)
-                .setProxyProperties(proxyProperties)
-                .build())
-            val endTime = System.currentTimeMillis()
-            processTimeInfo =
-              s"""read_and_upload_time:
-                 | ${Utils.getTimeString(endTime - startTime)}
-                 | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-                 | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-                 |""".stripMargin.filter(_ >= ' ')
-
           case _ =>
-            val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
             val rows = input.asInstanceOf[Iterator[String]]
             while (rows.hasNext) {
               val oneRow = rows.next.getBytes("UTF-8")
-              outputStream.write(oneRow)
-              outputStream.write('\n')
+              uploadStream.write(oneRow)
+              uploadStream.write('\n')
               rowCount += 1
               dataSize += (oneRow.size + 1)
             }
-            val data = outputStream.toByteArray
-            dataSize = data.size
-            outputStream.close()
+        }
+      } finally {
+        if (storageInfo.isDefined) {
+          uploadStream.close()
+        } else {
+          val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
+          dataSize = data.size
+          uploadStream.close()
+          // Set up proxy info if it is configured.
+          val proxyProperties = new Properties()
+          proxyInfo match {
+            case Some(proxyInfoValue) =>
+              proxyInfoValue.setProxyForJDBC(proxyProperties)
+            case None =>
+          }
 
-            // Set up proxy info if it is configured.
-            val proxyProperties = new Properties()
-            proxyInfo match {
-              case Some(proxyInfoValue) =>
-                proxyInfoValue.setProxyForJDBC(proxyProperties)
-              case None =>
-            }
-
-            // Upload data with FileTransferMetadata
-            val startUploadTime = System.currentTimeMillis()
-            val inStream = new ByteArrayInputStream(data)
-            SnowflakeFileTransferAgent.uploadWithoutConnection(
-              SnowflakeFileTransferConfig.Builder.newInstance()
-                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-                .setUploadStream(inStream)
-                .setRequireCompress(compress)
-                .setDestFileName(fileName)
-                .setOcspMode(OCSPMode.FAIL_OPEN)
-                .setProxyProperties(proxyProperties)
-                .build())
-            val endTime = System.currentTimeMillis()
-            processTimeInfo =
-              s"""read_and_upload_time:
-                 | ${Utils.getTimeString(endTime - startTime)}
-                 | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-                 | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-                 |""".stripMargin.filter(_ >= ' ')
+          val inStream = new ByteArrayInputStream(data)
+          SnowflakeFileTransferAgent.uploadWithoutConnection(
+            SnowflakeFileTransferConfig.Builder.newInstance()
+              .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+              .setUploadStream(inStream)
+              .setRequireCompress(false)
+              .setDestFileName(fileName)
+              .setOcspMode(OCSPMode.FAIL_OPEN)
+              .setProxyProperties(proxyProperties)
+              .build())
+          val endTime = System.currentTimeMillis()
+          processTimeInfo =
+            s"""read_and_upload_time:
+               | ${Utils.getTimeString(endTime - startTime)}
+               |""".stripMargin.filter(_ >= ' ')
         }
       }
     } else {
       logger.info(s"Empty partition, skipped file $fileName")
-    }
-
-
-    // todo: handle GCP
-    // When attempt number is smaller than 2, throw exception
-    if (TaskContext.get().attemptNumber() < 2) {
-      TestHook.raiseExceptionIfTestFlagEnabled(
-        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-        "Negative test to raise error when uploading data for the first two attempts"
-      )
-    }
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Finish writing partition ID:$partitionID $fileName
-         | write row count is $rowCount.
-         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
-         | $processTimeInfo
-         |""".stripMargin.filter(_ >= ' '))
-
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
-  }
-  // Read data and upload to cloud storage
-  private def doUploadPartitionV1(rows: Iterator[String],
-                                  format: SupportedFormat,
-                                  compress: Boolean,
-                                  directory: String,
-                                  partitionID: Int,
-                                  storageInfo: Option[Map[String, String]],
-                                  fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
-                                 )
-  : SingleElementIterator = {
-    val fileName = getFileName(partitionID, format, compress)
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Start writing partition ID:$partitionID as $fileName
-         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
-         |""".stripMargin.filter(_ >= ' '))
-
-    // Read data and upload to cloud storage
-    var rowCount: Long = 0
-    var dataSize: Long = 0
-    var processTimeInfo = ""
-    val startTime = System.currentTimeMillis()
-    if (storageInfo.isDefined) {
-      // For AWS and Azure, the rows are written to OutputStream as they are read.
-      var uploadStream: Option[OutputStream] = None
-      while (rows.hasNext) {
-        // Defer to create the upload stream to avoid empty files.
-        if (uploadStream.isEmpty) {
-          uploadStream = Some(createUploadStream(
-            fileName, Some(directory), compress, storageInfo.get))
-        }
-        val oneRow = rows.next.getBytes("UTF-8")
-        uploadStream.get.write(oneRow)
-        uploadStream.get.write('\n')
-        rowCount += 1
-        dataSize += (oneRow.size + 1)
-      }
-      if (uploadStream.isDefined) {
-        uploadStream.get.close()
-      }
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           |""".stripMargin.filter(_ >= ' ')
-    }
-    // For GCP, the rows are cached and then uploaded.
-    else if (fileTransferMetadata.isDefined) {
-      // cache the data in buffer
-      val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
-      while (rows.hasNext) {
-        outputStream.write(rows.next.getBytes("UTF-8"))
-        outputStream.write('\n')
-        rowCount += 1
-      }
-      val data = outputStream.toByteArray
-      dataSize = data.size
-      outputStream.close()
-
-      // Set up proxy info if it is configured.
-      val proxyProperties = new Properties()
-      proxyInfo match {
-        case Some(proxyInfoValue) =>
-          proxyInfoValue.setProxyForJDBC(proxyProperties)
-        case None =>
-      }
-
-      // Upload data with FileTransferMetadata
-      val startUploadTime = System.currentTimeMillis()
-      val inStream = new ByteArrayInputStream(data)
-      SnowflakeFileTransferAgent.uploadWithoutConnection(
-        SnowflakeFileTransferConfig.Builder.newInstance()
-          .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-          .setUploadStream(inStream)
-          .setRequireCompress(compress)
-          .setDestFileName(fileName)
-          .setOcspMode(OCSPMode.FAIL_OPEN)
-          .setProxyProperties(proxyProperties)
-          .build())
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-           | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-           |""".stripMargin.filter(_ >= ' ')
     }
 
     // When attempt number is smaller than 2, throw exception
