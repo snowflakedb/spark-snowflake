@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.io
 
 import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.SchemaBuilder.{BaseFieldTypeBuilder, BaseTypeBuilder, FieldDefault, RecordBuilder, nullable}
+import org.apache.avro.SchemaBuilder.{BaseFieldTypeBuilder, BaseTypeBuilder, FieldDefault, RecordBuilder}
 import org.apache.parquet.io.{OutputFile, PositionOutputStream}
 import org.apache.spark.sql.types._
 
@@ -53,7 +53,7 @@ object ParquetUtils {
         builder.stringBuilder()
           .prop("logicalType", "date")
           .endString()
-      case TimestampType | TimestampNTZType =>
+      case TimestampType =>
         builder.stringBuilder()
           .prop("logicalType", " timestamp-micros")
           .endString()

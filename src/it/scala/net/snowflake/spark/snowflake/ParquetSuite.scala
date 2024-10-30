@@ -502,7 +502,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because only support SaveMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -514,7 +514,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -526,7 +526,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[IllegalArgumentException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -547,7 +547,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
     assertThrows[SQLException]{
       df1.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_not_match)
