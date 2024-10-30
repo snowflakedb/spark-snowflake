@@ -46,6 +46,7 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.spark.{SparkContext, TaskContext}
@@ -674,9 +675,12 @@ sealed trait CloudStorage {
         format match {
           case SupportedFormat.PARQUET =>
             val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
+            val config = new Configuration()
+            config.setBoolean("parquet.avro.write-old-list-structure", false)
             val writer = AvroParquetWriter.builder[GenericData.Record](
                 new ParquetUtils.StreamOutputFile(uploadStream)
               ).withSchema(rows.head.getSchema)
+              .withConf(config)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
             rows.foreach(writer.write)

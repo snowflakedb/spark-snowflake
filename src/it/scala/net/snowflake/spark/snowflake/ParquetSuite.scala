@@ -536,6 +536,41 @@ class ParquetSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("null value in array") {
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          Array(null, "one", "two", "three"),
+        ),
+        Row(
+          Array("one", null, "two", "three"),
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("ARRAY_STRING_FIELD",
+        ArrayType(StringType, containsNull = true), nullable = true)))
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_array_map)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    val res = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_array_map)
+      .schema(schema)
+      .load().collect()
+    assert(res.head.getSeq(0) == Seq("null", "one", "two", "three"))
+    assert(res(1).getSeq(0) == Seq("one", "null", "two", "three"))
+  }
+
   test("test error when column map does not match") {
     jdbcUpdate(s"create or replace table $test_column_map_not_match (num int, str string)")
     // auto map
