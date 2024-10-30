@@ -216,7 +216,7 @@ private[io] object StageWriter {
         params, conn, tempStage = true, None, "load")
 
       val startTime = System.currentTimeMillis()
-      val fileUploadResults = storage.upload(rdd, format, None)
+      val fileUploadResults = storage.upload(rdd, format, schema, None)
 
       val startCopyInto = System.currentTimeMillis()
       if (fileUploadResults.nonEmpty) {

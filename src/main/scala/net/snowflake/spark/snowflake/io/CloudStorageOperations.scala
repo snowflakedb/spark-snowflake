@@ -51,6 +51,8 @@ import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StructType
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
@@ -346,22 +348,6 @@ object CloudStorageOperations {
     }
   }
 
-  /**
-   * Save a string rdd to cloud storage
-   *
-   * @param data    data frame object
-   * @param storage storage client
-   * @return a list of file name
-   */
-  def saveToStorage(
-                     data: RDD[Any],
-                     format: SupportedFormat = SupportedFormat.CSV,
-                     dir: Option[String] = None,
-                     compress: Boolean = true
-                   )(implicit storage: CloudStorage): List[String] = {
-    storage.upload(data, format, dir, compress).map(_.fileName)
-  }
-
   def deleteFiles(files: List[String])(implicit storage: CloudStorage,
                                        connection: ServerConnection): Unit =
     storage.deleteFiles(files)
@@ -530,9 +516,10 @@ sealed trait CloudStorage {
 
   def upload(data: RDD[Any],
              format: SupportedFormat = SupportedFormat.CSV,
+             schema: StructType,
              dir: Option[String],
              compress: Boolean = true): List[FileUploadResult] =
-    uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
+    uploadRDD(data, format, schema, dir, compress, getStageInfo(isWrite = true)._1)
 
   private[io] def checkUploadMetadata(storageInfo: Option[Map[String, String]],
                                       fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
@@ -562,6 +549,7 @@ sealed trait CloudStorage {
   // sleep time based on the task's attempt number.
   protected def uploadPartition(rows: Iterator[Any],
                                 format: SupportedFormat,
+                                schema: StructType,
                                 compress: Boolean,
                                 directory: String,
                                 partitionID: Int,
@@ -576,7 +564,7 @@ sealed trait CloudStorage {
 
     try {
       // Read data and upload to cloud storage
-      doUploadPartition(rows, format, compress, directory, partitionID,
+      doUploadPartition(rows, format, schema, compress, directory, partitionID,
         storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
@@ -633,6 +621,7 @@ sealed trait CloudStorage {
   // Read data and upload to cloud storage
   private def doUploadPartition(input: Iterator[Any],
                                 format: SupportedFormat,
+                                schema: StructType,
                                 compress: Boolean,
                                 directory: String,
                                 partitionID: Int,
@@ -669,17 +658,20 @@ sealed trait CloudStorage {
       try {
         format match {
           case SupportedFormat.PARQUET =>
-            val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
+            val avroSchema = io.ParquetUtils.convertStructToAvro(schema)
             val config = new Configuration()
             config.setBoolean("parquet.avro.write-old-list-structure", false)
             val writer = AvroParquetWriter.builder[GenericData.Record](
                 new ParquetUtils.StreamOutputFile(uploadStream)
-              ).withSchema(rows.head.getSchema)
+              ).withSchema(avroSchema)
               .withConf(config)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
-            rows.foreach(writer.write)
-            rowCount += rows.size
+            input.foreach {
+              case row: Row =>
+                writer.write(ParquetUtils.rowToAvroRecord(row, avroSchema, schema, param))
+                rowCount += 1
+            }
             dataSize += writer.getDataSize
             writer.close()
           case _ =>
@@ -749,6 +741,7 @@ sealed trait CloudStorage {
 
   protected def uploadRDD(data: RDD[Any],
                           format: SupportedFormat = SupportedFormat.CSV,
+                          schema: StructType,
                           dir: Option[String],
                           compress: Boolean = true,
                           storageInfo: Map[String, String]): List[FileUploadResult] = {
@@ -779,7 +772,7 @@ sealed trait CloudStorage {
         SparkConnectorContext.recordConfig()
 
         // Convert and upload the partition with the StorageInfo
-        uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
+        uploadPartition(rows, format, schema, compress, directory, index, Some(storageInfo), None)
 
       ///////////////////////////////////////////////////////////////////////
       // End code snippet to be executed on worker
@@ -1765,6 +1758,7 @@ case class InternalGcsStorage(override protected val param: MergedParameters,
   // so override it separately.
   override def upload(data: RDD[Any],
                       format: SupportedFormat = SupportedFormat.CSV,
+                      schema: StructType,
                       dir: Option[String],
                       compress: Boolean = true): List[FileUploadResult] = {
 
@@ -1808,7 +1802,7 @@ case class InternalGcsStorage(override protected val param: MergedParameters,
           metadatas.head
         }
         // Convert and upload the partition with the file transfer metadata
-        uploadPartition(rows, format, compress, directory, index, None, Some(metadata))
+        uploadPartition(rows, format, schema, compress, directory, index, None, Some(metadata))
 
       ///////////////////////////////////////////////////////////////////////
       // End code snippet to executed on worker
