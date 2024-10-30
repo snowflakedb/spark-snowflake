@@ -41,6 +41,49 @@ class ParquetSuite extends IntegrationSuiteBase {
     super.afterAll()
   }
 
+  test("test") {
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          1,
+          "string value",
+          123456789L,
+          123.45,
+          true,
+          BigDecimal("12345.6789").bigDecimal,
+          Timestamp.valueOf("2023-09-16 10:15:30"),
+          Date.valueOf("2023-01-01")
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("INT_COL", IntegerType, true),
+      StructField("STRING_COL", StringType, true),
+      StructField("LONG_COL", LongType, true),
+      StructField("DOUBLE_COL", DoubleType, true),
+      StructField("BOOLEAN_COL", BooleanType, true),
+      StructField("DECIMAL_COL", DecimalType(20, 10), true),
+      StructField("TIMESTAMP_COL", TimestampType, true),
+      StructField("DATE_COL", DateType, true)
+    ))
+    val df = sparkSession.createDataFrame(data, schema)
+    df.select("DECIMAL_COL").write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_all_type)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_all_type)
+      .load().show()
+  }
+
   test("test parquet with all type") {
     val data: RDD[Row] = sc.makeRDD(
       List(
