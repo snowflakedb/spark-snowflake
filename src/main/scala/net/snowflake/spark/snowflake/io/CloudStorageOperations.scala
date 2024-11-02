@@ -1795,6 +1795,16 @@ case class InternalGcsStorage(override protected val param: MergedParameters,
     // If the partition count is 0, no metadata is created.
     val oneMetadataPerFile = metadatas.nonEmpty && metadatas.head.isForOneFile
 
+    // 1. Avro Schema is not serializable in Spark 3.1.1.
+    // 2. Somehow, the Avro Schema can be created only one time with Schema builder.
+    // Therefore, if we create schema in the mapPartition function, we will get some error.
+    // e.g. cannot process decimal data.
+    // Alternatively, we create schema only one time here, and serialize the Json string to
+    // each partition, and then deserialize the Json string to avro schema in the partition.
+    if (format == SupportedFormat.PARQUET) {
+      this.avroSchema = Some(io.ParquetUtils.convertStructToAvro(schema).toString())
+    }
+
     // Some explain for newbies on spark connector:
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
