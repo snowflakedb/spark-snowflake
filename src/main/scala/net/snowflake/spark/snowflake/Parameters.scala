@@ -261,7 +261,7 @@ object Parameters {
     Set("off", "no", "false", "0", "disabled")
 
   // enable parquet format
-  val PARAM_USE_PARQUET_IN_WRITE: String = knownParam("use_parquet_in_write ")
+  val PARAM_USE_PARQUET_IN_WRITE: String = knownParam("use_parquet_in_write")
 
   /**
     * Helper method to check if a given string represents some form

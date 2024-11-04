@@ -502,7 +502,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because only support SaveMode.Append
     assertThrows[UnsupportedOperationException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -514,7 +514,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because "aaa" is not a column name of DF
     assertThrows[IllegalArgumentException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -526,7 +526,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     // throw exception because "AAA" is not a column name of table in snowflake database
     assertThrows[IllegalArgumentException] {
       df.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_parquet)
@@ -534,6 +534,41 @@ class ParquetSuite extends IntegrationSuiteBase {
         .mode(SaveMode.Append)
         .save()
     }
+  }
+
+  test("null value in array") {
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          Array(null, "one", "two", "three"),
+        ),
+        Row(
+          Array("one", null, "two", "three"),
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("ARRAY_STRING_FIELD",
+        ArrayType(StringType, containsNull = true), nullable = true)))
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_array_map)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    val res = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_array_map)
+      .schema(schema)
+      .load().collect()
+    assert(res.head.getSeq(0) == Seq("null", "one", "two", "three"))
+    assert(res(1).getSeq(0) == Seq("one", "null", "two", "three"))
   }
 
   test("test error when column map does not match") {
@@ -547,7 +582,7 @@ class ParquetSuite extends IntegrationSuiteBase {
 
     assertThrows[SQLException]{
       df1.write
-        .format(SNOWFLAKE_SOURCE_SHORT_NAME)
+        .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
         .option("dbtable", test_column_map_not_match)

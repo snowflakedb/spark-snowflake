@@ -46,8 +46,7 @@ package object io {
                rdd: RDD[Any],
                schema: StructType,
                saveMode: SaveMode,
-               format: SupportedFormat = SupportedFormat.CSV,
-               mapper: Option[Map[String, String]] = None): Unit =
+               format: SupportedFormat = SupportedFormat.CSV): Unit =
     StageWriter.writeToStage(sqlContext, rdd, schema, saveMode, params, format)
 
 }

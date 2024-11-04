@@ -1,14 +1,54 @@
 package net.snowflake.spark.snowflake.io
 
+import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.SchemaBuilder.{BaseFieldTypeBuilder, BaseTypeBuilder, FieldDefault, RecordBuilder, nullable}
+import org.apache.avro.SchemaBuilder.{BaseFieldTypeBuilder, BaseTypeBuilder, FieldDefault, RecordBuilder}
+import org.apache.avro.generic.GenericData
 import org.apache.parquet.io.{OutputFile, PositionOutputStream}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 import java.io.OutputStream
+import java.nio.ByteBuffer
+import java.time.ZoneOffset
+import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 object ParquetUtils {
   private val nameSpace = "snowflake"
+
+  def rowToAvroRecord(row: Row,
+                      schema: Schema,
+                      snowflakeStyleSchema: StructType,
+                      params: MergedParameters): GenericData.Record = {
+    val record = new GenericData.Record(schema)
+    row.toSeq.zip(snowflakeStyleSchema.names).foreach {
+      case (row: Row, name) =>
+        record.put(name,
+          rowToAvroRecord(
+            row,
+            schema.getField(name).schema().getTypes.get(0),
+            snowflakeStyleSchema(name).dataType.asInstanceOf[StructType],
+            params
+          ))
+      case (map: scala.collection.immutable.Map[Any, Any], name) =>
+        record.put(name, map.asJava)
+      case (str: String, name) =>
+        record.put(name, if (params.trimSpace) str.trim else str)
+      case (arr: mutable.WrappedArray[Any], name) =>
+        record.put(name, arr.toArray)
+      case (decimal: java.math.BigDecimal, name) =>
+        record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
+      case (timestamp: java.sql.Timestamp, name) =>
+        record.put(name, timestamp.toString)
+      case (date: java.sql.Date, name) =>
+        record.put(name, date.toString)
+      case (date: java.time.LocalDateTime, name) =>
+        record.put(name, date.toEpochSecond(ZoneOffset.UTC))
+      case (value, name) => record.put(name, value)
+    }
+    record
+  }
 
   def convertStructToAvro(structType: StructType): Schema =
     convertStructToAvro(
@@ -53,7 +93,7 @@ object ParquetUtils {
         builder.stringBuilder()
           .prop("logicalType", "date")
           .endString()
-      case TimestampType | TimestampNTZType =>
+      case TimestampType =>
         builder.stringBuilder()
           .prop("logicalType", " timestamp-micros")
           .endString()

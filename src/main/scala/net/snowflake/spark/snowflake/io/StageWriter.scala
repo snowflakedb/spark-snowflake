@@ -216,7 +216,7 @@ private[io] object StageWriter {
         params, conn, tempStage = true, None, "load")
 
       val startTime = System.currentTimeMillis()
-      val fileUploadResults = storage.upload(rdd, format, None)
+      val fileUploadResults = storage.upload(rdd, format, schema, None)
 
       val startCopyInto = System.currentTimeMillis()
       if (fileUploadResults.nonEmpty) {
@@ -562,10 +562,11 @@ private[io] object StageWriter {
         totalSize += fileUploadResult.fileSize
         totalRowCount += fileUploadResult.rowCount
       })
+    val fileSizeStr = if (totalSize == 0) "N/A" else Utils.getSizeString(totalSize)
     logAndAppend(progress, s"Total file count is ${fileUploadResults.size}, " +
       s"non-empty files count is ${expectedFileSet.size}, " +
-      s"total file size is ${Utils.getSizeString(totalSize)}, " +
-      s"total row count is ${Utils.getSizeString(totalRowCount)}.")
+      s"total file size is $fileSizeStr, " +
+      s"total row count is $totalRowCount.")
 
     // Indicate whether to use FILES clause in the copy command
     var useFilesClause = false

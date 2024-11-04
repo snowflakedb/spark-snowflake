@@ -43,13 +43,17 @@ import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
+import org.apache.avro.Schema
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StructType
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.Random
@@ -289,14 +293,11 @@ object CloudStorageOperations {
 
         (
           ExternalAzureStorage(
+            param = param,
             containerName = container,
             azureAccount = account,
             azureEndpoint = endpoint,
             azureSAS = azureSAS,
-            param.proxyInfo,
-            param.maxRetryCount,
-            param.sfURL,
-            param.useExponentialBackoff,
             param.expectedPartitionCount,
             pref = path,
             connection = conn
@@ -320,13 +321,10 @@ object CloudStorageOperations {
 
         (
           ExternalS3Storage(
+            param = param,
             bucketName = bucket,
             awsId = param.awsAccessKey.get,
             awsKey = param.awsSecretKey.get,
-            param.proxyInfo,
-            param.maxRetryCount,
-            param.sfURL,
-            param.useExponentialBackoff,
             param.expectedPartitionCount,
             pref = prefix,
             connection = conn,
@@ -349,22 +347,6 @@ object CloudStorageOperations {
           stageName
         )
     }
-  }
-
-  /**
-   * Save a string rdd to cloud storage
-   *
-   * @param data    data frame object
-   * @param storage storage client
-   * @return a list of file name
-   */
-  def saveToStorage(
-                     data: RDD[Any],
-                     format: SupportedFormat = SupportedFormat.CSV,
-                     dir: Option[String] = None,
-                     compress: Boolean = true
-                   )(implicit storage: CloudStorage): List[String] = {
-    storage.upload(data, format, dir, compress).map(_.fileName)
   }
 
   def deleteFiles(files: List[String])(implicit storage: CloudStorage,
@@ -494,14 +476,17 @@ private[io] object StorageInfo {
 }
 
 sealed trait CloudStorage {
+  protected val param: MergedParameters
   protected val RETRY_SLEEP_TIME_UNIT_IN_MS: Int = 1500
   protected val MAX_SLEEP_TIME_IN_MS: Int = 3 * 60 * 1000
   private var processedFileCount = 0
   protected val connection: ServerConnection
-  protected val maxRetryCount: Int
-  protected val proxyInfo: Option[ProxyInfo]
-  protected val sfURL: String
-  protected val useExponentialBackoff: Boolean
+  protected val maxRetryCount: Int = param.maxRetryCount
+  protected val proxyInfo: Option[ProxyInfo] = param.proxyInfo
+  protected val sfURL: String = param.sfURL
+  protected val useExponentialBackoff: Boolean = param.useExponentialBackoff
+
+  protected var avroSchema: Option[String] = None
 
   // The first 10 sleep time in second will be like
   // 3, 6, 12, 24, 48, 96, 192, 300, 300, 300, etc
@@ -534,9 +519,10 @@ sealed trait CloudStorage {
 
   def upload(data: RDD[Any],
              format: SupportedFormat = SupportedFormat.CSV,
+             schema: StructType,
              dir: Option[String],
              compress: Boolean = true): List[FileUploadResult] =
-    uploadRDD(data, format, dir, compress, getStageInfo(isWrite = true)._1)
+    uploadRDD(data, format, schema, dir, compress, getStageInfo(isWrite = true)._1)
 
   private[io] def checkUploadMetadata(storageInfo: Option[Map[String, String]],
                                       fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
@@ -566,6 +552,7 @@ sealed trait CloudStorage {
   // sleep time based on the task's attempt number.
   protected def uploadPartition(rows: Iterator[Any],
                                 format: SupportedFormat,
+                                schema: StructType,
                                 compress: Boolean,
                                 directory: String,
                                 partitionID: Int,
@@ -580,7 +567,7 @@ sealed trait CloudStorage {
 
     try {
       // Read data and upload to cloud storage
-      doUploadPartition(rows, format, compress, directory, partitionID,
+      doUploadPartition(rows, format, schema, compress, directory, partitionID,
         storageInfo, fileTransferMetadata)
     } catch {
       // Hit exception when uploading the file
@@ -637,6 +624,7 @@ sealed trait CloudStorage {
   // Read data and upload to cloud storage
   private def doUploadPartition(input: Iterator[Any],
                                 format: SupportedFormat,
+                                schema: StructType,
                                 compress: Boolean,
                                 directory: String,
                                 partitionID: Int,
@@ -660,136 +648,80 @@ sealed trait CloudStorage {
     // partition can be empty, can't generate empty parquet file,
     // so skip the empty partition.
     if (input.nonEmpty) {
-      if (storageInfo.isDefined) {
-        val uploadStream = createUploadStream(
+      val uploadStream = if (storageInfo.isDefined) {
+        createUploadStream(
           fileName,
           Some(directory),
           //      compress,
           if (format == SupportedFormat.PARQUET) false else compress,
           storageInfo.get)
-        try {
-          format match {
-            case SupportedFormat.PARQUET =>
-              val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
-              val writer = AvroParquetWriter.builder[GenericData.Record](
-                  new ParquetUtils.StreamOutputFile(uploadStream)
-                ).withSchema(rows.head.getSchema)
-                .withCompressionCodec(CompressionCodecName.SNAPPY)
-                .build()
-              rows.foreach(writer.write)
-              writer.close()
-            case _ =>
-              val rows = input.asInstanceOf[Iterator[String]]
-              while (rows.hasNext) {
-                val oneRow = rows.next.getBytes("UTF-8")
-                uploadStream.write(oneRow)
-                uploadStream.write('\n')
-                rowCount += 1
-                dataSize += (oneRow.size + 1)
-              }
-          }
-        } finally {
-          uploadStream.close()
-        }
-        val endTime = System.currentTimeMillis()
-        processTimeInfo =
-          s"""read_and_upload_time:
-             | ${Utils.getTimeString(endTime - startTime)}
-             |""".stripMargin.filter(_ >= ' ')
-      } else if (fileTransferMetadata.isDefined) {
+      } else {
+        new ByteArrayOutputStream(4 * 1024 * 1024)
+      }
+      try {
         format match {
           case SupportedFormat.PARQUET =>
-            val rows = input.asInstanceOf[Iterator[GenericData.Record]].toSeq
-            val outputStream = new ByteArrayOutputStream()
+            val avroSchema = new Schema.Parser().parse(this.avroSchema.get)
+            val config = new Configuration()
+            config.setBoolean("parquet.avro.write-old-list-structure", false)
             val writer = AvroParquetWriter.builder[GenericData.Record](
-                new ParquetUtils.StreamOutputFile(outputStream)
-              ).withSchema(rows.head.getSchema)
+                new ParquetUtils.StreamOutputFile(uploadStream)
+              ).withSchema(avroSchema)
+              .withConf(config)
               .withCompressionCodec(CompressionCodecName.SNAPPY)
               .build()
-            rows.foreach(writer.write)
-            writer.close()
-
-            val data = outputStream.toByteArray
-            dataSize = data.size
-            outputStream.close()
-
-            // Set up proxy info if it is configured.
-            val proxyProperties = new Properties()
-            proxyInfo match {
-              case Some(proxyInfoValue) =>
-                proxyInfoValue.setProxyForJDBC(proxyProperties)
-              case None =>
+            input.foreach {
+              case row: Row =>
+                writer.write(ParquetUtils.rowToAvroRecord(row, avroSchema, schema, param))
+                rowCount += 1
             }
-
-            // Upload data with FileTransferMetadata
-            val startUploadTime = System.currentTimeMillis()
-            val inStream = new ByteArrayInputStream(data)
-            SnowflakeFileTransferAgent.uploadWithoutConnection(
-              SnowflakeFileTransferConfig.Builder.newInstance()
-                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-                .setUploadStream(inStream)
-                .setRequireCompress(false)
-                .setDestFileName(fileName)
-                .setOcspMode(OCSPMode.FAIL_OPEN)
-                .setProxyProperties(proxyProperties)
-                .build())
-            val endTime = System.currentTimeMillis()
-            processTimeInfo =
-              s"""read_and_upload_time:
-                 | ${Utils.getTimeString(endTime - startTime)}
-                 | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-                 | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-                 |""".stripMargin.filter(_ >= ' ')
-
+            writer.close()
           case _ =>
-            val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
             val rows = input.asInstanceOf[Iterator[String]]
             while (rows.hasNext) {
               val oneRow = rows.next.getBytes("UTF-8")
-              outputStream.write(oneRow)
-              outputStream.write('\n')
+              uploadStream.write(oneRow)
+              uploadStream.write('\n')
               rowCount += 1
               dataSize += (oneRow.size + 1)
             }
-            val data = outputStream.toByteArray
-            dataSize = data.size
-            outputStream.close()
+        }
+      } finally {
+        if (storageInfo.isDefined) {
+          uploadStream.close()
+        } else {
+          val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
+          dataSize = data.size
+          uploadStream.close()
+          // Set up proxy info if it is configured.
+          val proxyProperties = new Properties()
+          proxyInfo match {
+            case Some(proxyInfoValue) =>
+              proxyInfoValue.setProxyForJDBC(proxyProperties)
+            case None =>
+          }
 
-            // Set up proxy info if it is configured.
-            val proxyProperties = new Properties()
-            proxyInfo match {
-              case Some(proxyInfoValue) =>
-                proxyInfoValue.setProxyForJDBC(proxyProperties)
-              case None =>
-            }
-
-            // Upload data with FileTransferMetadata
-            val startUploadTime = System.currentTimeMillis()
-            val inStream = new ByteArrayInputStream(data)
-            SnowflakeFileTransferAgent.uploadWithoutConnection(
-              SnowflakeFileTransferConfig.Builder.newInstance()
-                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-                .setUploadStream(inStream)
-                .setRequireCompress(compress)
-                .setDestFileName(fileName)
-                .setOcspMode(OCSPMode.FAIL_OPEN)
-                .setProxyProperties(proxyProperties)
-                .build())
-            val endTime = System.currentTimeMillis()
-            processTimeInfo =
-              s"""read_and_upload_time:
-                 | ${Utils.getTimeString(endTime - startTime)}
-                 | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-                 | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-                 |""".stripMargin.filter(_ >= ' ')
+          val inStream = new ByteArrayInputStream(data)
+          SnowflakeFileTransferAgent.uploadWithoutConnection(
+            SnowflakeFileTransferConfig.Builder.newInstance()
+              .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+              .setUploadStream(inStream)
+              .setRequireCompress(false)
+              .setDestFileName(fileName)
+              .setOcspMode(OCSPMode.FAIL_OPEN)
+              .setProxyProperties(proxyProperties)
+              .build())
+          val endTime = System.currentTimeMillis()
+          processTimeInfo =
+            s"""read_and_upload_time:
+               | ${Utils.getTimeString(endTime - startTime)}
+               |""".stripMargin.filter(_ >= ' ')
         }
       }
     } else {
       logger.info(s"Empty partition, skipped file $fileName")
     }
 
-
-    // todo: handle GCP
     // When attempt number is smaller than 2, throw exception
     if (TaskContext.get().attemptNumber() < 2) {
       TestHook.raiseExceptionIfTestFlagEnabled(
@@ -798,120 +730,12 @@ sealed trait CloudStorage {
       )
     }
 
+    val dataSizeStr = if (dataSize == 0) "N/A" else Utils.getSizeString(dataSize)
     CloudStorageOperations.log.info(
       s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
          | Finish writing partition ID:$partitionID $fileName
          | write row count is $rowCount.
-         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
-         | $processTimeInfo
-         |""".stripMargin.filter(_ >= ' '))
-
-    new SingleElementIterator(new FileUploadResult(s"$directory/$fileName", dataSize, rowCount))
-  }
-  // Read data and upload to cloud storage
-  private def doUploadPartitionV1(rows: Iterator[String],
-                                  format: SupportedFormat,
-                                  compress: Boolean,
-                                  directory: String,
-                                  partitionID: Int,
-                                  storageInfo: Option[Map[String, String]],
-                                  fileTransferMetadata: Option[SnowflakeFileTransferMetadata]
-                                 )
-  : SingleElementIterator = {
-    val fileName = getFileName(partitionID, format, compress)
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Start writing partition ID:$partitionID as $fileName
-         | TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
-         |""".stripMargin.filter(_ >= ' '))
-
-    // Read data and upload to cloud storage
-    var rowCount: Long = 0
-    var dataSize: Long = 0
-    var processTimeInfo = ""
-    val startTime = System.currentTimeMillis()
-    if (storageInfo.isDefined) {
-      // For AWS and Azure, the rows are written to OutputStream as they are read.
-      var uploadStream: Option[OutputStream] = None
-      while (rows.hasNext) {
-        // Defer to create the upload stream to avoid empty files.
-        if (uploadStream.isEmpty) {
-          uploadStream = Some(createUploadStream(
-            fileName, Some(directory), compress, storageInfo.get))
-        }
-        val oneRow = rows.next.getBytes("UTF-8")
-        uploadStream.get.write(oneRow)
-        uploadStream.get.write('\n')
-        rowCount += 1
-        dataSize += (oneRow.size + 1)
-      }
-      if (uploadStream.isDefined) {
-        uploadStream.get.close()
-      }
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           |""".stripMargin.filter(_ >= ' ')
-    }
-    // For GCP, the rows are cached and then uploaded.
-    else if (fileTransferMetadata.isDefined) {
-      // cache the data in buffer
-      val outputStream = new ByteArrayOutputStream(4 * 1024 * 1024)
-      while (rows.hasNext) {
-        outputStream.write(rows.next.getBytes("UTF-8"))
-        outputStream.write('\n')
-        rowCount += 1
-      }
-      val data = outputStream.toByteArray
-      dataSize = data.size
-      outputStream.close()
-
-      // Set up proxy info if it is configured.
-      val proxyProperties = new Properties()
-      proxyInfo match {
-        case Some(proxyInfoValue) =>
-          proxyInfoValue.setProxyForJDBC(proxyProperties)
-        case None =>
-      }
-
-      // Upload data with FileTransferMetadata
-      val startUploadTime = System.currentTimeMillis()
-      val inStream = new ByteArrayInputStream(data)
-      SnowflakeFileTransferAgent.uploadWithoutConnection(
-        SnowflakeFileTransferConfig.Builder.newInstance()
-          .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-          .setUploadStream(inStream)
-          .setRequireCompress(compress)
-          .setDestFileName(fileName)
-          .setOcspMode(OCSPMode.FAIL_OPEN)
-          .setProxyProperties(proxyProperties)
-          .build())
-
-      val endTime = System.currentTimeMillis()
-      processTimeInfo =
-        s"""read_and_upload_time:
-           | ${Utils.getTimeString(endTime - startTime)}
-           | read_time: ${Utils.getTimeString(startUploadTime - startTime)}
-           | upload_time: ${Utils.getTimeString(endTime - startUploadTime)}
-           |""".stripMargin.filter(_ >= ' ')
-    }
-
-    // When attempt number is smaller than 2, throw exception
-    if (TaskContext.get().attemptNumber() < 2) {
-      TestHook.raiseExceptionIfTestFlagEnabled(
-        TestHookFlag.TH_GCS_UPLOAD_RAISE_EXCEPTION,
-        "Negative test to raise error when uploading data for the first two attempts"
-      )
-    }
-
-    CloudStorageOperations.log.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
-         | Finish writing partition ID:$partitionID $fileName
-         | write row count is $rowCount.
-         | Uncompressed data size is ${Utils.getSizeString(dataSize)}.
+         | Uncompressed data size is $dataSizeStr.
          | $processTimeInfo
          |""".stripMargin.filter(_ >= ' '))
 
@@ -920,6 +744,7 @@ sealed trait CloudStorage {
 
   protected def uploadRDD(data: RDD[Any],
                           format: SupportedFormat = SupportedFormat.CSV,
+                          schema: StructType,
                           dir: Option[String],
                           compress: Boolean = true,
                           storageInfo: Map[String, String]): List[FileUploadResult] = {
@@ -936,6 +761,16 @@ sealed trait CloudStorage {
          | partitions: directory=$directory ${format.toString} $compress
          |""".stripMargin.filter(_ >= ' '))
 
+    // 1. Avro Schema is not serializable in Spark 3.1.1.
+    // 2. Somehow, the Avro Schema can be created only one time with Schema builder.
+    // Therefore, if we create schema in the mapPartition function, we will get some error.
+    // e.g. cannot process decimal data.
+    // Alternatively, we create schema only one time here, and serialize the Json string to
+    // each partition, and then deserialize the Json string to avro schema in the partition.
+    if (format == SupportedFormat.PARQUET) {
+      this.avroSchema = Some(io.ParquetUtils.convertStructToAvro(schema).toString())
+    }
+
     // Some explain for newbies on spark connector:
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
@@ -950,7 +785,7 @@ sealed trait CloudStorage {
         SparkConnectorContext.recordConfig()
 
         // Convert and upload the partition with the StorageInfo
-        uploadPartition(rows, format, compress, directory, index, Some(storageInfo), None)
+        uploadPartition(rows, format, schema, compress, directory, index, Some(storageInfo), None)
 
       ///////////////////////////////////////////////////////////////////////
       // End code snippet to be executed on worker
@@ -1087,15 +922,11 @@ sealed trait CloudStorage {
   def fileExists(fileName: String): Boolean
 }
 
-case class InternalAzureStorage(param: MergedParameters,
+case class InternalAzureStorage(override protected val param: MergedParameters,
                                 stageName: String,
                                 @transient override val connection: ServerConnection)
   extends CloudStorage {
 
-  override val maxRetryCount = param.maxRetryCount
-  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
-  override val sfURL = param.sfURL
-  override val useExponentialBackoff = param.useExponentialBackoff
 
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -1316,14 +1147,11 @@ case class InternalAzureStorage(param: MergedParameters,
   }
 }
 
-case class ExternalAzureStorage(containerName: String,
+case class ExternalAzureStorage(override protected val param: MergedParameters,
+                                containerName: String,
                                 azureAccount: String,
                                 azureEndpoint: String,
                                 azureSAS: String,
-                                override val proxyInfo: Option[ProxyInfo],
-                                override val maxRetryCount: Int,
-                                override val sfURL: String,
-                                override val useExponentialBackoff: Boolean,
                                 fileCountPerPartition: Int,
                                 pref: String = "",
                                 @transient override val connection: ServerConnection)
@@ -1468,16 +1296,12 @@ case class ExternalAzureStorage(containerName: String,
   }
 }
 
-case class InternalS3Storage(param: MergedParameters,
+case class InternalS3Storage(override protected val param: MergedParameters,
                              stageName: String,
                              @transient override val connection: ServerConnection,
                              parallelism: Int =
                              CloudStorageOperations.DEFAULT_PARALLELISM)
   extends CloudStorage {
-  override val maxRetryCount = param.maxRetryCount
-  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
-  override val sfURL = param.sfURL
-  override val useExponentialBackoff = param.useExponentialBackoff
 
   override protected def getStageInfo(
                                        isWrite: Boolean,
@@ -1716,13 +1540,10 @@ case class InternalS3Storage(param: MergedParameters,
   }
 }
 
-case class ExternalS3Storage(bucketName: String,
+case class ExternalS3Storage(override protected val param: MergedParameters,
+                             bucketName: String,
                              awsId: String,
                              awsKey: String,
-                             override val proxyInfo: Option[ProxyInfo],
-                             override val maxRetryCount: Int,
-                             override val sfURL: String,
-                             override val useExponentialBackoff: Boolean,
                              fileCountPerPartition: Int,
                              awsToken: Option[String] = None,
                              pref: String = "",
@@ -1870,17 +1691,11 @@ case class ExternalS3Storage(bucketName: String,
 
 // Internal CloudStorage for GCS (Google Cloud Storage).
 // NOTE: External storage for GCS is not supported.
-case class InternalGcsStorage(param: MergedParameters,
+case class InternalGcsStorage(override protected val param: MergedParameters,
                               stageName: String,
                               @transient override val connection: ServerConnection,
                               @transient stageManager: SFInternalStage)
   extends CloudStorage {
-
-  override val proxyInfo: Option[ProxyInfo] = param.proxyInfo
-  // Max retry count to upload a file
-  override val maxRetryCount: Int = param.maxRetryCount
-  override val sfURL = param.sfURL
-  override val useExponentialBackoff = param.useExponentialBackoff
 
   // Generate file transfer metadata objects for file upload. On GCS,
   // the file transfer metadata is pre-signed URL and related metadata.
@@ -1956,6 +1771,7 @@ case class InternalGcsStorage(param: MergedParameters,
   // so override it separately.
   override def upload(data: RDD[Any],
                       format: SupportedFormat = SupportedFormat.CSV,
+                      schema: StructType,
                       dir: Option[String],
                       compress: Boolean = true): List[FileUploadResult] = {
 
@@ -1979,6 +1795,16 @@ case class InternalGcsStorage(param: MergedParameters,
     // If the partition count is 0, no metadata is created.
     val oneMetadataPerFile = metadatas.nonEmpty && metadatas.head.isForOneFile
 
+    // 1. Avro Schema is not serializable in Spark 3.1.1.
+    // 2. Somehow, the Avro Schema can be created only one time with Schema builder.
+    // Therefore, if we create schema in the mapPartition function, we will get some error.
+    // e.g. cannot process decimal data.
+    // Alternatively, we create schema only one time here, and serialize the Json string to
+    // each partition, and then deserialize the Json string to avro schema in the partition.
+    if (format == SupportedFormat.PARQUET) {
+      this.avroSchema = Some(io.ParquetUtils.convertStructToAvro(schema).toString())
+    }
+
     // Some explain for newbies on spark connector:
     // Bellow code is executed in distributed by spark FRAMEWORK
     // 1. The master node executes "data.mapPartitionsWithIndex()"
@@ -1999,7 +1825,7 @@ case class InternalGcsStorage(param: MergedParameters,
           metadatas.head
         }
         // Convert and upload the partition with the file transfer metadata
-        uploadPartition(rows, format, compress, directory, index, None, Some(metadata))
+        uploadPartition(rows, format, schema, compress, directory, index, None, Some(metadata))
 
       ///////////////////////////////////////////////////////////////////////
       // End code snippet to executed on worker

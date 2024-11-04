@@ -311,16 +311,13 @@ class StageSuite extends IntegrationSuiteBase {
     try {
       // The credential for the external stage is fake.
       val azureExternalStage = ExternalAzureStorage(
+        param,
         containerName = "test_fake_container",
         azureAccount = "test_fake_account",
         azureEndpoint = "blob.core.windows.net",
         azureSAS =
           "?sig=test_test_test_test_test_test_test_test_test_test_test_test" +
             "_test_test_test_test_test_fak&spr=https&sp=rwdl&sr=c",
-        param.proxyInfo,
-        param.maxRetryCount,
-        param.sfURL,
-        param.useExponentialBackoff,
         param.expectedPartitionCount,
         pref = "test_dir",
         connection = connection
@@ -367,13 +364,10 @@ class StageSuite extends IntegrationSuiteBase {
     try {
       // The credential for the external stage is fake.
       val s3ExternalStage = ExternalS3Storage(
+        param,
         bucketName = "test_fake_bucket",
         awsId = "TEST_TEST_TEST_TEST1",
         awsKey = "TEST_TEST_TEST_TEST_TEST_TEST_TEST_TEST2",
-        param.proxyInfo,
-        param.maxRetryCount,
-        param.sfURL,
-        param.useExponentialBackoff,
         param.expectedPartitionCount,
         pref = "test_dir",
         connection = connection,
@@ -487,13 +481,10 @@ class StageSuite extends IntegrationSuiteBase {
     try {
       // The credential for the external stage is fake.
       val s3ExternalStage = ExternalS3Storage(
+        param,
         bucketName = "test_fake_bucket",
         awsId = "TEST_TEST_TEST_TEST1",
         awsKey = "TEST_TEST_TEST_TEST_TEST_TEST_TEST_TEST2",
-        param.proxyInfo,
-        param.maxRetryCount,
-        param.sfURL,
-        param.useExponentialBackoff,
         param.expectedPartitionCount,
         pref = "test_dir",
         connection = connection,
