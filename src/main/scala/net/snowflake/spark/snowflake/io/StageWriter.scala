@@ -431,7 +431,7 @@ private[io] object StageWriter {
         } else {
           if (!tableExists) {
             conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
-              overwrite = false, temporary = true)
+              overwrite = false, temporary = false)
           }
         }
 
@@ -501,6 +501,7 @@ private[io] object StageWriter {
             params.toSnowflakeSchema(schema), schema, params)
           conn.commit()
         }
+        conn.dropTable(tempTable.name)
       } else {
         if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
           if (tableExists) {
