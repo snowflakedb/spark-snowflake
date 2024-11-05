@@ -431,7 +431,7 @@ private[io] object StageWriter {
         } else {
           if (!tableExists) {
             conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
-              overwrite = false, temporary = false)
+              overwrite = false, temporary = true)
           }
         }
 
