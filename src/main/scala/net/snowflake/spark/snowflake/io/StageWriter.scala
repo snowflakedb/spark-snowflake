@@ -423,7 +423,7 @@ private[io] object StageWriter {
       if (params.useParquetInWrite()){
         // temporary table to store parquet file
         conn.createTable(tempTable.name, schema, params,
-          overwrite = false, temporary = false)
+          overwrite = false, temporary = true)
 
         if (saveMode == SaveMode.Overwrite){
             conn.createTable(relayTable.name, params.toSnowflakeSchema(schema), params,
@@ -431,7 +431,7 @@ private[io] object StageWriter {
         } else {
           if (!tableExists) {
             conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
-              overwrite = false, temporary = false)
+              overwrite = false, temporary = true)
           }
         }
 
