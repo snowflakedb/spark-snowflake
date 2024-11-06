@@ -326,7 +326,9 @@ private[io] object StageWriter {
       // If create table if table doesn't exist
       if (!tableExists)
       {
-        writeTableState.createTable(tableName, schema, params)
+        writeTableState.createTable(tableName,
+          if (params.useParquetInWrite()) params.toSnowflakeSchema(schema) else schema,
+          params)
       } else if (params.truncateTable && saveMode == SaveMode.Overwrite) {
         writeTableState.truncateTable(tableName)
       }
