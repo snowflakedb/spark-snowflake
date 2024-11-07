@@ -24,6 +24,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_column_map_parquet: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_column_map_not_match: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_nested_dataframe: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_no_staging_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $test_all_type")
@@ -39,6 +40,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table if exists $test_column_map_parquet")
     jdbcUpdate(s"drop table if exists $test_column_map_not_match")
     jdbcUpdate(s"drop table if exists $test_nested_dataframe")
+    jdbcUpdate(s"drop table if exists $test_no_staging_table")
     super.afterAll()
   }
 
@@ -648,5 +650,61 @@ class ParquetSuite extends IntegrationSuiteBase {
     assert(result(1).getMap[String, Int](2)("b") == 2)
     assert(result(2).getStruct(3).getString(0) == "ghi")
     assert(result(2).getAs[Row]("OBJ").getAs[String]("str") == "ghi")
+  }
+
+  test("test parquet not using staging table") {
+    val data: RDD[Row] = sc.makeRDD(
+      List(
+        Row(
+          1,
+          "string value",
+          123456789L,
+          123.45,
+          true,
+          BigDecimal("12345.6789").bigDecimal,
+          Timestamp.valueOf("2023-09-16 10:15:30"),
+          Date.valueOf("2023-01-01")
+        )
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("INT_COL", IntegerType, true),
+      StructField("STRING_COL", StringType, true),
+      StructField("LONG_COL", LongType, true),
+      StructField("DOUBLE_COL", DoubleType, true),
+      StructField("BOOLEAN_COL", BooleanType, true),
+      StructField("DECIMAL_COL", DecimalType(20, 10), true),
+      StructField("TIMESTAMP_COL", TimestampType, true),
+      StructField("DATE_COL", DateType, true)
+    ))
+    val df = sparkSession.createDataFrame(data, schema)
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("usestagingtable", "false")
+      .option("dbtable", test_no_staging_table)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+
+    val newDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_no_staging_table)
+      .load()
+
+    val expectedAnswer = List(
+      Row(1, "string value", 123456789, 123.45,
+        true, BigDecimal("12345.6789").bigDecimal.setScale(10),
+        Timestamp.valueOf("2023-09-16 10:15:30"), Date.valueOf("2023-01-01")
+      )
+    )
+    checkAnswer(newDf, expectedAnswer)
+
+    // assert no staging table is left
+    val res = sparkSession.sql(s"show tables like '%${test_all_type}_STAGING%'").collect()
+    assert(res.length == 0)
   }
 }

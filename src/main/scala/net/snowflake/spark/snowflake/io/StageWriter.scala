@@ -283,7 +283,7 @@ private[io] object StageWriter {
                            tempStage: String,
                            format: SupportedFormat,
                            fileUploadResults: List[FileUploadResult]): Unit = {
-    if (params.useStagingTable || !params.truncateTable || params.useParquetInWrite()) {
+    if (params.useStagingTable || !params.truncateTable) {
       writeToTableWithStagingTable(sqlContext, conn, schema, saveMode, params,
         file, tempStage, format, fileUploadResults)
     } else {
@@ -326,7 +326,9 @@ private[io] object StageWriter {
       // If create table if table doesn't exist
       if (!tableExists)
       {
-        writeTableState.createTable(tableName, schema, params)
+        writeTableState.createTable(tableName,
+          if (params.useParquetInWrite()) params.toSnowflakeSchema(schema) else schema,
+          params)
       } else if (params.truncateTable && saveMode == SaveMode.Overwrite) {
         writeTableState.truncateTable(tableName)
       }
@@ -390,20 +392,8 @@ private[io] object StageWriter {
         getStageTableName(table.name)
       }
     )
-
-    val relayTable = TableName(
-      if (params.stagingTableNameRemoveQuotesOnly) {
-        // NOTE: This is the staging table name generation for SC 2.8.1 and earlier.
-        // It is kept for back-compatibility and it will be removed later without any notice.
-        s"${table.name.replace('"', '_')}_staging_${Math.abs(Random.nextInt()).toString}"
-      } else {
-        getStageTableName(table.name)
-      }
-    )
-    assert(!params.useParquetInWrite() || params.useStagingTable)
     val targetTable =
-      if ((saveMode == SaveMode.Overwrite && params.useStagingTable) ||
-      params.useParquetInWrite()) {
+      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
         tempTable
       } else {
         table
@@ -419,43 +409,26 @@ private[io] object StageWriter {
       } else {
         DefaultJDBCWrapper.tableExists(params, table.toString)
       }
-
-      if (params.useParquetInWrite()){
-        // temporary table to store parquet file
-        conn.createTable(tempTable.name, schema, params,
-          overwrite = false, temporary = true)
-
-        if (saveMode == SaveMode.Overwrite){
-            conn.createTable(relayTable.name, params.toSnowflakeSchema(schema), params,
-              overwrite = false, temporary = false)
-        } else {
-          if (!tableExists) {
-            conn.createTable(table.name, params.toSnowflakeSchema(schema), params,
-              overwrite = false, temporary = false)
+      // purge tables when overwriting
+      if (saveMode == SaveMode.Overwrite && tableExists) {
+        if (params.useStagingTable) {
+          if (params.truncateTable) {
+            conn.createTableLike(tempTable.name, table.name)
           }
-        }
-
-      } else {
-        // purge tables when overwriting
-        if (saveMode == SaveMode.Overwrite && tableExists) {
-          if (params.useStagingTable) {
-            if (params.truncateTable) {
-              conn.createTableLike(tempTable.name, table.name)
-            }
-          } else if (params.truncateTable) conn.truncateTable(table.name)
-          else conn.dropTable(table.name)
-        }
-
-        // If the SaveMode is 'Append' and the target exists, skip
-        // CREATE TABLE IF NOT EXIST command. This command doesn't actually
-        // create a table but it needs CREATE TABLE privilege.
-        if (saveMode == SaveMode.Overwrite || !tableExists)
-        {
-          conn.createTable(targetTable.name, schema, params,
-            overwrite = false, temporary = false)
-        }
+        } else if (params.truncateTable) conn.truncateTable(table.name)
+        else conn.dropTable(table.name)
       }
 
+      // If the SaveMode is 'Append' and the target exists, skip
+      // CREATE TABLE IF NOT EXIST command. This command doesn't actually
+      // create a table but it needs CREATE TABLE privilege.
+      if (saveMode == SaveMode.Overwrite || !tableExists)
+      {
+        conn.createTable(targetTable.name,
+          if (params.useParquetInWrite()) params.toSnowflakeSchema(schema) else schema,
+          params,
+          overwrite = false, temporary = false)
+      }
 
       // pre actions
       Utils.executePreActions(
@@ -486,34 +459,18 @@ private[io] object StageWriter {
         Option(targetTable)
       )
 
-      if (params.useParquetInWrite()) {
-        if (saveMode == SaveMode.Overwrite){
-          conn.insertIntoTable(relayTable.name, tempTable.name,
-            params.toSnowflakeSchema(schema), schema, params)
-          if (tableExists) {
-            conn.swapTable(table.name, relayTable.name)
-            conn.dropTable(relayTable.name)
-          } else {
-            conn.renameTable(table.name, relayTable.name)
-          }
+
+      if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
+        if (tableExists) {
+          conn.swapTable(table.name, tempTable.name)
+          conn.dropTable(tempTable.name)
         } else {
-          conn.insertIntoTable(table.name, tempTable.name,
-            params.toSnowflakeSchema(schema), schema, params)
-          conn.commit()
+          conn.renameTable(table.name, tempTable.name)
         }
-        conn.dropTable(tempTable.name)
       } else {
-        if (saveMode == SaveMode.Overwrite && params.useStagingTable) {
-          if (tableExists) {
-            conn.swapTable(table.name, tempTable.name)
-            conn.dropTable(tempTable.name)
-          } else {
-            conn.renameTable(table.name, tempTable.name)
-          }
-        } else {
-          conn.commit()
-        }
+        conn.commit()
       }
+
     } catch {
       case e: Exception =>
         // snowflake-todo: try to provide more error information,
@@ -830,7 +787,20 @@ private[io] object StageWriter {
                           ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
-          EmptySnowflakeSQLStatement()
+          ConstantString("(") + params.toSnowflakeSchema(schema)
+            .map(
+              field =>
+                if (params.quoteJsonFieldName) {
+                  if (params.keepOriginalColumnNameCase) {
+                    Utils.quotedNameIgnoreCase(field.name)
+                  } else {
+                    Utils.ensureQuoted(field.name)
+                  }
+                } else {
+                  field.name
+                }
+            )
+            .mkString(",") + ")"
         case SupportedFormat.JSON =>
           val tableSchema =
             DefaultJDBCWrapper.resolveTable(conn, table.name, params)
@@ -886,7 +856,12 @@ private[io] object StageWriter {
                             ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
-          from
+          ConstantString("from (select") +
+            schema.map(
+              field =>
+                "$1:" + "\"" + field.name + "\""
+            ).mkString(",") +
+            from + "tmp)"
         case SupportedFormat.JSON =>
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
@@ -971,7 +946,6 @@ private[io] object StageWriter {
                             |    TYPE=PARQUET
                             |    USE_VECTORIZED_SCANNER=TRUE
                             |  )
-                            |  MATCH_BY_COLUMN_NAME = CASE_SENSITIVE
            """.stripMargin) !
         case SupportedFormat.CSV =>
           ConstantString(s"""
