@@ -164,6 +164,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .options(connectorOptionsNoTable)
       .option("dbtable", tableName2)
       .option(Parameters.PARAM_INTERNAL_USE_PARSE_JSON_FOR_WRITE, "true")
+      .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -242,6 +243,7 @@ class VariantTypeSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", tableName4)
+        .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
         .mode(SaveMode.Overwrite)
         .save()
 
