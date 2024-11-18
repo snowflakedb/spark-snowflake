@@ -25,6 +25,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_column_map_not_match: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_nested_dataframe: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_no_staging_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_table_name: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $test_all_type")
@@ -41,6 +42,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table if exists $test_column_map_not_match")
     jdbcUpdate(s"drop table if exists $test_nested_dataframe")
     jdbcUpdate(s"drop table if exists $test_no_staging_table")
+    jdbcUpdate(s"drop table if exists $test_table_name")
     super.afterAll()
   }
 
@@ -706,5 +708,54 @@ class ParquetSuite extends IntegrationSuiteBase {
     // assert no staging table is left
     val res = sparkSession.sql(s"show tables like '%${test_all_type}_STAGING%'").collect()
     assert(res.length == 0)
+  }
+
+  test("use parquet in structured type by default") {
+    // use CSV by default
+    sparkSession
+      .sql("select 1")
+      .write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_name)
+      .mode(SaveMode.Overwrite)
+      .save()
+    assert(Utils.getLastCopyLoad.contains("TYPE=CSV"))
+
+    // use Parquet on structured types
+    sparkSession
+      .sql("select array(1, 2)")
+      .write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_name)
+      .mode(SaveMode.Overwrite)
+      .save()
+    assert(Utils.getLastCopyLoad.contains("TYPE=PARQUET"))
+
+    // use Json on structured types when PARAM_USE_JSON_IN_STRUCTURED_DATA is true
+    sparkSession
+      .sql("select array(1, 2)")
+      .write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_name)
+      .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+    assert(Utils.getLastCopyLoad.contains("TYPE = JSON"))
+
+    // PARAM_USE_PARQUET_IN_WRITE can overwrite PARAM_USE_JSON_IN_STRUCTURED_DATA
+    sparkSession
+      .sql("select array(1, 2)")
+      .write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_table_name)
+      .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .mode(SaveMode.Overwrite)
+      .save()
+    assert(Utils.getLastCopyLoad.contains("TYPE=PARQUET"))
   }
 }
