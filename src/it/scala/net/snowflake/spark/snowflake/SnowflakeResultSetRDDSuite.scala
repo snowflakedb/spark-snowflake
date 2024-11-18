@@ -1866,6 +1866,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
       .option("dbtable", test_table_write)
+      .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -1922,6 +1923,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(localSFOption)
         .option("dbtable", test_table_write)
+        .option(Parameters.PARAM_USE_JSON_IN_STRUCTURED_DATA, "true")
         .mode(SaveMode.Overwrite)
         .save()
 
