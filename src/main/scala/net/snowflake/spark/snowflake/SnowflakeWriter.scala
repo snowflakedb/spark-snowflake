@@ -57,7 +57,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       if (params.useParquetInWrite()) {
         SupportedFormat.PARQUET
       } else if (Utils.containVariant(data.schema)){
-        SupportedFormat.JSON
+        if (params.useJsonInWrite()) SupportedFormat.JSON else SupportedFormat.PARQUET
       }
       else {
         SupportedFormat.CSV
@@ -74,7 +74,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
         )
         params.setColumnMap(Option(data.schema), toSchema)
       } finally conn.close()
-    } else if (params.columnMap.isDefined && params.useParquetInWrite()){
+    } else if (params.columnMap.isDefined && format == SupportedFormat.PARQUET){
       val conn = jdbcWrapper.getConnector(params)
       try {
         val toSchema = Utils.removeQuote(
@@ -94,7 +94,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
       } finally conn.close()
     }
 
-    if (params.useParquetInWrite()){
+    if (format == SupportedFormat.PARQUET){
       val conn = jdbcWrapper.getConnector(params)
       try{
         if (jdbcWrapper.tableExists(params, params.table.get.name)){

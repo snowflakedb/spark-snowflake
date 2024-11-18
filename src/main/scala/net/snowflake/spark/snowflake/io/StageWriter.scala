@@ -327,7 +327,7 @@ private[io] object StageWriter {
       if (!tableExists)
       {
         writeTableState.createTable(tableName,
-          if (params.useParquetInWrite()) params.toSnowflakeSchema(schema) else schema,
+          if (format == SupportedFormat.PARQUET) params.toSnowflakeSchema(schema) else schema,
           params)
       } else if (params.truncateTable && saveMode == SaveMode.Overwrite) {
         writeTableState.truncateTable(tableName)
@@ -425,7 +425,7 @@ private[io] object StageWriter {
       if (saveMode == SaveMode.Overwrite || !tableExists)
       {
         conn.createTable(targetTable.name,
-          if (params.useParquetInWrite()) params.toSnowflakeSchema(schema) else schema,
+          if (format == SupportedFormat.PARQUET) params.toSnowflakeSchema(schema) else schema,
           params,
           overwrite = false, temporary = false)
       }
@@ -904,7 +904,7 @@ private[io] object StageWriter {
     val fromString = ConstantString(s"FROM @$tempStage/$prefix/") !
 
     val mappingList: Option[List[(Int, String)]] =
-      if (params.useParquetInWrite()) None else params.columnMap match {
+      if (format == SupportedFormat.PARQUET) None else params.columnMap match {
       case Some(map) =>
         Some(map.toList.map {
           case (key, value) =>

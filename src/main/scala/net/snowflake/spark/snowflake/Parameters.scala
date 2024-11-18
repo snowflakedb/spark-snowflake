@@ -260,8 +260,17 @@ object Parameters {
   val BOOLEAN_VALUES_FALSE: Set[String] =
     Set("off", "no", "false", "0", "disabled")
 
-  // enable parquet format
+  // enable parquet format when loading data from Spark to Snowflake.
+  // When enabled, Spark connector will only use Parquet file format.
   val PARAM_USE_PARQUET_IN_WRITE: String = knownParam("use_parquet_in_write")
+
+  // By default, Spark connector uses CSV format when loading data from Spark to Snowflake.
+  // If the dataframe contains any structured type, Spark connector will use Parquet
+  // format instead of CSV.
+  // When this parameter is enabled, Spark connector will use JSON format when loading
+  // structured data but not Parquet.
+  // it will be ignored if USE_PARQUET_IN_WRITE parameter is enabled.
+  val PARAM_USE_JSON_IN_STRUCTURED_DATA: String = knownParam("use_json_in_structured_data")
 
   /**
     * Helper method to check if a given string represents some form
@@ -297,7 +306,8 @@ object Parameters {
     PARAM_TIMESTAMP_LTZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TIMESTAMP_TZ_OUTPUT_FORMAT -> "TZHTZM YYYY-MM-DD HH24:MI:SS.FF3",
     PARAM_TRIM_SPACE -> "false",
-    PARAM_USE_PARQUET_IN_WRITE -> "true"
+    PARAM_USE_PARQUET_IN_WRITE -> "false",
+    PARAM_USE_JSON_IN_STRUCTURED_DATA -> "false"
 
   )
 
@@ -613,11 +623,23 @@ object Parameters {
     def createPerQueryTempDir(): String = Utils.makeTempPath(rootTempDir)
 
     /**
-      * Use parquet form in download by default
+      * Use parquet format when loading data from Spark to Snowflake
       */
     def useParquetInWrite(): Boolean = {
       isTrue(parameters.getOrElse(PARAM_USE_PARQUET_IN_WRITE, "false"))
 
+    }
+
+    /**
+     * Use JSON format when loading structured data from Spark to Snowflake
+     */
+    def useJsonInWrite(): Boolean = {
+      if (useParquetInWrite()) {
+        // USE_PARQUET_IN_WRITE parameter can overwrite this parameter
+        false
+      } else {
+        isTrue(parameters.getOrElse(PARAM_USE_JSON_IN_STRUCTURED_DATA, "false"))
+      }
     }
 
     /**
