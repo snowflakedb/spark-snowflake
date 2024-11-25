@@ -408,7 +408,7 @@ object CloudStorageOperations {
       } else if (useRegionUrl.get.toBoolean) {
         val awsDomain: String =
           if (regionName.get.toLowerCase().startsWith("cn-")) {
-            ".amazonaws.cn"
+            ".amazonaws.com.cn"
           } else {
             ".amazonaws.com"
           }
