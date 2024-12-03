@@ -406,9 +406,15 @@ object CloudStorageOperations {
         s3ClientBuilder.withEndpointConfiguration(
           new AwsClientBuilder.EndpointConfiguration(stageEndPoint.get, regionName.get))
       } else if (useRegionUrl.get.toBoolean) {
+        val awsDomain: String =
+          if (regionName.get.toLowerCase().startsWith("cn-")) {
+            ".amazonaws.com.cn"
+          } else {
+            ".amazonaws.com"
+          }
         s3ClientBuilder.withEndpointConfiguration(
           new AwsClientBuilder.EndpointConfiguration(
-            "s3." + regionName.get + ".amazonaws.com", regionName.get))
+            "s3." + regionName.get + awsDomain, regionName.get))
       } else {
         s3ClientBuilder.withRegion(regionName.get)
       }
