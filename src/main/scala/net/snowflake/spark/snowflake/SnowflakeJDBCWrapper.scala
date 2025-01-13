@@ -168,6 +168,7 @@ private[snowflake] class JDBCWrapper {
           "BINARY"
         }
       case TimestampType => "TIMESTAMP"
+      case TimestampNTZType => "TIMESTAMP_NTZ"
       case DateType => "DATE"
       case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
       case _: StructType | _: ArrayType | _: MapType => "VARIANT"
