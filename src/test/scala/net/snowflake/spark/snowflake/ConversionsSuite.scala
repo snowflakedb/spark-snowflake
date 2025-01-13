@@ -144,6 +144,7 @@ class ConversionsSuite extends FunSuite {
          |"short":123,
          |"string": "test string",
          |"timestamp": "2015-07-01 00:00:00.001",
+         |"timestamp_ntz": "2015-07-01 00:00:00.001",
          |"array":[1,2,3,4,5],
          |"map":{"a":1,"b":2,"c":3},
          |"structure":{"num":123,"str":"str1"}
@@ -163,6 +164,7 @@ class ConversionsSuite extends FunSuite {
         StructField("short", ShortType, nullable = false),
         StructField("string", StringType, nullable = false),
         StructField("timestamp", TimestampType, nullable = false),
+        StructField("timestamp_ntz", TimestampNTZType, nullable = false),
         StructField("array", ArrayType(IntegerType), nullable = false),
         StructField("map", MapType(StringType, IntegerType), nullable = false),
         StructField(
@@ -199,9 +201,10 @@ class ConversionsSuite extends FunSuite {
     assert(result.getShort(8) == 123.toShort)
     assert(result.getString(9) == "test string")
     assert(result.getTimestamp(10) == Timestamp.valueOf("2015-07-01 00:00:00.001"))
-    assert(result.getSeq(11) sameElements Array(1, 2, 3, 4, 5))
-    assert(result.getMap(12) == Map("b" -> 2, "a" -> 1, "c" -> 3))
-    assert(result.getStruct(13) == Row(123, "str1"))
+    assert(result.getTimestamp(11) == Timestamp.valueOf("2015-07-01 00:00:00.001"))
+    assert(result.getSeq(12) sameElements Array(1, 2, 3, 4, 5))
+    assert(result.getMap(13) == Map("b" -> 2, "a" -> 1, "c" -> 3))
+    assert(result.getStruct(14) == Row(123, "str1"))
 
   }
 }
