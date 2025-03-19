@@ -856,12 +856,16 @@ private[io] object StageWriter {
                             ): SnowflakeSQLStatement =
       format match {
         case SupportedFormat.PARQUET =>
-          ConstantString("from (select") +
-            schema.map(
-              field =>
-                "$1:" + "\"" + field.name + "\""
-            ).mkString(",") +
-            from + "tmp)"
+          val names = schema.map(field => {
+            var name = "$1:" + "\"" + field.name + "\""
+            if (field.dataType == BinaryType) {
+              name += "::BINARY"
+            } else if (Seq("map", "struct").contains(field.dataType.typeName)) {
+              name = "parse_json(" + name + ")"
+            }
+            name
+          }).mkString(",")
+          ConstantString("from (select") + names + from + "tmp)"
         case SupportedFormat.JSON =>
           val columnPrefix = if (params.useParseJsonForWrite) "parse_json($1):" else "$1:"
           if (list.isEmpty || list.get.isEmpty) {
