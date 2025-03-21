@@ -860,7 +860,7 @@ private[io] object StageWriter {
             var name = "$1:" + "\"" + field.name + "\""
             if (field.dataType == BinaryType) {
               name += "::BINARY"
-            } else if (Seq("map", "struct").contains(field.dataType.typeName)) {
+            } else if (field.dataType.typeName == "map") {
               name = "parse_json(" + name + ")"
             }
             name
