@@ -4,12 +4,12 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: '**'
 
 jobs:
   test:
     name: IT
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
      matrix:
        scala_version: [ '2.12.11' ]
