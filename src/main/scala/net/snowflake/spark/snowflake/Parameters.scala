@@ -81,6 +81,7 @@ object Parameters {
   val PARAM_EXTRA_COPY_OPTIONS: String = knownParam("extracopyoptions")
   val PARAM_COLUMN_MAP: String = knownParam("columnmap")
   val PARAM_TRUNCATE_COLUMNS: String = knownParam("truncate_columns")
+  val PARAM_FORCE: String = knownParam("force")
   val PARAM_PURGE: String = knownParam("purge")
   val PARAM_TRIM_SPACE: String = knownParam("trim_space")
 
@@ -606,6 +607,15 @@ object Parameters {
       */
     def truncateColumns(): Boolean = {
       isTrue(parameters.getOrElse(PARAM_TRUNCATE_COLUMNS, "off"))
+    }
+
+    /**
+     * Whether or not to have FORCE in the COPY statement generated
+     * by the Spark connector
+     * @return
+     */
+    def force(): Boolean = {
+      isTrue(parameters.getOrElse(PARAM_FORCE, "off"))
     }
 
     /**
