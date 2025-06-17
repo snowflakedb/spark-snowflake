@@ -975,6 +975,13 @@ private[io] object StageWriter {
         EmptySnowflakeSQLStatement()
       }
 
+    val force =
+      if (params.force()) {
+        ConstantString("FORCE = TRUE") !
+      } else {
+        EmptySnowflakeSQLStatement()
+      }
+
     val purge =
       if (params.purge()) {
         ConstantString("PURGE = TRUE") !
@@ -1004,7 +1011,7 @@ private[io] object StageWriter {
 
     // todo: replace table name to Identifier(?) after bug fixed
     ConstantString("copy into") + table.name + mappingToString +
-      mappingFromString + filesClause + formatString + truncateCol +
+      mappingFromString + filesClause + formatString + truncateCol + force +
       purge + onError
   }
 
