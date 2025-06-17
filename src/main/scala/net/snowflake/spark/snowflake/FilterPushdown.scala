@@ -69,7 +69,7 @@ private[snowflake] object FilterPushdown {
             )) !
         case DateType =>
           StringVariable(Option(value).map(_.asInstanceOf[Date].toString)) + "::DATE"
-        case TimestampType =>
+        case TimestampType | TimestampNTZType =>
           StringVariable(Option(value).map(_.asInstanceOf[Timestamp].toString)) + "::TIMESTAMP(3)"
         case _ =>
           value match {
