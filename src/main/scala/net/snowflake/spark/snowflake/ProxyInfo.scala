@@ -5,8 +5,9 @@ import java.net.Proxy.Type
 import java.util.Properties
 
 import net.snowflake.client.core.SFSessionProperty
-import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol}
+import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol, ProxyAuthenticationMethod}
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import scala.collection.JavaConverters._
 
 private[snowflake] class ProxyInfo(proxyProtocol: Option[String],
                                    proxyHost: Option[String],
@@ -125,6 +126,14 @@ private[snowflake] class ProxyInfo(proxyProtocol: Option[String],
         s3client.setProxyPassword(optionValue)
       case None =>
     }
+
+    // Force the use of BASIC authentication only for proxy authentication
+    // This ensures that when multiple authentication schemes are offered by the proxy
+    // (e.g., NEGOTIATE, NTLM, BASIC), we only use BASIC authentication
+    if (proxyUser.isDefined && proxyPassword.isDefined) {
+      s3client.setProxyAuthenticationMethods(List(ProxyAuthenticationMethod.BASIC).asJava)
+    }
+
     nonProxyHosts match {
       case Some(optionValue) =>
         s3client.setNonProxyHosts(optionValue)
