@@ -82,7 +82,8 @@ if [ "$PUBLISH" = true ]; then
   sbt +publishSigned
   # Upload to Central Portal and auto-release
   sbt sonaUpload
-  sbt sonaRelease
+  # TODO: should be do auto-release?
+  # sbt sonaRelease
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
