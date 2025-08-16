@@ -56,9 +56,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       Properties.envOrNone("GPG_HEX_CODE").getOrElse("Jenkins_build_not_set_GPG_HEX_CODE"),
       "ignored" // this field is ignored; passwords are supplied by pinentry
     ),
-    # TODO: why do we need snapshot resolver
-    resolvers +=
-      "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-jdbc" % "3.24.2",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
@@ -126,7 +123,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     // New setting for the Central Portal
     publishTo := {
       val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
-      if (version.value.endsWith("-SNAPSHOT")) {
+      if (isSnapshot.value) {
         Some("central-snapshots" at centralSnapshots)
       } else {
         localStaging.value

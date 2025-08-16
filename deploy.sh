@@ -19,7 +19,6 @@ if [ -z "$GPG_PRIVATE_KEY" ]; then
   exit 1
 fi
 
-# TODO: should be SONATYPE_USERNAME instead of SONATYPE_USER???
 if [ -z "$SONATYPE_USER" ]; then
   echo "[ERROR] Jenkins sonatype user is not specified!"
   exit 1
@@ -47,8 +46,7 @@ fi
 
 mkdir -p ~/.ivy2
 
-STR=$'realm=Sonatype Nexus Repository Manager
-host=central.sonatype.com
+STR=$'host=central.sonatype.com
 user='$SONATYPE_USER$'
 password='$SONATYPE_PASSWORD$''
 
@@ -92,14 +90,12 @@ else
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
 fi
 
+# [DEPRECATED]
 if [ -n "$GITHUB_TAG_2" ]; then
   echo publishing previous_spark_version branch...
   git checkout tags/$GITHUB_TAG_2
   if [ "$PUBLISH" = true ]; then
     sbt +publishSigned
-    # TODO: why there is no sonaUpload and sonaRelease?
-    # sbt sonaUpload
-    # sbt sonaRelease
   else
     echo "publish to $PUBLISH_S3_URL"
     rm -rf ~/.ivy2/local/
@@ -108,14 +104,12 @@ if [ -n "$GITHUB_TAG_2" ]; then
   fi
 fi
 
+# [DEPRECATED]
 if [ -n "$GITHUB_TAG_3" ]; then
   echo publishing previous_spark_version branch...
   git checkout tags/$GITHUB_TAG_3
   if [ "$PUBLISH" = true ]; then
     sbt +publishSigned
-    # TODO: why there is no sonaUpload and sonaRelease?
-    # sbt sonaUpload
-    # sbt sonaRelease
   else
     echo "publish to $PUBLISH_S3_URL"
     rm -rf ~/.ivy2/local/
