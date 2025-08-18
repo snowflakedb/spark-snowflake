@@ -81,7 +81,7 @@ if [ "$PUBLISH" = true ]; then
   # Stage artifacts with PGP signing
   sbt +publishSigned
   # Upload to Central Portal and auto-release
-  # sbt sonaUpload
+  sbt sonaUpload
   # TODO: should be do auto-release?
   # sbt sonaRelease
 else
