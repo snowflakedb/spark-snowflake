@@ -64,9 +64,9 @@ which sbt
 if [ $? -ne 0 ]
 then
    pushd ..
-   echo "sbt is not installed, download latest sbt for test and build"
-   curl -L -o sbt-1.5.3.zip https://github.com/sbt/sbt/releases/download/v1.5.3/sbt-1.5.3.zip
-   unzip sbt-1.5.3.zip
+   echo "sbt is not installed, download the latest sbt 1 for test and build"
+   curl -L -o sbt-1.11.4.zip https://github.com/sbt/sbt/releases/download/v1.11.4/sbt-1.11.4.zip
+   unzip sbt-1.11.4.zip
    PATH=$PWD/sbt/bin:$PATH
    popd
 else
