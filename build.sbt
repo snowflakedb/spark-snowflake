@@ -60,7 +60,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "net.snowflake" % "snowflake-jdbc" % "3.24.2",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
-      "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
+      "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
       // For test to read/write from postgresql
       "org.postgresql" % "postgresql" % "42.5.4" % Test,
       // Below is for Spark Streaming from Kafka test only
