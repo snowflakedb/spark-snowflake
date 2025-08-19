@@ -46,8 +46,7 @@ fi
 
 mkdir -p ~/.ivy2
 
-STR=$'realm=Sonatype Nexus Repository Manager
-host=oss.sonatype.org
+STR=$'host=central.sonatype.com
 user='$SONATYPE_USER$'
 password='$SONATYPE_PASSWORD$''
 
@@ -65,9 +64,9 @@ which sbt
 if [ $? -ne 0 ]
 then
    pushd ..
-   echo "sbt is not installed, download latest sbt for test and build"
-   curl -L -o sbt-1.5.3.zip https://github.com/sbt/sbt/releases/download/v1.5.3/sbt-1.5.3.zip
-   unzip sbt-1.5.3.zip
+   echo "sbt is not installed, download the latest sbt 1 for test and build"
+   curl -L -o sbt-1.11.4.zip https://github.com/sbt/sbt/releases/download/v1.11.4/sbt-1.11.4.zip
+   unzip sbt-1.11.4.zip
    PATH=$PWD/sbt/bin:$PATH
    popd
 else
@@ -79,7 +78,12 @@ sbt version
 echo publishing main branch...
 git checkout tags/$GITHUB_TAG_1
 if [ "$PUBLISH" = true ]; then
+  # Stage artifacts with PGP signing
   sbt +publishSigned
+  # Upload to Central Portal and auto-release
+  sbt sonaUpload
+  # TODO: should be do auto-release?
+  # sbt sonaRelease
 else
   echo "publish to $PUBLISH_S3_URL"
   rm -rf ~/.ivy2/local/
@@ -87,6 +91,7 @@ else
   aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
 fi
 
+# [DEPRECATED]
 if [ -n "$GITHUB_TAG_2" ]; then
   echo publishing previous_spark_version branch...
   git checkout tags/$GITHUB_TAG_2
@@ -100,6 +105,7 @@ if [ -n "$GITHUB_TAG_2" ]; then
   fi
 fi
 
+# [DEPRECATED]
 if [ -n "$GITHUB_TAG_3" ]; then
   echo publishing previous_spark_version branch...
   git checkout tags/$GITHUB_TAG_3

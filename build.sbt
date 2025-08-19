@@ -44,7 +44,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     version := s"${sparkConnectorVersion}",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
     // Spark 3.2 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.9"),
+    crossScalaVersions := Seq("2.12.11", "2.13.10"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -56,8 +56,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       Properties.envOrNone("GPG_HEX_CODE").getOrElse("Jenkins_build_not_set_GPG_HEX_CODE"),
       "ignored" // this field is ignored; passwords are supplied by pinentry
     ),
-    resolvers +=
-      "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-jdbc" % "3.24.2",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
@@ -122,12 +120,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           </developer>
         </developers>,
 
-    publishTo := Some(
+    // New setting for the Central Portal
+    publishTo := {
+      val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
       if (isSnapshot.value) {
-        Opts.resolver.sonatypeSnapshots
+        Some("central-snapshots" at centralSnapshots)
       } else {
-        Opts.resolver.sonatypeStaging
+        localStaging.value
       }
-    )
+    }
 
   )
