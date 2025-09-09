@@ -450,7 +450,7 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
-  // Manually test AWS external stage
+  // Manually test AWS external stage with temporary aws credentials
   // You need to set below 3 environment variables and MAN_TEST_AWS_TEMPDIR
   private val MAN_TEST_AWS_TMP_ACCESS_KEY = "MAN_TEST_AWS_TMP_ACCESS_KEY"
   private val MAN_TEST_AWS_TMP_SECRET_KEY = "MAN_TEST_AWS_TMP_SECRET_KEY"

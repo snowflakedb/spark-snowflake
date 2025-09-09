@@ -349,6 +349,7 @@ object CloudStorageOperations {
             awsId = accessKey,
             awsKey = secretKey,
             param.expectedPartitionCount,
+            awsToken = sessionToken,
             pref = prefix,
             connection = conn,
             // For S3 external stage, it doesn't use region name in URL
