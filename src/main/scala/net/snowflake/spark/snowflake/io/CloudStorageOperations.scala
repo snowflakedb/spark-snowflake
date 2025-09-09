@@ -317,6 +317,7 @@ object CloudStorageOperations {
             }
             (creds.getAWSAccessKeyId, creds.getAWSSecretKey, token)
           case None =>
+            // TODO: fall back to creds.getAWSAccessKeyId, creds.getAWSSecretKey
             // Fall back to direct credential parameters
             (param.awsAccessKey.orNull, param.awsSecretKey.orNull, None)
         }
