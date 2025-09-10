@@ -408,7 +408,7 @@ class StageSuite extends IntegrationSuiteBase {
   private val MAN_TEST_AWS_TEMPDIR = "MAN_TEST_AWS_TEMPDIR"
   private val MAN_TEST_AWS_ACCESS_KEY = "MAN_TEST_AWS_ACCESS_KEY"
   private val MAN_TEST_AWS_SECRET_KEY = "MAN_TEST_AWS_SECRET_KEY"
-  test ("manual test with s3 external stage") {
+  ignore ("manual test with s3 external stage") {
     if (System.getenv(MAN_TEST_AWS_TEMPDIR) != null &&
       System.getenv(MAN_TEST_AWS_ACCESS_KEY) != null &&
       System.getenv(MAN_TEST_AWS_SECRET_KEY) != null) {
@@ -455,7 +455,7 @@ class StageSuite extends IntegrationSuiteBase {
   private val MAN_TEST_AWS_TMP_ACCESS_KEY = "MAN_TEST_AWS_TMP_ACCESS_KEY"
   private val MAN_TEST_AWS_TMP_SECRET_KEY = "MAN_TEST_AWS_TMP_SECRET_KEY"
   private val MAN_TEST_AWS_TMP_SESSION_TOKEN = "MAN_TEST_AWS_TMP_SESSION_TOKEN"
-  test ("manual test with s3 external stage using temporary credentials") {
+  ignore ("manual test with s3 external stage using temporary credentials") {
     if (System.getenv(MAN_TEST_AWS_TEMPDIR) != null &&
       System.getenv(MAN_TEST_AWS_TMP_ACCESS_KEY) != null &&
       System.getenv(MAN_TEST_AWS_TMP_SECRET_KEY) != null &&
