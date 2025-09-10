@@ -306,15 +306,38 @@ object CloudStorageOperations {
         )
 
       case s3_url(bucket, prefix) =>
-        require(param.awsAccessKey.isDefined, "missing aws access key")
-        require(param.awsSecretKey.isDefined, "missing aws secret key")
+        // Try to get credentials from temporaryAWSCredentials first, then fall back to direct credentials
+        val (accessKey, secretKey, sessionToken) = param.temporaryAWSCredentials match {
+          case Some(creds) =>
+            // Extract credentials from temporaryAWSCredentials object
+            val token = creds match {
+              case sessionCreds: net.snowflake.client.jdbc.internal.amazonaws.auth.AWSSessionCredentials =>
+                Some(sessionCreds.getSessionToken)
+              case _ => None
+            }
+            (creds.getAWSAccessKeyId, creds.getAWSSecretKey, token)
+          case None =>
+            // Fall back to direct credential parameters
+            (param.awsAccessKey.orNull, param.awsSecretKey.orNull, None)
+        }
+
+        // Validate that we have the required credentials
+        require(accessKey != null, "missing aws access key")
+        require(secretKey != null, "missing aws secret key")
+
+        // Build SQL statement with session token if available
+        val credentialsClause = sessionToken match {
+          case Some(token) =>
+            s"(aws_key_id='$accessKey' aws_secret_key='$secretKey' aws_token='$token')"
+          case None =>
+            s"(aws_key_id='$accessKey' aws_secret_key='$secretKey')"
+        }
 
         val sql =
           s"""
              |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
              |url = 's3://$bucket/$prefix'
-             |credentials =
-             |(aws_key_id='${param.awsAccessKey.get}' aws_secret_key='${param.awsSecretKey.get}')
+             |credentials = $credentialsClause
          """.stripMargin
 
         DefaultJDBCWrapper.executeQueryInterruptibly(conn, sql)
@@ -323,9 +346,10 @@ object CloudStorageOperations {
           ExternalS3Storage(
             param = param,
             bucketName = bucket,
-            awsId = param.awsAccessKey.get,
-            awsKey = param.awsSecretKey.get,
+            awsId = accessKey,
+            awsKey = secretKey,
             param.expectedPartitionCount,
+            awsToken = sessionToken,
             pref = prefix,
             connection = conn,
             // For S3 external stage, it doesn't use region name in URL

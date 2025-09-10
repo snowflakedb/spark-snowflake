@@ -450,6 +450,55 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
+  // Manually test AWS external stage with temporary aws credentials
+  // You need to set below 3 environment variables and MAN_TEST_AWS_TEMPDIR
+  private val MAN_TEST_AWS_TMP_ACCESS_KEY = "MAN_TEST_AWS_TMP_ACCESS_KEY"
+  private val MAN_TEST_AWS_TMP_SECRET_KEY = "MAN_TEST_AWS_TMP_SECRET_KEY"
+  private val MAN_TEST_AWS_TMP_SESSION_TOKEN = "MAN_TEST_AWS_TMP_SESSION_TOKEN"
+  ignore ("manual test with s3 external stage using temporary credentials") {
+    if (System.getenv(MAN_TEST_AWS_TEMPDIR) != null &&
+      System.getenv(MAN_TEST_AWS_TMP_ACCESS_KEY) != null &&
+      System.getenv(MAN_TEST_AWS_TMP_SECRET_KEY) != null &&
+      System.getenv(MAN_TEST_AWS_TMP_SESSION_TOKEN) != null) {
+      var sfOptionsNoTable = connectorOptionsNoTable
+      setupLargeResultTable(sfOptionsNoTable)
+
+      // Set AWS external stage options
+      sfOptionsNoTable += ("tempdir" -> System.getenv(MAN_TEST_AWS_TEMPDIR))
+      sfOptionsNoTable += ("temporary_aws_access_key_id" -> System.getenv(MAN_TEST_AWS_TMP_ACCESS_KEY))
+      sfOptionsNoTable += ("temporary_aws_secret_access_key" -> System.getenv(MAN_TEST_AWS_TMP_SECRET_KEY))
+      sfOptionsNoTable += ("temporary_aws_session_token" -> System.getenv(MAN_TEST_AWS_TMP_SESSION_TOKEN))
+
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_large_result)
+        .load()
+
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "on")
+        .option("purge", "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val dfTarget = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(sfOptionsNoTable)
+        .option("dbtable", test_table_write)
+        .load()
+      assert(dfTarget.count() == LARGE_TABLE_ROW_COUNT)
+
+      Utils.runQuery(
+        sfOptionsNoTable,
+        s"drop table if exists $test_table_large_result"
+      )
+    }
+  }
+
   test("misc for CloudStorageOperations") {
     println(CloudStorageOperations.DEFAULT_PARALLELISM)
     println(CloudStorageOperations.S3_MAX_RETRIES)
