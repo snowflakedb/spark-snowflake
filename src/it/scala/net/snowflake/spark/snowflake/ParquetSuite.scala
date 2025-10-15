@@ -758,4 +758,28 @@ class ParquetSuite extends IntegrationSuiteBase {
       .save()
     assert(Utils.getLastCopyLoad.contains("TYPE=PARQUET"))
   }
+
+  test("parquet arrays/maps of decimals should succeed") {
+    val rows = java.util.Arrays.asList(
+      Row(
+        Array(BigDecimal("1.23").bigDecimal, BigDecimal("4.56").bigDecimal),
+        Map("a" -> BigDecimal("7.89").bigDecimal)
+      )
+    )
+
+    val schema = StructType(List(
+      StructField("ARR_DEC", ArrayType(DecimalType(10, 2), containsNull = true), nullable = true),
+      StructField("MAP_DEC", MapType(StringType, DecimalType(10, 2)), nullable = true)
+    ))
+
+    val df = sparkSession.createDataFrame(rows, schema)
+
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", Random.alphanumeric.filter(_.isLetter).take(10).mkString)
+      .mode(SaveMode.Overwrite)
+      .save()
+  }
 }
