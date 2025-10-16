@@ -22,32 +22,89 @@ object ParquetUtils {
                       snowflakeStyleSchema: StructType,
                       params: MergedParameters): GenericData.Record = {
     val record = new GenericData.Record(schema)
-    row.toSeq.zip(snowflakeStyleSchema.names).foreach {
-      case (row: Row, name) =>
-        record.put(name,
-          rowToAvroRecord(
-            row,
-            schema.getField(name).schema().getTypes.get(0),
-            snowflakeStyleSchema(name).dataType.asInstanceOf[StructType],
-            params
-          ))
-      case (map: scala.collection.immutable.Map[Any, Any], name) =>
-        record.put(name, map.asJava)
-      case (str: String, name) =>
-        record.put(name, if (params.trimSpace) str.trim else str)
-      case (arr: mutable.WrappedArray[Any], name) =>
-        record.put(name, arr.toArray)
-      case (decimal: java.math.BigDecimal, name) =>
-        record.put(name, ByteBuffer.wrap(decimal.unscaledValue().toByteArray))
-      case (timestamp: java.sql.Timestamp, name) =>
-        record.put(name, timestamp.toString)
-      case (date: java.sql.Date, name) =>
-        record.put(name, date.toString)
-      case (date: java.time.LocalDateTime, name) =>
-        record.put(name, date.toEpochSecond(ZoneOffset.UTC))
-      case (value, name) => record.put(name, value)
+    row.toSeq.zip(snowflakeStyleSchema.names).foreach { case (value, name) =>
+      val fieldSchema = nonNullSchema(schema.getField(name).schema())
+      val sparkFieldType = snowflakeStyleSchema(name).dataType
+      record.put(name, convertValue(value, fieldSchema, sparkFieldType, params))
     }
     record
+  }
+
+  private def nonNullSchema(s: Schema): Schema =
+    if (s.getType == Schema.Type.UNION) s.getTypes.asScala.find(_.getType != Schema.Type.NULL).getOrElse(s)
+    else s
+
+  private def convertValue(value: Any,
+                           avroSchema: Schema,
+                           sparkType: DataType,
+                           params: MergedParameters): Any = {
+    if (value == null) return null
+
+    sparkType match {
+      case structType: StructType =>
+        val recordSchema = nonNullSchema(avroSchema)
+        rowToAvroRecord(value.asInstanceOf[Row], recordSchema, structType, params)
+
+      case ArrayType(elementType, _) =>
+        val arraySchema = nonNullSchema(avroSchema)
+        val elementSchema = nonNullSchema(arraySchema.getElementType)
+        val iterable: Iterable[Any] = value match {
+          case wa: mutable.WrappedArray[_] => wa.asInstanceOf[mutable.WrappedArray[Any]].toSeq
+          case a: Array[_] => a.asInstanceOf[Array[Any]].toSeq
+          case s: Seq[_] => s.asInstanceOf[Seq[Any]]
+          case jl: java.util.List[_] => jl.asScala.asInstanceOf[mutable.Buffer[Any]].toSeq
+          case other => Seq(other)
+        }
+        // Return a JVM array to match Avro ListWriter.writeJavaArray path
+        iterable
+          .map(elem => convertValue(elem, elementSchema, elementType, params).asInstanceOf[AnyRef])
+          .toArray[AnyRef]
+
+      case MapType(StringType, valueType, _) =>
+        val mapSchema = nonNullSchema(avroSchema)
+        val valueSchema = nonNullSchema(mapSchema.getValueType)
+        val scalaMap: Map[String, Any] = value match {
+          case m: scala.collection.immutable.Map[_, _] =>
+            m.asInstanceOf[scala.collection.immutable.Map[Any, Any]]
+              .map { case (k, v) => k.toString -> v }
+          case m: scala.collection.mutable.Map[_, _] =>
+            m.asInstanceOf[scala.collection.mutable.Map[Any, Any]].toMap
+              .map { case (k, v) => k.toString -> v }
+          case jm: java.util.Map[_, _] =>
+            jm.asScala.toMap.asInstanceOf[Map[Any, Any]].map { case (k, v) => k.toString -> v }
+          case other =>
+            throw new IllegalArgumentException(s"Unexpected map value: ${other.getClass}")
+        }
+        scalaMap.map { case (k, v) =>
+          k -> convertValue(v, valueSchema, valueType, params)
+        }.asJava
+
+      case dc: DecimalType =>
+        value match {
+          case jbd: java.math.BigDecimal => ByteBuffer.wrap(jbd.unscaledValue().toByteArray)
+          case sbd: scala.math.BigDecimal => ByteBuffer.wrap(sbd.bigDecimal.unscaledValue().toByteArray)
+          case d: org.apache.spark.sql.types.Decimal =>
+            ByteBuffer.wrap(d.toJavaBigDecimal.unscaledValue().toByteArray)
+          case other =>
+            // Fallback: attempt to parse string/number into BigDecimal
+            val bd = new java.math.BigDecimal(other.toString)
+            ByteBuffer.wrap(bd.unscaledValue().toByteArray)
+        }
+
+      case StringType =>
+        val s = value.toString
+        if (params.trimSpace) s.trim else s
+
+      case TimestampType =>
+        value.asInstanceOf[java.sql.Timestamp].toString
+
+      case DateType =>
+        value.asInstanceOf[java.sql.Date].toString
+
+      case _ =>
+        // For all other primitive types, return as-is
+        value
+    }
   }
 
   def convertStructToAvro(structType: StructType): Schema =
