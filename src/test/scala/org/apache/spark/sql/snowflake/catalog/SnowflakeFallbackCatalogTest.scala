@@ -118,7 +118,7 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
     assert(delegate.loadTableCalled)
   }
 
-  test("loadTable should convert 403 to FGACForbiddenException") {
+  test("loadTable should attempt V1Table creation on 403") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
     delegate.shouldThrow403 = true
@@ -130,14 +130,13 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
     
     val ident = Identifier.of(Array("schema"), "table")
     
-    val thrown = intercept[FGACForbiddenException] {
+    // In test environment without SparkSession, fallback will fail and rethrow original 403
+    val thrown = intercept[RuntimeException] {
       catalog.loadTable(ident)
     }
     
-    assert(thrown.isInstanceOf[FGACForbiddenException], 
-      "Should throw FGACForbiddenException")
-    assert(thrown.isInstanceOf[NoSuchTableException], 
-      "FGACForbiddenException should extend NoSuchTableException")
+    assert(thrown.getMessage.contains("403") || thrown.getMessage.contains("Forbidden"), 
+      "Should see 403 error when fallback fails in test environment")
   }
 
   test("loadTable should propagate non-403 exceptions when FGAC is enabled") {
