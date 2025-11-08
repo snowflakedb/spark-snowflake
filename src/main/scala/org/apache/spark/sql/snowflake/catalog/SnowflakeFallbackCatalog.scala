@@ -1,9 +1,12 @@
 package org.apache.spark.sql.snowflake.catalog
 
 import net.snowflake.spark.snowflake.Utils
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.slf4j.LoggerFactory
 
@@ -78,9 +81,14 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     } catch {
       case ex: Throwable =>
         if (isForbiddenException(ex)) {
-          log.info("Access forbidden for table {}, falling back to Snowflake JDBC", ident.toString)
-          val db = if (ident.namespace().length > 0) ident.namespace().mkString(".") else ""
-          throw new FGACForbiddenException(db, ident.name(), Some(ex))
+          try {
+            createSnowflakeV1Table(ident)
+          } catch {
+            case fallbackEx: Throwable =>
+              // rethrow original exception if fallback also fails
+              log.error(s"Failed to create V1Table fallback for ${ident}", fallbackEx)
+              throw ex
+          }
         } else {
           throw ex
         }
@@ -103,6 +111,67 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     (message.contains("403") || message.contains("Forbidden")) ||
     causeMessage.contains("403") || causeMessage.contains("Forbidden")
   }
+  
+  private def createSnowflakeV1Table(ident: Identifier): Table = {
+    val namespace = if (ident.namespace().nonEmpty) Some(ident.namespace().mkString(".")) else None
+
+    // TableIdentifier needs catalog field set for V2 catalogs
+    val tableIdentifier = TableIdentifier(
+      table = ident.name(),
+      database = namespace,
+      catalog = Some(catalogName) // Set catalog name!
+    )
+
+    // Get active SparkSession to access SparkConf
+    val spark = org.apache.spark.sql.SparkSession.getActiveSession.getOrElse(
+      throw new IllegalStateException("No active SparkSession found")
+    )
+
+    // Get Snowflake connection properties from SparkConf only
+    val snowflakeProps = spark.conf.getAll.filter { case (key, _) =>
+      key.toLowerCase.startsWith("spark.snowflake.") || key.toLowerCase.startsWith("snowflake.")
+    }.map { case (key, value) =>
+      val cleanKey = if (key.toLowerCase.startsWith("spark.snowflake.")) {
+        key.substring("spark.snowflake.".length).toLowerCase
+      } else if (key.toLowerCase.startsWith("snowflake.")) {
+        key.substring("snowflake.".length).toLowerCase
+      } else {
+        key.toLowerCase
+      }
+      cleanKey -> value
+    }
+
+    log.info(s"Snowflake properties for V1Table " +
+      s"(${snowflakeProps.size} keys): ${snowflakeProps.keys.mkString(", ")}")
+
+    // Build full table name for dbtable
+    val fullTableName = namespace match {
+      case Some(ns) => s"$ns.${ident.name()}"
+      case None => ident.name()
+    }
+
+    val storage = CatalogStorageFormat(
+      locationUri = None,
+      inputFormat = None,
+      outputFormat = None,
+      serde = None,
+      compressed = false,
+      properties = snowflakeProps + ("dbtable" -> fullTableName)
+    )
+
+    val catalogTable = CatalogTable(
+      identifier = tableIdentifier,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = storage,
+      schema = StructType(Seq.empty), // Empty schema, V1Table will use its own schema
+      provider = Some("net.snowflake.spark.snowflake.DefaultSource"),
+      partitionColumnNames = Seq.empty,
+      bucketSpec = None
+    )
+
+    new V1Table(catalogTable)
+  }
+
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     delegateCatalog.asInstanceOf[TableCatalog].listTables(namespace)
