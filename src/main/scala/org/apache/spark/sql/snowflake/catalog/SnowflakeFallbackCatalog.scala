@@ -1,7 +1,7 @@
 package org.apache.spark.sql.snowflake.catalog
 
 import net.snowflake.spark.snowflake.Utils
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.V1Table
@@ -11,6 +11,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.{universe => ru}
 
 class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces {
   
@@ -111,6 +112,84 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     (message.contains("403") || message.contains("Forbidden")) ||
     causeMessage.contains("403") || causeMessage.contains("Forbidden")
   }
+
+  /**
+   * Creates a CatalogTable using Scala runtime reflection to ensure compatibility
+   * across different Spark versions. This approach dynamically discovers constructor
+   * parameters and matches them by name, avoiding binary incompatibility issues.
+   */
+  private def createCatalogTableWithReflection(
+      tableIdentifier: TableIdentifier,
+      tableType: CatalogTableType,
+      storage: CatalogStorageFormat,
+      schema: StructType,
+      provider: Option[String],
+      partitionColumnNames: Seq[String],
+      bucketSpec: Option[BucketSpec]
+  ): CatalogTable = {
+    try {
+      val mirror = ru.runtimeMirror(getClass.getClassLoader)
+      val cls = mirror.staticClass("org.apache.spark.sql.catalyst.catalog.CatalogTable")
+
+      // Get primary constructor (the one with fewest parameters)
+      val ctors = cls.primaryConstructor.alternatives ++ cls.typeSignature.decls.collect {
+        case m: ru.MethodSymbol if m.isConstructor => m
+      }
+      val ctorSymbol = ctors.minBy(_.asMethod.paramLists.flatten.size).asMethod
+      val ctorMirror = mirror.reflectClass(cls).reflectConstructor(ctorSymbol)
+
+      val params = ctorSymbol.paramLists.flatten
+      log.debug(s"Using CatalogTable constructor with ${params.size} parameters")
+
+      // Default values for known fields - only the ones we need
+      val defaults: Map[String, AnyRef] = Map(
+        "identifier" -> tableIdentifier,
+        "tableType" -> tableType,
+        "storage" -> storage,
+        "schema" -> schema,
+        "provider" -> provider.orNull,
+        "partitionColumnNames" -> partitionColumnNames,
+        "bucketSpec" -> bucketSpec.orNull,
+        "owner" -> "",
+        "createTime" -> java.lang.Long.valueOf(System.currentTimeMillis()),
+        "lastAccessTime" -> java.lang.Long.valueOf(-1L),
+        "createVersion" -> "",
+        "properties" -> Map.empty[String, String],
+        "stats" -> None,
+        "viewText" -> None,
+        "comment" -> None,
+        "collation" -> None,
+        "unsupportedFeatures" -> Seq.empty[String],
+        "tracksPartitionsInCatalog" -> java.lang.Boolean.FALSE,
+        "schemaPreservesCase" -> java.lang.Boolean.TRUE,
+        "ignoredProperties" -> Map.empty[String, String],
+        "viewOriginalText" -> None,
+        "entityStorageLocations" -> Seq.empty,
+        "resourceName" -> None
+      )
+
+      // Build argument list based on parameter names
+      val args = params.map { p =>
+        val name = p.name.toString.trim
+        val value = defaults.getOrElse(name, null)
+        if (value == null) {
+          log.warn(s"No default value for CatalogTable parameter: $name - using null")
+        }
+        value.asInstanceOf[AnyRef]
+      }
+
+      val catalogTable = ctorMirror(args: _*).asInstanceOf[CatalogTable]
+      log.debug(s"Successfully created CatalogTable using reflection for table: ${tableIdentifier}")
+      catalogTable
+
+    } catch {
+      case ex: Exception =>
+        log.error(s"Reflection-based CatalogTable creation failed: ${ex.getMessage}", ex)
+        throw new RuntimeException(
+          s"Failed to create CatalogTable using reflection for ${tableIdentifier}. " +
+          s"This may indicate a Spark version compatibility issue.", ex)
+    }
+  }
   
   private def createSnowflakeV1Table(ident: Identifier): Table = {
     val namespace = if (ident.namespace().nonEmpty) Some(ident.namespace().mkString(".")) else None
@@ -127,8 +206,11 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       throw new IllegalStateException("No active SparkSession found")
     )
 
+    val allConfs =
+      spark.sparkContext.getConf.getAll.toMap ++ spark.conf.getAll ++ spark.sessionState.conf.getAllConfs
+
     // Get Snowflake connection properties from SparkConf only
-    val snowflakeProps = spark.conf.getAll.filter { case (key, _) =>
+    val snowflakeProps = allConfs.filter { case (key, _) =>
       key.toLowerCase.startsWith("spark.snowflake.") || key.toLowerCase.startsWith("snowflake.")
     }.map { case (key, value) =>
       val cleanKey = if (key.toLowerCase.startsWith("spark.snowflake.")) {
@@ -159,8 +241,9 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       properties = snowflakeProps + ("dbtable" -> fullTableName)
     )
 
-    val catalogTable = CatalogTable(
-      identifier = tableIdentifier,
+    // Use reflection-based creation to ensure compatibility across Spark versions
+    val catalogTable = createCatalogTableWithReflection(
+      tableIdentifier = tableIdentifier,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = StructType(Seq.empty), // Empty schema, V1Table will use its own schema
