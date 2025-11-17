@@ -14,28 +14,66 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.{universe => ru}
 
 class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces {
-  
+
   private val log = LoggerFactory.getLogger(getClass)
   private var delegateCatalog: CatalogPlugin = _
   private var catalogName: String = _
-  private var optionsMap: CaseInsensitiveStringMap = _
-  private var options: Map[String, String] = Map.empty
+
+  // Typed delegate fields for type-safe access (avoids asInstanceOf casts)
+  // TableCatalog is REQUIRED - validated in setDelegateCatalog
+  private var tableCatalog: TableCatalog = _
+
+  // Optional interfaces - null if delegate doesn't implement them
+  // Methods will throw UnsupportedOperationException if accessed when null
+  private var supportsNamespaces: SupportsNamespaces = _
+  private var functionCatalog: FunctionCatalog = _
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
-    this.optionsMap = options
-    this.options = options.asScala.toMap
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
-    
+
     // Create delegate catalog if not already set by Spark
     if (delegateCatalog == null) {
-      delegateCatalog = createDelegateCatalog(name, options)
+      val delegate = createDelegateCatalog(name, options)
+      setDelegateCatalog(delegate)  // This populates typed fields
     }
   }
 
   override def setDelegateCatalog(catalog: CatalogPlugin): Unit = {
     this.delegateCatalog = catalog
-    log.debug("Delegate catalog set by Spark: {}", catalog.getClass.getName)
+
+    // REQUIRED: Validate TableCatalog interface
+    catalog match {
+      case tc: TableCatalog =>
+        tableCatalog = tc
+        log.debug("Delegate implements TableCatalog")
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Delegate catalog must implement TableCatalog, got ${catalog.getClass.getName}"
+        )
+    }
+
+    // OPTIONAL: Check for SupportsNamespaces
+    supportsNamespaces = catalog match {
+      case ns: SupportsNamespaces =>
+        log.debug("Delegate implements SupportsNamespaces")
+        ns
+      case _ =>
+        log.debug("Delegate does not implement SupportsNamespaces")
+        null
+    }
+
+    // OPTIONAL: Check for FunctionCatalog
+    functionCatalog = catalog match {
+      case fc: FunctionCatalog =>
+        log.debug("Delegate implements FunctionCatalog")
+        fc
+      case _ =>
+        log.debug("Delegate does not implement FunctionCatalog")
+        null
+    }
+
+    log.debug("Delegate catalog set: {}", catalog.getClass.getName)
   }
   
   private def createDelegateCatalog(
@@ -78,7 +116,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
   override def loadTable(ident: Identifier): Table = {
     try {
-      delegateCatalog.asInstanceOf[TableCatalog].loadTable(ident)
+      tableCatalog.loadTable(ident)
     } catch {
       case ex: Throwable =>
         if (isForbiddenException(ex)) {
@@ -111,6 +149,31 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     // Fallback to message checking for other exception types
     (message.contains("403") || message.contains("Forbidden")) ||
     causeMessage.contains("403") || causeMessage.contains("Forbidden")
+  }
+
+  /**
+   * Constructs the dbtable property value from a V2 Identifier.
+   * This converts multi-part namespaces into Snowflake's dot-separated format.
+   *
+   * Examples:
+   * - Identifier(["db", "schema"], "table") → "db.schema.table"
+   * - Identifier(["schema"], "table") → "schema.table"
+   * - Identifier([], "table") → "table"
+   *
+   * @param ident The V2 Identifier with namespace and table name
+   * @return The fully qualified table name for the dbtable property
+   */
+  private[snowflake] def buildFullTableName(ident: Identifier): String = {
+    val namespace = if (ident.namespace().nonEmpty) {
+      Some(ident.namespace().mkString("."))
+    } else {
+      None
+    }
+
+    namespace match {
+      case Some(ns) => s"$ns.${ident.name()}"
+      case None => ident.name()
+    }
   }
 
   /**
@@ -226,11 +289,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     log.info(s"Snowflake properties for V1Table " +
       s"(${snowflakeProps.size} keys): ${snowflakeProps.keys.mkString(", ")}")
 
-    // Build full table name for dbtable
-    val fullTableName = namespace match {
-      case Some(ns) => s"$ns.${ident.name()}"
-      case None => ident.name()
-    }
+    // Build full table name for dbtable using the buildFullTableName method
+    val fullTableName = buildFullTableName(ident)
 
     val storage = CatalogStorageFormat(
       locationUri = None,
@@ -257,12 +317,12 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-    delegateCatalog.asInstanceOf[TableCatalog].listTables(namespace)
+    tableCatalog.listTables(namespace)
   }
 
   override def tableExists(ident: Identifier): Boolean = {
     try {
-      delegateCatalog.asInstanceOf[TableCatalog].tableExists(ident)
+      tableCatalog.tableExists(ident)
     } catch {
       case _: Exception => false
     }
@@ -273,52 +333,92 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       schema: StructType,
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-    delegateCatalog.asInstanceOf[TableCatalog].createTable(ident, schema, partitions, properties)
+    tableCatalog.createTable(ident, schema, partitions, properties)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    delegateCatalog.asInstanceOf[TableCatalog].alterTable(ident, changes: _*)
+    tableCatalog.alterTable(ident, changes: _*)
   }
 
   override def dropTable(ident: Identifier): Boolean = {
-    delegateCatalog.asInstanceOf[TableCatalog].dropTable(ident)
+    tableCatalog.dropTable(ident)
   }
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
-    delegateCatalog.asInstanceOf[TableCatalog].renameTable(oldIdent, newIdent)
+    tableCatalog.renameTable(oldIdent, newIdent)
   }
 
   override def listNamespaces(): Array[Array[String]] = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].listNamespaces()
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.listNamespaces()
   }
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].listNamespaces(namespace)
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.listNamespaces(namespace)
   }
 
   override def loadNamespaceMetadata(namespace: Array[String]): java.util.Map[String, String] = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].loadNamespaceMetadata(namespace)
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.loadNamespaceMetadata(namespace)
   }
 
   override def createNamespace(
       namespace: Array[String], metadata: java.util.Map[String, String]): Unit = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].createNamespace(namespace, metadata)
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.createNamespace(namespace, metadata)
   }
 
   override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].alterNamespace(namespace, changes: _*)
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.alterNamespace(namespace, changes: _*)
   }
 
   override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
-    delegateCatalog.asInstanceOf[SupportsNamespaces].dropNamespace(namespace, cascade)
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    supportsNamespaces.dropNamespace(namespace, cascade)
   }
 
   def listFunctions(namespace: Array[String]): Array[Identifier] = {
-    delegateCatalog.asInstanceOf[FunctionCatalog].listFunctions(namespace)
+    if (functionCatalog == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support functions"
+      )
+    }
+    functionCatalog.listFunctions(namespace)
   }
 
   def loadFunction(
       ident: Identifier): org.apache.spark.sql.connector.catalog.functions.UnboundFunction = {
-    delegateCatalog.asInstanceOf[FunctionCatalog].loadFunction(ident)
+    if (functionCatalog == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support functions"
+      )
+    }
+    functionCatalog.loadFunction(ident)
   }
 }
