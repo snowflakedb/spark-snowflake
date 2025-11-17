@@ -257,11 +257,49 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
   test("namespace operations should delegate to underlying catalog") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
-    
+
     catalog.setDelegateCatalog(delegate)
-    
+
     val result = catalog.listNamespaces()
-    
+
     assert(result != null)
+  }
+
+  test("dbtable property should be constructed from Identifier namespace and name") {
+    // This test verifies the ACTUAL dbtable string construction logic
+    // by calling the buildFullTableName method from SnowflakeFallbackCatalog.
+    // This method is private[snowflake] so it's accessible to tests in the same package.
+
+    val catalog = new SnowflakeFallbackCatalog()
+
+    // Test Case 1: Multi-part namespace (Snowflake: database.schema.table)
+    val multiPartIdent = Identifier.of(Array("production_db", "analytics_schema"), "sales_table")
+    val dbTableMulti = catalog.buildFullTableName(multiPartIdent)
+    assert(dbTableMulti === "production_db.analytics_schema.sales_table",
+      s"Multi-part namespace: Expected 'production_db.analytics_schema.sales_table', got '$dbTableMulti'")
+
+    // Test Case 2: Single-part namespace (Snowflake: schema.table)
+    val singlePartIdent = Identifier.of(Array("analytics_schema"), "sales_table")
+    val dbTableSingle = catalog.buildFullTableName(singlePartIdent)
+    assert(dbTableSingle === "analytics_schema.sales_table",
+      s"Single-part namespace: Expected 'analytics_schema.sales_table', got '$dbTableSingle'")
+
+    // Test Case 3: No namespace (Snowflake: table only)
+    val noNamespaceIdent = Identifier.of(Array(), "sales_table")
+    val dbTableNone = catalog.buildFullTableName(noNamespaceIdent)
+    assert(dbTableNone === "sales_table",
+      s"No namespace: Expected 'sales_table', got '$dbTableNone'")
+
+    // Test Case 4: Deep multi-part namespace (e.g., catalog.database.schema.table)
+    val deepNamespaceIdent = Identifier.of(Array("catalog", "production_db", "analytics_schema"), "sales_table")
+    val dbTableDeep = catalog.buildFullTableName(deepNamespaceIdent)
+    assert(dbTableDeep === "catalog.production_db.analytics_schema.sales_table",
+      s"Deep namespace: Expected 'catalog.production_db.analytics_schema.sales_table', got '$dbTableDeep'")
+
+    // Test Case 5: Namespace with special characters (should be preserved as-is)
+    val specialIdent = Identifier.of(Array("my_db", "my-schema"), "my.table")
+    val dbTableSpecial = catalog.buildFullTableName(specialIdent)
+    assert(dbTableSpecial === "my_db.my-schema.my.table",
+      s"Special characters: Expected 'my_db.my-schema.my.table', got '$dbTableSpecial'")
   }
 }
