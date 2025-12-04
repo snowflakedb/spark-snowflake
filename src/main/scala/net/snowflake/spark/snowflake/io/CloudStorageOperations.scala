@@ -226,8 +226,12 @@ object CloudStorageOperations {
                                    conn: ServerConnection,
                                    stageName: String,
                                    dir: Option[String] = None,
-                                   temporary: Boolean = false): CloudStorage = {
-    conn.createStage(stageName, temporary = temporary)
+                                   temporary: Boolean = false,
+                                   skipStageCreation: Boolean = false): CloudStorage = {
+    // Skip stage creation if using a user-specified existing stage
+    if (!skipStageCreation) {
+      conn.createStage(stageName, temporary = temporary)
+    }
     @transient val stageManager =
       new SFInternalStage(
         false,
@@ -366,8 +370,24 @@ object CloudStorageOperations {
         )
 
       case _ => // Internal Stage
+        // If a stage name was provided (e.g., user-specified via use_internal_stage),
+        // skip stage creation and use the existing stage directly
+        val useExistingStage = stage.isDefined
+        if (useExistingStage) {
+          log.info(
+            s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+               | Using user-specified internal stage: $stageName
+               |""".stripMargin.filter(_ >= ' '))
+        }
         (
-          createStorageClientFromStage(param, conn, stageName, None, tempStage),
+          createStorageClientFromStage(
+            param,
+            conn,
+            stageName,
+            None,
+            temporary = if (useExistingStage) false else tempStage,
+            skipStageCreation = useExistingStage
+          ),
           stageName
         )
     }
