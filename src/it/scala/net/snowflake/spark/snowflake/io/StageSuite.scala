@@ -678,7 +678,7 @@ class StageSuite extends IntegrationSuiteBase {
   // a temporary stage for each write operation.
   test("test snowflake_stage parameter for write operations") {
     val userStageName = s"user_specified_stage_$randomSuffix"
-    val testTableName = s"test_use_internal_stage_$randomSuffix"
+    val testTableName = s"test_snowflake_stage_$randomSuffix"
 
     try {
       // Setup: Create a persistent internal stage
@@ -792,15 +792,23 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
-  // Test PURGE functionality with user-specified Snowflake stage
+  // Test PURGE functionality with user-specified Snowflake stage using fully qualified name
   // Verifies that:
-  // 1. With purge=true, intermediate files are automatically cleaned up
-  // 2. With purge=false, files remain in the stage
-  // 3. Pre-existing files in the stage are NOT affected by purge
-  test("test snowflake_stage with purge option") {
-    val userStageName = s"user_stage_purge_test_$randomSuffix"
-    val testTableName = s"test_purge_$randomSuffix"
+  // 1. Fully qualified stage name (database.schema.stage) works correctly
+  // 2. With purge=true, intermediate files are automatically cleaned up
+  // 3. With purge=false, files remain in the stage
+  // 4. Pre-existing files in the stage are NOT affected by purge
+  test("test snowflake_stage with fully qualified name and purge option") {
+    val stageName = s"user_stage_fqn_purge_test_$randomSuffix"
+    val testTableName = s"test_fqn_purge_$randomSuffix"
     val preExistingFileName = "pre_existing_file.txt"
+
+    // Get database and schema from connector options to build fully qualified name
+    val database = connectorOptionsNoTable.getOrElse("sfdatabase",
+      connectorOptionsNoTable.getOrElse("sfDatabase", ""))
+    val schema = connectorOptionsNoTable.getOrElse("sfschema",
+      connectorOptionsNoTable.getOrElse("sfSchema", "public"))
+    val fullyQualifiedStageName = s"$database.$schema.$stageName"
 
     val param = Parameters.MergedParameters(connectorOptionsNoTable)
     val connection = TestUtils.getServerConnection(param)
@@ -808,16 +816,17 @@ class StageSuite extends IntegrationSuiteBase {
     try {
       val stmt = connection.createStatement()
 
-      // Setup: Create a persistent internal stage
-      stmt.execute(s"CREATE OR REPLACE STAGE $userStageName")
+      // Setup: Create a persistent internal stage using fully qualified name
+      stmt.execute(s"CREATE OR REPLACE STAGE $fullyQualifiedStageName")
+      println(s"Created stage with fully qualified name: $fullyQualifiedStageName")
 
       // Setup: Add a pre-existing file to the stage that should NOT be deleted
       stmt.execute(
-        s"PUT file://$temp_file_full_name1 @$userStageName/$preExistingFileName AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+        s"PUT file://$temp_file_full_name1 @$fullyQualifiedStageName/$preExistingFileName AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
       )
 
       // Verify pre-existing file is in stage
-      var rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      var rs = stmt.executeQuery(s"LIST @$fullyQualifiedStageName PATTERN='.*$preExistingFileName.*'")
       assert(rs.next(), "Pre-existing file should be in stage before test")
 
       // Create test DataFrame
@@ -825,13 +834,13 @@ class StageSuite extends IntegrationSuiteBase {
       val testData = Seq((1, "test1"), (2, "test2")).toDF("id", "value")
 
       // ============================================================
-      // Test 1: Write with purge=false - files should remain in stage
+      // Test 1: Write with purge=false using FQN stage - files should remain
       // ============================================================
       testData.write
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, fullyQualifiedStageName)
         .option(Parameters.PARAM_PURGE, "false")
         .mode(SaveMode.Overwrite)
         .save()
@@ -846,7 +855,7 @@ class StageSuite extends IntegrationSuiteBase {
       assert(resultCount == 2, s"Expected 2 rows but got $resultCount")
 
       // Count files in stage (should have pre-existing + uploaded files)
-      rs = stmt.executeQuery(s"LIST @$userStageName")
+      rs = stmt.executeQuery(s"LIST @$fullyQualifiedStageName")
       var fileCount = 0
       while (rs.next()) {
         fileCount += 1
@@ -857,11 +866,11 @@ class StageSuite extends IntegrationSuiteBase {
         s"With purge=false, files should remain in stage. Found $fileCount files")
 
       // Verify pre-existing file is still there
-      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      rs = stmt.executeQuery(s"LIST @$fullyQualifiedStageName PATTERN='.*$preExistingFileName.*'")
       assert(rs.next(), "Pre-existing file should still be in stage after purge=false write")
 
       // ============================================================
-      // Test 2: Write with purge=true - uploaded files should be cleaned
+      // Test 2: Write with purge=true using FQN stage - uploaded files should be cleaned
       // ============================================================
       val testData2 = Seq((3, "test3"), (4, "test4")).toDF("id", "value")
 
@@ -869,7 +878,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, fullyQualifiedStageName)
         .option(Parameters.PARAM_PURGE, "true")
         .mode(SaveMode.Append)
         .save()
@@ -885,7 +894,7 @@ class StageSuite extends IntegrationSuiteBase {
 
       // After purge=true, the files from this write should be cleaned
       // But pre-existing file and files from previous write (without purge) may still exist
-      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      rs = stmt.executeQuery(s"LIST @$fullyQualifiedStageName PATTERN='.*$preExistingFileName.*'")
       assert(rs.next(),
         "CRITICAL: Pre-existing file should NOT be deleted by purge! " +
         "Purge should only affect files from the current COPY operation.")
@@ -894,19 +903,20 @@ class StageSuite extends IntegrationSuiteBase {
       // Test 3: Verify purge only affects specific prefix, not entire stage
       // ============================================================
       // The pre-existing file should still exist after all operations
-      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      rs = stmt.executeQuery(s"LIST @$fullyQualifiedStageName PATTERN='.*$preExistingFileName.*'")
       val preExistingStillExists = rs.next()
       assert(preExistingStillExists,
         "Pre-existing files in user stage must be preserved! " +
         "PURGE should only delete files from the current write operation's prefix.")
 
+      println(s"SUCCESS: Fully qualified stage '$fullyQualifiedStageName' works correctly")
       println(s"SUCCESS: Pre-existing file '$preExistingFileName' was preserved after PURGE operations")
 
     } finally {
       // Cleanup
       try {
         connection.createStatement().execute(s"DROP TABLE IF EXISTS $testTableName")
-        connection.createStatement().execute(s"DROP STAGE IF EXISTS $userStageName")
+        connection.createStatement().execute(s"DROP STAGE IF EXISTS $fullyQualifiedStageName")
       } finally {
         connection.close()
       }
