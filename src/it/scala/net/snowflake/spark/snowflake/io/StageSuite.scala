@@ -672,5 +672,245 @@ class StageSuite extends IntegrationSuiteBase {
     }
     assert(ex.getMessage.contains("invalid value [negative_test_invalid_s3_dns] for parameter"))
   }
+
+  // Test user-specified internal stage for data loading
+  // This feature allows users to reuse a persistent stage instead of creating
+  // a temporary stage for each write operation.
+  test("test use_internal_stage parameter for write operations") {
+    val userStageName = s"user_specified_stage_$randomSuffix"
+    val testTableName = s"test_use_internal_stage_$randomSuffix"
+
+    try {
+      // Setup: Create a persistent internal stage
+      Utils.runQuery(
+        connectorOptionsNoTable,
+        s"CREATE OR REPLACE STAGE $userStageName"
+      )
+
+      // Setup: Create test data
+      setupLargeResultTable(connectorOptionsNoTable)
+
+      // Read source data
+      val df = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", test_table_large_result)
+        .load()
+
+      // Write using user-specified internal stage
+      df.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option("truncate_table", "off")
+        .option("usestagingtable", "off")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Verify data was loaded correctly
+      val resultCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .load()
+        .count()
+
+      assert(resultCount == LARGE_TABLE_ROW_COUNT,
+        s"Expected $LARGE_TABLE_ROW_COUNT rows but got $resultCount")
+
+      // Verify the user-specified stage still exists (was not dropped)
+      val param = Parameters.MergedParameters(connectorOptionsNoTable)
+      val connection = TestUtils.getServerConnection(param)
+      try {
+        val stmt = connection.createStatement()
+        val rs = stmt.executeQuery(s"SHOW STAGES LIKE '$userStageName'")
+        assert(rs.next(), "User-specified stage should still exist after write operation")
+      } finally {
+        connection.close()
+      }
+
+    } finally {
+      // Cleanup
+      Utils.runQuery(connectorOptionsNoTable, s"DROP TABLE IF EXISTS $testTableName")
+      Utils.runQuery(connectorOptionsNoTable, s"DROP TABLE IF EXISTS $test_table_large_result")
+      Utils.runQuery(connectorOptionsNoTable, s"DROP STAGE IF EXISTS $userStageName")
+    }
+  }
+
+  // Test that multiple writes with the same user-specified stage work correctly
+  // This simulates the streaming/micro-batch use case
+  test("test use_internal_stage parameter for multiple write operations") {
+    val userStageName = s"user_stage_multi_write_$randomSuffix"
+    val testTableName = s"test_multi_write_$randomSuffix"
+
+    try {
+      // Setup: Create a persistent internal stage
+      Utils.runQuery(
+        connectorOptionsNoTable,
+        s"CREATE OR REPLACE STAGE $userStageName"
+      )
+
+      // Create a simple test DataFrame
+      import testImplicits._
+      val testData1 = Seq((1, "first"), (2, "second")).toDF("id", "value")
+      val testData2 = Seq((3, "third"), (4, "fourth")).toDF("id", "value")
+
+      // First write using user-specified internal stage
+      testData1.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Second write (append) using same user-specified internal stage
+      testData2.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .mode(SaveMode.Append)
+        .save()
+
+      // Verify all data was loaded correctly
+      val resultCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .load()
+        .count()
+
+      assert(resultCount == 4,
+        s"Expected 4 rows after two writes but got $resultCount")
+
+    } finally {
+      // Cleanup
+      Utils.runQuery(connectorOptionsNoTable, s"DROP TABLE IF EXISTS $testTableName")
+      Utils.runQuery(connectorOptionsNoTable, s"DROP STAGE IF EXISTS $userStageName")
+    }
+  }
+
+  // Test PURGE functionality with user-specified internal stage
+  // Verifies that:
+  // 1. With purge=true, intermediate files are automatically cleaned up
+  // 2. With purge=false, files remain in the stage
+  // 3. Pre-existing files in the stage are NOT affected by purge
+  test("test use_internal_stage with purge option") {
+    val userStageName = s"user_stage_purge_test_$randomSuffix"
+    val testTableName = s"test_purge_$randomSuffix"
+    val preExistingFileName = "pre_existing_file.txt"
+
+    val param = Parameters.MergedParameters(connectorOptionsNoTable)
+    val connection = TestUtils.getServerConnection(param)
+
+    try {
+      val stmt = connection.createStatement()
+
+      // Setup: Create a persistent internal stage
+      stmt.execute(s"CREATE OR REPLACE STAGE $userStageName")
+
+      // Setup: Add a pre-existing file to the stage that should NOT be deleted
+      stmt.execute(
+        s"PUT file://$temp_file_full_name1 @$userStageName/$preExistingFileName AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+      )
+
+      // Verify pre-existing file is in stage
+      var rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      assert(rs.next(), "Pre-existing file should be in stage before test")
+
+      // Create test DataFrame
+      import testImplicits._
+      val testData = Seq((1, "test1"), (2, "test2")).toDF("id", "value")
+
+      // ============================================================
+      // Test 1: Write with purge=false - files should remain in stage
+      // ============================================================
+      testData.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_PURGE, "false")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      // Verify data was loaded
+      var resultCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .load()
+        .count()
+      assert(resultCount == 2, s"Expected 2 rows but got $resultCount")
+
+      // Count files in stage (should have pre-existing + uploaded files)
+      rs = stmt.executeQuery(s"LIST @$userStageName")
+      var fileCount = 0
+      while (rs.next()) {
+        fileCount += 1
+        println(s"File in stage (after purge=false): ${rs.getString(1)}")
+      }
+      // Should have at least pre-existing file + uploaded data files
+      assert(fileCount >= 2,
+        s"With purge=false, files should remain in stage. Found $fileCount files")
+
+      // Verify pre-existing file is still there
+      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      assert(rs.next(), "Pre-existing file should still be in stage after purge=false write")
+
+      // ============================================================
+      // Test 2: Write with purge=true - uploaded files should be cleaned
+      // ============================================================
+      val testData2 = Seq((3, "test3"), (4, "test4")).toDF("id", "value")
+
+      testData2.write
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_PURGE, "true")
+        .mode(SaveMode.Append)
+        .save()
+
+      // Verify data was loaded
+      resultCount = sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", testTableName)
+        .load()
+        .count()
+      assert(resultCount == 4, s"Expected 4 rows after append but got $resultCount")
+
+      // After purge=true, the files from this write should be cleaned
+      // But pre-existing file and files from previous write (without purge) may still exist
+      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      assert(rs.next(),
+        "CRITICAL: Pre-existing file should NOT be deleted by purge! " +
+        "Purge should only affect files from the current COPY operation.")
+
+      // ============================================================
+      // Test 3: Verify purge only affects specific prefix, not entire stage
+      // ============================================================
+      // The pre-existing file should still exist after all operations
+      rs = stmt.executeQuery(s"LIST @$userStageName PATTERN='.*$preExistingFileName.*'")
+      val preExistingStillExists = rs.next()
+      assert(preExistingStillExists,
+        "Pre-existing files in user stage must be preserved! " +
+        "PURGE should only delete files from the current write operation's prefix.")
+
+      println(s"SUCCESS: Pre-existing file '$preExistingFileName' was preserved after PURGE operations")
+
+    } finally {
+      // Cleanup
+      try {
+        connection.createStatement().execute(s"DROP TABLE IF EXISTS $testTableName")
+        connection.createStatement().execute(s"DROP STAGE IF EXISTS $userStageName")
+      } finally {
+        connection.close()
+      }
+    }
+  }
 }
 // scalastyle:on println

@@ -301,4 +301,25 @@ class ParametersSuite extends FunSuite with Matchers {
     val forceEnabledConnectionCacheKey = new ConnectionCacheKey(mergedParamsEnabled)
     assert(forceEnabledConnectionCacheKey.isPrePostActionsQualifiedForConnectionShare)
   }
+
+  test("test use_internal_stage parameter") {
+    // Test that userInternalStage is None when not specified
+    val mergedParams = Parameters.mergeParameters(minParams)
+    mergedParams.userInternalStage shouldBe None
+
+    // Test that userInternalStage is correctly set when specified
+    val paramsWithStage = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "my_custom_stage"))
+    paramsWithStage.userInternalStage shouldBe Some("my_custom_stage")
+
+    // Test with different stage name formats
+    val paramsWithQuotedStage = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "\"my_quoted_stage\""))
+    paramsWithQuotedStage.userInternalStage shouldBe Some("\"my_quoted_stage\"")
+
+    // Test with fully qualified stage name
+    val paramsWithFullyQualifiedStage = Parameters.mergeParameters(
+      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "mydb.myschema.my_stage"))
+    paramsWithFullyQualifiedStage.userInternalStage shouldBe Some("mydb.myschema.my_stage")
+  }
 }
