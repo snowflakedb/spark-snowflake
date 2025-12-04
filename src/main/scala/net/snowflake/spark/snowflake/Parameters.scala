@@ -88,10 +88,10 @@ object Parameters {
   val PARAM_TRUNCATE_TABLE: String = knownParam("truncate_table")
   val PARAM_CONTINUE_ON_ERROR: String = knownParam("continue_on_error")
   val PARAM_STREAMING_STAGE: String = knownParam("streaming_stage")
-  // User-specified internal stage name for data loading. When specified, this stage
+  // User-specified Snowflake stage name for data transfer. When specified, this stage
   // will be used instead of creating a temporary stage. This allows users to use
-  // a persistent internal stage for data transfer operations.
-  val PARAM_USE_INTERNAL_STAGE: String = knownParam("use_internal_stage")
+  // a persistent stage for data loading and unloading operations.
+  val PARAM_SNOWFLAKE_STAGE: String = knownParam("snowflake_stage")
   val PARAM_PEM_PRIVATE_KEY: String = knownParam("pem_private_key")
   val PARAM_KEEP_COLUMN_CASE: String = knownParam("keep_column_case")
 
@@ -1158,10 +1158,10 @@ object Parameters {
     def streamingStage: Option[String] = parameters.get(PARAM_STREAMING_STAGE)
 
     /**
-      * User-specified internal stage name for data loading operations.
+      * User-specified Snowflake stage name for data transfer operations.
       * When specified, this stage will be used instead of creating a temporary stage.
       */
-    def userInternalStage: Option[String] = parameters.get(PARAM_USE_INTERNAL_STAGE)
+    def snowflakeStage: Option[String] = parameters.get(PARAM_SNOWFLAKE_STAGE)
 
     def storagePath: Option[String] = {
       val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.*)".r

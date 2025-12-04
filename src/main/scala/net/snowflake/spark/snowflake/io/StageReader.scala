@@ -25,7 +25,7 @@ private[snowflake] object StageReader {
     val conn = DefaultJDBCWrapper.getConnector(params)
     val (storage, stage) =
       CloudStorageOperations.createStorageClient(
-        params, conn, tempStage = true, params.userInternalStage, "unload")
+        params, conn, tempStage = true, params.snowflakeStage, "unload")
     val compress = params.sfCompress
     val compressFormat = if (params.sfCompress) "gzip" else "none"
 

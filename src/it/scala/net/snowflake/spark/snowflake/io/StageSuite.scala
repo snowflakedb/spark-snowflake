@@ -673,10 +673,10 @@ class StageSuite extends IntegrationSuiteBase {
     assert(ex.getMessage.contains("invalid value [negative_test_invalid_s3_dns] for parameter"))
   }
 
-  // Test user-specified internal stage for data loading
+  // Test user-specified Snowflake stage for data loading
   // This feature allows users to reuse a persistent stage instead of creating
   // a temporary stage for each write operation.
-  test("test use_internal_stage parameter for write operations") {
+  test("test snowflake_stage parameter for write operations") {
     val userStageName = s"user_specified_stage_$randomSuffix"
     val testTableName = s"test_use_internal_stage_$randomSuffix"
 
@@ -702,7 +702,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
         .option("truncate_table", "off")
         .option("usestagingtable", "off")
         .mode(SaveMode.Overwrite)
@@ -740,7 +740,7 @@ class StageSuite extends IntegrationSuiteBase {
 
   // Test that multiple writes with the same user-specified stage work correctly
   // This simulates the streaming/micro-batch use case
-  test("test use_internal_stage parameter for multiple write operations") {
+  test("test snowflake_stage parameter for multiple write operations") {
     val userStageName = s"user_stage_multi_write_$randomSuffix"
     val testTableName = s"test_multi_write_$randomSuffix"
 
@@ -761,7 +761,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
         .mode(SaveMode.Overwrite)
         .save()
 
@@ -770,7 +770,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
         .mode(SaveMode.Append)
         .save()
 
@@ -792,12 +792,12 @@ class StageSuite extends IntegrationSuiteBase {
     }
   }
 
-  // Test PURGE functionality with user-specified internal stage
+  // Test PURGE functionality with user-specified Snowflake stage
   // Verifies that:
   // 1. With purge=true, intermediate files are automatically cleaned up
   // 2. With purge=false, files remain in the stage
   // 3. Pre-existing files in the stage are NOT affected by purge
-  test("test use_internal_stage with purge option") {
+  test("test snowflake_stage with purge option") {
     val userStageName = s"user_stage_purge_test_$randomSuffix"
     val testTableName = s"test_purge_$randomSuffix"
     val preExistingFileName = "pre_existing_file.txt"
@@ -831,7 +831,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
         .option(Parameters.PARAM_PURGE, "false")
         .mode(SaveMode.Overwrite)
         .save()
@@ -869,7 +869,7 @@ class StageSuite extends IntegrationSuiteBase {
         .format(SNOWFLAKE_SOURCE_NAME)
         .options(connectorOptionsNoTable)
         .option("dbtable", testTableName)
-        .option(Parameters.PARAM_USE_INTERNAL_STAGE, userStageName)
+        .option(Parameters.PARAM_SNOWFLAKE_STAGE, userStageName)
         .option(Parameters.PARAM_PURGE, "true")
         .mode(SaveMode.Append)
         .save()

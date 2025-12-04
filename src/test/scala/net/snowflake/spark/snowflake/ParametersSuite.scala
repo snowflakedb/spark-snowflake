@@ -302,24 +302,24 @@ class ParametersSuite extends FunSuite with Matchers {
     assert(forceEnabledConnectionCacheKey.isPrePostActionsQualifiedForConnectionShare)
   }
 
-  test("test use_internal_stage parameter") {
-    // Test that userInternalStage is None when not specified
+  test("test snowflake_stage parameter") {
+    // Test that snowflakeStage is None when not specified
     val mergedParams = Parameters.mergeParameters(minParams)
-    mergedParams.userInternalStage shouldBe None
+    mergedParams.snowflakeStage shouldBe None
 
-    // Test that userInternalStage is correctly set when specified
+    // Test that snowflakeStage is correctly set when specified
     val paramsWithStage = Parameters.mergeParameters(
-      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "my_custom_stage"))
-    paramsWithStage.userInternalStage shouldBe Some("my_custom_stage")
+      minParams ++ Map(Parameters.PARAM_SNOWFLAKE_STAGE -> "my_custom_stage"))
+    paramsWithStage.snowflakeStage shouldBe Some("my_custom_stage")
 
     // Test with different stage name formats
     val paramsWithQuotedStage = Parameters.mergeParameters(
-      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "\"my_quoted_stage\""))
-    paramsWithQuotedStage.userInternalStage shouldBe Some("\"my_quoted_stage\"")
+      minParams ++ Map(Parameters.PARAM_SNOWFLAKE_STAGE -> "\"my_quoted_stage\""))
+    paramsWithQuotedStage.snowflakeStage shouldBe Some("\"my_quoted_stage\"")
 
     // Test with fully qualified stage name
     val paramsWithFullyQualifiedStage = Parameters.mergeParameters(
-      minParams ++ Map(Parameters.PARAM_USE_INTERNAL_STAGE -> "mydb.myschema.my_stage"))
-    paramsWithFullyQualifiedStage.userInternalStage shouldBe Some("mydb.myschema.my_stage")
+      minParams ++ Map(Parameters.PARAM_SNOWFLAKE_STAGE -> "mydb.myschema.my_stage"))
+    paramsWithFullyQualifiedStage.snowflakeStage shouldBe Some("mydb.myschema.my_stage")
   }
 }

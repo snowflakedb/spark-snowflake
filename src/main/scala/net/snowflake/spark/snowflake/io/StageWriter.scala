@@ -213,7 +213,7 @@ private[io] object StageWriter {
       prologueSql.foreach(x => x.execute(params.bindVariableEnabled)(conn))
 
       val (storage, stage) = CloudStorageOperations.createStorageClient(
-        params, conn, tempStage = true, params.userInternalStage, "load")
+        params, conn, tempStage = true, params.snowflakeStage, "load")
 
       val startTime = System.currentTimeMillis()
       val fileUploadResults = storage.upload(rdd, format, schema, None)
