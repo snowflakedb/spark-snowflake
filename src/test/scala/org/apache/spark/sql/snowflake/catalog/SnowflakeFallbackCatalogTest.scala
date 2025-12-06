@@ -67,8 +67,6 @@ class TestDelegateCatalog extends TableCatalog with SupportsNamespaces {
 
 class SnowflakeFallbackCatalogTest extends FunSuite {
 
-  private val FGAC_KEY = "spark.snowflake.extensions.fgacJdbcFallback.enabled"
-
   test("isForbiddenException should detect 403 in exception message") {
     val catalog = new SnowflakeFallbackCatalog()
     val ex = new RuntimeException("HTTP 403 Forbidden")
@@ -102,34 +100,29 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
     assert(result === false, "Should not detect non-forbidden exceptions")
   }
 
-  test("loadTable should delegate when FGAC is disabled") {
+  test("loadTable should delegate when no 403 error occurs") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
-    
+
     catalog.setDelegateCatalog(delegate)
-    val options = Map(FGAC_KEY -> "false").asJava
+    val options = Map.empty[String, String].asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
     catalog.initialize("test", optionsMap)
-    
+
     val ident = Identifier.of(Array("schema"), "table")
     val result = catalog.loadTable(ident)
-    
+
     assert(result != null)
     assert(delegate.loadTableCalled)
   }
 
-  test("loadTable should attempt V1Table creation on 403 when FGAC enabled") {
+  test("loadTable should attempt V1Table creation on 403") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
     delegate.shouldThrow403 = true
 
     catalog.setDelegateCatalog(delegate)
-    val options = Map(
-      FGAC_KEY -> "true",
-      "spark.snowflake.sfURL" -> "test.snowflakecomputing.com",
-      "spark.snowflake.sfUser" -> "testuser",
-      "spark.snowflake.sfPassword" -> "testpass"
-    ).asJava
+    val options = Map.empty[String, String].asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
     catalog.initialize("test", optionsMap)
 
@@ -147,70 +140,46 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
       s"Should see 403 error or SparkSession error, got: ${thrown.getMessage}")
   }
 
-  test("reflection-based CatalogTable creation should work when SparkSession exists") {
-    // This test documents that the reflection approach will work in production
-    // where a SparkSession is available. In unit test environment, we expect
-    // an exception due to missing SparkSession.
-    val catalog = new SnowflakeFallbackCatalog()
-    val delegate = new TestDelegateCatalog()
-    delegate.shouldThrow403 = true
-
-    catalog.setDelegateCatalog(delegate)
-    val options = Map(FGAC_KEY -> "true").asJava
-    val optionsMap = new CaseInsensitiveStringMap(options)
-    catalog.initialize("test", optionsMap)
-
-    val ident = Identifier.of(Array("myschema"), "mytable")
-
-    // Expect failure due to no SparkSession in test environment
-    val thrown = intercept[Exception] {
-      catalog.loadTable(ident)
-    }
-
-    // Should fail due to no SparkSession, not due to CatalogTable construction
-    assert(thrown.getMessage.contains("SparkSession") || thrown.getMessage.contains("403"))
-  }
-
-  test("loadTable should propagate non-403 exceptions when FGAC is enabled") {
+  test("loadTable should propagate non-403 exceptions") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
     delegate.shouldThrowOther = true
-    
+
     catalog.setDelegateCatalog(delegate)
-    val options = Map(FGAC_KEY -> "true").asJava
+    val options = Map.empty[String, String].asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
     catalog.initialize("test", optionsMap)
-    
+
     val ident = Identifier.of(Array("schema"), "table")
-    
+
     val thrown = intercept[RuntimeException] {
       catalog.loadTable(ident)
     }
-    
+
     assert(thrown.getMessage == "Some other error")
   }
 
   test("initialize should set catalog name") {
     val catalog = new SnowflakeFallbackCatalog()
     val delegate = new TestDelegateCatalog()
-    
+
     catalog.setDelegateCatalog(delegate)
-    val options = Map(FGAC_KEY -> "true").asJava
+    val options = Map.empty[String, String].asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
     catalog.initialize("test_catalog", optionsMap)
-    
+
     assert(catalog.name() === "test_catalog")
   }
 
   test("createDelegateCatalog should require catalog-impl option") {
     val catalog = new SnowflakeFallbackCatalog()
-    val options = Map(FGAC_KEY -> "true").asJava
+    val options = Map.empty[String, String].asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
-    
+
     val thrown = intercept[IllegalArgumentException] {
       catalog.initialize("test", optionsMap)
     }
-    
+
     assert(thrown.getMessage.contains("catalog-impl"))
   }
 

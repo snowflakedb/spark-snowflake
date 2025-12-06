@@ -135,6 +135,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     } catch {
       case ex: Throwable =>
         if (isForbiddenException(ex)) {
+          log.info(s"403 Forbidden detected for ${ident}, attempting JDBC fallback")
           try {
             createSnowflakeV1Table(ident)
           } catch {
