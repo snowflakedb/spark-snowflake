@@ -220,40 +220,49 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       val params = ctorSymbol.paramLists.flatten
       log.debug(s"Using CatalogTable constructor with ${params.size} parameters")
 
+      // Log parameter details for debugging
+      params.foreach { p =>
+        val name = p.name.toString.trim
+        val typeStr = p.typeSignature.toString
+        log.debug(s"Constructor parameter: $name: $typeStr")
+      }
+
       // Default values for known fields - only the ones we need
       val defaults: Map[String, AnyRef] = Map(
         "identifier" -> tableIdentifier,
         "tableType" -> tableType,
         "storage" -> storage,
         "schema" -> schema,
-        "provider" -> provider.orNull,
+        "provider" -> provider,  // Keep as Option[String]
         "partitionColumnNames" -> partitionColumnNames,
-        "bucketSpec" -> bucketSpec.orNull,
+        "bucketSpec" -> bucketSpec,  // Keep as Option[BucketSpec]
         "owner" -> "",
         "createTime" -> java.lang.Long.valueOf(System.currentTimeMillis()),
         "lastAccessTime" -> java.lang.Long.valueOf(-1L),
         "createVersion" -> "",
         "properties" -> Map.empty[String, String],
-        "stats" -> None,
-        "viewText" -> None,
-        "comment" -> None,
-        "collation" -> None,
+        "stats" -> (None: Option[org.apache.spark.sql.catalyst.catalog.CatalogStatistics]),
+        "viewText" -> (None: Option[String]),
+        "comment" -> (None: Option[String]),
+        "collation" -> (None: Option[String]),
         "unsupportedFeatures" -> Seq.empty[String],
         "tracksPartitionsInCatalog" -> java.lang.Boolean.FALSE,
         "schemaPreservesCase" -> java.lang.Boolean.TRUE,
         "ignoredProperties" -> Map.empty[String, String],
-        "viewOriginalText" -> None,
+        "viewOriginalText" -> (None: Option[String]),
         "entityStorageLocations" -> Seq.empty,
-        "resourceName" -> None
+        "resourceName" -> (None: Option[String])
       )
 
       // Build argument list based on parameter names
       val args = params.map { p =>
         val name = p.name.toString.trim
-        val value = defaults.getOrElse(name, null)
-        if (value == null) {
-          log.warn(s"No default value for CatalogTable parameter: $name - using null")
-        }
+        val typeStr = p.typeSignature.toString
+        val value = defaults.getOrElse(name, {
+          log.warn(s"No default value for CatalogTable parameter: $name ($typeStr) - using null")
+          null
+        })
+        log.debug(s"Parameter $name = $value")
         value.asInstanceOf[AnyRef]
       }
 
