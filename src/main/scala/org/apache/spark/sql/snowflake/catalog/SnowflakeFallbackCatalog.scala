@@ -156,8 +156,15 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     val causeMessage = Option(ex.getCause).map(_.getMessage).getOrElse("")
 
     // Check for Iceberg ForbiddenException class
-    // TODO: Optimize if the ERROR message sent by Horizon IRC contains
-    // info that 403 is due to FGAC.
+    // TODO: Optimize 403 error handling to avoid unnecessary fallback attempts.
+    // Current behavior: When a 403 error occurs, we always attempt a JDBC fallback,
+    // which may result in two failed requests if the 403 is due to genuinely invalid
+    // credentials rather than FGAC restrictions.
+    // Potential optimization: If Horizon IRC includes metadata in the error message
+    // indicating whether the 403 is specifically due to FGAC policies (vs authentication
+    // failure), we could inspect that metadata to skip the fallback when we know the
+    // credentials are invalid. This would reduce latency and avoid redundant failures
+    // in the credential error case.
     if (exceptionClass.contains("ForbiddenException")) {
       return true
     }
