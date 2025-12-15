@@ -117,27 +117,70 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
   }
 
   test("loadTable should attempt V1Table creation on 403") {
-    val catalog = new SnowflakeFallbackCatalog()
-    val delegate = new TestDelegateCatalog()
-    delegate.shouldThrow403 = true
+    // Create a minimal SparkSession for this test
+    val testSpark = org.apache.spark.sql.SparkSession.builder()
+      .master("local[1]")
+      .appName("SnowflakeFallbackTest")
+      .config("spark.snowflake.url", "test.snowflakecomputing.com")
+      .config("spark.snowflake.user", "testuser")
+      .config("spark.snowflake.password", "testpass")
+      .config("spark.snowflake.database", "testdb")
+      .config("spark.snowflake.schema", "testschema")
+      .config("spark.ui.enabled", "false")  // Disable UI to avoid port conflicts
+      .config("spark.driver.host", "localhost")
+      .getOrCreate()
 
-    catalog.setDelegateCatalog(delegate)
-    val options = Map.empty[String, String].asJava
-    val optionsMap = new CaseInsensitiveStringMap(options)
-    catalog.initialize("test", optionsMap)
+    try {
+      // Set as active session
+      org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
 
-    val ident = Identifier.of(Array("schema"), "table")
+      val catalog = new SnowflakeFallbackCatalog()
+      val delegate = new TestDelegateCatalog()
+      delegate.shouldThrow403 = true
 
-    // In test environment without SparkSession, fallback will fail and rethrow original 403
-    // This is expected behavior - in production, SparkSession will be available
-    val thrown = intercept[RuntimeException] {
-      catalog.loadTable(ident)
+      catalog.setDelegateCatalog(delegate)
+      val options = Map.empty[String, String].asJava
+      val optionsMap = new CaseInsensitiveStringMap(options)
+      catalog.initialize("test_catalog", optionsMap)
+
+      val ident = Identifier.of(Array("testschema"), "testtable")
+
+      // With an active SparkSession, fallback should succeed and return a V1Table
+      val result = catalog.loadTable(ident)
+
+      // Verify we got a table back (not an exception)
+      assert(result != null, "Should return a table")
+      assert(result.isInstanceOf[V1Table],
+        "Should return a V1Table instance")
+
+      // Verify the delegate was called (403 was triggered)
+      assert(delegate.loadTableCalled, "Delegate should have been called")
+
+      // Verify the V1Table has the expected properties
+      val v1Table = result.asInstanceOf[V1Table]
+      val catalogTable = v1Table.catalogTable
+
+      // Check that dbtable is correctly set
+      val dbtable = catalogTable.storage.properties.get("dbtable")
+      assert(dbtable.isDefined, "dbtable property should be set")
+      assert(dbtable.get == "testschema.testtable",
+        s"dbtable should be 'testschema.testtable', got '${dbtable.get}'")
+
+      // Verify Snowflake configs were read from SparkSession
+      assert(catalogTable.storage.properties.get("url").contains("test.snowflakecomputing.com"),
+        "Should have url from SparkSession config")
+      assert(catalogTable.storage.properties.get("user").contains("testuser"),
+        "Should have user from SparkSession config")
+
+      // Verify provider is set correctly
+      assert(catalogTable.provider.contains("net.snowflake.spark.snowflake.DefaultSource"),
+        "Should have Snowflake DefaultSource as provider")
+
+    } finally {
+      // Clean up: stop the test session
+      testSpark.stop()
+      org.apache.spark.sql.SparkSession.clearActiveSession()
     }
-
-    // The original 403 exception should be thrown (fallback attempted but failed due to no SparkSession)
-    assert(thrown.getMessage.contains("403") || thrown.getMessage.contains("Forbidden") ||
-      thrown.getMessage.contains("No active SparkSession"),
-      s"Should see 403 error or SparkSession error, got: ${thrown.getMessage}")
   }
 
   test("loadTable should propagate non-403 exceptions") {
