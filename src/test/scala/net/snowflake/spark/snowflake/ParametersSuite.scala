@@ -134,6 +134,83 @@ class ParametersSuite extends FunSuite with Matchers {
       include("authenticator")  )
   }
 
+  // OAuth Client Credentials flow tests
+
+  test("OAuth Client Credentials: valid parameters and behavior") {
+    // Base valid parameters for OAuth Client Credentials
+    val baseParams: Map[String, String] = Map(
+      "dbtable" -> "test_table",
+      "sfurl" -> "account.snowflakecomputing.com:443",
+      "oauthclientid" -> "my_client_id",
+      "oauthclientsecret" -> "my_client_secret",
+      "oauthtokenrequesturl" -> "https://idp.example.com/oauth/token",
+      "sfdatabase" -> "testdb",
+      "sfschema" -> "testschema"
+    )
+
+    // Test lowercase authenticator - password and token are not required
+    val paramsLower = baseParams + ("sfauthenticator" -> "oauth_client_credentials")
+    val mergedLower = Parameters.mergeParameters(paramsLower)
+    mergedLower.sfAuthenticator shouldBe Some("oauth_client_credentials")
+    mergedLower.oauthClientId shouldBe Some("my_client_id")
+    mergedLower.oauthClientSecret shouldBe Some("my_client_secret")
+    mergedLower.oauthTokenRequestUrl shouldBe Some("https://idp.example.com/oauth/token")
+    mergedLower.isOAuthClientCredentials shouldBe true
+
+    // Test uppercase authenticator (case insensitive)
+    val paramsUpper = baseParams + ("sfauthenticator" -> "OAUTH_CLIENT_CREDENTIALS")
+    Parameters.mergeParameters(paramsUpper).isOAuthClientCredentials shouldBe true
+
+    // Test mixed case authenticator
+    val paramsMixed = baseParams + ("sfauthenticator" -> "OAuth_Client_Credentials")
+    Parameters.mergeParameters(paramsMixed).isOAuthClientCredentials shouldBe true
+
+    // Test optional sfUser parameter
+    val paramsWithUser = paramsLower + ("sfuser" -> "my_client_id")
+    val mergedWithUser = Parameters.mergeParameters(paramsWithUser)
+    mergedWithUser.sfUser shouldBe "my_client_id"
+    mergedWithUser.isOAuthClientCredentials shouldBe true
+
+    // Test optional oauthScope parameter
+    val paramsWithScope = paramsLower + ("oauthscope" -> "session:role:ANALYST")
+    val mergedWithScope = Parameters.mergeParameters(paramsWithScope)
+    mergedWithScope.oauthScope shouldBe Some("session:role:ANALYST")
+  }
+
+  test("OAuth Client Credentials: required parameters validation") {
+    val baseParams: Map[String, String] = Map(
+      "dbtable" -> "test_table",
+      "sfurl" -> "account.snowflakecomputing.com:443",
+      "sfauthenticator" -> "oauth_client_credentials",
+      "sfdatabase" -> "testdb",
+      "sfschema" -> "testschema"
+    )
+
+    // Test missing oauthClientId
+    intercept[IllegalArgumentException] {
+      Parameters.mergeParameters(baseParams ++ Map(
+        "oauthclientsecret" -> "secret",
+        "oauthtokenrequesturl" -> "https://idp.example.com/oauth/token"
+      ))
+    }.getMessage should include("oauthclientid")
+
+    // Test missing oauthClientSecret
+    intercept[IllegalArgumentException] {
+      Parameters.mergeParameters(baseParams ++ Map(
+        "oauthclientid" -> "client_id",
+        "oauthtokenrequesturl" -> "https://idp.example.com/oauth/token"
+      ))
+    }.getMessage should include("oauthclientsecret")
+
+    // Test missing oauthTokenRequestUrl
+    intercept[IllegalArgumentException] {
+      Parameters.mergeParameters(baseParams ++ Map(
+        "oauthclientid" -> "client_id",
+        "oauthclientsecret" -> "secret"
+      ))
+    }.getMessage should include("oauthtokenrequesturl")
+  }
+
   test("test ConnectionCacheKey.isQueryInWhiteList()") {
     val mergedParams = Parameters.mergeParameters(minParams)
     val connectionCacheKey = new ConnectionCacheKey(mergedParams)
