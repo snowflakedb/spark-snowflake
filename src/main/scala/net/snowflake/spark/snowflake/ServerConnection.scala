@@ -174,25 +174,24 @@ private[snowflake] object ServerConnection {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     if (params.sfUser != null) {
-      // user is optional when using Oauth token
+      // user is optional when using OAuth token or OAuth Client Credentials
       jdbcProperties.put("user", params.sfUser)
     }
-    params.privateKey match {
-      case Some(privateKey) =>
+    (params.isOAuthClientCredentials, params.privateKey, params.sfToken,
+      params.sfWorkloadIdentityProvider) match {
+      case (true, _, _, _) =>
+        params.oauthClientId.foreach(v => jdbcProperties.put("oauthClientId", v))
+        params.oauthClientSecret.foreach(v => jdbcProperties.put("oauthClientSecret", v))
+        params.oauthTokenRequestUrl.foreach(v => jdbcProperties.put("oauthTokenRequestUrl", v))
+        params.oauthScope.foreach(v => jdbcProperties.put("oauthScope", v))
+      case (_, Some(privateKey), _, _) =>
         jdbcProperties.put("privateKey", privateKey)
-      case None =>
-        // Adding OAuth Token parameter
-        params.sfToken match {
-          case Some(value) =>
-            jdbcProperties.put("token", value)
-          case None =>
-            // Adding Workload Identity Provider parameter
-            params.sfWorkloadIdentityProvider match {
-              case Some(value) =>
-                jdbcProperties.put("workloadIdentityProvider", value)
-              case None => jdbcProperties.put("password", params.sfPassword)
-            }
-        }
+      case (_, None, Some(token), _) =>
+        jdbcProperties.put("token", token)
+      case (_, None, None, Some(workloadIdentityProvider)) =>
+        jdbcProperties.put("workloadIdentityProvider", workloadIdentityProvider)
+      case (_, None, None, None) =>
+        jdbcProperties.put("password", params.sfPassword)
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
