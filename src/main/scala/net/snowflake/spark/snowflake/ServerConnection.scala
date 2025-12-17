@@ -174,19 +174,31 @@ private[snowflake] object ServerConnection {
     jdbcProperties.put("db", params.sfDatabase)
     jdbcProperties.put("schema", params.sfSchema) // Has a default
     if (params.sfUser != null) {
-      // user is optional when using Oauth token
+      // user is optional when using OAuth token or OAuth Client Credentials
       jdbcProperties.put("user", params.sfUser)
     }
-    params.privateKey match {
-      case Some(privateKey) =>
-        jdbcProperties.put("privateKey", privateKey)
-      case None =>
-        // Adding OAuth Token parameter
-        params.sfToken match {
-          case Some(value) =>
-            jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
-        }
+
+    // Handle different authentication methods
+    if (params.isOAuthClientCredentials) {
+      // OAuth Client Credentials flow - JDBC driver obtains token automatically
+      // Set the OAuth Client Credentials parameters for JDBC
+      params.oauthClientId.foreach(v => jdbcProperties.put("oauthClientId", v))
+      params.oauthClientSecret.foreach(v => jdbcProperties.put("oauthClientSecret", v))
+      params.oauthTokenRequestUrl.foreach(v => jdbcProperties.put("oauthTokenRequestUrl", v))
+      params.oauthScope.foreach(v => jdbcProperties.put("oauthScope", v))
+      // No password or token needed - JDBC driver handles token acquisition
+    } else {
+      params.privateKey match {
+        case Some(privateKey) =>
+          jdbcProperties.put("privateKey", privateKey)
+        case None =>
+          // Adding OAuth Token parameter
+          params.sfToken match {
+            case Some(value) =>
+              jdbcProperties.put("token", value)
+            case None => jdbcProperties.put("password", params.sfPassword)
+          }
+      }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties
