@@ -105,6 +105,13 @@ object Parameters {
   val PARAM_OAUTH_TOKEN: String = knownParam("sftoken")
   val PARAM_WORKLOAD_IDENTITY_PROVIDER: String = knownParam("sfworkloadidentityprovider")
 
+  // OAuth Client Credentials flow parameters
+  // These are passed directly to JDBC driver for OAuth Client Credentials authentication
+  val PARAM_OAUTH_CLIENT_ID: String = knownParam("oauthclientid")
+  val PARAM_OAUTH_CLIENT_SECRET: String = knownParam("oauthclientsecret")
+  val PARAM_OAUTH_TOKEN_REQUEST_URL: String = knownParam("oauthtokenrequesturl")
+  val PARAM_OAUTH_SCOPE: String = knownParam("oauthscope")
+
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
 
@@ -260,6 +267,9 @@ object Parameters {
   val TZ_SF2 = "sf_current"
   val TZ_SF_DEFAULT = "sf_default"
 
+  // Authenticator type constants
+  val AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS: String = "oauth_client_credentials"
+
   // List of values that mean "yes" when considered to be Boolean
   val BOOLEAN_VALUES_TRUE: Set[String] =
     Set("on", "yes", "true", "1", "enabled")
@@ -336,54 +346,75 @@ object Parameters {
 
       val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
       val workloadIdentityProviderVal = userParameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
-      
-      if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty && workloadIdentityProviderVal.isEmpty) {
-        throw new IllegalArgumentException(
-          "A Snowflake user must be provided with '" + PARAM_SF_USER + 
-            "' parameter, e.g. 'user1' (not required when using OAuth or Workload Identity authentication)"
-        )
-      }
-      
-      //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
       val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
-      if (authenticatorVal.isDefined && authenticatorVal.get.toLowerCase.contains("oauth") &&
-        tokenVal.isEmpty) {
-        throw new IllegalArgumentException(
-          "An OAuth token is required when authenticator is set to 'oauth'. " +
-            "Please provide '" + PARAM_OAUTH_TOKEN + "' parameter."
-        )
-      }
-      //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
-      if (tokenVal.isDefined && 
-        (authenticatorVal.isEmpty || !authenticatorVal.get.toLowerCase.contains("oauth"))) {
-        throw new IllegalArgumentException(
-          "The authenticator must be set to 'oauth' when specifying an OAuth token. " +
-            "Please set '" + PARAM_AUTHENTICATOR + "=oauth'."
-        )
-      }
 
-      //  ensure workload_identity_provider is provided if PARAM_AUTHENTICATOR = WORKLOAD_IDENTITY
-      if (authenticatorVal.isDefined && 
-          authenticatorVal.get.equalsIgnoreCase("WORKLOAD_IDENTITY") &&
+      val isOAuthClientCredentials = authenticatorVal.exists(
+        _.equalsIgnoreCase(AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS)
+      )
+
+      if (isOAuthClientCredentials) {
+        if (!userParameters.contains(PARAM_OAUTH_CLIENT_ID)) {
+          throw new IllegalArgumentException(
+            s"OAuth Client ID must be provided with '$PARAM_OAUTH_CLIENT_ID' parameter " +
+              "when using OAuth Client Credentials authentication"
+          )
+        }
+        if (!userParameters.contains(PARAM_OAUTH_CLIENT_SECRET)) {
+          throw new IllegalArgumentException(
+            s"OAuth Client Secret must be provided with '$PARAM_OAUTH_CLIENT_SECRET' parameter " +
+              "when using OAuth Client Credentials authentication"
+          )
+        }
+        if (!userParameters.contains(PARAM_OAUTH_TOKEN_REQUEST_URL)) {
+          throw new IllegalArgumentException(
+            s"OAuth Token Request URL must be provided with '$PARAM_OAUTH_TOKEN_REQUEST_URL' parameter " +
+              "when using OAuth Client Credentials authentication"
+          )
+        }
+      } else {
+        if ((!userParameters.contains(PARAM_SF_USER)) && tokenVal.isEmpty &&
           workloadIdentityProviderVal.isEmpty) {
-        throw new IllegalArgumentException(
-          "A workload identity provider is required when authenticator is set to 'WORKLOAD_IDENTITY'. " +
-            "Please provide '" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' parameter."
-        )
-      }
-      
-      if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
-        (!userParameters.contains(PARAM_WORKLOAD_IDENTITY_PROVIDER)) &&
-        //  if OAuth token not provided
-        (tokenVal.isEmpty)) {
-        throw new IllegalArgumentException(
-          "Authentication credentials must be provided. Please specify one of the following: " +
-            "'" + PARAM_SF_PASSWORD + "' (password), " +
-            "'" + PARAM_PEM_PRIVATE_KEY + "' (private key), " +
-            "'" + PARAM_OAUTH_TOKEN + "' (OAuth token), or " +
-            "'" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' (workload identity provider)."
-        )
+          throw new IllegalArgumentException(
+            "A Snowflake user must be provided with '" + PARAM_SF_USER +
+              "' parameter, e.g. 'user1' (not required when using OAuth or Workload Identity authentication)"
+          )
+        }
+
+        if (authenticatorVal.exists(_.toLowerCase.contains("oauth")) && tokenVal.isEmpty) {
+          throw new IllegalArgumentException(
+            "An OAuth token is required when authenticator is set to 'oauth'. " +
+              "Please provide '" + PARAM_OAUTH_TOKEN + "' parameter."
+          )
+        }
+
+        if (tokenVal.isDefined &&
+          !authenticatorVal.exists(_.toLowerCase.contains("oauth"))) {
+          throw new IllegalArgumentException(
+            "The authenticator must be set to 'oauth' when specifying an OAuth token. " +
+              "Please set '" + PARAM_AUTHENTICATOR + "=oauth'."
+          )
+        }
+
+        if (authenticatorVal.exists(_.equalsIgnoreCase("WORKLOAD_IDENTITY")) &&
+          workloadIdentityProviderVal.isEmpty) {
+          throw new IllegalArgumentException(
+            "A workload identity provider is required when authenticator is set to 'WORKLOAD_IDENTITY'. " +
+              "Please provide '" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' parameter."
+          )
+        }
+
+        if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
+          (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
+          (!userParameters.contains(PARAM_WORKLOAD_IDENTITY_PROVIDER)) &&
+          (tokenVal.isEmpty)) {
+          throw new IllegalArgumentException(
+            "Authentication credentials must be provided. Please specify one of the following: " +
+              "'" + PARAM_SF_PASSWORD + "' (password), " +
+              "'" + PARAM_PEM_PRIVATE_KEY + "' (private key), " +
+              "'" + PARAM_OAUTH_TOKEN + "' (OAuth token), or " +
+              "'" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' (workload identity provider)."
+          )
+        }
       }
 
       if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
@@ -823,6 +854,21 @@ object Parameters {
     def sfAuthenticator: Option[String] = parameters.get(PARAM_AUTHENTICATOR)
     def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)
     def sfWorkloadIdentityProvider: Option[String] = parameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
+
+    /**
+      * OAuth Client Credentials flow parameters
+      */
+    def oauthClientId: Option[String] = parameters.get(PARAM_OAUTH_CLIENT_ID)
+    def oauthClientSecret: Option[String] = parameters.get(PARAM_OAUTH_CLIENT_SECRET)
+    def oauthTokenRequestUrl: Option[String] = parameters.get(PARAM_OAUTH_TOKEN_REQUEST_URL)
+    def oauthScope: Option[String] = parameters.get(PARAM_OAUTH_SCOPE)
+
+    /**
+      * Check if OAuth Client Credentials authentication is being used
+      */
+    def isOAuthClientCredentials: Boolean = {
+      sfAuthenticator.exists(_.equalsIgnoreCase(AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS))
+    }
 
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
