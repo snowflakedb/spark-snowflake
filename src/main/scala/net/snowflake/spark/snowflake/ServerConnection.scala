@@ -179,26 +179,19 @@ private[snowflake] object ServerConnection {
     }
 
     // Handle different authentication methods
-    if (params.isOAuthClientCredentials) {
-      // OAuth Client Credentials flow - JDBC driver obtains token automatically
-      // Set the OAuth Client Credentials parameters for JDBC
-      params.oauthClientId.foreach(v => jdbcProperties.put("oauthClientId", v))
-      params.oauthClientSecret.foreach(v => jdbcProperties.put("oauthClientSecret", v))
-      params.oauthTokenRequestUrl.foreach(v => jdbcProperties.put("oauthTokenRequestUrl", v))
-      params.oauthScope.foreach(v => jdbcProperties.put("oauthScope", v))
-      // No password or token needed - JDBC driver handles token acquisition
-    } else {
-      params.privateKey match {
-        case Some(privateKey) =>
-          jdbcProperties.put("privateKey", privateKey)
-        case None =>
-          // Adding OAuth Token parameter
-          params.sfToken match {
-            case Some(value) =>
-              jdbcProperties.put("token", value)
-            case None => jdbcProperties.put("password", params.sfPassword)
-          }
-      }
+    (params.isOAuthClientCredentials, params.privateKey, params.sfToken) match {
+      case (true, _, _) =>
+        // OAuth Client Credentials flow - JDBC driver obtains token automatically
+        params.oauthClientId.foreach(v => jdbcProperties.put("oauthClientId", v))
+        params.oauthClientSecret.foreach(v => jdbcProperties.put("oauthClientSecret", v))
+        params.oauthTokenRequestUrl.foreach(v => jdbcProperties.put("oauthTokenRequestUrl", v))
+        params.oauthScope.foreach(v => jdbcProperties.put("oauthScope", v))
+      case (_, Some(privateKey), _) =>
+        jdbcProperties.put("privateKey", privateKey)
+      case (_, None, Some(token)) =>
+        jdbcProperties.put("token", token)
+      case (_, None, None) =>
+        jdbcProperties.put("password", params.sfPassword)
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default
     // Optional properties

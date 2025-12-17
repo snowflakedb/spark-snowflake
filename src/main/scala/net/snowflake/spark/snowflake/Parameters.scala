@@ -111,9 +111,6 @@ object Parameters {
   val PARAM_OAUTH_TOKEN_REQUEST_URL: String = knownParam("oauthtokenrequesturl")
   val PARAM_OAUTH_SCOPE: String = knownParam("oauthscope")
 
-  // Authenticator type constant for OAuth Client Credentials
-  val AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS: String = "oauth_client_credentials"
-
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
 
@@ -268,6 +265,9 @@ object Parameters {
   val TZ_SF1 = "snowflake"
   val TZ_SF2 = "sf_current"
   val TZ_SF_DEFAULT = "sf_default"
+
+  // Authenticator type constants
+  val AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS: String = "oauth_client_credentials"
 
   // List of values that mean "yes" when considered to be Boolean
   val BOOLEAN_VALUES_TRUE: Set[String] =
