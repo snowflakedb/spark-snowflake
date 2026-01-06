@@ -16,6 +16,7 @@
 
 package org.apache.spark.sql.snowflake.catalog
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -26,9 +27,13 @@ class TestDelegateCatalog extends TableCatalog with SupportsNamespaces {
   var shouldThrow403: Boolean = false
   var shouldThrowOther: Boolean = false
   var loadTableCalled: Boolean = false
-  
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
-  
+  var initializeOptions: CaseInsensitiveStringMap = _
+
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    // Capture the options passed during initialization
+    initializeOptions = options
+  }
+
   override def name(): String = "test_delegate"
   
   override def loadTable(ident: Identifier): Table = {
@@ -224,6 +229,42 @@ class SnowflakeFallbackCatalogTest extends FunSuite {
     }
 
     assert(thrown.getMessage.contains("catalog-impl"))
+  }
+
+  test("User-Agent header should be passed to delegate catalog") {
+    val catalog = new SnowflakeFallbackCatalog()
+
+    val options = Map(
+      "catalog-impl" -> "org.apache.spark.sql.snowflake.catalog.TestDelegateCatalog",
+      "custom-option" -> "custom-value"
+    ).asJava
+    val optionsMap = new CaseInsensitiveStringMap(options)
+
+    catalog.initialize("test_catalog", optionsMap)
+
+    val delegateField = catalog.getClass.getDeclaredField("delegateCatalog")
+    delegateField.setAccessible(true)
+    val delegate = delegateField.get(catalog).asInstanceOf[TestDelegateCatalog]
+
+    assert(delegate.initializeOptions != null)
+
+    val userAgent = delegate.initializeOptions.get("header.User-Agent")
+    assert(userAgent != null, "User-Agent header should be set")
+
+    val expectedUserAgent = s"spark-snowflake/${net.snowflake.spark.snowflake.Utils.VERSION} spark/${SPARK_VERSION}"
+    assert(userAgent == expectedUserAgent,
+      s"Expected '$expectedUserAgent', got '$userAgent'")
+
+    assert(userAgent.startsWith("spark-snowflake/"))
+    assert(userAgent.contains(s" spark/${SPARK_VERSION}"))
+    assert(userAgent.contains(net.snowflake.spark.snowflake.Utils.VERSION))
+
+    val pattern = """spark-snowflake/\d+\.\d+\.\d+ spark/\d+\.\d+\.\d+""".r
+    assert(pattern.findFirstIn(userAgent).isDefined,
+      s"User-Agent should match pattern spark-snowflake/X.Y.Z spark/X.Y.Z")
+
+    assert(delegate.initializeOptions.get("custom-option") == "custom-value")
+    assert(delegate.initializeOptions.get("catalog-impl") == null)
   }
 
   test("listTables should delegate to underlying catalog") {

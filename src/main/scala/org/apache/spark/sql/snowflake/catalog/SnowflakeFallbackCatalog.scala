@@ -16,6 +16,7 @@
 package org.apache.spark.sql.snowflake.catalog
 
 import net.snowflake.spark.snowflake.Utils
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog._
@@ -111,11 +112,22 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       val delegateOptions = options.asScala
         .filterKeys(key => !wrapperSpecificKeys.contains(key.toLowerCase))
         .toMap
-      
-      val delegateOptionsMap = new CaseInsensitiveStringMap(delegateOptions.asJava)
-      
+
+      // Always set User-Agent with spark-snowflake and Spark version
+      // Format: spark-snowflake/<connector-version> spark/<spark-version>
+      // Example: spark-snowflake/3.1.3 spark/3.5.0
+      // Using header.User-Agent for compatibility with all Iceberg versions
+      val sparkSnowflakeAgent = s"spark-snowflake/${net.snowflake.spark.snowflake.Utils.VERSION} spark/${SPARK_VERSION}"
+
+      val optionsWithUserAgent = delegateOptions +
+        ("header.User-Agent" -> sparkSnowflakeAgent)
+
+      log.debug("Setting User-Agent to: {}", sparkSnowflakeAgent)
+
+      val delegateOptionsMap = new CaseInsensitiveStringMap(optionsWithUserAgent.asJava)
+
       log.debug(
-          "Initializing delegate with filtered options: {}", delegateOptions.keys.mkString(", "))
+          "Initializing delegate with filtered options: {}", optionsWithUserAgent.keys.mkString(", "))
       delegate.initialize(name, delegateOptionsMap)
       
       log.debug("Successfully initialized delegate catalog: {}", catalogImpl)
