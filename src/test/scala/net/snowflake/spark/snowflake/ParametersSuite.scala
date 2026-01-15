@@ -142,7 +142,7 @@ class ParametersSuite extends FunSuite with Matchers {
     params.remove("sfuser")
     val mergedParams = Parameters.mergeParameters(params.toMap)
     mergedParams.sfAuthenticator shouldBe Some("WORKLOAD_IDENTITY")
-    mergedParams.workloadIdentityProvider shouldBe Some("my_provider")
+    mergedParams.sfWorkloadIdentityProvider shouldBe Some("my_provider")
   }
 
   test("Must specify Workload Identity Provider when Authenticator mode equals 'WORKLOAD_IDENTITY'") {

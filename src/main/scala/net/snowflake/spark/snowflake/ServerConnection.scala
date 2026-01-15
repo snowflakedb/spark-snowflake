@@ -187,7 +187,7 @@ private[snowflake] object ServerConnection {
             jdbcProperties.put("token", value)
           case None =>
             // Adding Workload Identity Provider parameter
-            params.workloadIdentityProvider match {
+            params.sfWorkloadIdentityProvider match {
               case Some(value) =>
                 jdbcProperties.put("workloadIdentityProvider", value)
               case None => jdbcProperties.put("password", params.sfPassword)

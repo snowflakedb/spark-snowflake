@@ -822,7 +822,7 @@ object Parameters {
       */
     def sfAuthenticator: Option[String] = parameters.get(PARAM_AUTHENTICATOR)
     def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)
-    def workloadIdentityProvider: Option[String] = parameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
+    def sfWorkloadIdentityProvider: Option[String] = parameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
 
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
