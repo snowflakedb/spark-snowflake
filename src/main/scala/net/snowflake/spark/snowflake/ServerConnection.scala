@@ -185,7 +185,13 @@ private[snowflake] object ServerConnection {
         params.sfToken match {
           case Some(value) =>
             jdbcProperties.put("token", value)
-          case None => jdbcProperties.put("password", params.sfPassword)
+          case None =>
+            // Adding Workload Identity Provider parameter
+            params.workloadIdentityProvider match {
+              case Some(value) =>
+                jdbcProperties.put("workloadIdentityProvider", value)
+              case None => jdbcProperties.put("password", params.sfPassword)
+            }
         }
     }
     jdbcProperties.put("ssl", params.sfSSL) // Has a default

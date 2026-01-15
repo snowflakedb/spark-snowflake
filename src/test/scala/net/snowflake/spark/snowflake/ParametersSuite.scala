@@ -130,8 +130,40 @@ class ParametersSuite extends FunSuite with Matchers {
       params += "sftoken" -> "mytoken"
       params.remove("sfpassword")
       Parameters.mergeParameters(params.toMap)
-    }.getMessage should (include("token") and include("Invalid") and
-      include("authenticator")  )
+    }.getMessage should (include("token") and include("authenticator") and
+      include("must be set to 'oauth'")  )
+  }
+
+  test("See if we can specify Authenticator with Workload Identity Provider") {
+    val params = collection.mutable.Map() ++= minParams
+    params += "sfauthenticator" -> "WORKLOAD_IDENTITY"
+    params += "sfworkloadidentityprovider" -> "my_provider"
+    params.remove("sfpassword")
+    params.remove("sfuser")
+    val mergedParams = Parameters.mergeParameters(params.toMap)
+    mergedParams.sfAuthenticator shouldBe Some("WORKLOAD_IDENTITY")
+    mergedParams.workloadIdentityProvider shouldBe Some("my_provider")
+  }
+
+  test("Must specify Workload Identity Provider when Authenticator mode equals 'WORKLOAD_IDENTITY'") {
+    intercept[IllegalArgumentException] {
+      val params = collection.mutable.Map() ++= minParams
+      params += "sfauthenticator" -> "WORKLOAD_IDENTITY"
+      params.remove("sfworkloadidentityprovider")
+      params.remove("sfpassword")
+      Parameters.mergeParameters(params.toMap)
+    }.getMessage should (include("workload identity provider") and include("is required") and
+      include("WORKLOAD_IDENTITY"))
+  }
+
+  test("Workload Identity Provider validation is case-insensitive for authenticator") {
+    intercept[IllegalArgumentException] {
+      val params = collection.mutable.Map() ++= minParams
+      params += "sfauthenticator" -> "workload_identity"
+      params.remove("sfworkloadidentityprovider")
+      params.remove("sfpassword")
+      Parameters.mergeParameters(params.toMap)
+    }.getMessage should (include("workload identity provider") and include("is required"))
   }
 
   test("test ConnectionCacheKey.isQueryInWhiteList()") {

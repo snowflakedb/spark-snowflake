@@ -103,6 +103,7 @@ object Parameters {
   // Add Oauth params
   val PARAM_AUTHENTICATOR: String = knownParam("sfauthenticator")
   val PARAM_OAUTH_TOKEN: String = knownParam("sftoken")
+  val PARAM_WORKLOAD_IDENTITY_PROVIDER: String = knownParam("sfworkloadidentityprovider")
 
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
@@ -334,36 +335,54 @@ object Parameters {
       }
 
       val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
-      if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty) {
+      val workloadIdentityProviderVal = userParameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
+      
+      if ((!userParameters.contains(PARAM_SF_USER)) &&  tokenVal.isEmpty && workloadIdentityProviderVal.isEmpty) {
         throw new IllegalArgumentException(
-          "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
+          "A Snowflake user must be provided with '" + PARAM_SF_USER + 
+            "' parameter, e.g. 'user1' (not required when using OAuth or Workload Identity authentication)"
         )
       }
-      if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
-        //  if OAuth token not provided
-        (tokenVal.isEmpty)) {
-        throw new IllegalArgumentException(
-          "A snowflake password or private key path or OAuth token must be provided with '" +
-            PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
-            PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
-        )
-      }
+      
       //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
       val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
-      if ((authenticatorVal.contains("oauth")) &&
-        (tokenVal.isEmpty)) {
+      if (authenticatorVal.isDefined && authenticatorVal.get.toLowerCase.contains("oauth") &&
+        tokenVal.isEmpty) {
         throw new IllegalArgumentException(
-          "An OAuth token is required if the authenticator mode is '" +
-            PARAM_AUTHENTICATOR + "'"
+          "An OAuth token is required when authenticator is set to 'oauth'. " +
+            "Please provide '" + PARAM_OAUTH_TOKEN + "' parameter."
         )
       }
       //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
-      if (!(authenticatorVal.contains("oauth")) &&
-        (!tokenVal.isEmpty)) {
+      if (tokenVal.isDefined && 
+        (authenticatorVal.isEmpty || !authenticatorVal.get.toLowerCase.contains("oauth"))) {
         throw new IllegalArgumentException(
-          "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR +
-            ", the authentication mode must be 'oauth' when specifying OAuth token"
+          "The authenticator must be set to 'oauth' when specifying an OAuth token. " +
+            "Please set '" + PARAM_AUTHENTICATOR + "=oauth'."
+        )
+      }
+
+      //  ensure workload_identity_provider is provided if PARAM_AUTHENTICATOR = WORKLOAD_IDENTITY
+      if (authenticatorVal.isDefined && 
+          authenticatorVal.get.equalsIgnoreCase("WORKLOAD_IDENTITY") &&
+          workloadIdentityProviderVal.isEmpty) {
+        throw new IllegalArgumentException(
+          "A workload identity provider is required when authenticator is set to 'WORKLOAD_IDENTITY'. " +
+            "Please provide '" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' parameter."
+        )
+      }
+      
+      if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
+        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
+        (!userParameters.contains(PARAM_WORKLOAD_IDENTITY_PROVIDER)) &&
+        //  if OAuth token not provided
+        (tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "Authentication credentials must be provided. Please specify one of the following: " +
+            "'" + PARAM_SF_PASSWORD + "' (password), " +
+            "'" + PARAM_PEM_PRIVATE_KEY + "' (private key), " +
+            "'" + PARAM_OAUTH_TOKEN + "' (OAuth token), or " +
+            "'" + PARAM_WORKLOAD_IDENTITY_PROVIDER + "' (workload identity provider)."
         )
       }
 
@@ -803,6 +822,7 @@ object Parameters {
       */
     def sfAuthenticator: Option[String] = parameters.get(PARAM_AUTHENTICATOR)
     def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)
+    def workloadIdentityProvider: Option[String] = parameters.get(PARAM_WORKLOAD_IDENTITY_PROVIDER)
 
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
