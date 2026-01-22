@@ -32,23 +32,22 @@ import org.mockito.Mockito
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
-/**
-  * Created by mzukowski on 8/9/16.
+/** Created by mzukowski on 8/9/16.
   */
 private class TestContext extends SparkContext("local", "SnowflakeBaseTest") {
 
-  /**
-    * A text file containing fake unloaded Snowflake data of all supported types
+  /** A text file containing fake unloaded Snowflake data of all supported types
     */
   val testData: String = new File(
-    "src/test/resources/snowflake_unload_data.txt").toURI.toString
+    "src/test/resources/snowflake_unload_data.txt"
+  ).toURI.toString
 
   override def newAPIHadoopFile[K, V, F <: InputFormat[K, V]](
-    path: String,
-    fClass: Class[F],
-    kClass: Class[K],
-    vClass: Class[V],
-    conf: Configuration = hadoopConfiguration
+      path: String,
+      fClass: Class[F],
+      kClass: Class[K],
+      vClass: Class[V],
+      conf: Configuration = hadoopConfiguration
   ): RDD[(K, V)] = {
     super.newAPIHadoopFile[K, V, F](testData, fClass, kClass, vClass, conf)
   }
@@ -60,8 +59,7 @@ class BaseTest
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
 
-  /**
-    * Spark Context with Hadoop file overridden to point at our local test data file for this suite,
+  /** Spark Context with Hadoop file overridden to point at our local test data file for this suite,
     * no matter what temp directory was generated and requested.
     */
   protected var sc: SparkContext = _
@@ -106,6 +104,7 @@ class BaseTest
     sc.hadoopConfiguration.set("fs.s3.awsSecretAccessKey", "test2")
     sc.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", "test1")
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", "test2")
+
     // Configure a mock S3 client so that we don't hit errors when trying to access AWS in tests.
     mockS3Client =
       Mockito.mock(classOf[AmazonS3Client], Mockito.RETURNS_SMART_NULLS)
