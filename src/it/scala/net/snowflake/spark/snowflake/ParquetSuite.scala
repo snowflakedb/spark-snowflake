@@ -26,6 +26,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_nested_dataframe: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_no_staging_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_table_name: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_null_type: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $test_all_type")
@@ -43,6 +44,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table if exists $test_nested_dataframe")
     jdbcUpdate(s"drop table if exists $test_no_staging_table")
     jdbcUpdate(s"drop table if exists $test_table_name")
+    jdbcUpdate(s"drop table if exists $test_null_type")
     super.afterAll()
   }
 
@@ -757,6 +759,22 @@ class ParquetSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
     assert(Utils.getLastCopyLoad.contains("TYPE=PARQUET"))
+  }
+
+  // Repro test for SNOW-3122114:
+  // Writing a DataFrame with NullType inside a structured column (e.g. array(null))
+  // via the Parquet path throws UnsupportedOperationException: Unexpected type: NullType.
+  // This test should FAIL (reproduce the bug) until NullType is properly handled in ParquetUtils.
+  test("test NullType in array with parquet - repro SNOW-3122114") {
+    // array(null) causes Spark to infer ArrayType(NullType), which triggers the bug
+    val df = sparkSession.sql("select array(null, null) as arr")
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_null_type)
+      .mode(SaveMode.Overwrite)
+      .save()
   }
 
   test("parquet arrays/maps of decimals should succeed") {
