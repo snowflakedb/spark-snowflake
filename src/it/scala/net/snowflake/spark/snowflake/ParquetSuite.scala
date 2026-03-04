@@ -4,7 +4,7 @@ import net.snowflake.spark.snowflake.Utils.{SNOWFLAKE_SOURCE_NAME, SNOWFLAKE_SOU
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, NullType, StringType, StructField, StructType, TimestampType}
 
 import java.sql.{Date, SQLException, Timestamp}
 import scala.collection.Seq
@@ -26,6 +26,7 @@ class ParquetSuite extends IntegrationSuiteBase {
   val test_nested_dataframe: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_no_staging_table: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
   val test_table_name: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
+  val test_null_type: String = Random.alphanumeric.filter(_.isLetter).take(10).mkString
 
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $test_all_type")
@@ -43,6 +44,7 @@ class ParquetSuite extends IntegrationSuiteBase {
     jdbcUpdate(s"drop table if exists $test_nested_dataframe")
     jdbcUpdate(s"drop table if exists $test_no_staging_table")
     jdbcUpdate(s"drop table if exists $test_table_name")
+    jdbcUpdate(s"drop table if exists $test_null_type")
     super.afterAll()
   }
 
@@ -757,6 +759,85 @@ class ParquetSuite extends IntegrationSuiteBase {
       .mode(SaveMode.Overwrite)
       .save()
     assert(Utils.getLastCopyLoad.contains("TYPE=PARQUET"))
+  }
+
+  test("test NullType in structured types with parquet - repro SNOW-3122114") {
+    // Spark infers NullType when all literal expressions inside a structured context are null:
+    //   array(null, null)       → ArrayType(NullType)
+    //   named_struct('a', null) → StructType with NullType fields
+    // Previously the Parquet write path threw UnsupportedOperationException on NullType.
+    // Fix: map NullType → StringType in Avro/Parquet schema conversion; all actual values
+    // remain null so no data is lost.
+
+    val writeSchema = StructType(List(
+      StructField("ID", IntegerType, nullable = true),
+      StructField("ARR", ArrayType(NullType, containsNull = true), nullable = true),
+      StructField("ST", StructType(List(
+        StructField("A", NullType, nullable = true),
+        StructField("B", NullType, nullable = true)
+      )), nullable = true)
+    ))
+
+    // Row 1: 2-element null array  + non-null struct whose fields are null
+    // Row 2: 1-element null array  + non-null struct whose fields are null
+    // Row 3: top-level null for both structured columns
+    val rows = java.util.Arrays.asList(
+      Row(1, Seq[Any](null, null), Row(null, null)),
+      Row(2, Seq[Any](null), Row(null, null)),
+      Row(3, null, null)
+    )
+
+    val df = sparkSession.createDataFrame(rows, writeSchema)
+
+    // Writing via the Parquet path previously threw UnsupportedOperationException on NullType
+    df.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option(Parameters.PARAM_USE_PARQUET_IN_WRITE, "true")
+      .option("dbtable", test_null_type)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // NullType is stored as StringType in Parquet/Snowflake; supply the concrete read schema.
+    val readSchema = StructType(List(
+      StructField("ID", IntegerType, nullable = true),
+      StructField("ARR", ArrayType(StringType, containsNull = true), nullable = true),
+      StructField("ST", StructType(List(
+        StructField("A", StringType, nullable = true),
+        StructField("B", StringType, nullable = true)
+      )), nullable = true)
+    ))
+
+    val result = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", test_null_type)
+      .schema(readSchema)
+      .load()
+      .collect()
+      .sortBy(_.getAs[Int]("ID"))
+
+    assert(result.length == 3)
+
+    // id=1: ARR is a 2-element array (elements are null); ST struct is non-null
+    val arr1 = result(0).getSeq[Any](result(0).fieldIndex("ARR"))
+    assert(arr1 != null && arr1.length == 2,
+      "row id=1: ARR should be a non-null array with 2 elements")
+    assert(!result(0).isNullAt(result(0).fieldIndex("ST")),
+      "row id=1: ST struct should be non-null")
+
+    // id=2: ARR is a 1-element array (element is null); ST struct is non-null
+    val arr2 = result(1).getSeq[Any](result(1).fieldIndex("ARR"))
+    assert(arr2 != null && arr2.length == 1,
+      "row id=2: ARR should be a non-null array with 1 element")
+    assert(!result(1).isNullAt(result(1).fieldIndex("ST")),
+      "row id=2: ST struct should be non-null")
+
+    // id=3: both structured columns are null at the top level
+    assert(result(2).isNullAt(result(2).fieldIndex("ARR")),
+      "row id=3: ARR should be null")
+    assert(result(2).isNullAt(result(2).fieldIndex("ST")),
+      "row id=3: ST should be null")
   }
 
   test("parquet arrays/maps of decimals should succeed") {

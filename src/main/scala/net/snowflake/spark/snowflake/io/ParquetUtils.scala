@@ -175,6 +175,9 @@ object ParquetUtils {
           struct,
           builder.record(name).namespace(nameSpace)
         )
+      // NullType: Parquet cannot represent a pure-null column type, so we treat it as a
+      // nullable string. All actual values are null, so no data is lost.
+      case NullType => builder.stringType()
       case _ =>
         throw new UnsupportedOperationException(s"Unexpected type: $dataType")
     }
@@ -229,6 +232,9 @@ object ParquetUtils {
           struct,
           builder.record(name).namespace(nameSpace)
         )
+      // NullType: Parquet cannot represent a pure-null element type, so we treat it as a
+      // nullable string. All actual values are null, so no data is lost.
+      case NullType => builder.stringType()
       case _ =>
         throw new UnsupportedOperationException(s"Unexpected type: $dataType")
     }
