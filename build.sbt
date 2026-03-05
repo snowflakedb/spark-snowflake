@@ -16,8 +16,8 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.5"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
+val sparkVersion = "4.0"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("4.0.0")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -42,10 +42,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     name := "spark-snowflake",
     organization := "net.snowflake",
     version := s"${sparkConnectorVersion}",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.13.10"),
     // Spark 3.2 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.10"),
-    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+    // crossScalaVersions := Seq("2.12.11", "2.13.10"),
+    crossScalaVersions := Seq("2.13.10"),
+    javacOptions ++= Seq("-source", "17", "-target", "17"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     // Set up GPG key for release build from environment variable: GPG_HEX_CODE
