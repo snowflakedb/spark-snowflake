@@ -150,7 +150,7 @@ object ParquetUtils {
         builder.stringBuilder()
           .prop("logicalType", "date")
           .endString()
-      case TimestampType =>
+      case TimestampType | TimestampNTZType =>
         builder.stringBuilder()
           .prop("logicalType", " timestamp-micros")
           .endString()
