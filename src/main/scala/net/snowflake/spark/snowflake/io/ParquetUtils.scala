@@ -150,9 +150,9 @@ object ParquetUtils {
         builder.stringBuilder()
           .prop("logicalType", "date")
           .endString()
-      case TimestampType =>
+      case TimestampType | TimestampNTZType =>
         builder.stringBuilder()
-          .prop("logicalType", " timestamp-micros")
+          .prop("logicalType", "timestamp-micros")
           .endString()
       case ArrayType(elementType, nullable) =>
         builder.array().items(
@@ -169,6 +169,10 @@ object ParquetUtils {
             getSchemaBuilder(valueContainsNull),
             name
           )
+        )
+      case MapType(keyType, _, _) =>
+        throw new UnsupportedOperationException(
+          s"MapType with non-string key type '$keyType' is not supported: Avro maps require string keys"
         )
       case struct: StructType =>
         convertStructToAvro(
@@ -226,6 +230,10 @@ object ParquetUtils {
             getSchemaBuilder(valueContainsNull),
             name
           )
+        )
+      case MapType(keyType, _, _) =>
+        throw new UnsupportedOperationException(
+          s"MapType with non-string key type '$keyType' is not supported: Avro maps require string keys"
         )
       case struct: StructType =>
         convertStructToAvro(
