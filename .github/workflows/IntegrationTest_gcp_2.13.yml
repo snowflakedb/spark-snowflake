@@ -12,34 +12,25 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
      matrix:
+       spark_version: [ '3.5.0', '4.0.0', '4.1.0' ]
+       use_copy_unload: [ 'false' ]
+       cloud_provider: [ 'gcp' ]
+       run_query_in_async: [ 'true', 'false' ]
        include:
-         # Spark 3.5 with Scala 2.13
-         - scala_version: '2.13.10'
-           spark_version: '3.5.0'
+         - spark_version: '3.5.0'
+           scala_version: '2.13.10'
            java_version: '8'
-           use_copy_unload: 'false'
-           cloud_provider: 'gcp'
+         - spark_version: '4.0.0'
+           scala_version: '2.13.16'
+           java_version: '17'
+         - spark_version: '4.1.0'
+           scala_version: '2.13.17'
+           java_version: '17'
+       exclude:
+         - spark_version: '4.0.0'
            run_query_in_async: 'true'
-         - scala_version: '2.13.10'
-           spark_version: '3.5.0'
-           java_version: '8'
-           use_copy_unload: 'false'
-           cloud_provider: 'gcp'
-           run_query_in_async: 'false'
-         # Spark 4.0 with Scala 2.13
-         - scala_version: '2.13.16'
-           spark_version: '4.0.0'
-           java_version: '17'
-           use_copy_unload: 'false'
-           cloud_provider: 'gcp'
-           run_query_in_async: 'false'
-         # Spark 4.1 with Scala 2.13
-         - scala_version: '2.13.17'
-           spark_version: '4.1.0'
-           java_version: '17'
-           use_copy_unload: 'false'
-           cloud_provider: 'gcp'
-           run_query_in_async: 'false'
+         - spark_version: '4.1.0'
+           run_query_in_async: 'true'
 
     steps:
     - uses: actions/checkout@v4

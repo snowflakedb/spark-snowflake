@@ -28,8 +28,9 @@ fi
 
 if [ "$INTEGRATION_TESTS" != "true" ]; then
   # Run only test
-  sbt -DsparkVersion=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test coverageReport
+  # Use ++! to force Scala version even when crossScalaVersions is empty (Spark 4.x)
+  sbt -DsparkVersion=$SPARK_VERSION "++$SPARK_SCALA_VERSION!" clean coverage test coverageReport
 else
   # Run both test and it
-  sbt -DsparkVersion=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test it:test coverageReport
+  sbt -DsparkVersion=$SPARK_VERSION "++$SPARK_SCALA_VERSION!" clean coverage test it:test coverageReport
 fi

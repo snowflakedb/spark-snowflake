@@ -84,11 +84,8 @@ git checkout tags/$GITHUB_TAG_1
 if [ "$PUBLISH" = true ]; then
   for spark_version in $SPARK_VERSIONS; do
     echo "Publishing for Spark $spark_version..."
-    sbt -DsparkVersion=$spark_version +publishSigned
+    sbt -DsparkVersion=$spark_version +publishSigned sonaUpload sonaRelease
   done
-  # Upload all staged artifacts to Central Portal and release
-  sbt sonaUpload
-  sbt sonaRelease
 else
   for spark_version in $SPARK_VERSIONS; do
     echo "Publishing locally for Spark $spark_version to $PUBLISH_S3_URL..."

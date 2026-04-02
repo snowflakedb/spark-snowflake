@@ -70,6 +70,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
 
     version := s"${sparkConnectorVersion}-spark_${sparkMajorMinor(sparkVersion.value)}",
 
+    // Note: String comparison works for our version set (3.5, 4.0, 4.1) but
+    // would break for e.g. "3.5.10" vs "3.5.9". Keep versions to X.Y.Z format.
     scalaVersion := {
       if (sparkVersion.value >= "4.1.0") "2.13.17"
       else if (sparkVersion.value >= "4.0.0") "2.13.16"
@@ -169,6 +171,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
         ) else Seq.empty
       )
     },
+
+    Compile / scalastyleSources ++= (Compile / unmanagedSourceDirectories).value,
+    Test / scalastyleSources ++= (Test / unmanagedSourceDirectories).value,
 
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
