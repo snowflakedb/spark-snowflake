@@ -20,11 +20,12 @@ jobs:
        run_query_in_async: [ 'true', 'false' ]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up JDK 1.8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v4
       with:
-        java-version: 1.8
+        distribution: 'temurin'
+        java-version: '8'
 
     - name: Decrypt snowflake.json for testing
       run: ./.github/scripts/decrypt_secret.sh snowflake.travis.json snowflake.travis.json.gpg
@@ -41,7 +42,7 @@ jobs:
         SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
         SPARK_CONN_ENV_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: ${{ matrix.run_query_in_async }}
 
-    - uses: codecov/codecov-action@v2
+    - uses: codecov/codecov-action@v4
       if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
       with:
         fail_ci_if_error: false

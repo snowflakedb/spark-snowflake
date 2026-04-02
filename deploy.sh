@@ -75,45 +75,25 @@ fi
 which sbt
 sbt version
 
-echo publishing main branch...
+# Spark versions to cross-build
+SPARK_VERSIONS="3.5.0 4.0.0 4.1.0"
+
+echo publishing from tag $GITHUB_TAG_1...
 git checkout tags/$GITHUB_TAG_1
+
 if [ "$PUBLISH" = true ]; then
-  # Stage artifacts with PGP signing
-  sbt +publishSigned
-  # Upload to Central Portal and auto-release
+  for spark_version in $SPARK_VERSIONS; do
+    echo "Publishing for Spark $spark_version..."
+    sbt -DsparkVersion=$spark_version +publishSigned
+  done
+  # Upload all staged artifacts to Central Portal and release
   sbt sonaUpload
   sbt sonaRelease
 else
-  echo "publish to $PUBLISH_S3_URL"
-  rm -rf ~/.ivy2/local/
-  sbt +publishLocalSigned
-  aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
-fi
-
-# [DEPRECATED]
-if [ -n "$GITHUB_TAG_2" ]; then
-  echo publishing previous_spark_version branch...
-  git checkout tags/$GITHUB_TAG_2
-  if [ "$PUBLISH" = true ]; then
-    sbt +publishSigned
-  else
-    echo "publish to $PUBLISH_S3_URL"
+  for spark_version in $SPARK_VERSIONS; do
+    echo "Publishing locally for Spark $spark_version to $PUBLISH_S3_URL..."
     rm -rf ~/.ivy2/local/
-    sbt +publishLocalSigned
-    aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_2}/ --recursive
-  fi
-fi
-
-# [DEPRECATED]
-if [ -n "$GITHUB_TAG_3" ]; then
-  echo publishing previous_spark_version branch...
-  git checkout tags/$GITHUB_TAG_3
-  if [ "$PUBLISH" = true ]; then
-    sbt +publishSigned
-  else
-    echo "publish to $PUBLISH_S3_URL"
-    rm -rf ~/.ivy2/local/
-    sbt +publishLocalSigned
-    aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_3}/ --recursive
-  fi
+    sbt -DsparkVersion=$spark_version +publishLocalSigned
+    aws s3 cp ~/.ivy2/local ${PUBLISH_S3_URL}/${GITHUB_TAG_1}/ --recursive
+  done
 fi
