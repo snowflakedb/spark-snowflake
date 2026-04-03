@@ -38,6 +38,16 @@ def sparkMajor(version: String): Int = {
   scala.util.Try(version.takeWhile(_ != '.').toInt).getOrElse(3)
 }
 
+def versionedSourceDirs(base: File, sparkVer: String): Seq[File] = {
+  val mm = sparkMajorMinor(sparkVer)
+  val common = Seq(base / "scala")
+  if (sparkMajor(sparkVer) >= 4) {
+    common ++ Seq(base / "4.x" / "scala", base / mm / "scala")
+  } else {
+    common :+ (base / mm / "scala")
+  }
+}
+
 def specialJvmOptions(sparkVer: String): Seq[String] = {
   if (sparkVer >= "4.0.0") {
     Seq(
@@ -98,38 +108,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     //   common (src/main/scala) is always included
     //   Spark 3.5 builds add src/main/3.5/
     //   Spark 4.x builds add src/main/4.x/ + src/main/4.0/ or src/main/4.1/
-    Compile / unmanagedSourceDirectories := {
-      val base = (Compile / sourceDirectory).value
-      val mm = sparkMajorMinor(sparkVersion.value)
-      val common = Seq(base / "scala")
-      if (sparkMajor(sparkVersion.value) >= 4) {
-        common ++ Seq(base / "4.x" / "scala", base / mm / "scala")
-      } else {
-        common :+ (base / mm / "scala")
-      }
-    },
+    Compile / unmanagedSourceDirectories :=
+      versionedSourceDirs((Compile / sourceDirectory).value, sparkVersion.value),
 
-    Test / unmanagedSourceDirectories := {
-      val base = (Test / sourceDirectory).value
-      val mm = sparkMajorMinor(sparkVersion.value)
-      val common = Seq(base / "scala")
-      if (sparkMajor(sparkVersion.value) >= 4) {
-        common ++ Seq(base / "4.x" / "scala", base / mm / "scala")
-      } else {
-        common :+ (base / mm / "scala")
-      }
-    },
+    Test / unmanagedSourceDirectories :=
+      versionedSourceDirs((Test / sourceDirectory).value, sparkVersion.value),
 
-    ItTest / unmanagedSourceDirectories := {
-      val base = (ItTest / sourceDirectory).value
-      val mm = sparkMajorMinor(sparkVersion.value)
-      val common = Seq(base / "scala")
-      if (sparkMajor(sparkVersion.value) >= 4) {
-        common ++ Seq(base / "4.x" / "scala", base / mm / "scala")
-      } else {
-        common :+ (base / mm / "scala")
-      }
-    },
+    ItTest / unmanagedSourceDirectories :=
+      versionedSourceDirs((ItTest / sourceDirectory).value, sparkVersion.value),
 
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),

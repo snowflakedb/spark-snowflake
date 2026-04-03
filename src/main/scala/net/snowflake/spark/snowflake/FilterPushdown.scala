@@ -85,27 +85,6 @@ private[snowflake] object FilterPushdown {
       }
     }
 
-    // Builds an escaped value, based on the value itself
-    def buildValue(value: Any): SnowflakeSQLStatement = {
-      value match {
-        case x: String =>
-          StringVariable(
-            Option(x).map(_.replace("'", "''")
-              .replace("\\", "\\\\"))
-          ) !
-        case x: Date => StringVariable(Option(x).map(_.toString)) + "::DATE"
-        case x: Timestamp => StringVariable(Option(x).map(_.toString)) + "::TIMESTAMP(3)"
-        case x: Int => IntVariable(Some(x)) !
-        case x: Long => LongVariable(Some(x)) !
-        case x: Short => ShortVariable(Some(x)) !
-        case x: Boolean => BooleanVariable(Some(x)) !
-        case x: Float => FloatVariable(Some(x)) !
-        case x: Double => DoubleVariable(Some(x)) !
-        case x: Byte => ByteVariable(Some(x)) !
-        case _ => ConstantStringVal(value) !
-      }
-    }
-
     // Builds a simple comparison string
     def buildComparison(attr: String,
                         value: Any,
@@ -163,15 +142,15 @@ private[snowflake] object FilterPushdown {
         else Some(ConstantString("(NOT (") + childStr.get + "))")
       case StringStartsWith(attr, value) =>
         Some(
-          ConstantString("STARTSWITH(") + wrap(attr) + "," + buildValue(value) + ")"
+          ConstantString("STARTSWITH(") + wrap(attr) + "," + buildValueWithType(StringType, value) + ")"
         )
       case StringEndsWith(attr, value) =>
         Some(
-          ConstantString("ENDSWITH(") + wrap(attr) + "," + buildValue(value) + ")"
+          ConstantString("ENDSWITH(") + wrap(attr) + "," + buildValueWithType(StringType, value) + ")"
         )
       case StringContains(attr, value) =>
         Some(
-          ConstantString("CONTAINS(") + wrap(attr) + "," + buildValue(value) + ")"
+          ConstantString("CONTAINS(") + wrap(attr) + "," + buildValueWithType(StringType, value) + ")"
         )
       case _ => None
     }
