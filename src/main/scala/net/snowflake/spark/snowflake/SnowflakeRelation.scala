@@ -112,6 +112,15 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
+    if (filters.nonEmpty) {
+      val ansiEnabled = sqlContext.sparkSession.conf
+        .getOption("spark.sql.ansi.enabled")
+        .exists(_.equalsIgnoreCase("true"))
+      if (ansiEnabled) {
+        log.warn("Push-down operation has not been verified in ANSI mode, " +
+          "there may be some minor differences between pushed logic and non-pushed.")
+      }
+    }
     val prunedSchema = pruneSchema(schema, requiredColumns)
     val columns = if (requiredColumns.isEmpty) {
       schema.map(_.name).toArray
