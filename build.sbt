@@ -158,6 +158,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       )
     },
 
+    // scalac-scoverage-plugin is full-version cross-compiled per Scala patch version.
+    // Older Scala versions (2.12.11, 2.13.10) only publish up to 2.0.x,
+    // while 2.13.16+ starts at 2.3.0. Pick the latest available per version.
+    coverageScalacPluginVersion := {
+      if (scalaVersion.value >= "2.13.16") "2.5.2"
+      else "2.0.11"
+    },
+
     Compile / scalastyleSources ++= (Compile / unmanagedSourceDirectories).value,
     Test / scalastyleSources ++= (Test / unmanagedSourceDirectories).value,
 
