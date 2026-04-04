@@ -28,9 +28,7 @@ jobs:
            scala_version: '2.13.17'
            java_version: '17'
        exclude:
-         # Spark 4.x doesn't need copy_unload=true or async permutations yet
-         - spark_version: '4.0.0'
-           use_copy_unload: 'true'
+         # Spark 4.1 doesn't need copy_unload=true or async permutations yet
          - spark_version: '4.1.0'
            use_copy_unload: 'true'
          - spark_version: '4.0.0'
