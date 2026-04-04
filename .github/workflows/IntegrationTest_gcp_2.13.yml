@@ -27,8 +27,6 @@ jobs:
            scala_version: '2.13.17'
            java_version: '17'
        exclude:
-         - spark_version: '4.0.0'
-           run_query_in_async: 'true'
          - spark_version: '4.1.0'
            run_query_in_async: 'true'
 
@@ -46,6 +44,7 @@ jobs:
         SNOWFLAKE_TEST_CONFIG_SECRET: ${{ secrets.SNOWFLAKE_TEST_CONFIG_SECRET }}
 
     - name: Run tests
+      id: run-tests
       run: ./.github/scripts/run-tests-github.sh
       env:
         INTEGRATION_TESTS: true
@@ -54,6 +53,10 @@ jobs:
         SNOWFLAKE_TEST_ACCOUNT: ${{ matrix.cloud_provider }}
         SPARK_CONN_ENV_USE_COPY_UNLOAD: ${{ matrix.use_copy_unload }}
         SPARK_CONN_ENV_INTERNAL_EXECUTE_QUERY_IN_SYNC_MODE: ${{ matrix.run_query_in_async }}
+
+    - name: Warn if integration tests were skipped
+      if: steps.run-tests.outputs.INTEGRATION_TESTS_SKIPPED == 'true'
+      run: echo "::warning::Integration tests were SKIPPED — Snowflake credentials not available (fork or external PR). Unit tests passed but this is NOT a full green build."
 
     - uses: codecov/codecov-action@v4
       if: matrix.use_copy_unload != 'true' || matrix.cloud_provider != 'gcp'
