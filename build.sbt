@@ -76,7 +76,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     name := "spark-snowflake",
     organization := "net.snowflake",
 
-    sparkVersion := System.getProperty("sparkVersion", "3.5.0"),
+    sparkVersion := System.getProperty("sparkVersion", "4.1.0"),
 
     version := s"${sparkConnectorVersion}-spark_${sparkMajorMinor(sparkVersion.value)}",
 
@@ -156,14 +156,6 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           "org.apache.spark" %% "spark-sql-api" % sv % "provided, test"
         ) else Seq.empty
       )
-    },
-
-    // scalac-scoverage-plugin is full-version cross-compiled per Scala patch version.
-    // Older Scala versions (2.12.11, 2.13.10) only publish up to 2.0.x,
-    // while 2.13.16+ starts at 2.3.0. Pick the latest available per version.
-    coverageScalacPluginVersion := {
-      if (scalaVersion.value >= "2.13.16") "2.5.2"
-      else "2.0.11"
     },
 
     Compile / scalastyleSources ++= (Compile / unmanagedSourceDirectories).value,
