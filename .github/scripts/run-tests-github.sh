@@ -43,9 +43,7 @@ if [ "$INTEGRATION_TESTS" == "true" ] && [ ! -f "snowflake.travis.json" ]; then
     echo "INTEGRATION_TESTS_SKIPPED=true" >> "$GITHUB_OUTPUT"
   fi
 
-  # Run unit tests only
-  sbt -DsparkVersion=$SPARK_VERSION "++$SPARK_SCALA_VERSION!" clean coverage test coverageReport
-  exit 0
+  unset INTEGRATION_TESTS
 fi
 
 if [ "$INTEGRATION_TESTS" != "true" ]; then
