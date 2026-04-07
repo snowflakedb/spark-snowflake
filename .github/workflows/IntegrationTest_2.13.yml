@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
      matrix:
-       spark_version: [ '3.5.0', '4.0.0', '4.1.0' ]
+       spark_version: [ '3.5.8', '4.0.0', '4.1.0' ]
        use_copy_unload: [ 'true', 'false' ]
        cloud_provider: [ 'aws', 'azure' ]
        run_query_in_async: [ 'true', 'false' ]
        include:
          # Default Scala/Java for all Spark versions
-         - spark_version: '3.5.0'
+         - spark_version: '3.5.8'
            scala_version: '2.13.10'
            java_version: '8'
          - spark_version: '4.0.0'

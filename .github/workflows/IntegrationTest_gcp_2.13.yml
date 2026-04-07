@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
      matrix:
-       spark_version: [ '3.5.0', '4.0.0', '4.1.0' ]
+       spark_version: [ '3.5.8', '4.0.0', '4.1.0' ]
        use_copy_unload: [ 'false' ]
        cloud_provider: [ 'gcp' ]
        run_query_in_async: [ 'true', 'false' ]

@@ -85,14 +85,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     scalaVersion := {
       if (sparkVersion.value >= "4.1.0") "2.13.17"
       else if (sparkVersion.value >= "4.0.0") "2.13.16"
-      else sys.props.getOrElse("SPARK_SCALA_VERSION", "2.12.11")
+      else sys.props.getOrElse("SPARK_SCALA_VERSION", "2.12.18")
     },
 
     crossScalaVersions := {
       if (sparkVersion.value >= "4.0.0") {
         Seq() // Spark 4.x is Scala 2.13 only; no cross compilation
       } else {
-        Seq("2.12.11", "2.13.10")
+        Seq("2.12.18", "2.13.10")
       }
     },
 
