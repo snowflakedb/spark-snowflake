@@ -19,7 +19,7 @@ jobs:
        include:
          # Default Scala/Java for all Spark versions
          - spark_version: '3.5.8'
-           scala_version: '2.13.10'
+           scala_version: '2.13.14'
            java_version: '8'
          - spark_version: '4.0.0'
            scala_version: '2.13.16'
