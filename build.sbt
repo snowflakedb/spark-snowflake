@@ -83,9 +83,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     // Note: String comparison works for our version set (3.5, 4.0, 4.1) but
     // would break for e.g. "3.5.10" vs "3.5.9". Keep versions to X.Y.Z format.
     scalaVersion := {
-      if (sparkVersion.value >= "4.1.0") "2.13.17"
-      else if (sparkVersion.value >= "4.0.0") "2.13.16"
-      else sys.props.getOrElse("SPARK_SCALA_VERSION", "2.12.18")
+      sys.props.getOrElse("SPARK_SCALA_VERSION",
+        if (sparkVersion.value >= "4.1.0") "2.13.17"
+        else if (sparkVersion.value >= "4.0.0") "2.13.16"
+        else "2.12.18"
+      )
     },
 
     crossScalaVersions := {
