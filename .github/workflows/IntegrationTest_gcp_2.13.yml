@@ -17,7 +17,7 @@ jobs:
        cloud_provider: [ 'gcp' ]
        run_query_in_async: [ 'true', 'false' ]
        include:
-         - spark_version: '3.5.0'
+         - spark_version: '3.5.8'
            scala_version: '2.13.10'
            java_version: '8'
          - spark_version: '4.0.0'
