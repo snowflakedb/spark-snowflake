@@ -142,9 +142,12 @@ class CloudCredentialsUtilsSuite extends FunSuite {
     val e = intercept[AmazonClientException] {
       CloudCredentialsUtils.load("s3a://bucket/path", new Configuration(false))
     }
+    val msg = Option(e.getMessage).getOrElse("")
+    // Message varies by AWS SDK / JDK / network (no EC2 metadata in CI or local dev).
     assert(
-      e.getMessage === "Unable to load credentials from service endpoint" ||
-        e.getMessage.contains("The requested metadata is not found at")
+      msg == "Unable to load credentials from service endpoint" ||
+        msg.contains("The requested metadata is not found at") ||
+        msg.contains("Failed to connect to service endpoint")
     )
   }
 }
