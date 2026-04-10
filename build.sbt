@@ -57,7 +57,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "ignored" // this field is ignored; passwords are supplied by pinentry
     ),
     libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-jdbc" % "3.28.0",
+      "net.snowflake" % "snowflake-jdbc" % "4.0.2",
+      "com.amazonaws" % "aws-java-sdk-s3" % "1.12.780",
+      "com.microsoft.azure" % "azure-storage" % "8.6.6",
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
@@ -81,6 +83,13 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
         classifier "test-sources",
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
       "org.apache.parquet" % "parquet-avro" % "1.15.2"
+    ),
+
+    dependencyOverrides ++= Seq(
+      "com.fasterxml.jackson.core" % "jackson-core" % "2.15.2",
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.15.2",
+      "com.fasterxml.jackson.core" % "jackson-annotations" % "2.15.2",
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.15.2"
     ),
 
     Test / testOptions += Tests.Argument("-oF"),

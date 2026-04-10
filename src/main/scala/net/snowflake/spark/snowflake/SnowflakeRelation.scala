@@ -31,7 +31,8 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 
 import scala.language.postfixOps
 import scala.reflect.ClassTag
-import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
+import net.snowflake.client.internal.jdbc.SnowflakeLoggedFeatureNotSupportedException
+import net.snowflake.client.api.resultset.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 
 import scala.collection.JavaConverters

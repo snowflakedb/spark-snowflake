@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.io
 
-import net.snowflake.client.jdbc.SnowflakeResultSet
+import net.snowflake.client.api.resultset.SnowflakeResultSet
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.Parameters.MergedParameters

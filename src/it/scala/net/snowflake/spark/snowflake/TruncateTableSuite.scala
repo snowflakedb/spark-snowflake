@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.SnowflakeSQLException
+import net.snowflake.client.api.exception.SnowflakeSQLException
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import net.snowflake.spark.snowflake.test.TestHookFlag.{

@@ -21,7 +21,8 @@ import java.net.URI
 import java.sql.{Connection, ResultSet}
 import java.util.{Properties, UUID}
 
-import net.snowflake.client.jdbc.{SnowflakeDriver, SnowflakeResultSet, SnowflakeResultSetSerializable}
+import net.snowflake.client.api.driver.SnowflakeDriver
+import net.snowflake.client.api.resultset.{SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import org.apache.spark.{SPARK_VERSION, SparkContext, SparkEnv}
 
@@ -30,8 +31,8 @@ import scala.collection.mutable
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.io._
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.BucketLifecycleConfiguration
+import com.amazonaws.services.s3.{AmazonS3Client, AmazonS3URI}
+import com.amazonaws.services.s3.model.BucketLifecycleConfiguration
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
 import net.snowflake.spark.snowflake.FSType.FSType
@@ -59,7 +60,7 @@ object Utils {
   /**
     * The certified JDBC version to work with this spark connector version.
     */
-  val CERTIFIED_JDBC_VERSION = "3.28.0"
+  val CERTIFIED_JDBC_VERSION = "4.0.2"
 
   /**
     * Important:
@@ -81,7 +82,7 @@ object Utils {
   private[snowflake] lazy val javaVersion =
     System.getProperty("java.version", "UNKNOWN")
   private[snowflake] lazy val jdbcVersion =
-    SnowflakeDriver.implementVersion
+    SnowflakeDriver.getImplementationVersion()
   private val mapper = new ObjectMapper()
 
   private[snowflake] val JDBC_DRIVER =

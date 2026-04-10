@@ -3,7 +3,8 @@ package net.snowflake.spark.snowflake.io
 import java.sql.ResultSet
 import java.util.Properties
 
-import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
+import net.snowflake.client.api.exception.{ErrorCode, SnowflakeSQLException}
+import net.snowflake.client.api.resultset.SnowflakeResultSetSerializable
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake.{

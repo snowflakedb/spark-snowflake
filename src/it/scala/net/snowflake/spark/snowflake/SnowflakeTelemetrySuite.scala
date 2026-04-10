@@ -4,7 +4,7 @@ import java.nio.file.Files
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
-import net.snowflake.client.jdbc.telemetry.Telemetry
+import net.snowflake.client.internal.jdbc.telemetry.Telemetry
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.SparkEnv
 import org.apache.spark.ml.linalg.{Vector, Vectors}

@@ -2,13 +2,13 @@ package net.snowflake.spark.snowflake
 
 import java.io.{PrintWriter, StringWriter}
 import java.util.regex.Pattern
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
+import net.snowflake.client.api.exception.SnowflakeSQLException
+import net.snowflake.client.internal.jdbc.telemetry.{Telemetry, TelemetryClient}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.slf4j.LoggerFactory
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
-import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
+import net.snowflake.client.internal.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
 import org.apache.spark.sql.SparkSession
