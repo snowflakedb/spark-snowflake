@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.core.{SFBaseSession, SFSession, SFSessionProperty}
-import net.snowflake.client.jdbc.SnowflakeConnectionV1
+import net.snowflake.client.internal.api.implementation.connection.SnowflakeConnectionImpl
+import net.snowflake.client.internal.core.{SFBaseSession, SFSession, SFSessionProperty}
 import net.snowflake.spark.snowflake.Parameters.{MergedParameters, PARAM_SF_URL, PARAM_SF_USER}
 import net.snowflake.spark.snowflake.Utils.JDBC_DRIVER
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
@@ -301,7 +301,7 @@ private[snowflake] object ServerConnection {
     // use provided JDBC connection
     private val providedConn = mutable.Map[String, Connection]()
     def register(conn: Connection): String = {
-      val sessionId: String = conn.asInstanceOf[SnowflakeConnectionV1].getSessionID
+      val sessionId: String = conn.asInstanceOf[SnowflakeConnectionImpl].getSessionID
       providedConn.put(sessionId, conn)
       sessionId
     }
@@ -318,7 +318,7 @@ private[snowflake] object ServerConnection {
 
     def getParameters(id: String): Map[String, String] =
       providedConn.get(id) match {
-        case Some(sfConn: SnowflakeConnectionV1) =>
+        case Some(sfConn: SnowflakeConnectionImpl) =>
           val map = mutable.Map[String, String]()
           map.put(PARAM_SF_URL, sfConn.getSfSession.getUrl)
           map.put(PARAM_SF_USER, sfConn.getSfSession.getUser)
@@ -345,10 +345,10 @@ private[snowflake] class ServerConnection(val jdbcConnection: Connection, val en
 
   def rollback(): Unit = jdbcConnection.rollback()
 
-  def getSessionID: String = jdbcConnection.asInstanceOf[SnowflakeConnectionV1].getSessionID
+  def getSessionID: String = jdbcConnection.asInstanceOf[SnowflakeConnectionImpl].getSessionID
 
-  def getSfSession: SFSession = jdbcConnection.asInstanceOf[SnowflakeConnectionV1].getSfSession
+  def getSfSession: SFSession = jdbcConnection.asInstanceOf[SnowflakeConnectionImpl].getSfSession
 
   def getSFBaseSession: SFBaseSession =
-    jdbcConnection.asInstanceOf[SnowflakeConnectionV1].getSFBaseSession
+    jdbcConnection.asInstanceOf[SnowflakeConnectionImpl].getSFBaseSession
 }

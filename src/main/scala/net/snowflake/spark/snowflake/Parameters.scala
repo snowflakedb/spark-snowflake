@@ -20,10 +20,9 @@ package net.snowflake.spark.snowflake
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.{KeyFactory, PrivateKey}
 import java.util.Properties
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import com.amazonaws.auth.{AWSCredentials, BasicSessionCredentials}
+import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.FSType.FSType
-import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -1131,7 +1130,7 @@ object Parameters {
           )
           // scalastyle:on
           try {
-            val encoded = Base64.decodeBase64(key)
+            val encoded = java.util.Base64.getDecoder.decode(key)
             val kf = KeyFactory.getInstance("RSA")
             val keySpec = new PKCS8EncodedKeySpec(encoded)
             kf.generatePrivate(keySpec)
