@@ -708,6 +708,7 @@ sealed trait CloudStorage {
       } else {
         new ByteArrayOutputStream(4 * 1024 * 1024)
       }
+      var success = false
       try {
         format match {
           case SupportedFormat.PARQUET =>
@@ -736,36 +737,39 @@ sealed trait CloudStorage {
               dataSize += (oneRow.size + 1)
             }
         }
+        success = true
       } finally {
-        if (storageInfo.isDefined) {
-          uploadStream.close()
-        } else {
-          val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
-          dataSize = data.size
-          uploadStream.close()
-          // Set up proxy info if it is configured.
-          val proxyProperties = new Properties()
-          proxyInfo match {
-            case Some(proxyInfoValue) =>
-              proxyInfoValue.setProxyForJDBC(proxyProperties)
-            case None =>
-          }
+        if (success) {
+          if (storageInfo.isDefined) {
+            uploadStream.close()
+          } else {
+            val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
+            dataSize = data.size
+            uploadStream.close()
+            // Set up proxy info if it is configured.
+            val proxyProperties = new Properties()
+            proxyInfo match {
+              case Some(proxyInfoValue) =>
+                proxyInfoValue.setProxyForJDBC(proxyProperties)
+              case None =>
+            }
 
-          val inStream = new ByteArrayInputStream(data)
-          SnowflakeFileTransferAgent.uploadWithoutConnection(
-            SnowflakeFileTransferConfig.Builder.newInstance()
-              .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-              .setUploadStream(inStream)
-              .setRequireCompress(false)
-              .setDestFileName(fileName)
-              .setOcspMode(OCSPMode.FAIL_OPEN)
-              .setProxyProperties(proxyProperties)
-              .build())
-          val endTime = System.currentTimeMillis()
-          processTimeInfo =
-            s"""read_and_upload_time:
-               | ${Utils.getTimeString(endTime - startTime)}
-               |""".stripMargin.filter(_ >= ' ')
+            val inStream = new ByteArrayInputStream(data)
+            SnowflakeFileTransferAgent.uploadWithoutConnection(
+              SnowflakeFileTransferConfig.Builder.newInstance()
+                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+                .setUploadStream(inStream)
+                .setRequireCompress(false)
+                .setDestFileName(fileName)
+                .setOcspMode(OCSPMode.FAIL_OPEN)
+                .setProxyProperties(proxyProperties)
+                .build())
+            val endTime = System.currentTimeMillis()
+            processTimeInfo =
+              s"""read_and_upload_time:
+                 | ${Utils.getTimeString(endTime - startTime)}
+                 |""".stripMargin.filter(_ >= ' ')
+          }
         }
       }
     } else {
