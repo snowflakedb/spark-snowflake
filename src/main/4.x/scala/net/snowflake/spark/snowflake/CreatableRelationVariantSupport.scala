@@ -22,7 +22,7 @@ import org.apache.spark.sql.types.DataType
 /**
   * Spark 4.0+ checks [[CreatableRelationProvider.supportsDataType]] before save; the default
   * implementation rejects [[org.apache.spark.sql.types.VariantType]]. Snowflake accepts VARIANT
-  * columns via the existing JSON (and compatible) write paths.
+  * via JSON staging and Parquet staging (VARIANT values serialized as JSON text in string columns).
   */
 private[snowflake] trait CreatableRelationVariantSupport extends CreatableRelationProvider {
 
