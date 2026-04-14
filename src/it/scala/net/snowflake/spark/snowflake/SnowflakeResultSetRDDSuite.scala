@@ -775,14 +775,15 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         // set spark timezone
         val thisSparkSession = if (sparkTimezone != null) {
           TimeZone.setDefault(TimeZone.getTimeZone(sparkTimezone))
-          SparkSession.builder
-            .master("local")
-            .appName("SnowflakeSourceSuite")
-            .config("spark.sql.shuffle.partitions", "6")
-            .config("spark.driver.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
-            .config("spark.executor.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
-            .config("spark.sql.session.timeZone", sparkTimezone)
-            .getOrCreate()
+          LocalSparkNetworking(
+            SparkSession.builder
+              .master("local")
+              .appName("SnowflakeSourceSuite")
+              .config("spark.sql.shuffle.partitions", "6")
+              .config("spark.driver.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
+              .config("spark.executor.extraJavaOptions", s"-Duser.timezone=$sparkTimezone")
+              .config("spark.sql.session.timeZone", sparkTimezone)
+          ).getOrCreate()
         } else {
           sparkSession
         }

@@ -27,10 +27,11 @@ import org.apache.hadoop.mapreduce.InputFormat
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
 
 /**
   * Created by mzukowski on 8/9/16.
@@ -55,8 +56,7 @@ private class TestContext extends SparkContext("local", "SnowflakeBaseTest") {
 }
 
 class BaseTest
-    extends FunSuite
-    with net.snowflake.spark.snowflake.QueryTest
+    extends net.snowflake.spark.snowflake.QueryTest
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
 

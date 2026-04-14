@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import java.io.File
+
 import scala.util.Properties
 
 val sparkVersion = settingKey[String]("Spark version")
@@ -98,6 +100,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       }
     },
 
+    // sbt-scoverage 2.3.0 resolves scalac-scoverage-plugin_<SCALA>:2.3.0, which is
+    // not published for Scala 2.13.17 (404 on Maven Central — only 2.5.2+ exists).
+    // Override per-Scala so the compiler plugin matches an actually-published version.
+    coverageScalacPluginVersion := (scalaVersion.value match {
+      case "2.13.17" => "2.5.2"
+      case _         => "2.3.0"
+    }),
+
     javacOptions ++= {
       if (sparkVersion.value >= "4.0.0") {
         Seq("-source", "17", "-target", "17")
@@ -114,7 +124,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       versionedSourceDirs((Compile / sourceDirectory).value, sparkVersion.value),
 
     Test / unmanagedSourceDirectories :=
-      versionedSourceDirs((Test / sourceDirectory).value, sparkVersion.value),
+      versionedSourceDirs((Test / sourceDirectory).value, sparkVersion.value) :+
+        (Test / sourceDirectory).value / "java",
 
     ItTest / unmanagedSourceDirectories :=
       versionedSourceDirs((ItTest / sourceDirectory).value, sparkVersion.value),
@@ -133,8 +144,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       val sv = sparkVersion.value
       Seq(
         "net.snowflake" % "snowflake-jdbc" % "3.28.0",
-        "org.scalatest" %% "scalatest" % "3.1.1" % Test,
-        "org.mockito" % "mockito-core" % "1.10.19" % Test,
+        "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+        "org.mockito" % "mockito-core" % "4.11.0" % Test,
         "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
         // For test to read/write from postgresql
         "org.postgresql" % "postgresql" % "42.5.4" % Test,
