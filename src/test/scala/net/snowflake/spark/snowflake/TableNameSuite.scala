@@ -17,9 +17,9 @@
 
 package net.snowflake.spark.snowflake
 
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class TableNameSuite extends FunSuite {
+class TableNameSuite extends AnyFunSuite {
   test("TableName.toString") {
     assert(TableName("foo.bar").toString === "foo.bar")
   }

@@ -319,12 +319,14 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   private def createSnowflakeV1Table(ident: Identifier): Table = {
     val namespace = if (ident.namespace().nonEmpty) Some(ident.namespace().mkString(".")) else None
 
-    // TableIdentifier needs catalog field set for V2 catalogs
-    val tableIdentifier = TableIdentifier(
-      table = ident.name(),
-      database = namespace,
-      catalog = Some(catalogName) // Set catalog name!
-    )
+    // TableIdentifier enforces: catalog.isEmpty || database.isDefined (Spark 3.5+ / 4.x).
+    // Only set catalog when we have a database/namespace qualifier.
+    val tableIdentifier = namespace match {
+      case Some(db) =>
+        TableIdentifier(table = ident.name(), database = Some(db), catalog = Some(catalogName))
+      case None =>
+        TableIdentifier(table = ident.name(), database = None, catalog = None)
+    }
 
     // Get active SparkSession to access SparkConf
     val spark = org.apache.spark.sql.SparkSession.getActiveSession.getOrElse(

@@ -26,9 +26,9 @@ trait SFTestData extends SQLTestData {
         TestData2(2, 2) ::
         TestData2(3, 1) ::
         TestData2(3, 2) :: Nil)
-      df.createOrReplaceTempView("testData2")
-      df
-}
+    df.createOrReplaceTempView("testData2")
+    df
+  }
 
   override protected lazy val testData3: DataFrame = {
     val df = spark.createDataFrame(
