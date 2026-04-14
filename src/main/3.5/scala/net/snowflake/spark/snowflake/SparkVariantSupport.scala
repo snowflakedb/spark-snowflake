@@ -36,4 +36,9 @@ private[snowflake] object SparkVariantSupport {
     throw new UnsupportedOperationException(
       "Native Spark VariantType is not available in this Spark version"
     )
+
+  def variantToParquetJson(value: AnyRef, zoneId: java.time.ZoneId): String =
+    throw new UnsupportedOperationException(
+      "Native Spark VariantType is not available in this Spark version"
+    )
 }

@@ -26,13 +26,14 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 
 /**
   * Integration coverage for Spark 4.x native [[VariantType]] when reading/writing Snowflake
-  * VARIANT columns (JDBC metadata, JSON unload when enabled, and JSON write path).
+  * VARIANT columns (JDBC metadata, JSON unload when enabled, Parquet and JSON write paths).
   * Only compiled for Spark 4+ (see src/it/4.x).
   */
 class NativeSparkVariantTypeITSuite extends IntegrationSuiteBase {
 
   private val tableRead = s"SPARK_IT_NATIVE_VARIANT_READ_$randomSuffix"
   private val tableWrite = s"SPARK_IT_NATIVE_VARIANT_WRITE_$randomSuffix"
+  private val tableWriteParquet = s"SPARK_IT_NATIVE_VARIANT_WRITE_PQ_$randomSuffix"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -60,6 +61,7 @@ class NativeSparkVariantTypeITSuite extends IntegrationSuiteBase {
   override def afterAll(): Unit = {
     jdbcUpdate(s"drop table if exists $tableRead")
     jdbcUpdate(s"drop table if exists $tableWrite")
+    jdbcUpdate(s"drop table if exists $tableWriteParquet")
     super.afterAll()
   }
 
@@ -122,15 +124,13 @@ class NativeSparkVariantTypeITSuite extends IntegrationSuiteBase {
     }
   }
 
-  test("round-trip write DataFrame with VariantType column and read back") {
+  test("round-trip write DataFrame with VariantType column using JSON staging") {
     val src =
       sparkSession.sql("""select 100 as id, parse_json('{"k":"hello","n":-1}') as v""")
 
     val vField = src.schema.fields.find(_.name.equalsIgnoreCase("v")).get
     assert(vField.dataType === VariantType)
 
-    // Variant-containing saves default to Parquet unless JSON is enabled; ParquetUtils does not
-    // yet map VariantType (see ParquetUtils.convertFieldToAvro).
     src.write
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(connectorOptionsNoTable)
@@ -152,6 +152,72 @@ class NativeSparkVariantTypeITSuite extends IntegrationSuiteBase {
     val vCol = rowVariantAt(row, fieldIndex(row, "v"))
     assert(vCol.getFieldByKey("k").getString === "hello")
     assert(vCol.getFieldByKey("n").getLong === -1L)
+  }
+
+  test(
+    "Parquet staging round-trip: scalars, array of objects, second VARIANT column, SQL null, empty array"
+  ) {
+    val src = sparkSession.sql("""
+      select 201 as id,
+        parse_json('{"inner":42,"objs":[{"p":1},{"p":2}],"path":"a/b","label":"round-trip"}') as v_complex,
+        parse_json('{"token":1}') as v_aux,
+        cast(null as variant) as v_sql_null
+      union all
+      select 202 as id,
+        parse_json('[]') as v_complex,
+        parse_json('{"z":9}') as v_aux,
+        cast(null as variant) as v_sql_null
+      """)
+
+    assert(
+      src.schema.fields
+        .filter(f =>
+          Seq("v_complex", "v_aux", "v_sql_null").exists(_.equalsIgnoreCase(f.name))
+        )
+        .forall(_.dataType === VariantType)
+    )
+
+    src.write
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(connectorOptionsNoTable)
+      .option("dbtable", tableWriteParquet)
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    val rows =
+      sparkSession.read
+        .format(SNOWFLAKE_SOURCE_NAME)
+        .options(connectorOptionsNoTable)
+        .option("dbtable", tableWriteParquet)
+        .load()
+        .collect()
+
+    assert(rows.length === 2)
+    assert(rows.head.schema.map(_.dataType).contains(VariantType))
+
+    val row201 = findRowWithId(rows, 201)
+    val vc201 = rowVariantAt(row201, fieldIndex(row201, "V_COMPLEX"))
+    assert(vc201.getFieldByKey("inner").getLong === 42L)
+    val objs = vc201.getFieldByKey("objs")
+    assert(objs.arraySize() === 2)
+    assert(objs.getElementAtIndex(0).getFieldByKey("p").getLong === 1L)
+    assert(objs.getElementAtIndex(1).getFieldByKey("p").getLong === 2L)
+    assert(vc201.getFieldByKey("path").getString === "a/b")
+    assert(vc201.getFieldByKey("label").getString === "round-trip")
+
+    val aux201 = rowVariantAt(row201, fieldIndex(row201, "V_AUX"))
+    assert(aux201.getFieldByKey("token").getLong === 1L)
+
+    assert(row201.isNullAt(fieldIndex(row201, "V_SQL_NULL")))
+
+    val row202 = findRowWithId(rows, 202)
+    val vc202 = rowVariantAt(row202, fieldIndex(row202, "V_COMPLEX"))
+    assert(vc202.arraySize() === 0)
+
+    val aux202 = rowVariantAt(row202, fieldIndex(row202, "V_AUX"))
+    assert(aux202.getFieldByKey("z").getLong === 9L)
+
+    assert(row202.isNullAt(fieldIndex(row202, "V_SQL_NULL")))
   }
 
   /**
