@@ -33,15 +33,23 @@ object SnowflakeSparkUtils {
 
   def getNameForLogicalPlanOrExpression(obj: Any): String = {
     obj match {
-      case SaveIntoDataSourceCommand(_, dataSource: JdbcRelationProvider, options, _) =>
-        s"SaveIntoDataSourceCommand:${getClassName(dataSource)}:" +
-          getJDBCProviderName(options.getOrElse("url", "unknown"))
-      case SaveIntoDataSourceCommand(_, dataSource, _, _) =>
-        s"SaveIntoDataSourceCommand:${getClassName(dataSource)}"
-      case LogicalRelation(r: JDBCRelation, _, _, _) =>
-        s"LogicalRelation:${getClassName(r)}:${getJDBCProviderName(r.jdbcOptions.url)}"
-      case LogicalRelation(r, _, _, _) =>
-        s"LogicalRelation:${getClassName(r)}"
+      case cmd: SaveIntoDataSourceCommand =>
+        val ds = cmd.dataSource
+        val options = cmd.options
+        ds match {
+          case _: JdbcRelationProvider =>
+            s"SaveIntoDataSourceCommand:${getClassName(ds)}:" +
+              getJDBCProviderName(options.getOrElse("url", "unknown"))
+          case _ =>
+            s"SaveIntoDataSourceCommand:${getClassName(ds)}"
+        }
+      case lr: LogicalRelation =>
+        lr.relation match {
+          case r: JDBCRelation =>
+            s"LogicalRelation:${getClassName(r)}:${getJDBCProviderName(r.jdbcOptions.url)}"
+          case r =>
+            s"LogicalRelation:${getClassName(r)}"
+        }
       case null => "NULL"
       case _ => getClassName(obj)
     }

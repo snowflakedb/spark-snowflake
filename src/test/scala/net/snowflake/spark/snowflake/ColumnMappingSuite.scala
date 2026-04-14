@@ -1,8 +1,8 @@
 package net.snowflake.spark.snowflake
 
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class ColumnMappingSuite extends FunSuite {
+class ColumnMappingSuite extends AnyFunSuite {
 
   test("test parseMap function") {
     val origin = Map("col1" -> "col2", "col3" -> "col4", "col5" -> "col5")
