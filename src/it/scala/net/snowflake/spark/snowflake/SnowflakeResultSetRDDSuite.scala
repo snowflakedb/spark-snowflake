@@ -1890,8 +1890,22 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
         s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
         s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
     )
-    val expectedResult = if (params.useCopyUnload) {
-      // The returned format is different for USE_COPY_UNLOAD = true
+    // On Spark 4, VARIANT columns are surfaced as VariantType / VariantVal. Cast to
+    // string so Row equality works against the String-typed expected rows below.
+    val resultForCompare = result.select(result.schema.fields.map { f =>
+      if (SparkVariantSupport.isSparkVariantType(f.dataType))
+        org.apache.spark.sql.functions.col(f.name).cast("string").as(f.name)
+      else
+        org.apache.spark.sql.functions.col(f.name)
+    }: _*)
+
+    // Compact JSON is produced when USE_COPY_UNLOAD=true, and on Spark 4 when the
+    // VARIANT columns are surfaced as Spark's native VariantType (CAST(VariantVal
+    // AS STRING) yields compact JSON). On Spark 3.5 with Arrow unload the columns
+    // come back as pretty-printed JSON strings.
+    val compactJsonExpected = params.useCopyUnload ||
+      result.schema.fields.exists(f => SparkVariantSupport.isSparkVariantType(f.dataType))
+    val expectedResult = if (compactJsonExpected) {
       def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
       expectedResultArrow.map(r => Row(
         r.getString(0),
@@ -1905,7 +1919,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
     // Check the result is expected.
     checkAnswer(
-      result,
+      resultForCompare,
       expectedResult
     )
   }
@@ -1947,8 +1961,17 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
           s"""{\n  "c1": "value_c2",\n  "c2": "value_cc2"\n}""",
           s"""{\n  "d1": "value_d2",\n  "d2": "value_dd2"\n}""")
       )
-      val expectedResult = if (params.useCopyUnload) {
-        // The returned format is different for USE_COPY_UNLOAD = true
+      // See note above: cast VariantType columns to string, and expect compact JSON
+      // when USE_COPY_UNLOAD=true or when the schema uses Spark 4's native VariantType.
+      val resultForCompare = result.select(result.schema.fields.map { f =>
+        if (SparkVariantSupport.isSparkVariantType(f.dataType))
+          org.apache.spark.sql.functions.col(f.name).cast("string").as(f.name)
+        else
+          org.apache.spark.sql.functions.col(f.name)
+      }: _*)
+      val compactJsonExpected = params.useCopyUnload ||
+        result.schema.fields.exists(f => SparkVariantSupport.isSparkVariantType(f.dataType))
+      val expectedResult = if (compactJsonExpected) {
         def replaceSpace(data: String) = data.replaceAll("\n", "").replaceAll(" ", "")
         expectedResultArrow.map(r => Row(
           r.getString(0),
@@ -1962,7 +1985,7 @@ class SnowflakeResultSetRDDSuite extends IntegrationSuiteBase {
 
       // Check the result is expected.
       checkAnswer(
-        result,
+        resultForCompare,
         expectedResult
       )
     })

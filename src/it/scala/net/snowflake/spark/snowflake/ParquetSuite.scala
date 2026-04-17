@@ -582,8 +582,8 @@ class ParquetSuite extends IntegrationSuiteBase {
       .option("dbtable", test_array_map)
       .schema(schema)
       .load().collect()
-    assert(res.head.getSeq(0) == Seq("null", "one", "two", "three"))
-    assert(res(1).getSeq(0) == Seq("one", "null", "two", "three"))
+    assert(res.head.getSeq(0) == Seq(null, "one", "two", "three"))
+    assert(res(1).getSeq(0) == Seq("one", null, "two", "three"))
   }
 
   test("test error when column map does not match") {
