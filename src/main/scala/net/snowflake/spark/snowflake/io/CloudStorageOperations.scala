@@ -739,7 +739,8 @@ sealed trait CloudStorage {
         }
         success = true
       } finally {
-        if (success) {
+        val isInterrupted = TaskContext.get() != null && TaskContext.get().isInterrupted()
+        if (success && !isInterrupted) {
           if (storageInfo.isDefined) {
             uploadStream.close()
           } else {
@@ -770,6 +771,10 @@ sealed trait CloudStorage {
                  | ${Utils.getTimeString(endTime - startTime)}
                  |""".stripMargin.filter(_ >= ' ')
           }
+        } else {
+          CloudStorageOperations.log.warn(
+            s"Discarding partial file $fileName. success=$success, isInterrupted=$isInterrupted"
+          )
         }
       }
     } else {
