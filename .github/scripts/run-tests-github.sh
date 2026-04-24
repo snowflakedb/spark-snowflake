@@ -26,10 +26,30 @@ if [ "$SNOWFLAKE_TEST_ACCOUNT" == "aws" -a "$SPARK_CONN_ENV_USE_COPY_UNLOAD" == 
   export EXTRA_TEST_FOR_COVERAGE=true
 fi
 
+# If credentials file is missing (forks, external PRs), run unit tests only
+if [ "$INTEGRATION_TESTS" == "true" ] && [ ! -f "snowflake.travis.json" ]; then
+  echo ""
+  echo "========================================================================"
+  echo "WARNING: Snowflake credentials not available (snowflake.travis.json"
+  echo "         not found). This is expected for forks and external PRs."
+  echo ""
+  echo "         Integration tests are SKIPPED — do NOT treat this as a full"
+  echo "         green build."
+  echo "========================================================================"
+  echo ""
+
+  # Signal to the workflow that integration tests were skipped
+  if [ -n "$GITHUB_OUTPUT" ]; then
+    echo "INTEGRATION_TESTS_SKIPPED=true" >> "$GITHUB_OUTPUT"
+  fi
+
+  unset INTEGRATION_TESTS
+fi
+
 if [ "$INTEGRATION_TESTS" != "true" ]; then
   # Run only test
-  sbt -Dspark.testVersion=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test coverageReport
+  sbt -DsparkVersion=$SPARK_VERSION -DscalaVersion=$SPARK_SCALA_VERSION clean evicted coverage test coverageReport
 else
   # Run both test and it
-  sbt -Dspark.version=$SPARK_VERSION ++$SPARK_SCALA_VERSION clean coverage test it:test coverageReport
+  sbt -DsparkVersion=$SPARK_VERSION -DscalaVersion=$SPARK_SCALA_VERSION clean evicted coverage test it:test coverageReport
 fi

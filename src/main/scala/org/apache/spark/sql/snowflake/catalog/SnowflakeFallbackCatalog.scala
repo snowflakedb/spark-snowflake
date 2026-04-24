@@ -55,6 +55,24 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     }
   }
 
+  private def withNamespaces[T](f: SupportsNamespaces => T): T = {
+    if (supportsNamespaces == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
+      )
+    }
+    f(supportsNamespaces)
+  }
+
+  private def withFunctionCatalog[T](f: FunctionCatalog => T): T = {
+    if (functionCatalog == null) {
+      throw new UnsupportedOperationException(
+        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support functions"
+      )
+    }
+    f(functionCatalog)
+  }
+
   override def setDelegateCatalog(catalog: CatalogPlugin): Unit = {
     this.delegateCatalog = catalog
 
@@ -392,77 +410,29 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     tableCatalog.renameTable(oldIdent, newIdent)
   }
 
-  override def listNamespaces(): Array[Array[String]] = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.listNamespaces()
-  }
+  override def listNamespaces(): Array[Array[String]] =
+    withNamespaces(_.listNamespaces())
 
-  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.listNamespaces(namespace)
-  }
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] =
+    withNamespaces(_.listNamespaces(namespace))
 
-  override def loadNamespaceMetadata(namespace: Array[String]): java.util.Map[String, String] = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.loadNamespaceMetadata(namespace)
-  }
+  override def loadNamespaceMetadata(namespace: Array[String]): java.util.Map[String, String] =
+    withNamespaces(_.loadNamespaceMetadata(namespace))
 
   override def createNamespace(
-      namespace: Array[String], metadata: java.util.Map[String, String]): Unit = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.createNamespace(namespace, metadata)
-  }
+      namespace: Array[String], metadata: java.util.Map[String, String]): Unit =
+    withNamespaces(_.createNamespace(namespace, metadata))
 
-  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.alterNamespace(namespace, changes: _*)
-  }
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit =
+    withNamespaces(_.alterNamespace(namespace, changes: _*))
 
-  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
-    if (supportsNamespaces == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support namespaces"
-      )
-    }
-    supportsNamespaces.dropNamespace(namespace, cascade)
-  }
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean =
+    withNamespaces(_.dropNamespace(namespace, cascade))
 
-  def listFunctions(namespace: Array[String]): Array[Identifier] = {
-    if (functionCatalog == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support functions"
-      )
-    }
-    functionCatalog.listFunctions(namespace)
-  }
+  def listFunctions(namespace: Array[String]): Array[Identifier] =
+    withFunctionCatalog(_.listFunctions(namespace))
 
   def loadFunction(
-      ident: Identifier): org.apache.spark.sql.connector.catalog.functions.UnboundFunction = {
-    if (functionCatalog == null) {
-      throw new UnsupportedOperationException(
-        s"Delegate catalog ${delegateCatalog.getClass.getName} does not support functions"
-      )
-    }
-    functionCatalog.loadFunction(ident)
-  }
+      ident: Identifier): org.apache.spark.sql.connector.catalog.functions.UnboundFunction =
+    withFunctionCatalog(_.loadFunction(ident))
 }

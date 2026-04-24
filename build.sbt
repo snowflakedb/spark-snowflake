@@ -16,8 +16,7 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.5"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
+val sparkVersion = settingKey[String]("Spark version")
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -27,6 +26,41 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.5.0")
  * in snowflake repository.
  */
 val sparkConnectorVersion = "3.1.8"
+
+// Extract major.minor from a version string like "3.5.0" -> "3.5"
+def sparkMajorMinor(version: String): String = {
+  val parts = version.split('.')
+  if (parts.length >= 2) s"${parts(0)}.${parts(1)}" else version
+}
+
+// Extract major version from a version string like "3.5.0" -> 3
+def sparkMajor(version: String): Int = {
+  scala.util.Try(version.takeWhile(_ != '.').toInt).getOrElse(3)
+}
+
+def versionedSourceDirs(base: File, sparkVer: String): Seq[File] = {
+  val mm = sparkMajorMinor(sparkVer)
+  val common = Seq(base / "scala")
+  if (sparkMajor(sparkVer) >= 4) {
+    common ++ Seq(base / "4.x" / "scala", base / mm / "scala")
+  } else {
+    common :+ (base / mm / "scala")
+  }
+}
+
+def specialJvmOptions(sparkVer: String): Seq[String] = {
+  if (sparkVer >= "4.0.0") {
+    Seq(
+      "base/java.lang", "base/java.lang.invoke", "base/java.lang.reflect",
+      "base/java.io", "base/java.net", "base/java.nio",
+      "base/java.util", "base/java.util.concurrent", "base/java.util.concurrent.atomic",
+      "base/sun.nio.ch", "base/sun.nio.cs", "base/sun.security.action",
+      "base/sun.util.calendar", "security.jgss/sun.security.krb5"
+    ).map("--add-opens=java." + _ + "=ALL-UNNAMED")
+  } else {
+    Seq()
+  }
+}
 
 lazy val ItTest = config("it") extend Test
 
@@ -41,11 +75,50 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
-    version := s"${sparkConnectorVersion}",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    // Spark 3.2 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.10"),
-    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+
+    sparkVersion := System.getProperty("sparkVersion", "4.1.0"),
+
+    version := s"${sparkConnectorVersion}-spark_${sparkMajorMinor(sparkVersion.value)}",
+
+    // Note: String comparison works for our version set (3.5, 4.0, 4.1) but
+    // would break for e.g. "3.5.10" vs "3.5.9". Keep versions to X.Y.Z format.
+    scalaVersion := {
+      sys.props.getOrElse("scalaVersion",
+        if (sparkVersion.value >= "4.1.0") "2.13.17"
+        else if (sparkVersion.value >= "4.0.0") "2.13.16"
+        else "2.12.18"
+      )
+    },
+
+    crossScalaVersions := {
+      if (sparkVersion.value >= "4.0.0") {
+        Seq() // Spark 4.x is Scala 2.13 only; no cross compilation
+      } else {
+        Seq("2.12.18", "2.13.14")
+      }
+    },
+
+    javacOptions ++= {
+      if (sparkVersion.value >= "4.0.0") {
+        Seq("-source", "17", "-target", "17")
+      } else {
+        Seq("-source", "1.8", "-target", "1.8")
+      }
+    },
+
+    // Version-specific source directories:
+    //   common (src/main/scala) is always included
+    //   Spark 3.5 builds add src/main/3.5/
+    //   Spark 4.x builds add src/main/4.x/ + src/main/4.0/ or src/main/4.1/
+    Compile / unmanagedSourceDirectories :=
+      versionedSourceDirs((Compile / sourceDirectory).value, sparkVersion.value),
+
+    Test / unmanagedSourceDirectories :=
+      versionedSourceDirs((Test / sourceDirectory).value, sparkVersion.value),
+
+    ItTest / unmanagedSourceDirectories :=
+      versionedSourceDirs((ItTest / sourceDirectory).value, sparkVersion.value),
+
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     // Set up GPG key for release build from environment variable: GPG_HEX_CODE
@@ -56,39 +129,46 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       Properties.envOrNone("GPG_HEX_CODE").getOrElse("Jenkins_build_not_set_GPG_HEX_CODE"),
       "ignored" // this field is ignored; passwords are supplied by pinentry
     ),
-    libraryDependencies ++= Seq(
-      "net.snowflake" % "snowflake-jdbc" % "3.28.0",
-      "org.scalatest" %% "scalatest" % "3.1.1" % Test,
-      "org.mockito" % "mockito-core" % "1.10.19" % Test,
-      "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
-      // For test to read/write from postgresql
-      "org.postgresql" % "postgresql" % "42.5.4" % Test,
-      // Below is for Spark Streaming from Kafka test only
-      // "org.apache.spark" %% "spark-sql-kafka-0-10" % "2.4.0",
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test",
-      "org.apache.spark" %% "spark-mllib" % testSparkVersion % "test",
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion %
-        "provided, test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % testSparkVersion % "provided, test"
-        classifier "test-sources",
-      "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test"
-        classifier "test-sources",
-      "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test"
-        classifier "test-sources",
-      // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
-      "org.apache.parquet" % "parquet-avro" % "1.15.2"
-    ),
+    libraryDependencies ++= {
+      val sv = sparkVersion.value
+      Seq(
+        "net.snowflake" % "snowflake-jdbc" % "3.28.0",
+        "org.scalatest" %% "scalatest" % "3.1.1" % Test,
+        "org.mockito" % "mockito-core" % "1.10.19" % Test,
+        "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
+        // For test to read/write from postgresql
+        "org.postgresql" % "postgresql" % "42.5.4" % Test,
+        "org.apache.spark" %% "spark-core" % sv % "provided, test",
+        "org.apache.spark" %% "spark-sql" % sv % "provided, test",
+        "org.apache.spark" %% "spark-catalyst" % sv % "provided, test",
+        "org.apache.spark" %% "spark-mllib" % sv % "test",
+        "org.apache.spark" %% "spark-core" % sv % "provided, test" classifier "tests",
+        "org.apache.spark" %% "spark-sql" % sv % "provided, test" classifier "tests",
+        "org.apache.spark" %% "spark-catalyst" % sv %
+          "provided, test" classifier "tests",
+        "org.apache.spark" %% "spark-core" % sv % "provided, test"
+          classifier "test-sources",
+        "org.apache.spark" %% "spark-sql" % sv % "provided, test"
+          classifier "test-sources",
+        "org.apache.spark" %% "spark-catalyst" % sv % "provided, test"
+          classifier "test-sources",
+        "org.apache.parquet" % "parquet-avro" % "1.15.2"
+      ) ++ (
+        if (sv >= "4.0.0") Seq(
+          "org.apache.spark" %% "spark-sql-api" % sv % "provided, test"
+        ) else Seq.empty
+      )
+    },
+
+    Compile / scalastyleSources ++= (Compile / unmanagedSourceDirectories).value,
+    Test / scalastyleSources ++= (Test / unmanagedSourceDirectories).value,
 
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
     Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
+    Test / javaOptions ++= specialJvmOptions(sparkVersion.value),
 
     // Release settings
-    // usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
     Global / pgpPassphrase := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(_.toCharArray),
 
     publishMavenStyle := true,
