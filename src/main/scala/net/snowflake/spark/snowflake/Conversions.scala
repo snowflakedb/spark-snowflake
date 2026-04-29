@@ -177,6 +177,8 @@ private[snowflake] object Conversions {
             case StringType =>
               if (isIR) UTF8String.fromString(data) else data
             case TimestampType => parseTimestamp(data, isIR)
+            case _ if SparkVariantSupport.isSparkVariantType(field.dataType) =>
+              SparkVariantSupport.materializeNonNullJdbcVariant(data, isIR, field.nullable)
             case _ => data
           }
         }
@@ -261,9 +263,17 @@ private[snowflake] object Conversions {
     */
   private[snowflake] def jsonStringToRow[T: ClassTag](
     data: JsonNode,
-    dataType: DataType
+    dataType: DataType,
+    nullable: Boolean = true
   ): Any = {
     val isIR: Boolean = isInternalRow[T]()
+    if (data == null || data.isNull || data.isMissingNode) {
+      if (nullable) null
+      else
+        throw new IllegalArgumentException(
+          "JSON null/missing value is not allowed for a non-nullable field"
+        )
+    }
     dataType match {
       case ByteType => data.asInt().toByte
       case BooleanType => data.asBoolean()
@@ -277,31 +287,53 @@ private[snowflake] object Conversions {
       case StringType =>
         if (isIR) UTF8String.fromString(data.asText()) else data.asText()
       case TimestampType => parseTimestamp(data.asText(), isIR)
-      case ArrayType(dt, _) =>
+      case ArrayType(dt, containsNull) =>
         val result = new Array[Any](data.size())
-        (0 until data.size())
-          .foreach(i => result(i) = jsonStringToRow[T](data.get(i), dt))
+        var i = 0
+        while (i < data.size()) {
+          val elem = data.get(i)
+          if (elem == null || elem.isNull || elem.isMissingNode) {
+            if (!containsNull)
+              throw new IllegalArgumentException(
+                s"Array element $i is null but array does not allow null elements"
+              )
+            result(i) = null
+          } else {
+            result(i) = jsonStringToRow[T](elem, dt, containsNull)
+          }
+          i += 1
+        }
         if (isIR) new GenericArrayData(result) else result.toSeq
       case StructType(fields) =>
         val converted = fields.map(field => {
           val value = data.findValue(field.name)
-          if (value == null) {
+          if (value == null || value.isNull || value.isMissingNode) {
             if (field.nullable) null
             else throw new IllegalArgumentException("data is not nullable")
-          } else jsonStringToRow[T](value, field.dataType)
+          } else jsonStringToRow[T](value, field.dataType, field.nullable)
         })
         if (isIR) InternalRow.fromSeq(converted).asInstanceOf[T]
         else Row.fromSeq(converted).asInstanceOf[T]
       // String key only
-      case MapType(_, dt, _) =>
+      case MapType(_, dt, valueContainsNull) =>
         val keys = data.fieldNames()
         if (isIR) {
           var keyList: List[UTF8String] = Nil
           var valueList: List[Any] = Nil
           while (keys.hasNext) {
             val key = keys.next()
+            val vnode = data.get(key)
             keyList = UTF8String.fromString(key) :: keyList
-            valueList = jsonStringToRow[T](data.get(key), dt) :: valueList
+            valueList =
+              (if (vnode == null || vnode.isNull || vnode.isMissingNode) {
+                 if (!valueContainsNull)
+                   throw new IllegalArgumentException(
+                     s"Map value for key '$key' is null but map does not allow null values"
+                   )
+                 null
+               } else {
+                 jsonStringToRow[T](vnode, dt, valueContainsNull)
+               }) :: valueList
           }
           new ArrayBasedMapData(
             new GenericArrayData(keyList.reverse.toArray),
@@ -311,10 +343,27 @@ private[snowflake] object Conversions {
           val result = scala.collection.mutable.HashMap.empty[String, Any]
           while (keys.hasNext) {
             val key = keys.next()
-            result.put(key, jsonStringToRow[T](data.get(key), dt))
+            val vnode = data.get(key)
+            result.put(
+              key,
+              if (vnode == null || vnode.isNull || vnode.isMissingNode) {
+                if (!valueContainsNull)
+                  throw new IllegalArgumentException(
+                    s"Map value for key '$key' is null but map does not allow null values"
+                  )
+                null
+              } else {
+                jsonStringToRow[T](vnode, dt, valueContainsNull)
+              }
+            )
           }
           result
         }
+      case _ if SparkVariantSupport.isSparkVariantType(dataType) =>
+        // Use JsonNode#toString so strings/numbers become valid JSON fragments (e.g. TextNode "ok"
+        // -> "\"ok\""). asText() would yield "ok", which is not valid JSON for parseJson.
+        val jsonText = data.toString
+        SparkVariantSupport.materializeNonNullJdbcVariant(jsonText, isIR, nullable)
       case _ =>
         if (isIR) UTF8String.fromString(data.toString) else data.toString
     }
