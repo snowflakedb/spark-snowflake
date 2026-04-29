@@ -10,9 +10,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, TaskAttemptID}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class RecordReaderSuite extends FunSuite {
+class RecordReaderSuite extends AnyFunSuite {
 
   val mapper: ObjectMapper = new ObjectMapper()
 
