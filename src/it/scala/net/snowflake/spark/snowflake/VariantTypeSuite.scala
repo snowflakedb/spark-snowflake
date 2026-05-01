@@ -56,9 +56,18 @@ class VariantTypeSuite extends IntegrationSuiteBase {
       .load()
       .collect()
 
+    // ARR / OB are still surfaced as JSON strings (only Snowflake VARIANT columns
+    // are mapped to Spark 4's VariantType via catalystTypeForSnowflakeJdbcColumn).
     assert(df(0).get(0).isInstanceOf[String])
     assert(df(0).get(1).isInstanceOf[String])
-    assert(df(0).get(2).isInstanceOf[String])
+    // MAP is declared VARIANT in Snowflake. On Spark 3.5 it comes back as a String
+    // holding pretty-printed JSON; on Spark 4 it's a VariantVal whose toString is
+    // compact JSON. Compare as parsed JSON to be format-insensitive.
+    val mapper = new ObjectMapper()
+    assert(
+      mapper.readTree(df(0).get(2).toString) ==
+        mapper.readTree("""{"a":"one","b":"two"}""")
+    )
     assert(df(0).get(3).toString == "123")
     assert(df.length == 2)
   }

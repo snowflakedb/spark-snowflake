@@ -154,9 +154,21 @@ private[snowflake] case class SnowflakeRelation(
   // Get an RDD with COPY Unload
   private def getSnowflakeRDD[T: ClassTag](statement: SnowflakeSQLStatement,
                                            resultSchema: StructType): RDD[T] = {
+    // JSON unload relies on Jackson field-name lookups. Top-level column names
+    // containing characters like ':', ';', ',' or whitespace can fail to match
+    // the keys in Snowflake's JSON output, which surfaces as silent nulls for
+    // those columns (notably VariantType). CSV is position-based and unaffected,
+    // and CSVConverter materializes VariantType from the JSON-text cell, so fall
+    // back to CSV when any top-level field name is not JSON-lookup-safe.
+    def isJsonLookupSafeName(name: String): Boolean =
+      name != null &&
+        !name.exists(c => c == ':' || c == ';' || c == ',' || c.isWhitespace)
     val format: SupportedFormat =
-      if (Utils.containVariant(resultSchema)) SupportedFormat.JSON
-      else SupportedFormat.CSV
+      if (Utils.containVariant(resultSchema) &&
+          resultSchema.fields.forall(f => isJsonLookupSafeName(f.name)))
+        SupportedFormat.JSON
+      else
+        SupportedFormat.CSV
 
     val rdd: RDD[String] = io.readRDD(sqlContext, params, statement, format)
 
