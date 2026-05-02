@@ -16,10 +16,15 @@
 
 package net.snowflake.spark.snowflake
 
+import java.time.ZoneId
+
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.types.{DataType, VariantType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.types.variant.{Variant, VariantUtil}
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /** Spark 4.x: map Snowflake VARIANT columns to Spark [[VariantType]] and JSON text to variant values. */
 private[snowflake] object SparkVariantSupport {
@@ -64,9 +69,50 @@ private[snowflake] object SparkVariantSupport {
           "Empty or whitespace-only string cannot be converted to VARIANT for a non-nullable column"
         )
     }
-    val vv =
+    val vv0 =
       VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json), false, true)
+    val vv = maybeUnwrapSnowflakeStringVariant(vv0)
     if (isInternalRow) vv
     else CatalystTypeConverters.convertToScala(vv, VariantType).asInstanceOf[AnyRef]
+  }
+
+  /**
+    * Snowflake can materialize VARIANT cells loaded from staged JSON/Parquet as a STRING-typed
+    * variant whose string payload is itself JSON (`{...}` / `[...]`). Spark `parseJson` on the
+    * outer JDBC text then yields STRING; unwrap one level so object/array fields resolve.
+    */
+  private def maybeUnwrapSnowflakeStringVariant(vv: VariantVal): VariantVal = {
+    val v = new Variant(vv.getValue, vv.getMetadata)
+    if (v.getType != VariantUtil.Type.STRING) return vv
+    val inner = v.getString.trim
+    if (!looksLikeJsonObjectOrArray(inner)) return vv
+    try {
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString(inner), false, true)
+    } catch {
+      case NonFatal(_) => vv
+    }
+  }
+
+  private def looksLikeJsonObjectOrArray(s: String): Boolean =
+    s.nonEmpty && {
+      val c = s.charAt(0)
+      (c == '{' && s.endsWith("}")) || (c == '[' && s.endsWith("]"))
+    }
+
+  /**
+    * Serialize a Spark [[VariantType]] cell to JSON text for Parquet/Avro string columns (Snowflake
+    * COPY loads VARIANT from JSON strings in staged files).
+    */
+  def variantToParquetJson(value: AnyRef, zoneId: ZoneId): String = {
+    if (value == null) return null
+    val variant = value match {
+      case v: Variant => v
+      case vv: VariantVal => new Variant(vv.getValue, vv.getMetadata)
+      case other =>
+        throw new IllegalArgumentException(
+          s"Expected Variant or VariantVal for VariantType column, got ${Option(other).map(_.getClass).orNull}"
+        )
+    }
+    variant.toJson(zoneId)
   }
 }
