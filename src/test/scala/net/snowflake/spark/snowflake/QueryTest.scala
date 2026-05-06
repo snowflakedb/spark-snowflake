@@ -21,6 +21,7 @@ package net.snowflake.spark.snowflake
 
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.{Row, DataFrame}
+import org.scalatest.FunSuite
 
 /**
   * Copy of Spark SQL's `QueryTest` trait.

@@ -4,8 +4,11 @@ addSbtPlugin("com.github.gseitz" % "sbt-release" % "1.0.11")
 
 addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "3.12.2")
 
-// 2.0.x → scalac 2.0.7 (no _2.13.14). 2.2.0 → scalac 2.2.0 (no _2.13.16). 2.3.0 → scalac 2.3.0 for 2.12.18 / 2.13.16 (Spark 3.5.8+ aligns on 2.13.16 per SIP-51).
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.3.0")
+val sparkVersion = System.getProperty("sparkVersion", "unknown")
+
+// Different scoverage versions for different generations of Spark builds.
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.4.4").filter(_ => sparkVersion.startsWith("4"))
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.0.12").filter(_ => sparkVersion.startsWith("3"))
 
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.2")
 
