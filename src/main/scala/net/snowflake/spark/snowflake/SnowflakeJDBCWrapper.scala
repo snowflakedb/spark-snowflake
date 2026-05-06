@@ -89,9 +89,8 @@ private[snowflake] class JDBCWrapper {
       val fieldScale = rsmd.getScale(i + 1)
       val isSigned = rsmd.isSigned(i + 1)
       val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-      val columnTypeName = rsmd.getColumnTypeName(i + 1)
       val columnType =
-        getCatalystType(dataType, columnTypeName, fieldSize, fieldScale, isSigned)
+        getCatalystType(dataType, fieldSize, fieldScale, isSigned)
       fields(i) = StructField(
         if (params.keepOriginalColumnNameCase) columnName
         // Add quotes around column names if Snowflake would usually require them.
@@ -148,9 +147,7 @@ private[snowflake] class JDBCWrapper {
     * Retrieve corresponding data type in snowflake of giving struct field
     */
   def schemaConversion(field: StructField): String =
-    if (SparkVariantSupport.isSparkVariantType(field.dataType)) {
-      "VARIANT"
-    } else field.dataType match {
+    field.dataType match {
       case IntegerType => "INTEGER"
       case LongType => "INTEGER"
       case DoubleType => "DOUBLE"
@@ -290,15 +287,9 @@ private[snowflake] class JDBCWrapper {
     * @return The Catalyst type corresponding to sqlType.
     */
   private def getCatalystType(sqlType: Int,
-                              columnTypeName: String,
                               precision: Int,
                               scale: Int,
                               signed: Boolean): DataType = {
-    SparkVariantSupport
-      .catalystTypeForSnowflakeJdbcColumn(sqlType, columnTypeName)
-      .foreach { dt =>
-        return dt
-      }
     // TODO: cleanup types which are irrelevant for Snowflake.
     // Snowflake-todo: Add support for some types like ARRAY.
     // Snowflake-todo: Verify all types.
