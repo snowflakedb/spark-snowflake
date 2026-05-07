@@ -20,7 +20,7 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.FunSuite
 import scala.collection.JavaConverters._
 
 class TestDelegateCatalog extends TableCatalog with SupportsNamespaces {
@@ -70,7 +70,7 @@ class TestDelegateCatalog extends TableCatalog with SupportsNamespaces {
   override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = false
 }
 
-class SnowflakeFallbackCatalogTest extends AnyFunSuite {
+class SnowflakeFallbackCatalogTest extends FunSuite {
 
   test("isForbiddenException should detect 403 in exception message") {
     val catalog = new SnowflakeFallbackCatalog()

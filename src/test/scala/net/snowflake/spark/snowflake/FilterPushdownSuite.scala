@@ -17,12 +17,12 @@
 
 package net.snowflake.spark.snowflake
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.FunSuite
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import net.snowflake.spark.snowflake.FilterPushdown._
 
-class FilterPushdownSuite extends AnyFunSuite {
+class FilterPushdownSuite extends FunSuite {
 
   // Fake filter class to detect fallback logic
   test("buildWhereClause with empty list of filters") {

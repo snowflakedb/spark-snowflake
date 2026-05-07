@@ -21,7 +21,6 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.snowflake.IntegrationSqlContext
 import org.apache.spark.sql.sources.{Filter, GreaterThan, LessThan}
 import org.apache.spark.sql.types._
 
@@ -83,7 +82,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.mergeParameters(sfOptions)
-    val sqlContext = IntegrationSqlContext(sc)
+    val sqlContext = new SQLContext(sc)
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     // Test lazy schema
@@ -140,7 +139,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_write)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = IntegrationSqlContext(sc)
+    val sqlContext = new SQLContext(sc)
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val (df, _, rowCount) = createTestDataFrame()
@@ -163,7 +162,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_large_result)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = IntegrationSqlContext(sc)
+    val sqlContext = new SQLContext(sc)
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val snowflakeSQLStatement = new SnowflakeSQLStatement() +
@@ -177,7 +176,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_large_result)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = IntegrationSqlContext(sc)
+    val sqlContext = new SQLContext(sc)
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val filters: Array[Filter] = Array(GreaterThan("INT_C", 10), LessThan("INT_C", 20))

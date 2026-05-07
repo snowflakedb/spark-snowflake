@@ -29,13 +29,12 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers
+import org.scalatest.{FunSuite, Matchers}
 
 /**
   * Unit tests for all kinds of some classes
   */
-class MiscSuite01 extends AnyFunSuite with Matchers {
+class MiscSuite01 extends FunSuite with Matchers {
 
   private val mapper = new ObjectMapper()
 

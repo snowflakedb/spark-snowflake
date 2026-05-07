@@ -17,13 +17,12 @@
 
 package net.snowflake.spark.snowflake
 
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers
+import org.scalatest.{FunSuite, Matchers}
 
 /**
   * Check validation of parameter config
   */
-class ParametersSuite extends AnyFunSuite with Matchers {
+class ParametersSuite extends FunSuite with Matchers {
 
   val minParams: Map[String, String] = Map(
     "tempdir" -> "s3://foo/bar",

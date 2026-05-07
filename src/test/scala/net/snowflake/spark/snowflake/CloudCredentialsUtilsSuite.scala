@@ -24,9 +24,9 @@ import net.snowflake.client.jdbc.internal.amazonaws.auth.{
 }
 import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.FunSuite
 
-class CloudCredentialsUtilsSuite extends AnyFunSuite {
+class CloudCredentialsUtilsSuite extends FunSuite {
 
   test("credentialsString with regular S3 keys") {
     val creds =

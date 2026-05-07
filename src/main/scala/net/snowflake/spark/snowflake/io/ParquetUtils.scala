@@ -1,9 +1,6 @@
 package net.snowflake.spark.snowflake.io
 
-import java.time.ZoneOffset
-
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.spark.snowflake.SparkVariantSupport
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.SchemaBuilder.{BaseFieldTypeBuilder, BaseTypeBuilder, FieldDefault, RecordBuilder}
 import org.apache.avro.generic.GenericData
@@ -104,9 +101,6 @@ object ParquetUtils {
       case DateType =>
         value.asInstanceOf[java.sql.Date].toString
 
-      case sparkType if SparkVariantSupport.isSparkVariantType(sparkType) =>
-        SparkVariantSupport.variantToParquetJson(value.asInstanceOf[AnyRef], ZoneOffset.UTC)
-
       case _ =>
         // For all other primitive types, return as-is
         value
@@ -185,8 +179,6 @@ object ParquetUtils {
           struct,
           builder.record(name).namespace(nameSpace)
         )
-      case dt if SparkVariantSupport.isSparkVariantType(dt) =>
-        builder.stringType()
       // NullType: Parquet cannot represent a pure-null column type, so we treat it as a
       // nullable string. All actual values are null, so no data is lost.
       case NullType => builder.stringType()
@@ -248,8 +240,6 @@ object ParquetUtils {
           struct,
           builder.record(name).namespace(nameSpace)
         )
-      case dt if SparkVariantSupport.isSparkVariantType(dt) =>
-        builder.stringType()
       // NullType: Parquet cannot represent a pure-null element type, so we treat it as a
       // nullable string. All actual values are null, so no data is lost.
       case NullType => builder.stringType()

@@ -12,7 +12,6 @@ import net.snowflake.spark.snowflake.{
   SnowflakeConnectorException,
   SnowflakeTelemetry,
   SparkConnectorContext,
-  SparkVariantSupport,
   TelemetryConstValues
 }
 import org.apache.spark.rdd.RDD
@@ -199,17 +198,11 @@ case class ResultIterator[T: ClassTag](
 
   override def next(): T = {
     val converted = schema.fields.indices.map(index => {
-      val jdbcObj = data.getObject(index + 1) // check null value, JDBC standard
+      data.getObject(index + 1) // check null value, JDBC standard
       if (data.wasNull()) {
         null
       } else {
         schema.fields(index).dataType match {
-          case _ if SparkVariantSupport.isSparkVariantType(schema.fields(index).dataType) =>
-            SparkVariantSupport.materializeNonNullJdbcVariant(
-              jdbcObj,
-              isIR,
-              schema.fields(index).nullable
-            )
           case StringType =>
             if (isIR) {
               UTF8String.fromString(data.getString(index + 1))
@@ -227,8 +220,7 @@ case class ResultIterator[T: ClassTag](
           case _: ArrayType | _: MapType | _: StructType =>
             Conversions.jsonStringToRow[T](
               mapper.readTree(data.getString(index + 1)),
-              schema.fields(index).dataType,
-              schema.fields(index).nullable
+              schema.fields(index).dataType
             )
           case BinaryType =>
             // if (isIR) UTF8String.fromString(data.getString(index + 1))
