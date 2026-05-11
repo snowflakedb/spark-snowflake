@@ -708,6 +708,7 @@ sealed trait CloudStorage {
       } else {
         new ByteArrayOutputStream(4 * 1024 * 1024)
       }
+      var success = false
       try {
         format match {
           case SupportedFormat.PARQUET =>
@@ -736,36 +737,60 @@ sealed trait CloudStorage {
               dataSize += (oneRow.size + 1)
             }
         }
+        success = true
       } finally {
-        if (storageInfo.isDefined) {
-          uploadStream.close()
-        } else {
-          val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
-          dataSize = data.size
-          uploadStream.close()
-          // Set up proxy info if it is configured.
-          val proxyProperties = new Properties()
-          proxyInfo match {
-            case Some(proxyInfoValue) =>
-              proxyInfoValue.setProxyForJDBC(proxyProperties)
-            case None =>
-          }
+        val isInterrupted = TaskContext.get() != null && TaskContext.get().isInterrupted()
+        if (success && !isInterrupted) {
+          if (storageInfo.isDefined) {
+            uploadStream.close()
+          } else {
+            val data = uploadStream.asInstanceOf[ByteArrayOutputStream].toByteArray
+            dataSize = data.size
+            uploadStream.close()
+            // Set up proxy info if it is configured.
+            val proxyProperties = new Properties()
+            proxyInfo match {
+              case Some(proxyInfoValue) =>
+                proxyInfoValue.setProxyForJDBC(proxyProperties)
+              case None =>
+            }
 
-          val inStream = new ByteArrayInputStream(data)
-          SnowflakeFileTransferAgent.uploadWithoutConnection(
-            SnowflakeFileTransferConfig.Builder.newInstance()
-              .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
-              .setUploadStream(inStream)
-              .setRequireCompress(false)
-              .setDestFileName(fileName)
-              .setOcspMode(OCSPMode.FAIL_OPEN)
-              .setProxyProperties(proxyProperties)
-              .build())
-          val endTime = System.currentTimeMillis()
-          processTimeInfo =
-            s"""read_and_upload_time:
-               | ${Utils.getTimeString(endTime - startTime)}
-               |""".stripMargin.filter(_ >= ' ')
+            val inStream = new ByteArrayInputStream(data)
+            SnowflakeFileTransferAgent.uploadWithoutConnection(
+              SnowflakeFileTransferConfig.Builder.newInstance()
+                .setSnowflakeFileTransferMetadata(fileTransferMetadata.get)
+                .setUploadStream(inStream)
+                .setRequireCompress(false)
+                .setDestFileName(fileName)
+                .setOcspMode(OCSPMode.FAIL_OPEN)
+                .setProxyProperties(proxyProperties)
+                .build())
+            val endTime = System.currentTimeMillis()
+            processTimeInfo =
+              s"""read_and_upload_time:
+                 | ${Utils.getTimeString(endTime - startTime)}
+                 |""".stripMargin.filter(_ >= ' ')
+          }
+        } else {
+          CloudStorageOperations.log.warn(
+            s"Discarding partial file $fileName. success=$success, isInterrupted=$isInterrupted"
+          )
+          // Actively abandon any work the upload stream has already done.
+          // Critically, we must NOT call close() here — for an
+          // S3UploadOutputStream that would commit the buffered partial
+          // data via putObject (single-shot path) or completeMultipartUpload
+          // (multipart path), overwriting a sibling task's successful file.
+          // Instead, abort the multipart upload (if one was initiated) so
+          // we don't leak in-progress parts in the bucket.
+          uploadStream match {
+            case s3: S3UploadOutputStream => s3.abort()
+            case _ =>
+              // For the anonymous OutputStream wrappers used by other
+              // storage backends, the data is held only in an in-memory
+              // ByteArrayOutputStream until close(); skipping close() means
+              // the buffer is simply discarded. No cloud-side cleanup
+              // needed.
+          }
         }
       }
     } else {
@@ -2184,5 +2209,39 @@ private[io] class S3UploadOutputStream(s3Client: AmazonS3,
     if (dataSizeInBuffer > 0) {
       uploadDataChunk(isLastChunk = true)
     }
+  }
+
+  // Abandon any in-progress multipart upload without committing it.
+  //
+  // Used when the upload is aborted (e.g. speculative task killed). Avoids
+  // calling close() — which would commit the partial data and overwrite a
+  // sibling task's successful object — and explicitly aborts any S3 multipart
+  // upload that was already initiated, so we don't leak parts.
+  //
+  // Safe to call multiple times. Errors are logged and swallowed; this is
+  // expected to run from a finally block where we don't want a cleanup
+  // failure to mask the original cause.
+  private[io] def abort(): Unit = {
+    if (useMultipleBlockUpload) {
+      try {
+        s3Client.abortMultipartUpload(
+          new AbortMultipartUploadRequest(
+            bucketName, keyName, initResponse.getUploadId))
+        CloudStorageOperations.log.info(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+             | Aborted in-progress multipart upload for $file
+             | uploadId=${initResponse.getUploadId}
+             |""".stripMargin.filter(_ >= ' '))
+      } catch {
+        case th: Throwable =>
+          CloudStorageOperations.log.warn(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}:
+               | Failed to abort multipart upload for $file:
+               | ${th.getMessage}
+               |""".stripMargin.filter(_ >= ' '))
+      }
+    }
+    try byteArrayOutputStream.close()
+    catch { case _: Throwable => () }
   }
 }
