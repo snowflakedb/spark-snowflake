@@ -22,10 +22,11 @@ package net.snowflake.spark.snowflake
 import java.sql.{PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
-import net.snowflake.client.jdbc.telemetry.{Telemetry, TelemetryClient}
+import net.snowflake.client.internal.jdbc.telemetry.{Telemetry, TelemetryClient}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
-import net.snowflake.client.jdbc.{SnowflakePreparedStatement, SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.client.api.statement.{SnowflakePreparedStatement, SnowflakeStatement}
+import net.snowflake.client.api.resultset.SnowflakeResultSet
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory

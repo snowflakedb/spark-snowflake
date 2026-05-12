@@ -24,20 +24,19 @@ import java.util.Properties
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 import javax.crypto.{Cipher, CipherInputStream, CipherOutputStream, SecretKey}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import net.snowflake.client.core.{OCSPMode, SFStatement}
-import net.snowflake.client.jdbc.{ErrorCode, MatDesc, SnowflakeFileTransferAgent, SnowflakeFileTransferConfig, SnowflakeFileTransferMetadata, SnowflakeSQLException}
-import net.snowflake.client.jdbc.cloud.storage.StageInfo.StageType
-import net.snowflake.client.jdbc.internal.amazonaws.ClientConfiguration
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials, BasicSessionCredentials}
-import net.snowflake.client.jdbc.internal.amazonaws.client.builder.AwsClientBuilder
-import net.snowflake.client.jdbc.internal.amazonaws.retry.{PredefinedRetryPolicies, RetryPolicy}
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.{AmazonS3, AmazonS3Client, AmazonS3ClientBuilder}
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model._
-import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
+import net.snowflake.client.internal.core.{OCSPMode, SFStatement}
+import net.snowflake.client.api.exception.{ErrorCode, SnowflakeSQLException}
+import net.snowflake.client.internal.jdbc.{MatDesc, SnowflakeFileTransferAgent, SnowflakeFileTransferConfig, SnowflakeFileTransferMetadata}
+import net.snowflake.client.internal.jdbc.cloud.storage.StageInfo.StageType
+import com.amazonaws.ClientConfiguration
+import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials, BasicSessionCredentials}
+import com.amazonaws.client.builder.AwsClientBuilder
+import com.amazonaws.retry.{PredefinedRetryPolicies, RetryPolicy}
+import com.amazonaws.services.s3.{AmazonS3, AmazonS3Client, AmazonS3ClientBuilder}
+import com.amazonaws.services.s3.model._
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.{AccessCondition, OperationContext, StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlobClient, CloudBlockBlob}
-import net.snowflake.client.jdbc.internal.snowflake.common.core.SqlState
+import com.microsoft.azure.storage.{AccessCondition, OperationContext, StorageCredentialsAnonymous, StorageCredentialsSharedAccessSignature}
+import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlobClient, CloudBlockBlob}
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
@@ -86,7 +85,7 @@ object CloudStorageOperations {
                                             stageType: StageType
                                           ): InputStream = {
 
-    val decodedKey = Base64.decode(masterKey)
+    val decodedKey = java.util.Base64.getDecoder.decode(masterKey)
     val (key, iv) =
       stageType match {
         case StageType.S3 =>
@@ -101,14 +100,14 @@ object CloudStorageOperations {
 
     if (key == null || iv == null) {
       throw new SnowflakeSQLException(
-        SqlState.INTERNAL_ERROR,
+        "22000",
         ErrorCode.INTERNAL_ERROR.getMessageCode,
         "File " + "metadata incomplete"
       )
     }
 
-    val keyBytes: Array[Byte] = Base64.decode(key)
-    val ivBytes: Array[Byte] = Base64.decode(iv)
+    val keyBytes: Array[Byte] = java.util.Base64.getDecoder.decode(key)
+    val ivBytes: Array[Byte] = java.util.Base64.getDecoder.decode(iv)
 
     val queryStageMasterKey: SecretKey =
       new SecretKeySpec(decodedKey, 0, decodedKey.length, AES)
@@ -186,7 +185,7 @@ object CloudStorageOperations {
                                               smkId: String
                                             ): (Cipher, String, String, String) = {
 
-    val decodedKey = Base64.decode(masterKey)
+    val decodedKey = java.util.Base64.getDecoder.decode(masterKey)
     val keySize = decodedKey.length
     val fileKeyBytes = new Array[Byte](keySize)
     val fileCipher = Cipher.getInstance(DATA_CIPHER)
@@ -217,8 +216,8 @@ object CloudStorageOperations {
     (
       fileCipher,
       matDesc.toString,
-      Base64.encodeAsString(encKeK: _*),
-      Base64.encodeAsString(ivData: _*)
+      java.util.Base64.getEncoder.encodeToString(encKeK),
+      java.util.Base64.getEncoder.encodeToString(ivData)
     )
   }
 
@@ -315,7 +314,7 @@ object CloudStorageOperations {
           case Some(creds) =>
             // Extract credentials from temporaryAWSCredentials object
             val token = creds match {
-              case sessionCreds: net.snowflake.client.jdbc.internal.amazonaws.auth.AWSSessionCredentials =>
+              case sessionCreds: com.amazonaws.auth.AWSSessionCredentials =>
                 Some(sessionCreds.getSessionToken)
               case _ => None
             }

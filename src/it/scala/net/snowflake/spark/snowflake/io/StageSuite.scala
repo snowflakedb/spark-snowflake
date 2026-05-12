@@ -17,7 +17,8 @@
 package net.snowflake.spark.snowflake.io
 
 import java.io.File
-import net.snowflake.client.jdbc.{SnowflakeFileTransferMetadataV1, SnowflakeSQLException}
+import net.snowflake.client.internal.jdbc.SnowflakeFileTransferMetadataV1
+import net.snowflake.client.api.exception.SnowflakeSQLException
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}

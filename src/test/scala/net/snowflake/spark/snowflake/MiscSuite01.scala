@@ -21,12 +21,12 @@ import java.net.{InetSocketAddress, Proxy}
 import java.security.InvalidKeyException
 import java.util.Properties
 
-import net.snowflake.client.core.SFSessionProperty
-import net.snowflake.client.jdbc.SnowflakeSQLException
-import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol}
+import net.snowflake.client.internal.core.SFSessionProperty
+import net.snowflake.client.api.exception.SnowflakeSQLException
+import com.amazonaws.{ClientConfiguration, Protocol}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import com.microsoft.azure.storage.OperationContext
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
@@ -306,7 +306,7 @@ class MiscSuite01 extends FunSuite with Matchers {
     SnowflakeTelemetry.addThrowable(metric,
       new SnowflakeSQLException(queryId, errorMessage, sqlState, errorCode))
     assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_CLASS_NAME).asText()
-      .equals("class net.snowflake.client.jdbc.SnowflakeSQLException"))
+      .equals("class net.snowflake.client.api.exception.SnowflakeSQLException"))
     var expectedMessage = s"SnowflakeSQLException: ErrorCode=$errorCode" +
       s" SQLState=$sqlState QueryId=$queryId"
     assert(metric.get(TelemetryQueryStatusFields.EXCEPTION_MESSAGE)
