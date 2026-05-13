@@ -25,7 +25,7 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.{BinaryType, StructType, TimestampType}
+import org.apache.spark.sql.types.{BinaryType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
@@ -925,7 +925,7 @@ private[io] object StageWriter {
     val mappingFromString = getMappingFromString(mappingList, fromString)
 
     val hasTimestampColumn: Boolean =
-      schema.exists(field => field.dataType == TimestampType)
+      schema.exists(field => field.dataType == TimestampType || field.dataType == TimestampNTZType)
 
     val timestampFormat: String =
       if (params.getStringTimestampFormat.isEmpty) {

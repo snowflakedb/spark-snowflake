@@ -19,10 +19,9 @@ package net.snowflake.spark.snowflake
 
 import java.sql.Timestamp
 import java.text._
-import java.time.ZonedDateTime
+import java.time.{LocalDateTime, ZonedDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, TimeZone}
-
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -126,6 +125,15 @@ private[snowflake] object Conversions {
         TimeZone.getDefault.toZoneId))
   }
 
+  def formatTimestamp(t: LocalDateTime): String = {
+    // For writing to snowflake, time zone needs to be included
+    // in the timestamp string. The spark default timezone is used.
+    timestampWriteFormatter.format(
+      ZonedDateTime.of(
+        t,
+        TimeZone.getDefault.toZoneId))
+  }
+
   // All strings are converted into double-quoted strings, with
   // quote inside converted to double quotes
   def formatString(s: String): String = {
@@ -176,7 +184,7 @@ private[snowflake] object Conversions {
             case ShortType => data.toShort
             case StringType =>
               if (isIR) UTF8String.fromString(data) else data
-            case TimestampType => parseTimestamp(data, isIR)
+            case TimestampType | TimestampNTZType => parseTimestamp(data, isIR)
             case _ => data
           }
         }
@@ -276,7 +284,7 @@ private[snowflake] object Conversions {
       case ShortType => data.shortValue()
       case StringType =>
         if (isIR) UTF8String.fromString(data.asText()) else data.asText()
-      case TimestampType => parseTimestamp(data.asText(), isIR)
+      case TimestampType | TimestampNTZType => parseTimestamp(data.asText(), isIR)
       case ArrayType(dt, _) =>
         val result = new Array[Any](data.size())
         (0 until data.size())

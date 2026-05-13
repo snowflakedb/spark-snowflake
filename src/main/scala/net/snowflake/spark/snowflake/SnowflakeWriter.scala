@@ -19,6 +19,7 @@ package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
 import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
+import net.snowflake.spark.snowflake.Conversions.timestampWriteFormatter
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.{snowflakeStyleSchema, snowflakeStyleString}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat
@@ -26,6 +27,9 @@ import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
+
+import java.time.{LocalDateTime, ZonedDateTime}
+import java.util.TimeZone
 
 /**
  * Functions to write data to Snowflake.
@@ -284,6 +288,11 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           {
             if (v == null) ""
             else Conversions.formatTimestamp(v.asInstanceOf[Timestamp])
+          }
+        case TimestampNTZType =>
+          (v: Any) => {
+            if (v == null) ""
+            else Conversions.formatTimestamp(v.asInstanceOf[LocalDateTime])
           }
         case StringType =>
           (v: Any) =>

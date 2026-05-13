@@ -236,7 +236,7 @@ case class ResultIterator[T: ClassTag](
           case FloatType => data.getFloat(index + 1)
           case IntegerType => data.getInt(index + 1)
           case LongType => data.getLong(index + 1)
-          case TimestampType =>
+          case TimestampType | TimestampNTZType =>
             if (isIR) {
               DateTimeUtils.fromJavaTimestamp(data.getTimestamp(index + 1))
             } else {
