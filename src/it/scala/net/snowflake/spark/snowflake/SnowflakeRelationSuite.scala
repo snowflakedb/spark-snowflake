@@ -82,7 +82,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       )
 
     val param = Parameters.mergeParameters(sfOptions)
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = SparkSession.builder().getOrCreate().sqlContext
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     // Test lazy schema
@@ -139,7 +139,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_write)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = SparkSession.builder().getOrCreate().sqlContext
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val (df, _, rowCount) = createTestDataFrame()
@@ -162,7 +162,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_large_result)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = SparkSession.builder().getOrCreate().sqlContext
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val snowflakeSQLStatement = new SnowflakeSQLStatement() +
@@ -176,7 +176,7 @@ class SnowflakeRelationSuite extends IntegrationSuiteBase {
       replaceOption(connectorOptionsNoTable, "dbtable", test_table_large_result)
 
     val param = Parameters.mergeParameters(sfOptionsNoTable)
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = SparkSession.builder().getOrCreate().sqlContext
     val jdbcWrapper = new JDBCWrapper()
     val snowflakeRelation = new SnowflakeRelation(jdbcWrapper, param, None)(sqlContext)
     val filters: Array[Filter] = Array(GreaterThan("INT_C", 10), LessThan("INT_C", 20))

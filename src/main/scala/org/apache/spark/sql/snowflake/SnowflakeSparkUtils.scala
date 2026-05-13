@@ -38,9 +38,9 @@ object SnowflakeSparkUtils {
           getJDBCProviderName(options.getOrElse("url", "unknown"))
       case SaveIntoDataSourceCommand(_, dataSource, _, _) =>
         s"SaveIntoDataSourceCommand:${getClassName(dataSource)}"
-      case LogicalRelation(r: JDBCRelation, _, _, _) =>
+      case LogicalRelation(r: JDBCRelation, _, _, _, _) =>
         s"LogicalRelation:${getClassName(r)}:${getJDBCProviderName(r.jdbcOptions.url)}"
-      case LogicalRelation(r, _, _, _) =>
+      case LogicalRelation(r, _, _, _, _) =>
         s"LogicalRelation:${getClassName(r)}"
       case null => "NULL"
       case _ => getClassName(obj)
