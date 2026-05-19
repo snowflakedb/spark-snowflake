@@ -88,16 +88,17 @@ class SnowflakeTelemetrySuite extends IntegrationSuiteBase {
 
       val pythonTestFile = System.getProperty("user.dir") + "/src/test/python/unittest.py"
 
-      sparkSession = SparkSession.builder
-        .master("local")
-        .appName("SnowflakeSourceSuite")
-        .config("spark.sql.shuffle.partitions", "6")
-        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-        // spark 3.0 to support legacy conversion for unix_timestamp().
-        // It may not be necessary for spark 2.X.
-        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-        .config("spark.files", pythonTestFile)
-        .getOrCreate()
+      sparkSession = LocalSparkNetworking(
+        SparkSession.builder
+          .master("local")
+          .appName("SnowflakeSourceSuite")
+          .config("spark.sql.shuffle.partitions", "6")
+          // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+          // spark 3.0 to support legacy conversion for unix_timestamp().
+          // It may not be necessary for spark 2.X.
+          .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+          .config("spark.files", pythonTestFile)
+      ).getOrCreate()
 
       // unit test
       val metric: ObjectNode = mapper.createObjectNode()

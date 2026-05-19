@@ -28,15 +28,8 @@ import scala.util.matching.Regex
   */
 trait IntegrationSuiteBase
     extends IntegrationEnv
-    with net.snowflake.spark.snowflake.QueryTest {
-
-  /**
-    * A helper object for importing spark SQL implicits.
-    * It is equivalent to org.apache.spark.sql.test.SQLTestUtilsBase.testImplicits
-    */
-  protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = sparkSession.sqlContext
-  }
+    with net.snowflake.spark.snowflake.QueryTest
+    with IntegrationSuiteTestImplicits {
 
   def getAzureURL(input: String): String = {
     val azure_url = "wasbs?://([^@]+)@([^.]+)\\.([^/]+)/(.+)?".r

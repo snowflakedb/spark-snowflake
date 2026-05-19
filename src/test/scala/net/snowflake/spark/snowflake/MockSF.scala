@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.util.matching.Regex
 
 import org.apache.spark.sql.types.StructType
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -47,7 +47,8 @@ class MockSF(params: Map[String, String],
   private[this] val jdbcConnections: mutable.Buffer[Connection] =
     mutable.Buffer.empty
 
-  val jdbcWrapper: JDBCWrapper = spy(new JDBCWrapper)
+  // Mockito 4 + Scala: spy() is ambiguous; delegate to Java (MockitoCompat.spyJdbcWrapper).
+  val jdbcWrapper: JDBCWrapper = MockitoCompat.spyJdbcWrapper(new JDBCWrapper)
 
   private def createMockStatement(query: String): PreparedStatement = {
     val mockStatement = mock(classOf[PreparedStatement], RETURNS_SMART_NULLS)

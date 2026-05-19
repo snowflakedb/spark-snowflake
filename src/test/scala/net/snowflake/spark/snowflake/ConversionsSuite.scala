@@ -20,14 +20,14 @@ package net.snowflake.spark.snowflake
 import java.sql.{Date, Timestamp}
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 /**
   * Unit test for data type conversions
   */
-class ConversionsSuite extends FunSuite {
+class ConversionsSuite extends AnyFunSuite {
 
   val mapper = new ObjectMapper()
 

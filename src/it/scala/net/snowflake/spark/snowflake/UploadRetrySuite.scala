@@ -69,10 +69,10 @@ class UploadRetrySuite extends IntegrationSuiteBase{
     // Always run in UTC
     TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
 
-    val conf = new SparkConf()
-      conf.setMaster(s"local[*, $retryCount]")
-      conf.setAppName("SnowflakeRetryTest")
-      conf.setExecutorEnv("spark.task.maxFailures", s"$retryCount")
+    val conf = LocalSparkNetworking(new SparkConf())
+    conf.setMaster(s"local[*, $retryCount]")
+    conf.setAppName("SnowflakeRetryTest")
+    conf.setExecutorEnv("spark.task.maxFailures", s"$retryCount")
 
     sc = SparkContext.getOrCreate(conf)
 
@@ -96,13 +96,14 @@ class UploadRetrySuite extends IntegrationSuiteBase{
 
 
     // Use fewer partitions to make tests faster
-    sparkSession = SparkSession.builder
-      .master(s"local[*, $retryCount]")
-      .appName("SnowflakeRetryTest")
-      .config("spark.sql.shuffle.partitions", "6")
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .config("spark.task.maxFailures", s"$retryCount")
-      .getOrCreate()
+    sparkSession = LocalSparkNetworking(
+      SparkSession.builder
+        .master(s"local[*, $retryCount]")
+        .appName("SnowflakeRetryTest")
+        .config("spark.sql.shuffle.partitions", "6")
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+        .config("spark.task.maxFailures", s"$retryCount")
+    ).getOrCreate()
 
 
     // There is bug for Date.equals() to compare Date with different timezone,
