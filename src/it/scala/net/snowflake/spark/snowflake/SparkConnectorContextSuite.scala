@@ -169,15 +169,16 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
     conn.close()
 
     // Recreate spark session to avoid affect following test cases
-    sparkSession = SparkSession.builder
-      .master("local")
-      .appName("SnowflakeSourceSuite")
-      .config("spark.sql.shuffle.partitions", "6")
-      // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-      // spark 3.0 to support legacy conversion for unix_timestamp().
-      // It may not be necessary for spark 2.X.
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .getOrCreate()
+    sparkSession = LocalSparkNetworking(
+      SparkSession.builder
+        .master("local")
+        .appName("SnowflakeSourceSuite")
+        .config("spark.sql.shuffle.partitions", "6")
+        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+        // spark 3.0 to support legacy conversion for unix_timestamp().
+        // It may not be necessary for spark 2.X.
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+    ).getOrCreate()
   }
 
   private def getSessionID(connection: ServerConnection): String = {
@@ -261,15 +262,16 @@ class SparkConnectorContextSuite extends IntegrationSuiteBase {
       // Clean up
       conn.close()
       // Recreate spark session to avoid affect following test cases
-      sparkSession = SparkSession.builder
-        .master("local")
-        .appName("SnowflakeSourceSuite")
-        .config("spark.sql.shuffle.partitions", "6")
-        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-        // spark 3.0 to support legacy conversion for unix_timestamp().
-        // It may not be necessary for spark 2.X.
-        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-        .getOrCreate()
+      sparkSession = LocalSparkNetworking(
+        SparkSession.builder
+          .master("local")
+          .appName("SnowflakeSourceSuite")
+          .config("spark.sql.shuffle.partitions", "6")
+          // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+          // spark 3.0 to support legacy conversion for unix_timestamp().
+          // It may not be necessary for spark 2.X.
+          .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+      ).getOrCreate()
       // Wait for child thread done to avoid affect other test cases.
       Await.ready(f2, Duration.Inf)
     }

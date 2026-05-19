@@ -24,17 +24,14 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
 /**
-  * Snowflake Source implementation for Spark SQL
-  * Major TODO points:
-  *   - Add support for compression Snowflake->Spark
-  *   - Add support for using Snowflake Stage files, so the user doesn't need
-  * to provide AWS passwords
-  *   - Add support for VARIANT
+  * Snowflake Source implementation for Spark SQL (Spark 4.x).
+  * [[CreatableRelationVariantSupport]] allows Spark native [[org.apache.spark.sql.types.VariantType]]
+  * in save paths that serialize through JSON (see [[SnowflakeWriter]]).
   */
 class DefaultSource(jdbcWrapper: JDBCWrapper)
     extends RelationProvider
     with SchemaRelationProvider
-    with CreatableRelationProvider
+    with CreatableRelationVariantSupport
     with DataSourceRegister {
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME

@@ -42,11 +42,8 @@ class SnowflakeSparkUtilsSuite extends SFQueryTest with SFTestSessionBase {
     val jdbcOptions1 = new JDBCOptions(
       "jdbc:postgresql://localhost/mrui?user=mrui&password=password", "t1", Map.empty)
     val jdbcRelation1 = JDBCRelation(schema, Array.empty, jdbcOptions1)(spark)
-    // case class LogicalRelation(
-    //    relation: BaseRelation,
-    //    output: Seq[AttributeReference],
-    //    catalogTable: Option[CatalogTable],
-    //    override val isStreaming: Boolean)
+    // LogicalRelation is constructed via companion apply(relation, isStreaming = false);
+    // arity of the case class itself varies by Spark version (e.g. optional stream field in 3.5.3+ / 4.x).
     val logicalRelation1 = LogicalRelation(jdbcRelation1)
     assert(SnowflakeSparkUtils.getNameForLogicalPlanOrExpression(logicalRelation1)
       .equals("LogicalRelation:JDBCRelation:postgresql"))

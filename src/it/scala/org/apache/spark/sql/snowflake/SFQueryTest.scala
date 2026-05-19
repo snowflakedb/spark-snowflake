@@ -87,7 +87,8 @@ object SFQueryTest {
   }
 
   def getErrorMessageInCheckAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted =
+      df.queryExecution.logical.collect { case s: logical.Sort => s }.nonEmpty
 
     val sparkAnswer = try df.collect().toSeq
     catch {

@@ -17,9 +17,10 @@
 
 package net.snowflake.spark.snowflake.io
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class IOSuite extends FunSuite with Matchers {
+class IOSuite extends AnyFunSuite with Matchers {
 
   test("test generate stage table name") {
     // Original table name (String), is_table_name_quoted (boolean)

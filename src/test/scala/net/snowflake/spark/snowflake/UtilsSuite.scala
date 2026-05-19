@@ -22,12 +22,13 @@ import java.net.URI
 
 import net.snowflake.client.jdbc.internal.apache.commons.io.FileUtils
 import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Unit tests for helper functions
   */
-class UtilsSuite extends FunSuite with Matchers {
+class UtilsSuite extends AnyFunSuite with Matchers {
 
   test("joinUrls preserves protocol information") {
     Utils.joinUrls("s3n://foo/bar/", "/baz") shouldBe "s3n://foo/bar/baz/"

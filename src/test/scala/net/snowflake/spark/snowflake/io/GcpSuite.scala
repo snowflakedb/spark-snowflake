@@ -21,9 +21,9 @@ import net.snowflake.spark.snowflake.{
   Parameters,
   SnowflakeConnectorFeatureNotSupportException
 }
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class GcpSuite extends FunSuite {
+class GcpSuite extends AnyFunSuite {
   var mergedParams = MergedParameters(Parameters.DEFAULT_PARAMETERS
                       ++ Map("sfurl" -> "sfctest0.snowflakecomputing.com"))
   val gcsStorage = InternalGcsStorage(mergedParams, "dummyStage", null, null)

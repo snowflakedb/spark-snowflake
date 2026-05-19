@@ -32,7 +32,9 @@ import org.apache.logging.log4j.core.config.AbstractConfiguration
 import org.apache.logging.log4j.core.layout.PatternLayout
 import org.apache.spark.sql._
 import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
@@ -44,7 +46,7 @@ import scala.util.Random
   * Base class for writing integration tests which run against a real Snowflake cluster.
   */
 trait IntegrationEnv
-    extends FunSuite
+    extends AnyFunSuite
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
 
@@ -265,7 +267,7 @@ trait IntegrationEnv
     TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
     log.debug(s"time zone:${ZonedDateTime.now()}")
 
-    val conf = new SparkConf()
+    val conf = LocalSparkNetworking(new SparkConf())
     conf.setMaster("local")
     conf.setAppName("SnowflakeSourceSuite")
 
@@ -293,15 +295,17 @@ trait IntegrationEnv
     sparkSession = createDefaultSparkSession
   }
 
-  protected def createDefaultSparkSession = SparkSession.builder
-    .master("local")
-    .appName("SnowflakeSourceSuite")
-    .config("spark.sql.shuffle.partitions", "6")
-    // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
-    // spark 3.0 to support legacy conversion for unix_timestamp().
-    // It may not be necessary for spark 2.X.
-    .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-    .getOrCreate()
+  protected def createDefaultSparkSession =
+    LocalSparkNetworking(
+      SparkSession.builder
+        .master("local")
+        .appName("SnowflakeSourceSuite")
+        .config("spark.sql.shuffle.partitions", "6")
+        // "spark.sql.legacy.timeParserPolicy = LEGACY" is added to allow
+        // spark 3.0 to support legacy conversion for unix_timestamp().
+        // It may not be necessary for spark 2.X.
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+    ).getOrCreate()
 
   override def afterAll(): Unit = {
     try {
@@ -364,5 +368,20 @@ trait IntegrationEnv
         log.info(s"Can't read $CONFIG_JSON_FILE, load config from other source")
         None
     }
+  }
+}
+
+/** Pin local Spark driver RPC to loopback; reduces executor↔driver classloader/RPC issues in IT (esp. Spark 4). */
+private[snowflake] object LocalSparkNetworking {
+  def apply(conf: SparkConf): SparkConf = {
+    conf.set("spark.driver.host", "127.0.0.1")
+    conf.set("spark.driver.bindAddress", "127.0.0.1")
+    conf
+  }
+
+  def apply(builder: SparkSession.Builder): SparkSession.Builder = {
+    builder
+      .config("spark.driver.host", "127.0.0.1")
+      .config("spark.driver.bindAddress", "127.0.0.1")
   }
 }

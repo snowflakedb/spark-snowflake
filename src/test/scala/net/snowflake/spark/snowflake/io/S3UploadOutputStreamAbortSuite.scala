@@ -27,7 +27,7 @@ import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.{
   UploadPartRequest,
   UploadPartResult
 }
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.mutable
 
@@ -51,7 +51,7 @@ import scala.collection.mutable
  *   3. abort() must swallow cleanup failures (it runs in a finally
  *      block).
  */
-class S3UploadOutputStreamAbortSuite extends FunSuite {
+class S3UploadOutputStreamAbortSuite extends AnyFunSuite {
 
   private val storageInfo = Map(
     StorageInfo.BUCKET_NAME -> "test_bucket",
