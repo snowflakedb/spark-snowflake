@@ -16,7 +16,7 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.SnowflakeConnectionV1
+import net.snowflake.client.internal.api.implementation.connection.SnowflakeConnectionImpl
 
 import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME

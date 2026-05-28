@@ -16,7 +16,8 @@
 
 package net.snowflake.spark.snowflake
 
-import net.snowflake.client.jdbc.{SnowflakeResultSet, SnowflakeStatement}
+import net.snowflake.client.api.resultset.SnowflakeResultSet
+import net.snowflake.client.api.statement.SnowflakeStatement
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}

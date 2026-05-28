@@ -18,7 +18,7 @@ package net.snowflake.spark.snowflake.io
 import java.sql.ResultSet
 import java.time.LocalDateTime
 import java.util.TimeZone
-import net.snowflake.client.jdbc.SnowflakeResultSet
+import net.snowflake.client.api.resultset.SnowflakeResultSet
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat

@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.test
 
-import net.snowflake.client.jdbc.{ErrorCode, SnowflakeSQLException}
+import net.snowflake.client.api.exception.{ErrorCode, SnowflakeSQLException}
 import net.snowflake.spark.snowflake.test.TestHookFlag.TestHookFlag
 import org.slf4j.{Logger, LoggerFactory}
 

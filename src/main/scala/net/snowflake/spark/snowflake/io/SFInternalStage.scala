@@ -16,10 +16,11 @@
 
 package net.snowflake.spark.snowflake.io
 
-import net.snowflake.client.jdbc.internal.amazonaws.util.Base64
-import net.snowflake.client.core.SFStatement
+import java.util.Base64
+import net.snowflake.client.internal.core.SFStatement
+import net.snowflake.client.internal.jdbc.SnowflakeFileTransferAgent
 import net.snowflake.client.jdbc._
-import net.snowflake.client.jdbc.cloud.storage.StageInfo
+import net.snowflake.client.internal.jdbc.cloud.storage.StageInfo
 import net.snowflake.spark.snowflake._
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 
@@ -133,7 +134,7 @@ private[io] class SFInternalStage(isWrite: Boolean,
   private[io] lazy val masterKey =
     if (encMat != null) encMat.getQueryStageMasterKey else null
   private[io] lazy val decodedKey =
-    if (masterKey != null) Base64.decode(masterKey) else null
+    if (masterKey != null) Base64.getDecoder.decode(masterKey) else null
 
   private[io] lazy val is256Encryption: Boolean = {
     val length = if (decodedKey != null) decodedKey.length * 8 else 128

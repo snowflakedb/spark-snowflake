@@ -17,6 +17,8 @@
 import java.io.File
 
 import scala.util.Properties
+import scala.xml.{Elem, Node => XmlNode, NodeSeq => XmlNodeSeq}
+import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 val sparkVersion = settingKey[String]("Spark version")
 
@@ -143,7 +145,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     libraryDependencies ++= {
       val sv = sparkVersion.value
       Seq(
-        "net.snowflake" % "snowflake-jdbc" % "3.28.0",
+        "net.snowflake" % "snowflake-jdbc" % "4.0.2",
+        "com.amazonaws" % "aws-java-sdk-s3" % "1.12.780",
+        "com.microsoft.azure" % "azure-storage" % "8.6.6",
         "org.scalatest" %% "scalatest" % "3.2.19" % Test,
         "org.mockito" % "mockito-core" % "4.11.0" % Test,
         "org.apache.commons" % "commons-lang3" % "3.18.0" % "provided",
@@ -169,6 +173,63 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           "org.apache.spark" %% "spark-sql-api" % sv % "provided, test"
         ) else Seq.empty
       )
+    },
+
+    dependencyOverrides ++= Seq(
+      "com.fasterxml.jackson.core"   % "jackson-core"          % "2.15.2",
+      "com.fasterxml.jackson.core"   % "jackson-databind"      % "2.15.2",
+      "com.fasterxml.jackson.core"   % "jackson-annotations"   % "2.15.2",
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.15.2"
+    ),
+
+    assembly / assemblyShadeRules := Seq(
+      ShadeRule.rename("com.amazonaws.**"       -> "net.snowflake.spark.shaded.amazonaws.@1").inAll,
+      ShadeRule.rename("com.microsoft.azure.**" -> "net.snowflake.spark.shaded.azure.@1").inAll,
+      ShadeRule.rename("software.amazon.ion.**" -> "net.snowflake.spark.shaded.amazonion.@1").inAll
+    ),
+
+    // Only fold the AWS and Azure SDKs (and their AWS-specific transitives) into
+    // the assembly. Common libraries (jackson, joda-time, httpclient, commons-*,
+    // slf4j) stay unbundled and resolve from the user's Spark/Hadoop classpath.
+    assembly / assemblyExcludedJars := {
+      val cp = (assembly / fullClasspath).value
+      val keepPrefixes = Seq(
+        "aws-java-sdk-", "jmespath-java-", "ion-java-",
+        "azure-storage-", "azure-keyvault-core-"
+      )
+      cp.filter { entry =>
+        val n = entry.data.getName
+        !keepPrefixes.exists(p => n.startsWith(p))
+      }
+    },
+
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF")     => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) if xs.lastOption.exists(s =>
+            s.endsWith(".SF") || s.endsWith(".DSA") || s.endsWith(".RSA")) =>
+        MergeStrategy.discard
+      case PathList("module-info.class")           => MergeStrategy.discard
+      case PathList(ps @ _*) if ps.lastOption.contains("module-info.class") =>
+        MergeStrategy.discard
+      case other =>
+        val old = (assembly / assemblyMergeStrategy).value
+        old(other)
+    },
+
+    Compile / packageBin := assembly.value,
+
+    pomPostProcess := { (node: XmlNode) =>
+      val rule = new RewriteRule {
+        override def transform(n: XmlNode): XmlNodeSeq = n match {
+          case e: Elem if e.label == "dependency" =>
+            val groupId = (e \ "groupId").text
+            if (groupId == "com.amazonaws" || groupId == "com.microsoft.azure") {
+              XmlNodeSeq.Empty
+            } else e
+          case other => other
+        }
+      }
+      new RuleTransformer(rule).transform(node).head
     },
 
     Compile / scalastyleSources ++= (Compile / unmanagedSourceDirectories).value,

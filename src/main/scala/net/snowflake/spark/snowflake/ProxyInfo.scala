@@ -4,9 +4,9 @@ import java.net.{InetSocketAddress, Proxy}
 import java.net.Proxy.Type
 import java.util.Properties
 
-import net.snowflake.client.core.SFSessionProperty
-import net.snowflake.client.jdbc.internal.amazonaws.{ClientConfiguration, Protocol, ProxyAuthenticationMethod}
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.OperationContext
+import net.snowflake.client.internal.core.SFSessionProperty
+import com.amazonaws.{ClientConfiguration, Protocol, ProxyAuthenticationMethod}
+import com.microsoft.azure.storage.OperationContext
 import scala.collection.JavaConverters._
 
 private[snowflake] class ProxyInfo(proxyProtocol: Option[String],

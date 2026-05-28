@@ -19,13 +19,13 @@ package net.snowflake.spark.snowflake
 
 import java.net.URI
 
-import net.snowflake.client.jdbc.internal.amazonaws.auth.{
+import com.amazonaws.auth.{
   AWSCredentials,
   AWSSessionCredentials,
   BasicAWSCredentials,
   InstanceProfileCredentialsProvider
 }
-import net.snowflake.client.jdbc.internal.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
+import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
