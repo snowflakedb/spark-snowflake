@@ -18,7 +18,7 @@
 package net.snowflake.spark.snowflake
 
 import java.sql.{Date, Timestamp}
-import net.snowflake.client.jdbc.internal.apache.commons.codec.binary.Base64
+import java.util.Base64
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.{snowflakeStyleSchema, snowflakeStyleString}
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.spark.snowflake.io.SupportedFormat
@@ -237,7 +237,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           (v: Any) =>
             v match {
               case null => ""
-              case bytes: Array[Byte] => Base64.encodeBase64String(bytes)
+              case bytes: Array[Byte] => Base64.getEncoder.encodeToString(bytes)
             }
         case _ => (input: Any) => input
       }
@@ -300,7 +300,7 @@ private[snowflake] class SnowflakeWriter(jdbcWrapper: JDBCWrapper) {
           (v: Any) =>
             v match {
               case null => ""
-              case bytes: Array[Byte] => Base64.encodeBase64String(bytes)
+              case bytes: Array[Byte] => Base64.getEncoder.encodeToString(bytes)
             }
         case _ =>
           (v: Any) =>

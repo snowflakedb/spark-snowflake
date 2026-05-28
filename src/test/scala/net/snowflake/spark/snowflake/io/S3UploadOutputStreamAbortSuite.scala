@@ -15,8 +15,8 @@
  */
 package net.snowflake.spark.snowflake.io
 
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.AbstractAmazonS3
-import net.snowflake.client.jdbc.internal.amazonaws.services.s3.model.{
+import com.amazonaws.services.s3.AbstractAmazonS3
+import com.amazonaws.services.s3.model.{
   AbortMultipartUploadRequest,
   CompleteMultipartUploadRequest,
   CompleteMultipartUploadResult,
