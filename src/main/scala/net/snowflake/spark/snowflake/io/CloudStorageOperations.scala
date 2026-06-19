@@ -118,7 +118,7 @@ object CloudStorageOperations {
 
     val fileKeyBytes: Array[Byte] = keyCipher.doFinal(keyBytes)
     val fileKey =
-      new SecretKeySpec(fileKeyBytes, 0, decodedKey.length, AES)
+      new SecretKeySpec(fileKeyBytes, 0, fileKeyBytes.length, AES)
 
     val dataCipher = Cipher.getInstance(DATA_CIPHER)
     val ivy: IvParameterSpec = new IvParameterSpec(ivBytes)
