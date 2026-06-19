@@ -536,7 +536,8 @@ object Utils {
     * check whether a name is quoted
     */
   def isQuoted(name: String): Boolean = {
-    name.startsWith("\"") && name.endsWith("\"")
+    name.length >= 2 && name.startsWith("\"") && name.endsWith("\"") &&
+      !name.substring(1, name.length - 1).replace("\"\"", "").contains("\"")  /* Hardening */
   }
 
   /**
@@ -555,7 +556,7 @@ object Utils {
     if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*")) {
       "\"" + name.toUpperCase + "\""
     } else {
-      "\"" + name + "\""
+      "\"" + name.replace("\"", "\"\"") + "\""  /* Hardening */
     }
   }
 
@@ -563,7 +564,7 @@ object Utils {
     * wrap a name with double quotes without capitalize letters
     */
   def quotedNameIgnoreCase(name: String): String =
-    if (isQuoted(name)) name else s""""$name""""
+    if (isQuoted(name)) name else "\"" + name.replace("\"", "\"\"") + "\""  /* Hardening */
 
   /**
     * Check whether the giving DataFrame contains variant type or not
