@@ -355,4 +355,42 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     assert(dbTableSpecial === "my_db.my-schema.my.table",
       s"Special characters: Expected 'my_db.my-schema.my.table', got '$dbTableSpecial'")
   }
+
+  // Hardening: a runtime SQLConf value (what a Spark-SQL `SET` writes) must NOT
+  // leak into the privileged V1Table option map; only immutable SparkConf should flow.
+  test("runtime SQLConf values must not leak into V1Table properties (dbee43e2)") {
+    val testSpark = org.apache.spark.sql.SparkSession.builder()
+      .master("local[1]")
+      .appName("FallbackCatalogMergeSecurityTest")
+      .config("spark.snowflake.url", "test.snowflakecomputing.com")
+      .config("spark.snowflake.user", "testuser")
+      .config("spark.ui.enabled", "false")
+      .config("spark.driver.host", "localhost")
+      .getOrCreate()
+    try {
+      org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
+      // Simulate a malicious `SET snowflake.preactions=...` (writes to runtime SQLConf).
+      testSpark.conf.set("snowflake.preactions", "GRANT ROLE ACCOUNTADMIN TO USER attacker")
+
+      val catalog = new SnowflakeFallbackCatalog()
+      val delegate = new TestDelegateCatalog()
+      delegate.shouldThrow403 = true
+      catalog.setDelegateCatalog(delegate)
+      catalog.initialize("test_catalog",
+        new CaseInsensitiveStringMap(Map.empty[String, String].asJava))
+
+      val result = catalog.loadTable(Identifier.of(Array("testschema"), "testtable"))
+      val props = result.asInstanceOf[V1Table].catalogTable.storage.properties
+
+      assert(props.get("preactions").isEmpty,
+        s"runtime SET value leaked into V1Table properties: ${props.get("preactions")}")
+      // Legit admin SparkConf value must still flow through.
+      assert(props.get("url").contains("test.snowflakecomputing.com"),
+        "admin SparkConf 'url' should still be present in V1Table properties")
+    } finally {
+      testSpark.conf.unset("snowflake.preactions")
+      org.apache.spark.sql.SparkSession.clearActiveSession()
+    }
+  }
+
 }
