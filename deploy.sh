@@ -84,6 +84,8 @@ git checkout tags/$GITHUB_TAG_1
 if [ "$PUBLISH" = true ]; then
   for spark_version in $SPARK_VERSIONS; do
     echo "Publishing for Spark $spark_version..."
+    # Clean prior iteration's staging so sonaUpload bundles only the current sparkVersion.
+    rm -rf target/sonatype-staging ~/.ivy2/local/net.snowflake/spark-snowflake*
     sbt -DsparkVersion=$spark_version +publishSigned sonaUpload sonaRelease
   done
 else
