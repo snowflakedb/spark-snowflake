@@ -85,7 +85,7 @@ if [ "$PUBLISH" = true ]; then
   for spark_version in $SPARK_VERSIONS; do
     echo "Publishing for Spark $spark_version..."
     # Clean prior iteration's staging so sonaUpload bundles only the current sparkVersion.
-    rm -rf target/sonatype-staging ~/.ivy2/local/net.snowflake/spark-snowflake*
+    rm -rf target/sona-staging target/sonatype-staging ~/.ivy2/local/net.snowflake/spark-snowflake*
     sbt -DsparkVersion=$spark_version +publishSigned sonaUpload sonaRelease
   done
 else
