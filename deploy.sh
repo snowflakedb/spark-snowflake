@@ -86,7 +86,15 @@ if [ "$PUBLISH" = true ]; then
     echo "Publishing for Spark $spark_version..."
     # Clean prior iteration's staging so sonaUpload bundles only the current sparkVersion.
     rm -rf target/sona-staging target/sonatype-staging ~/.ivy2/local/net.snowflake/spark-snowflake*
-    sbt -DsparkVersion=$spark_version +publishSigned sonaUpload sonaRelease
+    # Spark 3.x cross-builds Scala 2.12 + 2.13, so use + to publish both.
+    # Spark 4.x is Scala 2.13 only (crossScalaVersions is empty), where +publishSigned
+    # iterates over nothing and stages no artifacts (empty bundle); publish the single
+    # default Scala version without +.
+    if [[ "$spark_version" == 3.* ]]; then
+      sbt -DsparkVersion=$spark_version +publishSigned sonaUpload sonaRelease
+    else
+      sbt -DsparkVersion=$spark_version publishSigned sonaUpload sonaRelease
+    fi
   done
 else
   for spark_version in $SPARK_VERSIONS; do
