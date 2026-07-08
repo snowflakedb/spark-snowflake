@@ -262,6 +262,14 @@ object CloudStorageOperations {
   /**
    * @return Storage client and stage name
    */
+  // Hardening: SQL-escape helpers for CREATE STAGE construction.
+  private[snowflake] def escapeSqlStringLiteral(value: String): String = value.replace("'", "''")
+  private[snowflake] def escapeSqlIdentifier(name: String): String = {
+    val inner = if (name.startsWith("\"") && name.endsWith("\"") && name.length >= 2)
+      name.substring(1, name.length - 1) else name
+    "\"" + inner.replace("\"", "\"\"") + "\""
+  }
+
   def createStorageClient(
                            param: MergedParameters,
                            conn: ServerConnection,
@@ -287,7 +295,7 @@ object CloudStorageOperations {
 
         val sql =
           s"""
-             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
+             |create or replace ${if (tempStage) "temporary" else ""} stage ${escapeSqlIdentifier(stageName)}
              |url = 'azure://$account.$endpoint/$container/$path'
              |credentials =
              |(azure_sas_token='$azureSAS')
@@ -332,15 +340,15 @@ object CloudStorageOperations {
         // Build SQL statement with session token if available
         val credentialsClause = sessionToken match {
           case Some(token) =>
-            s"(aws_key_id='$accessKey' aws_secret_key='$secretKey' aws_token='$token')"
+            s"(aws_key_id='${escapeSqlStringLiteral(accessKey)}' aws_secret_key='${escapeSqlStringLiteral(secretKey)}' aws_token='${escapeSqlStringLiteral(token)}')"
           case None =>
-            s"(aws_key_id='$accessKey' aws_secret_key='$secretKey')"
+            s"(aws_key_id='${escapeSqlStringLiteral(accessKey)}' aws_secret_key='${escapeSqlStringLiteral(secretKey)}')"
         }
 
         val sql =
           s"""
-             |create or replace ${if (tempStage) "temporary" else ""} stage $stageName
-             |url = 's3://$bucket/$prefix'
+             |create or replace ${if (tempStage) "temporary" else ""} stage ${escapeSqlIdentifier(stageName)}
+             |url = 's3://${escapeSqlStringLiteral(bucket)}/${escapeSqlStringLiteral(prefix)}'
              |credentials = $credentialsClause
          """.stripMargin
 
