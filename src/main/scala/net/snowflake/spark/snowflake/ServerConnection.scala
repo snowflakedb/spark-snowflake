@@ -151,6 +151,27 @@ private[snowflake] object ServerConnection {
     serverConnection
   }
 
+  // Hardening: validate the OAuth token request URL before handing it to
+  // the JDBC driver, which POSTs oauthClientId/oauthClientSecret to it.
+  private[snowflake] def validateOAuthTokenRequestUrl(url: String): Unit = {
+    val uri =
+      try new java.net.URI(url)
+      catch {
+        case e: Exception =>
+          throw new IllegalArgumentException(
+            s"oauthtokenrequesturl is not a valid URI: $url", e)
+      }
+    require(Option(uri.getScheme).map(_.toLowerCase).contains("https"),
+      s"oauthtokenrequesturl must use HTTPS scheme (got '${uri.getScheme}'): $url")
+    val host = Option(uri.getHost).getOrElse(
+      throw new IllegalArgumentException(s"oauthtokenrequesturl has no host: $url"))
+    val hostLower = host.toLowerCase.trim
+    require(!Set("localhost", "127.0.0.1", "::1", "[::1]").contains(hostLower),
+      s"oauthtokenrequesturl must not target loopback address '$host'")
+    require(!hostLower.startsWith("169.254."),
+      s"oauthtokenrequesturl must not target link-local/IMDS address '$host'")
+  }
+
   private def createJDBCConnection(params: MergedParameters): Connection = {
     // Derive class name
     val driverClassName = JDBC_DRIVER
@@ -182,7 +203,10 @@ private[snowflake] object ServerConnection {
       case (true, _, _, _) =>
         params.oauthClientId.foreach(v => jdbcProperties.put("oauthClientId", v))
         params.oauthClientSecret.foreach(v => jdbcProperties.put("oauthClientSecret", v))
-        params.oauthTokenRequestUrl.foreach(v => jdbcProperties.put("oauthTokenRequestUrl", v))
+        params.oauthTokenRequestUrl.foreach { v =>
+          validateOAuthTokenRequestUrl(v)  // Hardening
+          jdbcProperties.put("oauthTokenRequestUrl", v)
+        }
         params.oauthScope.foreach(v => jdbcProperties.put("oauthScope", v))
       case (_, Some(privateKey), _, _) =>
         jdbcProperties.put("privateKey", privateKey)
