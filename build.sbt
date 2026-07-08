@@ -29,7 +29,7 @@ val sparkVersion = settingKey[String]("Spark version")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "3.2.0"
+val sparkConnectorVersion = "3.2.1"
 
 // Extract major.minor from a version string like "3.5.0" -> "3.5"
 def sparkMajorMinor(version: String): String = {
