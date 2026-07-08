@@ -51,6 +51,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     */
   override def createRelation(sqlContext: SQLContext,
                               parameters: Map[String, String]): BaseRelation = {
+    ensureConnectorOptionsRedacted(sqlContext.sparkSession)
     val params = Parameters.mergeParameters(parameters)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
@@ -61,6 +62,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   override def createRelation(sqlContext: SQLContext,
                               parameters: Map[String, String],
                               schema: StructType): BaseRelation = {
+    ensureConnectorOptionsRedacted(sqlContext.sparkSession)
     val params = Parameters.mergeParameters(parameters)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
@@ -116,4 +118,30 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     createRelation(sqlContext, parameters)
   }
+  // Hardening: Register connector-specific sensitive option names so that
+  // Spark's plan redaction (SaveIntoDataSourceCommand.simpleString, event logs,
+  // History Server UI) masks them. Without this, pem_private_key and similar keys
+  // appear in plaintext in shared cluster logs.
+  private val CONNECTOR_SENSITIVE_OPTION_KEYS: Seq[String] = Seq(
+    "pem_private_key", "sfpassword", "sfprivatekeypassphrase",
+    "awsaccesskey", "awssecretkey",
+    "oauthclientid", "oauthclientsecret",
+    "temporary_aws_access_key_id", "temporary_aws_secret_access_key",
+    "temporary_aws_session_token", "temporary_azure_sas_token",
+    "proxy_password"
+  )
+
+  private[snowflake] def ensureConnectorOptionsRedacted(spark: org.apache.spark.sql.SparkSession): Unit = {
+    // Extend spark.sql.redaction.options.regex to include our sensitive keys.
+    // We only write the config once (guard on first-call by checking for our marker).
+    val MARKER = "pem_private_key"
+    val optKey = "spark.sql.redaction.options.regex"
+    val existing = spark.conf.get(optKey, "(?i)url")
+    if (!existing.contains(MARKER)) {
+      val additionalPattern = CONNECTOR_SENSITIVE_OPTION_KEYS.mkString("(?i)(", "|", ")")
+      spark.conf.set(optKey, s"$additionalPattern|$existing")
+    }
+  }
+
+
 }
