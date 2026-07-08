@@ -122,6 +122,16 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
   }
 
   test("loadTable should attempt V1Table creation on 403") {
+    // The fallback now reads ONLY the immutable SparkConf, so the connector
+    // properties below must be present at SparkContext creation time. Other suites
+    // in the shared test JVM may have left a SparkContext running, in which case
+    // getOrCreate() would reuse it and our builder configs would land in the
+    // session SQLConf (which the fix intentionally ignores) rather than the
+    // immutable SparkConf. Tear down any existing session so we start fresh.
+    org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
+    org.apache.spark.sql.SparkSession.clearActiveSession()
+    org.apache.spark.sql.SparkSession.clearDefaultSession()
+
     // Create a minimal SparkSession for this test
     val testSpark = org.apache.spark.sql.SparkSession.builder()
       .master("local[1]")
@@ -185,6 +195,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
       // Clean up: stop the test session
       testSpark.stop()
       org.apache.spark.sql.SparkSession.clearActiveSession()
+      org.apache.spark.sql.SparkSession.clearDefaultSession()
     }
   }
 
@@ -355,4 +366,42 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     assert(dbTableSpecial === "my_db.my-schema.my.table",
       s"Special characters: Expected 'my_db.my-schema.my.table', got '$dbTableSpecial'")
   }
+
+  // Hardening: a runtime SQLConf value (what a Spark-SQL `SET` writes) must NOT
+  // leak into the privileged V1Table option map; only immutable SparkConf should flow.
+  test("runtime SQLConf values must not leak into V1Table properties (dbee43e2)") {
+    val testSpark = org.apache.spark.sql.SparkSession.builder()
+      .master("local[1]")
+      .appName("FallbackCatalogMergeSecurityTest")
+      .config("spark.snowflake.url", "test.snowflakecomputing.com")
+      .config("spark.snowflake.user", "testuser")
+      .config("spark.ui.enabled", "false")
+      .config("spark.driver.host", "localhost")
+      .getOrCreate()
+    try {
+      org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
+      // Simulate a malicious `SET snowflake.preactions=...` (writes to runtime SQLConf).
+      testSpark.conf.set("snowflake.preactions", "GRANT ROLE ACCOUNTADMIN TO USER attacker")
+
+      val catalog = new SnowflakeFallbackCatalog()
+      val delegate = new TestDelegateCatalog()
+      delegate.shouldThrow403 = true
+      catalog.setDelegateCatalog(delegate)
+      catalog.initialize("test_catalog",
+        new CaseInsensitiveStringMap(Map.empty[String, String].asJava))
+
+      val result = catalog.loadTable(Identifier.of(Array("testschema"), "testtable"))
+      val props = result.asInstanceOf[V1Table].catalogTable.storage.properties
+
+      assert(props.get("preactions").isEmpty,
+        s"runtime SET value leaked into V1Table properties: ${props.get("preactions")}")
+      // Legit admin SparkConf value must still flow through.
+      assert(props.get("url").contains("test.snowflakecomputing.com"),
+        "admin SparkConf 'url' should still be present in V1Table properties")
+    } finally {
+      testSpark.conf.unset("snowflake.preactions")
+      org.apache.spark.sql.SparkSession.clearActiveSession()
+    }
+  }
+
 }

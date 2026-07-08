@@ -334,7 +334,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     )
 
     val allConfs =
-      spark.sparkContext.getConf.getAll.toMap ++ spark.conf.getAll ++ spark.sessionState.conf.getAllConfs
+      spark.sparkContext.getConf.getAll.toMap  // Hardening: use ONLY immutable SparkConf; spark.conf/sessionState.conf are runtime SQLConf settable via SET and must not feed privileged connector options  // Hardening: sessionState.conf removed — it is user-mutable via SET and must not be merged into privileged connector options
 
     // Get Snowflake connection properties from SparkConf only
     val snowflakeProps = allConfs.filter { case (key, _) =>
