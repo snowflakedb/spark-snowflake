@@ -122,6 +122,16 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
   }
 
   test("loadTable should attempt V1Table creation on 403") {
+    // The fallback now reads ONLY the immutable SparkConf, so the connector
+    // properties below must be present at SparkContext creation time. Other suites
+    // in the shared test JVM may have left a SparkContext running, in which case
+    // getOrCreate() would reuse it and our builder configs would land in the
+    // session SQLConf (which the fix intentionally ignores) rather than the
+    // immutable SparkConf. Tear down any existing session so we start fresh.
+    org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
+    org.apache.spark.sql.SparkSession.clearActiveSession()
+    org.apache.spark.sql.SparkSession.clearDefaultSession()
+
     // Create a minimal SparkSession for this test
     val testSpark = org.apache.spark.sql.SparkSession.builder()
       .master("local[1]")
@@ -185,6 +195,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
       // Clean up: stop the test session
       testSpark.stop()
       org.apache.spark.sql.SparkSession.clearActiveSession()
+      org.apache.spark.sql.SparkSession.clearDefaultSession()
     }
   }
 
