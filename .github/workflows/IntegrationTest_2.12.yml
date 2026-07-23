@@ -2,7 +2,7 @@ name: IT 2.12
 
 on:
   push:
-    branches: [ master, wshangguan-SNOW-3824906-2x-ci-probe ]
+    branches: [ master, wshangguan-SNOW-3824906-2x-ci-probe, wshangguan-SNOW-3824906-2x-jdbc-3.28 ]
   pull_request:
     branches: [ master ]
 
