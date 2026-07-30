@@ -2,9 +2,9 @@ name: IT GCP 2.12
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, 'backport/**', 'backport-**' ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, 'backport/**', 'backport-**' ]
 
 jobs:
   test:
