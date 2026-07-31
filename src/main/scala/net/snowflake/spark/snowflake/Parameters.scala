@@ -102,6 +102,13 @@ object Parameters {
   val PARAM_AUTHENTICATOR: String = knownParam("sfauthenticator")
   val PARAM_OAUTH_TOKEN: String = knownParam("sftoken")
 
+  // OAuth Client Credentials flow parameters
+  // These are passed directly to JDBC driver for OAuth Client Credentials authentication
+  val PARAM_OAUTH_CLIENT_ID: String = knownParam("oauthclientid")
+  val PARAM_OAUTH_CLIENT_SECRET: String = knownParam("oauthclientsecret")
+  val PARAM_OAUTH_TOKEN_REQUEST_URL: String = knownParam("oauthtokenrequesturl")
+  val PARAM_OAUTH_SCOPE: String = knownParam("oauthscope")
+
   // Internal use only?
   val PARAM_BIND_VARIABLE: String = knownParam("bind_variable")
 
@@ -255,6 +262,9 @@ object Parameters {
   val TZ_SF2 = "sf_current"
   val TZ_SF_DEFAULT = "sf_default"
 
+  // Authenticator type constants
+  val AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS: String = "oauth_client_credentials"
+
   // List of values that mean "yes" when considered to be Boolean
   val BOOLEAN_VALUES_TRUE: Set[String] =
     Set("on", "yes", "true", "1", "enabled")
@@ -321,38 +331,67 @@ object Parameters {
           "' parameter, e.g. 'accountname.snowflakecomputing.com:443'"
       )
     }
-    if (!userParameters.contains(PARAM_SF_USER)) {
-      throw new IllegalArgumentException(
-        "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
-      )
-    }
     val tokenVal = userParameters.get(PARAM_OAUTH_TOKEN)
-    if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
-      (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
-      //  if OAuth token not provided
-      (tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "A snowflake password or private key path or OAuth token must be provided with '" +
-          PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
-          PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
-      )
-    }
-    //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
     val authenticatorVal = userParameters.get(PARAM_AUTHENTICATOR)
-    if ((authenticatorVal.contains("oauth")) &&
-      (tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "An OAuth token is required if the authenticator mode is '" +
-          PARAM_AUTHENTICATOR + "'"
-      )
-    }
-    //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
-    if (!(authenticatorVal.contains("oauth")) &&
-      (!tokenVal.isEmpty)) {
-      throw new IllegalArgumentException(
-        "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR +
-          ", the authentication mode must be 'oauth' when specifying OAuth token"
-      )
+
+    val isOAuthClientCredentials = authenticatorVal.exists(
+      _.equalsIgnoreCase(AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS)
+    )
+
+    if (isOAuthClientCredentials) {
+      // OAuth Client Credentials does not require a user, password, private key,
+      // or a pre-fetched OAuth token; the JDBC driver performs the grant using
+      // the client id/secret against the token request URL.
+      if (!userParameters.contains(PARAM_OAUTH_CLIENT_ID)) {
+        throw new IllegalArgumentException(
+          s"OAuth Client ID must be provided with '$PARAM_OAUTH_CLIENT_ID' parameter " +
+            "when using OAuth Client Credentials authentication"
+        )
+      }
+      if (!userParameters.contains(PARAM_OAUTH_CLIENT_SECRET)) {
+        throw new IllegalArgumentException(
+          s"OAuth Client Secret must be provided with '$PARAM_OAUTH_CLIENT_SECRET' parameter " +
+            "when using OAuth Client Credentials authentication"
+        )
+      }
+      if (!userParameters.contains(PARAM_OAUTH_TOKEN_REQUEST_URL)) {
+        throw new IllegalArgumentException(
+          s"OAuth Token Request URL must be provided with '$PARAM_OAUTH_TOKEN_REQUEST_URL' " +
+            "parameter when using OAuth Client Credentials authentication"
+        )
+      }
+    } else {
+      if (!userParameters.contains(PARAM_SF_USER)) {
+        throw new IllegalArgumentException(
+          "A snowflake user must be provided with '" + PARAM_SF_USER + "' parameter, e.g. 'user1'"
+        )
+      }
+      if ((!userParameters.contains(PARAM_SF_PASSWORD)) &&
+        (!userParameters.contains(PARAM_PEM_PRIVATE_KEY)) &&
+        //  if OAuth token not provided
+        (tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "A snowflake password or private key path or OAuth token must be provided with '" +
+            PARAM_SF_PASSWORD + " or " + PARAM_PEM_PRIVATE_KEY + "' or '" +
+            PARAM_OAUTH_TOKEN + "' parameter, e.g. 'password'"
+        )
+      }
+      //  ensure OAuth token  provided if PARAM_AUTHENTICATOR = OAuth
+      if ((authenticatorVal.contains("oauth")) &&
+        (tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "An OAuth token is required if the authenticator mode is '" +
+            PARAM_AUTHENTICATOR + "'"
+        )
+      }
+      //  PARAM_AUTHENTICATOR must be OAuth if OAuth token is specified
+      if (!(authenticatorVal.contains("oauth")) &&
+        (!tokenVal.isEmpty)) {
+        throw new IllegalArgumentException(
+          "Invalid authenticator mode passed '" + PARAM_AUTHENTICATOR +
+            ", the authentication mode must be 'oauth' when specifying OAuth token"
+        )
+      }
     }
     if (!userParameters.contains(PARAM_SF_DBTABLE) && !userParameters.contains(
           PARAM_SF_QUERY
@@ -619,9 +658,10 @@ object Parameters {
     }
 
     /**
-      * Snowflake user
+      * Snowflake user. Optional when using OAuth Client Credentials
+      * authentication, so returns null when absent rather than throwing.
       */
-    def sfUser: String = parameters(PARAM_SF_USER)
+    def sfUser: String = parameters.getOrElse(PARAM_SF_USER, null)
 
     /**
       * Snowflake password
@@ -692,6 +732,21 @@ object Parameters {
       */
     def sfAuthenticator: Option[String] = parameters.get(PARAM_AUTHENTICATOR)
     def sfToken: Option[String] = parameters.get(PARAM_OAUTH_TOKEN)
+
+    /**
+      * OAuth Client Credentials flow parameters
+      */
+    def oauthClientId: Option[String] = parameters.get(PARAM_OAUTH_CLIENT_ID)
+    def oauthClientSecret: Option[String] = parameters.get(PARAM_OAUTH_CLIENT_SECRET)
+    def oauthTokenRequestUrl: Option[String] = parameters.get(PARAM_OAUTH_TOKEN_REQUEST_URL)
+    def oauthScope: Option[String] = parameters.get(PARAM_OAUTH_SCOPE)
+
+    /**
+      * Check if OAuth Client Credentials authentication is being used
+      */
+    def isOAuthClientCredentials: Boolean = {
+      sfAuthenticator.exists(_.equalsIgnoreCase(AUTHENTICATOR_OAUTH_CLIENT_CREDENTIALS))
+    }
 
     def expectedPartitionCount: Int = {
       parameters.getOrElse(PARAM_EXPECTED_PARTITION_COUNT, "1000").toInt
