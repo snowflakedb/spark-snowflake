@@ -144,6 +144,9 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     ),
     libraryDependencies ++= {
       val sv = sparkVersion.value
+      // parquet-avro:1.13.1 needs to be pinned for Apache Spark 3.5 because
+      // v1.15.2 is incompatible.
+      val parquetAvroVersion = if (sv >= "4.0.0") "1.15.2" else "1.13.1"
       Seq(
         "net.snowflake" % "snowflake-jdbc" % "4.0.2",
         "com.amazonaws" % "aws-java-sdk-s3" % "1.12.780",
@@ -167,7 +170,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           classifier "test-sources",
         "org.apache.spark" %% "spark-catalyst" % sv % "provided, test"
           classifier "test-sources",
-        "org.apache.parquet" % "parquet-avro" % "1.15.2"
+        "org.apache.parquet" % "parquet-avro" % parquetAvroVersion
       ) ++ (
         if (sv >= "4.0.0") Seq(
           "org.apache.spark" %% "spark-sql-api" % sv % "provided, test"
