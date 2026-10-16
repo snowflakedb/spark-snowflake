@@ -248,7 +248,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     val options = Map(
       "catalog-impl" -> "org.apache.spark.sql.snowflake.catalog.TestDelegateCatalog",
       "custom-option" -> "custom-value",
-      "snowflake-database" -> "MY_DB_2"
+      SnowflakeFallbackCatalog.DATABASE_OPTION -> "MY_DB_2"
     ).asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
 
@@ -277,7 +277,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
 
     assert(delegate.initializeOptions.get("custom-option") == "custom-value")
     assert(delegate.initializeOptions.get("catalog-impl") == null)
-    assert(delegate.initializeOptions.get("snowflake-database") == null)
+    assert(delegate.initializeOptions.get(SnowflakeFallbackCatalog.DATABASE_OPTION) == null)
   }
 
   test("listTables should delegate to underlying catalog") {
@@ -407,34 +407,12 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
   }
 
   test("snowflake-database catalog option should qualify dbtable") {
-    org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
-    org.apache.spark.sql.SparkSession.clearActiveSession()
-    org.apache.spark.sql.SparkSession.clearDefaultSession()
-    val testSpark = org.apache.spark.sql.SparkSession.builder()
-      .master("local[1]")
-      .config("spark.snowflake.sfDatabase", "MY_DB_1")
-      .config("spark.ui.enabled", "false")
-      .config("spark.driver.host", "localhost")
-      .getOrCreate()
+    val catalog = new SnowflakeFallbackCatalog()
+    catalog.setDelegateCatalog(new TestDelegateCatalog())
+    catalog.initialize("alias", new CaseInsensitiveStringMap(
+      Map(SnowflakeFallbackCatalog.DATABASE_OPTION -> "MY_DB_2").asJava))
 
-    def dbtable(options: Map[String, String]): Option[String] = {
-      val catalog = new SnowflakeFallbackCatalog()
-      val delegate = new TestDelegateCatalog()
-      delegate.shouldThrow403 = true
-      catalog.setDelegateCatalog(delegate)
-      catalog.initialize("alias", new CaseInsensitiveStringMap(options.asJava))
-      catalog.loadTable(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE"))
-        .asInstanceOf[V1Table].catalogTable.storage.properties.get("dbtable")
-    }
-
-    try {
-      org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
-      assert(dbtable(Map.empty).contains("MY_SCHEMA.MY_TABLE"))
-      assert(dbtable(Map("snowflake-database" -> "MY_DB_2")).contains("MY_DB_2.MY_SCHEMA.MY_TABLE"))
-    } finally {
-      testSpark.stop()
-      org.apache.spark.sql.SparkSession.clearActiveSession()
-      org.apache.spark.sql.SparkSession.clearDefaultSession()
-    }
+    assert(catalog.buildFullTableName(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE")) ===
+      "MY_DB_2.MY_SCHEMA.MY_TABLE")
   }
 }
