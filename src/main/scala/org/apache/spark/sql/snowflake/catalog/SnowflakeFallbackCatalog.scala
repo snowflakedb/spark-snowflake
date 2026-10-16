@@ -219,8 +219,18 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
    * @param ident The V2 Identifier with namespace and table name
    * @return The fully qualified table name for the dbtable property
    */
-  private[snowflake] def buildFullTableName(ident: Identifier): String =
-    (snowflakeDatabase.toSeq ++ ident.namespace() :+ ident.name()).mkString(".")
+  private[snowflake] def buildFullTableName(ident: Identifier): String = {
+    val namespace = if (ident.namespace().nonEmpty) {
+      Some((snowflakeDatabase.toSeq ++ ident.namespace()).mkString("."))
+    } else {
+      None
+    }
+
+    namespace match {
+      case Some(ns) => s"$ns.${ident.name()}"
+      case None => ident.name()
+    }
+  }
 
   /**
    * Creates a CatalogTable using Scala runtime reflection to ensure compatibility
