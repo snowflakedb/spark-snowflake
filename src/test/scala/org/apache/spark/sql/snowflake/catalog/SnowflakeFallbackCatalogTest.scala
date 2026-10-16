@@ -247,7 +247,8 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
 
     val options = Map(
       "catalog-impl" -> "org.apache.spark.sql.snowflake.catalog.TestDelegateCatalog",
-      "custom-option" -> "custom-value"
+      "custom-option" -> "custom-value",
+      "snowflake-database" -> "MY_DB_2"
     ).asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
 
@@ -276,6 +277,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
 
     assert(delegate.initializeOptions.get("custom-option") == "custom-value")
     assert(delegate.initializeOptions.get("catalog-impl") == null)
+    assert(delegate.initializeOptions.get("snowflake-database") == null)
   }
 
   test("listTables should delegate to underlying catalog") {
@@ -404,4 +406,35 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     }
   }
 
+  test("snowflake-database catalog option should override session sfDatabase") {
+    org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
+    org.apache.spark.sql.SparkSession.clearActiveSession()
+    org.apache.spark.sql.SparkSession.clearDefaultSession()
+    val testSpark = org.apache.spark.sql.SparkSession.builder()
+      .master("local[1]")
+      .config("spark.snowflake.sfDatabase", "MY_DB_1")
+      .config("spark.ui.enabled", "false")
+      .config("spark.driver.host", "localhost")
+      .getOrCreate()
+
+    def sfDatabase(options: Map[String, String]): Option[String] = {
+      val catalog = new SnowflakeFallbackCatalog()
+      val delegate = new TestDelegateCatalog()
+      delegate.shouldThrow403 = true
+      catalog.setDelegateCatalog(delegate)
+      catalog.initialize("alias", new CaseInsensitiveStringMap(options.asJava))
+      catalog.loadTable(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE"))
+        .asInstanceOf[V1Table].catalogTable.storage.properties.get("sfdatabase")
+    }
+
+    try {
+      org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
+      assert(sfDatabase(Map.empty).contains("MY_DB_1"))
+      assert(sfDatabase(Map("snowflake-database" -> "MY_DB_2")).contains("MY_DB_2"))
+    } finally {
+      testSpark.stop()
+      org.apache.spark.sql.SparkSession.clearActiveSession()
+      org.apache.spark.sql.SparkSession.clearDefaultSession()
+    }
+  }
 }

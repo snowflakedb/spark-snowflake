@@ -15,7 +15,7 @@
  */
 package org.apache.spark.sql.snowflake.catalog
 
-import net.snowflake.spark.snowflake.Utils
+import net.snowflake.spark.snowflake.{Parameters, Utils}
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -34,6 +34,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   private val log = LoggerFactory.getLogger(getClass)
   private var delegateCatalog: CatalogPlugin = _
   private var catalogName: String = _
+  private var snowflakeDatabase: Option[String] = None
 
   // Typed delegate fields for type-safe access (avoids asInstanceOf casts)
   // TableCatalog is REQUIRED - validated in setDelegateCatalog
@@ -46,6 +47,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
+    this.snowflakeDatabase = Option(options.get(SnowflakeFallbackCatalog.DATABASE_OPTION))
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
 
     // Create delegate catalog if not already set by Spark
@@ -126,7 +128,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       val delegate =
           delegateClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       // Filter out wrapper-specific options before passing to delegate
-      val wrapperSpecificKeys = Set("catalog-impl")
+      val wrapperSpecificKeys = Set("catalog-impl", SnowflakeFallbackCatalog.DATABASE_OPTION)
       val delegateOptions = options.asScala
         .filterKeys(key => !wrapperSpecificKeys.contains(key.toLowerCase))
         .toMap
@@ -362,7 +364,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       outputFormat = None,
       serde = None,
       compressed = false,
-      properties = snowflakeProps + ("dbtable" -> fullTableName)
+      properties = snowflakeProps ++ snowflakeDatabase.map(Parameters.PARAM_SF_DATABASE -> _) +
+        ("dbtable" -> fullTableName)
     )
 
     // Use reflection-based creation to ensure compatibility across Spark versions
@@ -437,4 +440,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   def loadFunction(
       ident: Identifier): org.apache.spark.sql.connector.catalog.functions.UnboundFunction =
     withFunctionCatalog(_.loadFunction(ident))
+}
+
+object SnowflakeFallbackCatalog {
+  val DATABASE_OPTION = "snowflake-database"
 }
