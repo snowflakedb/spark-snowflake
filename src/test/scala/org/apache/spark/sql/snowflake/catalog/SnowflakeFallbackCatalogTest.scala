@@ -406,7 +406,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     }
   }
 
-  test("snowflake-database catalog option should override session sfDatabase") {
+  test("snowflake-database catalog option should qualify dbtable") {
     org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
     org.apache.spark.sql.SparkSession.clearActiveSession()
     org.apache.spark.sql.SparkSession.clearDefaultSession()
@@ -417,20 +417,20 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
       .config("spark.driver.host", "localhost")
       .getOrCreate()
 
-    def sfDatabase(options: Map[String, String]): Option[String] = {
+    def dbtable(options: Map[String, String]): Option[String] = {
       val catalog = new SnowflakeFallbackCatalog()
       val delegate = new TestDelegateCatalog()
       delegate.shouldThrow403 = true
       catalog.setDelegateCatalog(delegate)
       catalog.initialize("alias", new CaseInsensitiveStringMap(options.asJava))
       catalog.loadTable(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE"))
-        .asInstanceOf[V1Table].catalogTable.storage.properties.get("sfdatabase")
+        .asInstanceOf[V1Table].catalogTable.storage.properties.get("dbtable")
     }
 
     try {
       org.apache.spark.sql.SparkSession.setActiveSession(testSpark)
-      assert(sfDatabase(Map.empty).contains("MY_DB_1"))
-      assert(sfDatabase(Map("snowflake-database" -> "MY_DB_2")).contains("MY_DB_2"))
+      assert(dbtable(Map.empty).contains("MY_SCHEMA.MY_TABLE"))
+      assert(dbtable(Map("snowflake-database" -> "MY_DB_2")).contains("MY_DB_2.MY_SCHEMA.MY_TABLE"))
     } finally {
       testSpark.stop()
       org.apache.spark.sql.SparkSession.clearActiveSession()

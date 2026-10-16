@@ -15,7 +15,7 @@
  */
 package org.apache.spark.sql.snowflake.catalog
 
-import net.snowflake.spark.snowflake.{Parameters, Utils}
+import net.snowflake.spark.snowflake.Utils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -356,7 +356,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       s"(${snowflakeProps.size} keys): ${snowflakeProps.keys.mkString(", ")}")
 
     // Build full table name for dbtable using the buildFullTableName method
-    val fullTableName = buildFullTableName(ident)
+    val tableName = buildFullTableName(ident)
+    val fullTableName = snowflakeDatabase.fold(tableName)(db => s"$db.$tableName")
 
     val storage = CatalogStorageFormat(
       locationUri = None,
@@ -364,8 +365,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       outputFormat = None,
       serde = None,
       compressed = false,
-      properties = snowflakeProps ++ snowflakeDatabase.map(Parameters.PARAM_SF_DATABASE -> _) +
-        ("dbtable" -> fullTableName)
+      properties = snowflakeProps + ("dbtable" -> fullTableName)
     )
 
     // Use reflection-based creation to ensure compatibility across Spark versions
