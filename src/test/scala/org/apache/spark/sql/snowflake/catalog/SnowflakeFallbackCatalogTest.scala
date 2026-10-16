@@ -248,7 +248,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     val options = Map(
       "catalog-impl" -> "org.apache.spark.sql.snowflake.catalog.TestDelegateCatalog",
       "custom-option" -> "custom-value",
-      SnowflakeFallbackCatalog.DATABASE_OPTION -> "MY_DB_2"
+      "snowflake-database" -> "MY_DB_2"
     ).asJava
     val optionsMap = new CaseInsensitiveStringMap(options)
 
@@ -277,7 +277,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
 
     assert(delegate.initializeOptions.get("custom-option") == "custom-value")
     assert(delegate.initializeOptions.get("catalog-impl") == null)
-    assert(delegate.initializeOptions.get(SnowflakeFallbackCatalog.DATABASE_OPTION) == null)
+    assert(delegate.initializeOptions.get("snowflake-database") == null)
   }
 
   test("listTables should delegate to underlying catalog") {
@@ -410,7 +410,7 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     val catalog = new SnowflakeFallbackCatalog()
     catalog.setDelegateCatalog(new TestDelegateCatalog())
     catalog.initialize("alias", new CaseInsensitiveStringMap(
-      Map(SnowflakeFallbackCatalog.DATABASE_OPTION -> "MY_DB_2").asJava))
+      Map("snowflake-database" -> "MY_DB_2").asJava))
 
     assert(catalog.buildFullTableName(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE")) ===
       "MY_DB_2.MY_SCHEMA.MY_TABLE")

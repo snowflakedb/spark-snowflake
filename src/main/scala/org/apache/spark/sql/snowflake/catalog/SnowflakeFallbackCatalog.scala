@@ -47,7 +47,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
-    this.snowflakeDatabase = Option(options.get(SnowflakeFallbackCatalog.DATABASE_OPTION))
+    this.snowflakeDatabase = Option(options.get("snowflake-database"))
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
 
     // Create delegate catalog if not already set by Spark
@@ -128,7 +128,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       val delegate =
           delegateClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       // Filter out wrapper-specific options before passing to delegate
-      val wrapperSpecificKeys = Set("catalog-impl", SnowflakeFallbackCatalog.DATABASE_OPTION)
+      val wrapperSpecificKeys = Set("catalog-impl", "snowflake-database")
       val delegateOptions = options.asScala
         .filterKeys(key => !wrapperSpecificKeys.contains(key.toLowerCase))
         .toMap
@@ -440,8 +440,4 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   def loadFunction(
       ident: Identifier): org.apache.spark.sql.connector.catalog.functions.UnboundFunction =
     withFunctionCatalog(_.loadFunction(ident))
-}
-
-object SnowflakeFallbackCatalog {
-  val DATABASE_OPTION = "snowflake-database"
 }
