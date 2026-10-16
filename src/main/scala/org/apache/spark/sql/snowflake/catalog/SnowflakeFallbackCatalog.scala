@@ -365,7 +365,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       outputFormat = None,
       serde = None,
       compressed = false,
-      properties = snowflakeProps + ("dbtable" -> fullTableName)
+      properties = snowflakeDatabase.map("sfdatabase" -> _).toMap ++ snowflakeProps +
+        ("dbtable" -> fullTableName)
     )
 
     // Use reflection-based creation to ensure compatibility across Spark versions

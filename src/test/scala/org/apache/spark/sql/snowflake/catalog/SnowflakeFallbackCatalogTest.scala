@@ -415,4 +415,36 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     assert(catalog.buildFullTableName(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE")) ===
       "MY_DB_2.MY_SCHEMA.MY_TABLE")
   }
+
+  test("snowflake-database should default sfdatabase only when session does not set it") {
+    def fallbackSfDatabase(sessionConf: Map[String, String]): Option[String] = {
+      org.apache.spark.sql.SparkSession.getDefaultSession.foreach(_.stop())
+      org.apache.spark.sql.SparkSession.clearActiveSession()
+      org.apache.spark.sql.SparkSession.clearDefaultSession()
+      val spark = org.apache.spark.sql.SparkSession.builder()
+        .master("local[1]")
+        .config("spark.ui.enabled", "false")
+        .config("spark.driver.host", "localhost")
+        .config(sessionConf)
+        .getOrCreate()
+      try {
+        org.apache.spark.sql.SparkSession.setActiveSession(spark)
+        val catalog = new SnowflakeFallbackCatalog()
+        val delegate = new TestDelegateCatalog()
+        delegate.shouldThrow403 = true
+        catalog.setDelegateCatalog(delegate)
+        catalog.initialize("alias", new CaseInsensitiveStringMap(
+          Map("snowflake-database" -> "MY_DB_2").asJava))
+        catalog.loadTable(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE"))
+          .asInstanceOf[V1Table].catalogTable.storage.properties.get("sfdatabase")
+      } finally {
+        spark.stop()
+        org.apache.spark.sql.SparkSession.clearActiveSession()
+        org.apache.spark.sql.SparkSession.clearDefaultSession()
+      }
+    }
+
+    assert(fallbackSfDatabase(Map.empty).contains("MY_DB_2"))
+    assert(fallbackSfDatabase(Map("spark.snowflake.sfDatabase" -> "MY_DB_1")).contains("MY_DB_1"))
+  }
 }
