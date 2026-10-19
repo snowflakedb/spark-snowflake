@@ -47,11 +47,9 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
-    // Inserted unquoted into dbtable. snowflake-database overrides; otherwise the Iceberg
-    // warehouse, which Horizon IRC maps to the Snowflake database
-    this.snowflakeDatabase = Seq("snowflake-database", "warehouse").view
-      .flatMap(key => Option(options.get(key)).map(_.trim).filter(_.nonEmpty))
-      .headOption
+    // Inserted unquoted into dbtable; snowflake-database overrides the catalog name
+    this.snowflakeDatabase = Some(
+      Option(options.get("snowflake-database")).map(_.trim).filter(_.nonEmpty).getOrElse(name))
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
 
     // Create delegate catalog if not already set by Spark
@@ -218,7 +216,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
    * - Identifier(["db", "schema"], "table") → "db.schema.table"
    * - Identifier(["schema"], "table") → "schema.table"
    * - Identifier([], "table") → "table"
-   * - with a database resolved from snowflake-database (or else warehouse) "db",
+   * - with a database resolved from snowflake-database (or else the catalog name) "db",
    *   Identifier(["schema"], "table") -> "db.schema.table"; any other namespace length is rejected
    *
    * @param ident The V2 Identifier with namespace and table name
@@ -227,7 +225,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   private[snowflake] def buildFullTableName(ident: Identifier): String = {
     require(snowflakeDatabase.isEmpty || ident.namespace().length == 1,
       s"Catalog '$catalogName' resolves Snowflake database '${snowflakeDatabase.getOrElse("")}' " +
-        "(from snowflake-database or warehouse), which requires a single-level " +
+        "(from snowflake-database or the catalog name), which requires a single-level " +
         s"namespace (schema.table), but got: $ident")
     val namespace = if (ident.namespace().nonEmpty) {
       Some((snowflakeDatabase.toSeq ++ ident.namespace()).mkString("."))
