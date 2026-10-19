@@ -111,9 +111,12 @@ private[snowflake] object FilterPushdown {
       }
     }
 
+    // Plain unquoted identifiers are emitted as-is; any other name is emitted
+    // as a single quoted identifier.
     def wrap(name: String): String =
       if (keepNameCase) Utils.quotedNameIgnoreCase(name)
-      else name
+      else if (name.matches("[_a-zA-Z][_0-9a-zA-Z$]*")) name
+      else Utils.ensureQuoted(name)
 
     filter match {
       case EqualTo(attr, value) => buildComparison(attr, value, "=")

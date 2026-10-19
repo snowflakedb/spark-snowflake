@@ -648,7 +648,8 @@ object Utils {
           field =>
             StructField(
               if (field.name.startsWith("\"") && field.name.endsWith("\"")) {
-                field.name.substring(1, field.name.length - 1)
+                val inner = field.name.substring(1, field.name.length - 1)
+                if (isQuoted(field.name)) inner.replace("\"\"", "\"") else inner
               } else {
                 field.name
               },

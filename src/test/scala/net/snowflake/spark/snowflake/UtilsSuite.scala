@@ -181,6 +181,18 @@ class UtilsSuite extends AnyFunSuite with Matchers {
     }
   }
 
+  test("removeQuote recovers the original column name") {
+    import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+    val schema = StructType(
+      Seq(
+        StructField("COL1", IntegerType),
+        StructField("\"Mixed Case\"", IntegerType),
+        StructField("\"a\"\"b\"", IntegerType)
+      )
+    )
+    Utils.removeQuote(schema).fieldNames shouldBe Array("COL1", "Mixed Case", "a\"b")
+  }
+
   test("verify JDBC version is updated for release") {
     assert(Utils.CERTIFIED_JDBC_VERSION.equals(Utils.jdbcVersion))
   }
