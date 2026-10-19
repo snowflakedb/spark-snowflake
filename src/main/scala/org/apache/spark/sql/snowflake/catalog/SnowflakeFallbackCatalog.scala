@@ -47,9 +47,9 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
-    // Inserted unquoted into dbtable; snowflake-database overrides the catalog name
-    this.snowflakeDatabase = Some(
-      Option(options.get("snowflake-database")).map(_.trim).filter(_.nonEmpty).getOrElse(name))
+    // Inserted unquoted into dbtable
+    this.snowflakeDatabase =
+      Option(options.get("snowflake-database")).map(_.trim).filter(_.nonEmpty)
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
 
     // Create delegate catalog if not already set by Spark
@@ -208,6 +208,9 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     causeMessage.contains("403") || causeMessage.contains("Forbidden")
   }
 
+  private[snowflake] def resolveDatabase(sessionDatabase: Option[String]): Option[String] =
+    snowflakeDatabase.orElse(Option(catalogName).filter(_ => sessionDatabase.isEmpty))
+
   /**
    * Constructs the dbtable property value from a V2 Identifier.
    * This converts multi-part namespaces into Snowflake's dot-separated format.
@@ -216,19 +219,19 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
    * - Identifier(["db", "schema"], "table") → "db.schema.table"
    * - Identifier(["schema"], "table") → "schema.table"
    * - Identifier([], "table") → "table"
-   * - with a database resolved from snowflake-database (or else the catalog name) "db",
-   *   Identifier(["schema"], "table") -> "db.schema.table"; any other namespace length is rejected
+   * - with snowflake-database "db" set, Identifier(["schema"], "table") -> "db.schema.table";
+   *   any other namespace length is rejected
    *
    * @param ident The V2 Identifier with namespace and table name
    * @return The fully qualified table name for the dbtable property
    */
-  private[snowflake] def buildFullTableName(ident: Identifier): String = {
-    require(snowflakeDatabase.isEmpty || ident.namespace().length == 1,
-      s"Catalog '$catalogName' resolves Snowflake database '${snowflakeDatabase.getOrElse("")}' " +
-        "(from snowflake-database or the catalog name), which requires a single-level " +
-        s"namespace (schema.table), but got: $ident")
+  private[snowflake] def buildFullTableName(
+      ident: Identifier, database: Option[String] = resolveDatabase(None)): String = {
+    require(database.isEmpty || ident.namespace().length == 1,
+      s"Catalog '$catalogName' resolves Snowflake database '${database.get}', which requires " +
+        s"a single-level namespace (schema.table), but got: $ident")
     val namespace = if (ident.namespace().nonEmpty) {
-      Some((snowflakeDatabase.toSeq ++ ident.namespace()).mkString("."))
+      Some((database.toSeq ++ ident.namespace()).mkString("."))
     } else {
       None
     }
@@ -364,7 +367,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       s"(${snowflakeProps.size} keys): ${snowflakeProps.keys.mkString(", ")}")
 
     // Build full table name for dbtable using the buildFullTableName method
-    val fullTableName = buildFullTableName(ident)
+    val database = resolveDatabase(snowflakeProps.get(Parameters.PARAM_SF_DATABASE))
+    val fullTableName = buildFullTableName(ident, database)
 
     val storage = CatalogStorageFormat(
       locationUri = None,
@@ -372,7 +376,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       outputFormat = None,
       serde = None,
       compressed = false,
-      properties = snowflakeDatabase.map(Parameters.PARAM_SF_DATABASE -> _).toMap ++
+      properties = database.map(Parameters.PARAM_SF_DATABASE -> _).toMap ++
         snowflakeProps + ("dbtable" -> fullTableName)
     )
 

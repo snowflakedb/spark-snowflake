@@ -449,6 +449,21 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     }
   }
 
+  test("session sfdatabase should replace the catalog name but not snowflake-database") {
+    val byName = new SnowflakeFallbackCatalog()
+    byName.setDelegateCatalog(new TestDelegateCatalog())
+    byName.initialize("MY_DB_2", new CaseInsensitiveStringMap(Map.empty[String, String].asJava))
+    assert(byName.resolveDatabase(Some("MY_DB_1")).isEmpty)
+    assert(byName.buildFullTableName(Identifier.of(Array("A", "B"), "MY_TABLE"),
+      byName.resolveDatabase(Some("MY_DB_1"))) === "A.B.MY_TABLE")
+
+    val explicit = new SnowflakeFallbackCatalog()
+    explicit.setDelegateCatalog(new TestDelegateCatalog())
+    explicit.initialize("MY_DB_2", new CaseInsensitiveStringMap(
+      Map("snowflake-database" -> "MY_DB_3").asJava))
+    assert(explicit.resolveDatabase(Some("MY_DB_1")).contains("MY_DB_3"))
+  }
+
   test("each catalog registered in Spark should use its own name as the database") {
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearActiveSession()
@@ -522,5 +537,9 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     val fromCatalogName = fallbackProps(Map.empty, Map.empty, "MY_DB_3")
     assert(fromCatalogName.get("sfdatabase").contains("MY_DB_3"))
     assert(fromCatalogName.get("dbtable").contains("MY_DB_3.MY_SCHEMA.MY_TABLE"))
+    val sessionOverName =
+      fallbackProps(Map("spark.snowflake.sfDatabase" -> "MY_DB_1"), Map.empty, "MY_DB_3")
+    assert(sessionOverName.get("sfdatabase").contains("MY_DB_1"))
+    assert(sessionOverName.get("dbtable").contains("MY_SCHEMA.MY_TABLE"))
   }
 }
