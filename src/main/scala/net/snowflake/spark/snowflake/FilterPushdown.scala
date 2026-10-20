@@ -111,11 +111,11 @@ private[snowflake] object FilterPushdown {
       }
     }
 
-    // Plain unquoted identifiers are emitted as-is; any other name is emitted
-    // as a single quoted identifier.
+    // Plain identifiers are emitted as-is; any other name is quoted exactly as
+    // the projection list quotes it, so both resolve to the same column.
     def wrap(name: String): String =
       if (keepNameCase) Utils.quotedNameIgnoreCase(name)
-      else if (name.matches("[_a-zA-Z][_0-9a-zA-Z$]*")) name
+      else if (Utils.isPlainIdentifier(name)) name
       else Utils.ensureQuoted(name)
 
     filter match {

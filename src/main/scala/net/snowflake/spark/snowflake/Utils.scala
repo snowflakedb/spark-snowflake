@@ -548,12 +548,18 @@ object Utils {
   }
 
   /**
+    * check whether a name is a legal identifier that needs no quoting
+    */
+  private[snowflake] def isPlainIdentifier(name: String): Boolean =
+    name.matches("[_a-zA-Z]([_0-9a-zA-Z])*")
+
+  /**
     * wrap a name with double quotes
     */
   def quotedName(name: String): String = {
     // Name legality check going from spark => SF.
     // If the input identifier is legal, uppercase before wrapping it with double quotes.
-    if (name.matches("[_a-zA-Z]([_0-9a-zA-Z])*")) {
+    if (isPlainIdentifier(name)) {
       "\"" + name.toUpperCase + "\""
     } else {
       "\"" + name.replace("\"", "\"\"") + "\""  /* Hardening */

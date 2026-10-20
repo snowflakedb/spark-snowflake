@@ -260,12 +260,14 @@ class FilterPushdownSuite extends AnyFunSuite {
     val schema = StructType(
       Seq(
         StructField("COL$1", IntegerType),
+        StructField("col$2", IntegerType),
         StructField("\"Mixed Case\"", IntegerType),
         StructField("\"a\"\"b\"", StringType)
       )
     )
     val filters = Seq(
       EqualTo("COL$1", 1),
+      EqualTo("col$2", 1),
       GreaterThan("\"Mixed Case\"", 2),
       EqualTo("\"a\"\"b\"", "x"),
       IsNull("\"a\"\"b\""),
@@ -274,7 +276,8 @@ class FilterPushdownSuite extends AnyFunSuite {
     )
     val whereClause = buildWhereStatement(schema, filters)
     val expectedWhereClause =
-      """WHERE COL$1 = 1
+      """WHERE "COL$1" = 1
+        | AND "col$2" = 1
         | AND "Mixed Case" > 2
         | AND "a""b" = 'x'
         | AND ( "a""b" IS NULL)
