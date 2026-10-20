@@ -97,7 +97,7 @@ private[snowflake] class JDBCWrapper {
         if (params.keepOriginalColumnNameCase) columnName
         // Add quotes around column names if Snowflake would usually require them.
         else if (columnName.matches("[_A-Z]([_0-9A-Z])*")) columnName
-        else s""""$columnName"""",
+        else "\"" + columnName.replace("\"", "\"\"") + "\"",
         columnType,
         nullable
       )

@@ -111,9 +111,12 @@ private[snowflake] object FilterPushdown {
       }
     }
 
+    // Plain identifiers are emitted as-is; any other name is quoted exactly as
+    // the projection list quotes it, so both resolve to the same column.
     def wrap(name: String): String =
       if (keepNameCase) Utils.quotedNameIgnoreCase(name)
-      else name
+      else if (Utils.isPlainIdentifier(name)) name
+      else Utils.ensureQuoted(name)
 
     filter match {
       case EqualTo(attr, value) => buildComparison(attr, value, "=")

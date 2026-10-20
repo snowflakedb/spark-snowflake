@@ -256,6 +256,80 @@ class FilterPushdownSuite extends AnyFunSuite {
     assert(whereClause.toString.replaceAll(" ", "") === expectedWhereClause.replaceAll(" ", ""))
   }
 
+  test("buildWhereClause quotes column names that are not plain identifiers") {
+    val schema = StructType(
+      Seq(
+        StructField("COL$1", IntegerType),
+        StructField("col$2", IntegerType),
+        StructField("\"Mixed Case\"", IntegerType),
+        StructField("\"a\"\"b\"", StringType)
+      )
+    )
+    val filters = Seq(
+      EqualTo("COL$1", 1),
+      EqualTo("col$2", 1),
+      GreaterThan("\"Mixed Case\"", 2),
+      EqualTo("\"a\"\"b\"", "x"),
+      IsNull("\"a\"\"b\""),
+      In("\"a\"\"b\"", Array("y")),
+      StringStartsWith("\"a\"\"b\"", "z")
+    )
+    val whereClause = buildWhereStatement(schema, filters)
+    val expectedWhereClause =
+      """WHERE "COL$1" = 1
+        | AND "col$2" = 1
+        | AND "Mixed Case" > 2
+        | AND "a""b" = 'x'
+        | AND ( "a""b" IS NULL)
+        | AND ( "a""b" IN ( 'y' ))
+        | AND STARTSWITH( "a""b" , 'z' )
+        |""".stripMargin.filter(_ >= ' ')
+    assert(whereClause.toString.replaceAll(" ", "") === expectedWhereClause.replaceAll(" ", ""))
+  }
+
+  test("buildWhereClause emits a malformed quoted column name as one identifier") {
+    val schema = StructType(Seq(StructField("\"a\"b\"", IntegerType)))
+    val whereClause = buildWhereStatement(schema, Seq(EqualTo("\"a\"b\"", 1)))
+    assert(whereClause.toString === "WHERE \"\"\"a\"\"b\"\"\" = 1")
+  }
+
+  test("column names resolved from table metadata are usable in filters") {
+    import java.sql.Types
+    import javax.sql.rowset.RowSetMetaDataImpl
+    import org.mockito.Mockito.mock
+
+    val labels = Seq("ID", "Mixed Case", "a\"b")
+    val meta = new RowSetMetaDataImpl()
+    meta.setColumnCount(labels.size)
+    labels.zipWithIndex.foreach { case (label, i) =>
+      meta.setColumnLabel(i + 1, label)
+      meta.setColumnType(i + 1, Types.VARCHAR)
+      meta.setColumnTypeName(i + 1, "VARCHAR")
+    }
+    val conn = mock(classOf[ServerConnection])
+    val baseParams = Map(
+      "tempdir" -> "s3://foo/bar",
+      "dbtable" -> "test_table",
+      "sfurl" -> "account.snowflakecomputing.com:443",
+      "sfuser" -> "username",
+      "sfpassword" -> "password"
+    )
+
+    val schema = DefaultJDBCWrapper.resolveTableFromMeta(
+      conn, meta, Parameters.mergeParameters(baseParams))
+    assert(schema.fieldNames === Array("ID", "\"Mixed Case\"", "\"a\"\"b\""))
+    assert(
+      buildWhereStatement(schema, Seq(EqualTo("\"a\"\"b\"", "v"))).toString ===
+        "WHERE \"a\"\"b\" = 'v'")
+
+    val keepCaseSchema = DefaultJDBCWrapper.resolveTableFromMeta(
+      conn, meta, Parameters.mergeParameters(baseParams + ("keep_column_case" -> "on")))
+    assert(keepCaseSchema.fieldNames === labels.toArray)
+    assert(
+      buildWhereStatement(keepCaseSchema, Seq(EqualTo("a\"b", "v")), keepNameCase = true)
+        .toString === "WHERE \"a\"\"b\" = 'v'")
+  }
+
   private val testSchema: StructType = StructType(
     Seq(
       StructField("test_byte", ByteType),
