@@ -193,7 +193,7 @@ object CloudStorageOperations {
     val blockSz = fileCipher.getBlockSize
     val ivData = new Array[Byte](blockSz)
 
-    val secRnd = SecureRandom.getInstance("SHA1PRNG", "SUN")
+    val secRnd = new SecureRandom()
     secRnd.nextBytes(new Array[Byte](10))
 
     secRnd.nextBytes(ivData)
