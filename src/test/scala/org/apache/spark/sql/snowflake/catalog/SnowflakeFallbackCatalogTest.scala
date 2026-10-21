@@ -179,8 +179,8 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
       // Check that dbtable is correctly set
       val dbtable = catalogTable.storage.properties.get("dbtable")
       assert(dbtable.isDefined, "dbtable property should be set")
-      assert(dbtable.get == "testschema.testtable",
-        s"dbtable should be 'testschema.testtable', got '${dbtable.get}'")
+      assert(dbtable.get == "\"testschema\".\"testtable\"",
+        s"dbtable should be '\"testschema\".\"testtable\"', got '${dbtable.get}'")
 
       // Verify Snowflake configs were read from SparkSession
       assert(catalogTable.storage.properties.get("url").contains("test.snowflakecomputing.com"),
@@ -340,41 +340,44 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     val catalog = new SnowflakeFallbackCatalog()
 
     // Test Case 1: Multi-part namespace (Snowflake: database.schema.table)
-    val multiPartIdent = Identifier.of(Array("production_db", "analytics_schema"), "sales_table")
+    val multiPartIdent = Identifier.of(Array("PRODUCTION_DB", "ANALYTICS_SCHEMA"), "SALES_TABLE")
     val dbTableMulti = catalog.buildFullTableName(multiPartIdent, None)
-    assert(dbTableMulti === "production_db.analytics_schema.sales_table",
-      s"Multi-part namespace: Expected 'production_db.analytics_schema.sales_table', got '$dbTableMulti'")
+    assert(dbTableMulti === "PRODUCTION_DB.ANALYTICS_SCHEMA.SALES_TABLE",
+      s"Multi-part namespace: Expected 'PRODUCTION_DB.ANALYTICS_SCHEMA.SALES_TABLE', got '$dbTableMulti'")
 
     // Test Case 2: Single-part namespace (Snowflake: schema.table)
-    val singlePartIdent = Identifier.of(Array("analytics_schema"), "sales_table")
+    val singlePartIdent = Identifier.of(Array("ANALYTICS_SCHEMA"), "SALES_TABLE")
     val dbTableSingle = catalog.buildFullTableName(singlePartIdent, None)
-    assert(dbTableSingle === "analytics_schema.sales_table",
-      s"Single-part namespace: Expected 'analytics_schema.sales_table', got '$dbTableSingle'")
+    assert(dbTableSingle === "ANALYTICS_SCHEMA.SALES_TABLE",
+      s"Single-part namespace: Expected 'ANALYTICS_SCHEMA.SALES_TABLE', got '$dbTableSingle'")
 
     // Test Case 3: No namespace (Snowflake: table only)
-    val noNamespaceIdent = Identifier.of(Array(), "sales_table")
+    val noNamespaceIdent = Identifier.of(Array(), "SALES_TABLE")
     val dbTableNone = catalog.buildFullTableName(noNamespaceIdent, None)
-    assert(dbTableNone === "sales_table",
-      s"No namespace: Expected 'sales_table', got '$dbTableNone'")
+    assert(dbTableNone === "SALES_TABLE",
+      s"No namespace: Expected 'SALES_TABLE', got '$dbTableNone'")
 
     // Test Case 4: Deep multi-part namespace (e.g., catalog.database.schema.table)
-    val deepNamespaceIdent = Identifier.of(Array("catalog", "production_db", "analytics_schema"), "sales_table")
+    val deepNamespaceIdent =
+      Identifier.of(Array("CATALOG", "PRODUCTION_DB", "ANALYTICS_SCHEMA"), "SALES_TABLE")
     val dbTableDeep = catalog.buildFullTableName(deepNamespaceIdent, None)
-    assert(dbTableDeep === "catalog.production_db.analytics_schema.sales_table",
-      s"Deep namespace: Expected 'catalog.production_db.analytics_schema.sales_table', got '$dbTableDeep'")
+    assert(dbTableDeep === "CATALOG.PRODUCTION_DB.ANALYTICS_SCHEMA.SALES_TABLE",
+      s"Deep namespace: Expected 'CATALOG.PRODUCTION_DB.ANALYTICS_SCHEMA.SALES_TABLE', got '$dbTableDeep'")
 
-    // Test Case 5: Parts that are not plain identifiers are quoted, case preserved
-    val specialIdent = Identifier.of(Array("my_db", "my-schema"), "my.table")
+    // Test Case 5: Lowercase names keep their case, e.g. CREATE ICEBERG TABLE "table1"
+    assert(catalog.buildFullTableName(Identifier.of(Array("PUBLIC"), "table1"), None) ===
+      "PUBLIC.\"table1\"")
+    assert(catalog.buildFullTableName(Identifier.of(Array("MySchema"), "Table1"), Some("MY_DB")) ===
+      "MY_DB.\"MySchema\".\"Table1\"")
+
+    // Test Case 6: Special characters are quoted, case preserved
+    val specialIdent = Identifier.of(Array("MY_DB", "my-schema"), "my.table")
     val dbTableSpecial = catalog.buildFullTableName(specialIdent, None)
-    assert(dbTableSpecial === "my_db.\"my-schema\".\"my.table\"",
-      s"Special characters: Expected 'my_db.\"my-schema\".\"my.table\"', got '$dbTableSpecial'")
+    assert(dbTableSpecial === "MY_DB.\"my-schema\".\"my.table\"",
+      s"Special characters: Expected 'MY_DB.\"my-schema\".\"my.table\"', got '$dbTableSpecial'")
 
-    // Test Case 6: Embedded double quotes are escaped
-    assert(catalog.buildFullTableName(Identifier.of(Array("s"), "a\"b"), None) === "s.\"a\"\"b\"")
-
-    // Test Case 7: Quoted parts sit after an unquoted resolved database
-    assert(catalog.buildFullTableName(Identifier.of(Array("My Schema"), "t"), Some("MY_DB")) ===
-      "MY_DB.\"My Schema\".t")
+    // Test Case 7: Embedded double quotes are escaped
+    assert(catalog.buildFullTableName(Identifier.of(Array("S"), "a\"b"), None) === "S.\"a\"\"b\"")
   }
 
   // Hardening: a runtime SQLConf value (what a Spark-SQL `SET` writes) must NOT

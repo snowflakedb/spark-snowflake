@@ -219,11 +219,12 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
    * This converts multi-part namespaces into Snowflake's dot-separated format.
    *
    * Examples:
-   * - Identifier(["db", "schema"], "table") → "db.schema.table"
-   * - Identifier(["schema"], "table") → "schema.table"
-   * - Identifier([], "table") → "table"
-   * - with database "db", Identifier(["schema"], "table") -> "db.schema.table";
+   * - Identifier(["DB", "SCHEMA"], "TABLE") → "DB.SCHEMA.TABLE"
+   * - Identifier(["SCHEMA"], "TABLE") → "SCHEMA.TABLE"
+   * - Identifier([], "TABLE") → "TABLE"
+   * - with database "DB", Identifier(["SCHEMA"], "TABLE") -> "DB.SCHEMA.TABLE";
    *   any other namespace length is rejected
+   * - Identifier(["schema"], "table1") → "\"schema\".\"table1\""
    * - Identifier(["my-schema"], "my.table") → "\"my-schema\".\"my.table\""
    *
    * @param ident The V2 Identifier with namespace and table name
@@ -240,10 +241,12 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     namespaced.mkString(".")
   }
 
-  // Plain identifiers stay unquoted so Snowflake resolves them as before; any other
-  // part is quoted so dots, dashes and other characters stay inside that part.
+  // We only get here after Horizon IRC returned 403 for this exact identifier, so the
+  // object exists under that case-sensitive name (e.g. CREATE ICEBERG TABLE "table1").
+  // Quote each part to keep its case; unquoted, Snowflake would fold "table1" to TABLE1.
+  // Uppercase plain identifiers resolve the same either way and stay unquoted.
   private def identifierPart(part: String): String =
-    if (part.matches("[_a-zA-Z][_0-9a-zA-Z]*")) part
+    if (part.matches("[_A-Z][_0-9A-Z]*")) part
     else "\"" + part.replace("\"", "\"\"") + "\""
 
   /**
