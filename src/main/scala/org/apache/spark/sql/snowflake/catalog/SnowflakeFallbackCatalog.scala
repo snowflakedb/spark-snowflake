@@ -224,6 +224,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
    * - Identifier([], "table") → "table"
    * - with database "db", Identifier(["schema"], "table") -> "db.schema.table";
    *   any other namespace length is rejected
+   * - Identifier(["my-schema"], "my.table") → "\"my-schema\".\"my.table\""
    *
    * @param ident The V2 Identifier with namespace and table name
    * @param database The Snowflake database from resolveDatabase, if any
@@ -234,17 +235,16 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     require(database.isEmpty || ident.namespace().length == 1,
       s"Catalog '$catalogName' resolves Snowflake database '${database.get}', which requires " +
         s"a single-level namespace (schema.table), but got: $ident")
-    val namespace = if (ident.namespace().nonEmpty) {
-      Some((database.toSeq ++ ident.namespace()).mkString("."))
-    } else {
-      None
-    }
-
-    namespace match {
-      case Some(ns) => s"$ns.${ident.name()}"
-      case None => ident.name()
-    }
+    val parts = ident.namespace().map(identifierPart) :+ identifierPart(ident.name())
+    val namespaced = if (ident.namespace().nonEmpty) database.toSeq ++ parts else parts.toSeq
+    namespaced.mkString(".")
   }
+
+  // Plain identifiers stay unquoted so Snowflake resolves them as before; any other
+  // part is quoted so dots, dashes and other characters stay inside that part.
+  private def identifierPart(part: String): String =
+    if (part.matches("[_a-zA-Z][_0-9a-zA-Z]*")) part
+    else "\"" + part.replace("\"", "\"\"") + "\""
 
   /**
    * Creates a CatalogTable using Scala runtime reflection to ensure compatibility
@@ -380,7 +380,10 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       outputFormat = None,
       serde = None,
       compressed = false,
-      properties = database.map(Parameters.PARAM_SF_DATABASE -> _).toMap ++
+      // keep_column_case defaults to on so column names match the Iceberg schema
+      // (e.g. Glue's lowercase "col1" rather than a quoted "\"col1\""); SparkConf can override
+      properties = Map(Parameters.PARAM_KEEP_COLUMN_CASE -> "on") ++
+        database.map(Parameters.PARAM_SF_DATABASE -> _).toMap ++
         snowflakeProps + ("dbtable" -> fullTableName)
     )
 

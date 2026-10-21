@@ -363,11 +363,18 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     assert(dbTableDeep === "catalog.production_db.analytics_schema.sales_table",
       s"Deep namespace: Expected 'catalog.production_db.analytics_schema.sales_table', got '$dbTableDeep'")
 
-    // Test Case 5: Namespace with special characters (should be preserved as-is)
+    // Test Case 5: Parts that are not plain identifiers are quoted, case preserved
     val specialIdent = Identifier.of(Array("my_db", "my-schema"), "my.table")
     val dbTableSpecial = catalog.buildFullTableName(specialIdent, None)
-    assert(dbTableSpecial === "my_db.my-schema.my.table",
-      s"Special characters: Expected 'my_db.my-schema.my.table', got '$dbTableSpecial'")
+    assert(dbTableSpecial === "my_db.\"my-schema\".\"my.table\"",
+      s"Special characters: Expected 'my_db.\"my-schema\".\"my.table\"', got '$dbTableSpecial'")
+
+    // Test Case 6: Embedded double quotes are escaped
+    assert(catalog.buildFullTableName(Identifier.of(Array("s"), "a\"b"), None) === "s.\"a\"\"b\"")
+
+    // Test Case 7: Quoted parts sit after an unquoted resolved database
+    assert(catalog.buildFullTableName(Identifier.of(Array("My Schema"), "t"), Some("MY_DB")) ===
+      "MY_DB.\"My Schema\".t")
   }
 
   // Hardening: a runtime SQLConf value (what a Spark-SQL `SET` writes) must NOT
@@ -551,5 +558,37 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
       Map("spark.snowflake.sfDatabase" -> "MY_DB_1"), Map("warehouse" -> "MY_DB_3"))
     assert(sessionOverWarehouse.get("sfdatabase").contains("MY_DB_1"))
     assert(sessionOverWarehouse.get("dbtable").contains("MY_SCHEMA.MY_TABLE"))
+  }
+
+  test("fallback V1Table should keep column case unless SparkConf overrides it") {
+    def keepColumnCase(sessionConf: Map[String, String]): Option[String] = {
+      SparkSession.getDefaultSession.foreach(_.stop())
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+      val spark = SparkSession.builder()
+        .master("local[1]")
+        .config("spark.ui.enabled", "false")
+        .config("spark.driver.host", "localhost")
+        .config(sessionConf)
+        .getOrCreate()
+      try {
+        SparkSession.setActiveSession(spark)
+        val catalog = new SnowflakeFallbackCatalog()
+        val delegate = new TestDelegateCatalog()
+        delegate.shouldThrow403 = true
+        catalog.setDelegateCatalog(delegate)
+        catalog.initialize("alias",
+          new CaseInsensitiveStringMap(Map.empty[String, String].asJava))
+        catalog.loadTable(Identifier.of(Array("MY_SCHEMA"), "MY_TABLE"))
+          .asInstanceOf[V1Table].catalogTable.storage.properties.get("keep_column_case")
+      } finally {
+        spark.stop()
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
+    }
+
+    assert(keepColumnCase(Map.empty).contains("on"))
+    assert(keepColumnCase(Map("spark.snowflake.keep_column_case" -> "off")).contains("off"))
   }
 }
