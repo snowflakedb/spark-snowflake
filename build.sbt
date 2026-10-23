@@ -84,6 +84,19 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
 
     version := s"${sparkConnectorVersion}-spark_${sparkMajorMinor(sparkVersion.value)}",
 
+    Compile / sourceGenerators += Def.task {
+      val file = (Compile / sourceManaged).value /
+        "net" / "snowflake" / "spark" / "snowflake" / "BuildInfo.scala"
+      IO.write(file,
+        s"""package net.snowflake.spark.snowflake
+           |
+           |private[snowflake] object BuildInfo {
+           |  val connectorVersion = "$sparkConnectorVersion"
+           |}
+           |""".stripMargin)
+      Seq(file)
+    }.taskValue,
+
     // Note: String comparison works for our version set (3.5, 4.0, 4.1) but
     // would break for e.g. "3.5.10" vs "3.5.9". Keep versions to X.Y.Z format.
     scalaVersion := {
@@ -242,6 +255,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     Test / fork := true,
     Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
     Test / javaOptions ++= specialJvmOptions(sparkVersion.value),
+    Test / javaOptions += s"-DexpectedConnectorVersion=$sparkConnectorVersion",
 
     // Release settings
     Global / pgpPassphrase := Properties.envOrNone("GPG_KEY_PASSPHRASE").map(_.toCharArray),
