@@ -183,7 +183,11 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
           classifier "test-sources",
         "org.apache.spark" %% "spark-catalyst" % sv % "provided, test"
           classifier "test-sources",
-        "org.apache.parquet" % "parquet-avro" % parquetAvroVersion
+        "org.apache.parquet" % "parquet-avro" % parquetAvroVersion,
+        // SnowflakeFallbackCatalog extends Iceberg's SparkCatalog
+        // Iceberg 1.7+ needs Java 11+ (1.11 needs 17); Spark 3.5 still builds/tests on Java 8
+        "org.apache.iceberg" %% s"iceberg-spark-runtime-${sparkMajorMinor(sv)}" %
+          (if (sv >= "4.0.0") "1.11.0" else "1.6.1") % "provided, test"
       ) ++ (
         if (sv >= "4.0.0") Seq(
           "org.apache.spark" %% "spark-sql-api" % sv % "provided, test"
