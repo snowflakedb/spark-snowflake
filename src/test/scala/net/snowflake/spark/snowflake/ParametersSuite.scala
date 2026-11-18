@@ -17,8 +17,11 @@
 
 package net.snowflake.spark.snowflake
 
+import org.mockito.Mockito._
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
+
+import java.sql.{Connection, SQLException, Statement}
 
 /**
   * Check validation of parameter config
@@ -431,5 +434,80 @@ class ParametersSuite extends AnyFunSuite with Matchers {
     val paramsWithFullyQualifiedStage = Parameters.mergeParameters(
       minParams ++ Map(Parameters.PARAM_SNOWFLAKE_STAGE -> "mydb.myschema.my_stage"))
     paramsWithFullyQualifiedStage.snowflakeStage shouldBe Some("mydb.myschema.my_stage")
+  }
+
+  test("iceberg freshness override is empty unless the fallback stamp is set") {
+    val plain = Parameters.mergeParameters(minParams)
+    plain.icebergFreshnessSessionOverride shouldBe None
+    plain.sfExtraOptions.keySet should not contain Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS
+
+    val off = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "off"))
+    off.icebergFreshnessSessionOverride shouldBe None
+  }
+
+  test("ENFORCED freshness override includes the legacy cache parameter") {
+    val params = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "enforced",
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "0"))
+    val freshness = params.icebergFreshnessSessionOverride.get
+    freshness.policy shouldBe "ENFORCED"
+    freshness.seconds shouldBe 0
+    freshness.alterSessionSql shouldBe
+      "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
+        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0, " +
+        "STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE = 0"
+  }
+
+  test("TARGET freshness override does not set the legacy cache parameter") {
+    val params = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "TARGET",
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "30"))
+    val sql = params.icebergFreshnessSessionOverride.get.alterSessionSql
+    sql should include ("ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'TARGET'")
+    sql should include ("ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 30")
+    sql should not include ("STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE")
+  }
+
+  test("freshness seconds outside 0 to 86400 are rejected") {
+    intercept[IllegalArgumentException] {
+      Parameters.mergeParameters(minParams ++ Map(
+        Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED",
+        Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "-1"
+      )).icebergFreshnessSessionOverride
+    }
+  }
+
+  test("a freshness stamp changes the JDBC connection cache key") {
+    val plain = new ConnectionCacheKey(Parameters.mergeParameters(minParams))
+    val stamped = new ConnectionCacheKey(Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED")))
+    plain should not equal stamped
+  }
+
+  test("freshness on a caller-supplied connection is rejected before login") {
+    val params = Parameters.mergeParameters(Map(
+      "connection_id" -> "not-a-session",
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED"))
+    val thrown = intercept[IllegalStateException] {
+      DefaultJDBCWrapper.getConnector(params)
+    }
+    thrown.getMessage should include ("caller-supplied")
+  }
+
+  test("a failed freshness ALTER SESSION names the parameter and closes the statement") {
+    val params = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED"))
+    val connection = mock(classOf[Connection])
+    val statement = mock(classOf[Statement])
+    when(connection.createStatement()).thenReturn(statement)
+    when(statement.execute(org.mockito.ArgumentMatchers.anyString()))
+      .thenThrow(new SQLException("unknown session parameter"))
+
+    val thrown = intercept[SQLException] {
+      ServerConnection.applyIcebergFreshnessSessionOverride(connection, params)
+    }
+    thrown.getMessage should include ("ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=ENFORCED")
+    verify(statement).close()
   }
 }

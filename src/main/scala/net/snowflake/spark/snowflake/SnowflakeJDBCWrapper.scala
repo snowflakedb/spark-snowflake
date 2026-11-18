@@ -109,8 +109,15 @@ private[snowflake] class JDBCWrapper {
   /**
     * Get a connection based on the provided parameters
     */
-  def getConnector(params: MergedParameters): ServerConnection =
-    ServerConnection.getServerConnection(params)
+  def getConnector(params: MergedParameters): ServerConnection = {
+    val freshness = params.icebergFreshnessSessionOverride
+    if (freshness.isDefined && params.getConnectionId.isDefined) {
+      throw new IllegalStateException(
+        "snowflake-iceberg-freshness cannot be applied to a caller-supplied Snowflake connection")
+    }
+    // A stamped read must not enter the process-wide pool. close() then ends the session.
+    ServerConnection.getServerConnection(params, useCache = freshness.isEmpty)
+  }
 
   /**
     * Compute the SQL schema string for the given Spark SQL Schema.

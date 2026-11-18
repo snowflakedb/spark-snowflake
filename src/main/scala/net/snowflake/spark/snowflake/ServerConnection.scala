@@ -316,8 +316,40 @@ private[snowflake] object ServerConnection {
       }
     }
 
+    try {
+      applyIcebergFreshnessSessionOverride(conn, params)
+    } catch {
+      case error: Throwable =>
+        try conn.close() catch { case _: Throwable => }
+        throw error
+    }
+
     jdbcConnectionCount.incrementAndGet()
     conn
+  }
+
+  /**
+   * Sets the JIT freshness overrides on a connection that is not shared.
+   * A failure is thrown with the parameter names. It is not logged and ignored.
+   */
+  private[snowflake] def applyIcebergFreshnessSessionOverride(
+      conn: Connection,
+      params: MergedParameters): Unit = {
+    params.icebergFreshnessSessionOverride.foreach { freshness =>
+      val statement = conn.createStatement()
+      try {
+        statement.execute(freshness.alterSessionSql)
+      } catch {
+        case e: SQLException =>
+          throw new SQLException(
+            "Failed to set Iceberg query freshness for the fallback read " +
+              s"(ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=${freshness.policy}, " +
+              s"ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE=${freshness.seconds}): ${e.getMessage}",
+            e)
+      } finally {
+        statement.close()
+      }
+    }
   }
 
   object providedConnections {
