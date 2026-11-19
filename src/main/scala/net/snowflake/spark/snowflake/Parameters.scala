@@ -267,22 +267,14 @@ object Parameters {
     "internal_fallback_iceberg_refresh_seconds"
   )
 
-  /** Session overrides for one fallback read. ENFORCED also sets the legacy cache parameter. */
+  /** Session overrides for one fallback read. */
   private[snowflake] case class IcebergFreshnessSessionOverride(
       policy: String,
-      seconds: Int,
-      includeLegacy: Boolean) {
-    def alterSessionSql: String = {
-      val assignments = Seq(
-        s"ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = '$policy'",
+      seconds: Int) {
+    def alterSessionSql: String =
+      "ALTER SESSION SET " +
+        s"ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = '$policy', " +
         s"ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = $seconds"
-      ) ++ (if (includeLegacy) {
-        Seq(s"STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE = $seconds")
-      } else {
-        Nil
-      })
-      "ALTER SESSION SET " + assignments.mkString(", ")
-    }
   }
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
@@ -1192,10 +1184,7 @@ object Parameters {
 
     /**
      * Freshness overrides requested by SnowflakeFallbackCatalog.
-     * Empty when the catalog option is off. ENFORCED includes the legacy
-     * STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE so the read still refreshes
-     * when ENABLE_JIT_REFRESH_PARAMETERS_V2 is off. TARGET cannot be expressed by
-     * that legacy parameter.
+     * Empty when the catalog option is off.
      */
     private[snowflake] def icebergFreshnessSessionOverride
         : Option[IcebergFreshnessSessionOverride] = {
@@ -1205,8 +1194,7 @@ object Parameters {
         case Some(policy @ ("ENFORCED" | "TARGET")) =>
           val seconds = parseFreshnessSeconds(
             parameters.getOrElse(PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS, "0"))
-          Some(IcebergFreshnessSessionOverride(
-            policy, seconds, includeLegacy = policy == "ENFORCED"))
+          Some(IcebergFreshnessSessionOverride(policy, seconds))
         case Some(other) =>
           throw new IllegalArgumentException(
             s"$PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS must be ENFORCED or TARGET, got '$other'")

@@ -446,7 +446,7 @@ class ParametersSuite extends AnyFunSuite with Matchers {
     off.icebergFreshnessSessionOverride shouldBe None
   }
 
-  test("ENFORCED freshness override includes the legacy cache parameter") {
+  test("ENFORCED freshness override sets only the current parameters") {
     val params = Parameters.mergeParameters(minParams ++ Map(
       Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "enforced",
       Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "0"))
@@ -455,18 +455,17 @@ class ParametersSuite extends AnyFunSuite with Matchers {
     freshness.seconds shouldBe 0
     freshness.alterSessionSql shouldBe
       "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
-        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0, " +
-        "STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE = 0"
+        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0"
   }
 
-  test("TARGET freshness override does not set the legacy cache parameter") {
+  test("TARGET freshness override sets only the current parameters") {
     val params = Parameters.mergeParameters(minParams ++ Map(
       Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "TARGET",
       Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "30"))
     val sql = params.icebergFreshnessSessionOverride.get.alterSessionSql
-    sql should include ("ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'TARGET'")
-    sql should include ("ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 30")
-    sql should not include ("STATEMENT_ICEBERG_METADATA_CACHE_SECONDS_OVERRIDE")
+    sql shouldBe
+      "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'TARGET', " +
+        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 30"
   }
 
   test("freshness seconds outside 0 to 86400 are rejected") {

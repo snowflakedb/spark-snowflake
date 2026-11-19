@@ -329,7 +329,7 @@ private[snowflake] object ServerConnection {
   }
 
   /**
-   * Sets the JIT freshness overrides on a connection that is not shared.
+   * Sets the Iceberg freshness overrides on a connection that is not shared.
    * A failure is thrown with the parameter names. It is not logged and ignored.
    */
   private[snowflake] def applyIcebergFreshnessSessionOverride(
