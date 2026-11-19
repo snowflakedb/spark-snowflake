@@ -23,107 +23,105 @@ private[snowflake] object StageReader {
                     statement: SnowflakeSQLStatement,
                     format: SupportedFormat): RDD[String] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
-    try {
-      val (storage, stage) =
-        CloudStorageOperations.createStorageClient(
-          params, conn, tempStage = true, params.snowflakeStage, "unload")
-      val compress = params.sfCompress
-      val compressFormat = if (params.sfCompress) "gzip" else "none"
+    val (storage, stage) =
+      CloudStorageOperations.createStorageClient(
+        params, conn, tempStage = true, params.snowflakeStage, "unload")
+    val compress = params.sfCompress
+    val compressFormat = if (params.sfCompress) "gzip" else "none"
 
-      Utils.genPrologueSql(params).foreach(x => x.execute(params.bindVariableEnabled)(conn))
+    Utils.genPrologueSql(params).foreach(x => x.execute(params.bindVariableEnabled)(conn))
 
-      Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
+    Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
 
-      val prefix = Random.alphanumeric take 10 mkString ""
+    val prefix = Random.alphanumeric take 10 mkString ""
 
-      val copyStatement = buildUnloadStatement(
-        params,
-        statement,
-        s"@$stage/$prefix/",
-        compressFormat,
-        format
-      )
-      logger.info(s"Now executing below command to read from snowflake:\n${copyStatement.toString}")
+    val copyStatement = buildUnloadStatement(
+      params,
+      statement,
+      s"@$stage/$prefix/",
+      compressFormat,
+      format
+    )
+    logger.info(s"Now executing below command to read from snowflake:\n${copyStatement.toString}")
 
-      val startTime = System.currentTimeMillis()
-      val res = try {
-        if (params.isExecuteQueryWithSyncMode) {
-          copyStatement.execute(params.bindVariableEnabled)(conn)
-        } else {
-          val asyncRs = copyStatement.executeAsync(bindVariableEnabled = false)(conn)
-          val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-          logger.info(s"The query ID for async reading from snowflake with COPY INTO LOCATION is: " +
-            s"$queryID; The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
-          SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
-          // Call getMetaData() to wait fot the async query to be done
-          // Note: do not call next() to wait for the query to be done because
-          // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
-          asyncRs.getMetaData
-          SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
-          asyncRs
-        }
-      } catch {
-        case th: Throwable => {
-          // send telemetry message
-          SnowflakeTelemetry.sendQueryStatus(
-            conn,
-            TelemetryConstValues.OPERATION_READ,
-            copyStatement.getLastQueryID(),
-            TelemetryConstValues.STATUS_FAIL,
-            System.currentTimeMillis() - startTime,
-            Some(th),
-            "Hit exception when reading with COPY INTO LOCATION")
-          // Re-throw the exception
-          throw th
-        }
+    val startTime = System.currentTimeMillis()
+    val res = try {
+      if (params.isExecuteQueryWithSyncMode) {
+        copyStatement.execute(params.bindVariableEnabled)(conn)
+      } else {
+        val asyncRs = copyStatement.executeAsync(bindVariableEnabled = false)(conn)
+        val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
+        logger.info(s"The query ID for async reading from snowflake with COPY INTO LOCATION is: " +
+          s"$queryID; The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+        SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
+        // Call getMetaData() to wait fot the async query to be done
+        // Note: do not call next() to wait for the query to be done because
+        // it will change the ResultSet, so getCopyMissedFiles() doesn't work.
+        asyncRs.getMetaData
+        SparkConnectorContext.removeRunningQuery(sqlContext.sparkContext, conn, queryID)
+        asyncRs
       }
-      val queryID = res.asInstanceOf[SnowflakeResultSet].getQueryID
-      Utils.setLastSelectQueryId(queryID)
+    } catch {
+      case th: Throwable => {
+        // send telemetry message
+        SnowflakeTelemetry.sendQueryStatus(
+          conn,
+          TelemetryConstValues.OPERATION_READ,
+          copyStatement.getLastQueryID(),
+          TelemetryConstValues.STATUS_FAIL,
+          System.currentTimeMillis() - startTime,
+          Some(th),
+          "Hit exception when reading with COPY INTO LOCATION")
+        // Re-throw the exception
+        throw th
+      }
+    }
+    val queryID = res.asInstanceOf[SnowflakeResultSet].getQueryID
+    Utils.setLastSelectQueryId(queryID)
 
-      // Verify it's the expected format
-      val sch = res.getMetaData
-      if (sch.getColumnCount >= 3) {
-        // Format V1 for COPY INTO LOCATION. The result format is:
-        // rows_unloaded    input_bytes    output_bytes
-        // Format V2 for COPY INTO LOCATION. The result format is:
-        // ROW_COUNT    FILE_NAME     FILE_SIZE
-        val thirdColumnName = sch.getColumnName(3)
-        val thirdColumnType = sch.getColumnTypeName(3)
-        if (("output_bytes".equalsIgnoreCase(thirdColumnName)
-          || "FILE_SIZE".equalsIgnoreCase(thirdColumnName))
-          && "number".equalsIgnoreCase(thirdColumnType))
-        {
-          var rowCount: Long = 0
-          var dataSize: Long = 0
-          while (res.next) {
-            rowCount += res.getLong(1)
-            dataSize += res.getLong(3)
-          }
-          sendEgressUsage(conn, queryID, rowCount, dataSize)
-        } else {
-          logger.warn(
-            s"""The result format of COPY INTO LOCATION is not recognized.
-               | $thirdColumnName $thirdColumnType""".stripMargin)
+    // Verify it's the expected format
+    val sch = res.getMetaData
+    if (sch.getColumnCount >= 3) {
+      // Format V1 for COPY INTO LOCATION. The result format is:
+      // rows_unloaded    input_bytes    output_bytes
+      // Format V2 for COPY INTO LOCATION. The result format is:
+      // ROW_COUNT    FILE_NAME     FILE_SIZE
+      val thirdColumnName = sch.getColumnName(3)
+      val thirdColumnType = sch.getColumnTypeName(3)
+      if (("output_bytes".equalsIgnoreCase(thirdColumnName)
+        || "FILE_SIZE".equalsIgnoreCase(thirdColumnName))
+        && "number".equalsIgnoreCase(thirdColumnType))
+      {
+        var rowCount: Long = 0
+        var dataSize: Long = 0
+        while (res.next) {
+          rowCount += res.getLong(1)
+          dataSize += res.getLong(3)
         }
+        sendEgressUsage(conn, queryID, rowCount, dataSize)
       } else {
         logger.warn(
           s"""The result format of COPY INTO LOCATION is not recognized.
-             | ${sch.getColumnCount}""".stripMargin)
+             | $thirdColumnName $thirdColumnType""".stripMargin)
       }
-
-      Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
-
-      SnowflakeTelemetry.send(conn.getTelemetry)
-
-      val resultRDD = storage.download(
-        sqlContext.sparkContext, format, compress, prefix)
-
-      // The connection can't be closed before download because the spark driver
-      // needs the connection to acquire the credential for distributed download.
-      resultRDD
-    } finally {
-      conn.close()
+    } else {
+      logger.warn(
+        s"""The result format of COPY INTO LOCATION is not recognized.
+           | ${sch.getColumnCount}""".stripMargin)
     }
+
+    Utils.executePostActions(DefaultJDBCWrapper, conn, params, params.table)
+
+    SnowflakeTelemetry.send(conn.getTelemetry)
+
+    val resultRDD = storage.download(
+      sqlContext.sparkContext, format, compress, prefix)
+
+    // The connection can't be closed before download because the spark driver
+    // needs the connection to acquire the credential for distributed download.
+    conn.close()
+
+    resultRDD
   }
 
   private def buildUnloadStatement(

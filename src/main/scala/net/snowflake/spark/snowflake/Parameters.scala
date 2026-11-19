@@ -258,24 +258,15 @@ object Parameters {
 
   val PARAM_CONNECTION_ID: String = knownParam("connection_id")
 
-  // Written only by SnowflakeFallbackCatalog. A value here opens an uncached JDBC
-  // session and sets the Iceberg freshness overrides on that session alone.
-  val PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS: String = knownParam(
-    "internal_fallback_iceberg_freshness"
-  )
-  val PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS: String = knownParam(
-    "internal_fallback_iceberg_refresh_seconds"
+  // Written only by SnowflakeFallbackCatalog. Selects the freshness connection cache.
+  val PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS: String = knownParam(
+    "internal_fallback_ensure_freshness"
   )
 
-  /** Session overrides for one fallback read. */
-  private[snowflake] case class IcebergFreshnessSessionOverride(
-      policy: String,
-      seconds: Int) {
-    def alterSessionSql: String =
-      "ALTER SESSION SET " +
-        s"ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = '$policy', " +
-        s"ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = $seconds"
-  }
+  /** Fixed session values for a freshness connection. */
+  private[snowflake] val ENSURE_FRESHNESS_ALTER_SESSION_SQL: String =
+    "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
+      "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0"
 
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
@@ -1182,41 +1173,9 @@ object Parameters {
       parameters.get(PARAM_CONNECTION_ID)
     }
 
-    /**
-     * Freshness overrides requested by SnowflakeFallbackCatalog.
-     * Empty when the catalog option is off.
-     */
-    private[snowflake] def icebergFreshnessSessionOverride
-        : Option[IcebergFreshnessSessionOverride] = {
-      parameters.get(PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS)
-        .map(_.trim).filter(_.nonEmpty).map(_.toUpperCase) match {
-        case None | Some("OFF") => None
-        case Some(policy @ ("ENFORCED" | "TARGET")) =>
-          val seconds = parseFreshnessSeconds(
-            parameters.getOrElse(PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS, "0"))
-          Some(IcebergFreshnessSessionOverride(policy, seconds))
-        case Some(other) =>
-          throw new IllegalArgumentException(
-            s"$PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS must be ENFORCED or TARGET, got '$other'")
-      }
-    }
-
-    private def parseFreshnessSeconds(raw: String): Int = {
-      val seconds =
-        try raw.trim.toInt
-        catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(
-              s"$PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS must be an integer " +
-                s"from 0 to 86400, got '$raw'")
-        }
-      if (seconds < 0 || seconds > 86400) {
-        throw new IllegalArgumentException(
-          s"$PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS must be an integer " +
-            s"from 0 to 86400, got '$raw'")
-      }
-      seconds
-    }
+    /** True when this relation should use the freshness connection cache. */
+    private[snowflake] def ensureIcebergFreshness: Boolean =
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS, "false"))
 
     /**
       * Generate private key form pem key value

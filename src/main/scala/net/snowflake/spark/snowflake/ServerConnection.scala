@@ -99,11 +99,35 @@ private[snowflake] object ServerConnection {
     new ServerConnection(jdbcConnection, true)
 
   private val cachedJdbcConnections = mutable.Map[ConnectionCacheKey, Connection]()
+  // Sessions that have the Iceberg freshness overrides. Never returned to a normal read.
+  private val freshnessJdbcConnections = mutable.Map[ConnectionCacheKey, Connection]()
 
   def closeAllCachedConnections: Unit = synchronized {
-    log.info(s"Close all ${cachedJdbcConnections.size} cached connection.")
+    log.info(s"Close all ${cachedJdbcConnections.size} cached connection " +
+      s"and ${freshnessJdbcConnections.size} freshness connection.")
     cachedJdbcConnections.values.foreach(_.close())
     cachedJdbcConnections.clear()
+    freshnessJdbcConnections.values.foreach(_.close())
+    freshnessJdbcConnections.clear()
+  }
+
+  /**
+   * A cached session for fallback reads that need a fresh Iceberg snapshot.
+   * The caller does not close it. closeAllCachedConnections does, when the application ends.
+   */
+  def getFreshnessServerConnection(parameters: MergedParameters): ServerConnection = synchronized {
+    if (parameters.getConnectionId.isDefined) {
+      throw new IllegalStateException(
+        "snowflake-ensure-freshness cannot be applied to a caller-supplied Snowflake connection")
+    }
+    val connectionCacheKey = new ConnectionCacheKey(parameters)
+    serverConnection(
+      parameters,
+      connectionCacheKey,
+      freshnessJdbcConnections,
+      enableCache = true,
+      label = "freshness ",
+      onCreated = applyIcebergFreshnessSessionOverride)
   }
 
   def getServerConnection(parameters: MergedParameters, useCache: Boolean = true)
@@ -113,35 +137,55 @@ private[snowflake] object ServerConnection {
     // since the Snowpark connection in the staging area will be purged after get.
     val enableCache = (useCache || parameters.getConnectionId.isDefined) &&
       connectionCacheKey.isConnectionCacheSupported
+    serverConnection(parameters, connectionCacheKey, cachedJdbcConnections, enableCache, label = "")
+  }
+
+  /**
+   * Borrow a session from one cache. A miss logs in, runs onCreated, and stores the connection
+   * when caching is enabled. close() on the returned wrapper does not close a cached session.
+   */
+  private def serverConnection(
+      parameters: MergedParameters,
+      connectionCacheKey: ConnectionCacheKey,
+      cache: mutable.Map[ConnectionCacheKey, Connection],
+      enableCache: Boolean,
+      label: String,
+      onCreated: Connection => Unit = _ => ()): ServerConnection = {
     val (jdbcConnection, newConnection) =
-      if (enableCache && cachedJdbcConnections.keySet.contains(connectionCacheKey)) {
-        (cachedJdbcConnections(connectionCacheKey), false)
+      if (enableCache && cache.keySet.contains(connectionCacheKey)) {
+        (cache(connectionCacheKey), false)
       } else {
-        val newConnection: Connection = parameters.getConnectionId match {
+        val created: Connection = parameters.getConnectionId match {
           case Some(connectionId) =>
             val snowparkConnection =
               ServerConnection.providedConnections.getConnection(connectionId).getOrElse{
                 throw new RuntimeException("Internal Error: Can't find the Snowpark Session")
               }
             log.debug(s"Reuse connection from Snowpark")
-            cachedJdbcConnections.put(connectionCacheKey, snowparkConnection)
+            cache.put(connectionCacheKey, snowparkConnection)
             snowparkConnection
-          case _ =>
+          case None =>
             val createdJdbcConnection = createJDBCConnection(parameters)
+            try {
+              onCreated(createdJdbcConnection)
+            } catch {
+              case error: Throwable =>
+                try createdJdbcConnection.close() catch { case _: Throwable => }
+                throw error
+            }
             if (enableCache) {
               log.debug(s"Cache the new created JDBCConnection")
-              cachedJdbcConnections.put(connectionCacheKey, createdJdbcConnection)
+              cache.put(connectionCacheKey, createdJdbcConnection)
             }
             createdJdbcConnection
         }
-        (newConnection, true)
+        (created, true)
       }
     val serverConnection = ServerConnection(jdbcConnection, enableCache)
 
-    log.info(s"Create ServerConnection with ${if (newConnection) "new" else "cached"}" +
+    log.info(s"Create ${label}ServerConnection with ${if (newConnection) "new" else "cached"}" +
       s" JDBC connection: ${serverConnection.getSessionID}")
 
-    // Send client info telemetry message.
     if (newConnection) {
       val extraValues = Map(TelemetryClientInfoFields.SFURL -> parameters.sfURL,
         TelemetryClientInfoFields.SHARED -> enableCache.toString)
@@ -316,39 +360,26 @@ private[snowflake] object ServerConnection {
       }
     }
 
-    try {
-      applyIcebergFreshnessSessionOverride(conn, params)
-    } catch {
-      case error: Throwable =>
-        try conn.close() catch { case _: Throwable => }
-        throw error
-    }
-
     jdbcConnectionCount.incrementAndGet()
     conn
   }
 
   /**
-   * Sets the Iceberg freshness overrides on a connection that is not shared.
-   * A failure is thrown with the parameter names. It is not logged and ignored.
+   * Sets ENFORCED and 0 seconds on a freshness-cache connection.
+   * A failure is thrown with the parameter name. It is not logged and ignored.
    */
-  private[snowflake] def applyIcebergFreshnessSessionOverride(
-      conn: Connection,
-      params: MergedParameters): Unit = {
-    params.icebergFreshnessSessionOverride.foreach { freshness =>
-      val statement = conn.createStatement()
-      try {
-        statement.execute(freshness.alterSessionSql)
-      } catch {
-        case e: SQLException =>
-          throw new SQLException(
-            "Failed to set Iceberg query freshness for the fallback read " +
-              s"(ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=${freshness.policy}, " +
-              s"ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE=${freshness.seconds}): ${e.getMessage}",
-            e)
-      } finally {
-        statement.close()
-      }
+  private[snowflake] def applyIcebergFreshnessSessionOverride(conn: Connection): Unit = {
+    val statement = conn.createStatement()
+    try {
+      statement.execute(Parameters.ENSURE_FRESHNESS_ALTER_SESSION_SQL)
+    } catch {
+      case e: SQLException =>
+        throw new SQLException(
+          "Failed to set Iceberg query freshness for the fallback read " +
+            s"(ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=ENFORCED): ${e.getMessage}",
+          e)
+    } finally {
+      statement.close()
     }
   }
 

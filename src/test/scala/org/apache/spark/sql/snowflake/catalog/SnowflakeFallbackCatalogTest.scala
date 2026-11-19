@@ -558,54 +558,40 @@ class SnowflakeFallbackCatalogTest extends AnyFunSuite {
     assert(sessionOverWarehouse.get("dbtable").contains("MY_SCHEMA.MY_TABLE"))
   }
 
-  test("snowflake-iceberg-freshness rejects an unknown policy at initialize") {
+  test("snowflake-ensure-freshness rejects a value other than true or false") {
     val catalog = new SnowflakeFallbackCatalog()
     intercept[IllegalArgumentException] {
       catalog.initialize("alias", new CaseInsensitiveStringMap(
-        Map("snowflake-iceberg-freshness" -> "required").asJava))
+        Map("snowflake-ensure-freshness" -> "enforced").asJava))
     }
   }
 
-  test("snowflake-iceberg-refresh-seconds rejects a value outside 0 to 86400") {
-    val catalog = new SnowflakeFallbackCatalog()
-    intercept[IllegalArgumentException] {
-      catalog.initialize("alias", new CaseInsensitiveStringMap(
-        Map("snowflake-iceberg-refresh-seconds" -> "86401").asJava))
-    }
-  }
-
-  test("freshness catalog options are not passed to the Iceberg delegate") {
+  test("snowflake-ensure-freshness is not passed to the Iceberg delegate") {
     val catalog = new SnowflakeFallbackCatalog()
     catalog.initialize("alias", new CaseInsensitiveStringMap(Map(
       "catalog-impl" -> classOf[TestDelegateCatalog].getName,
-      "snowflake-iceberg-freshness" -> "enforced",
-      "snowflake-iceberg-refresh-seconds" -> "0",
+      "snowflake-ensure-freshness" -> "true",
       "warehouse" -> "MY_DB"
     ).asJava))
     val options = TestDelegateCatalog.lastInstance.initializeOptions
-    assert(options.get("snowflake-iceberg-freshness") == null)
-    assert(options.get("snowflake-iceberg-refresh-seconds") == null)
+    assert(options.get("snowflake-ensure-freshness") == null)
     assert(options.get("warehouse") == "MY_DB")
   }
 
-  test("freshness stamp is written only from the catalog option") {
+  test("ensure-freshness stamp is written only from the catalog option") {
     val off = fallbackProps(Map(
-      "spark.snowflake.internal_fallback_iceberg_freshness" -> "ENFORCED"))
-    assert(!off.contains("internal_fallback_iceberg_freshness"))
+      "spark.snowflake.internal_fallback_ensure_freshness" -> "true"))
+    assert(!off.contains("internal_fallback_ensure_freshness"))
 
-    val enforced = fallbackProps(
-      Map("spark.snowflake.internal_fallback_iceberg_freshness" -> "TARGET"),
-      Map(
-        "snowflake-database" -> "MY_DB_2",
-        "snowflake-iceberg-freshness" -> "enforced",
-        "snowflake-iceberg-refresh-seconds" -> "15"))
-    assert(enforced.get("internal_fallback_iceberg_freshness").contains("ENFORCED"))
-    assert(enforced.get("internal_fallback_iceberg_refresh_seconds").contains("15"))
-
-    val target = fallbackProps(Map.empty, Map(
+    val on = fallbackProps(Map(
+      "spark.snowflake.internal_fallback_ensure_freshness" -> "false"), Map(
       "snowflake-database" -> "MY_DB_2",
-      "snowflake-iceberg-freshness" -> "target"))
-    assert(target.get("internal_fallback_iceberg_freshness").contains("TARGET"))
-    assert(target.get("internal_fallback_iceberg_refresh_seconds").contains("0"))
+      "snowflake-ensure-freshness" -> "true"))
+    assert(on.get("internal_fallback_ensure_freshness").contains("true"))
+
+    val explicitOff = fallbackProps(Map.empty, Map(
+      "snowflake-database" -> "MY_DB_2",
+      "snowflake-ensure-freshness" -> "false"))
+    assert(!explicitOff.contains("internal_fallback_ensure_freshness"))
   }
 }

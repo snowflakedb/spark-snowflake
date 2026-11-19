@@ -436,58 +436,38 @@ class ParametersSuite extends AnyFunSuite with Matchers {
     paramsWithFullyQualifiedStage.snowflakeStage shouldBe Some("mydb.myschema.my_stage")
   }
 
-  test("iceberg freshness override is empty unless the fallback stamp is set") {
+  test("ensure freshness is off unless the fallback stamp is set") {
     val plain = Parameters.mergeParameters(minParams)
-    plain.icebergFreshnessSessionOverride shouldBe None
-    plain.sfExtraOptions.keySet should not contain Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS
+    plain.ensureIcebergFreshness shouldBe false
+    plain.sfExtraOptions.keySet should not contain (
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS)
 
     val off = Parameters.mergeParameters(minParams ++ Map(
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "off"))
-    off.icebergFreshnessSessionOverride shouldBe None
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "false"))
+    off.ensureIcebergFreshness shouldBe false
+
+    val on = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true"))
+    on.ensureIcebergFreshness shouldBe true
   }
 
-  test("ENFORCED freshness override sets only the current parameters") {
-    val params = Parameters.mergeParameters(minParams ++ Map(
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "enforced",
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "0"))
-    val freshness = params.icebergFreshnessSessionOverride.get
-    freshness.policy shouldBe "ENFORCED"
-    freshness.seconds shouldBe 0
-    freshness.alterSessionSql shouldBe
+  test("ensure freshness sets ENFORCED and zero seconds") {
+    Parameters.ENSURE_FRESHNESS_ALTER_SESSION_SQL shouldBe
       "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
         "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0"
   }
 
-  test("TARGET freshness override sets only the current parameters") {
-    val params = Parameters.mergeParameters(minParams ++ Map(
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "TARGET",
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "30"))
-    val sql = params.icebergFreshnessSessionOverride.get.alterSessionSql
-    sql shouldBe
-      "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'TARGET', " +
-        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 30"
-  }
-
-  test("freshness seconds outside 0 to 86400 are rejected") {
-    intercept[IllegalArgumentException] {
-      Parameters.mergeParameters(minParams ++ Map(
-        Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED",
-        Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_REFRESH_SECONDS -> "-1"
-      )).icebergFreshnessSessionOverride
-    }
-  }
-
-  test("a freshness stamp changes the JDBC connection cache key") {
+  test("an ensure-freshness stamp changes the JDBC connection cache key") {
     val plain = new ConnectionCacheKey(Parameters.mergeParameters(minParams))
     val stamped = new ConnectionCacheKey(Parameters.mergeParameters(minParams ++ Map(
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED")))
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true")))
     plain should not equal stamped
   }
 
-  test("freshness on a caller-supplied connection is rejected before login") {
+  test("ensure freshness on a caller-supplied connection is rejected before login") {
     val params = Parameters.mergeParameters(Map(
       "connection_id" -> "not-a-session",
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED"))
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true"))
     val thrown = intercept[IllegalStateException] {
       DefaultJDBCWrapper.getConnector(params)
     }
@@ -495,8 +475,6 @@ class ParametersSuite extends AnyFunSuite with Matchers {
   }
 
   test("a failed freshness ALTER SESSION names the parameter and closes the statement") {
-    val params = Parameters.mergeParameters(minParams ++ Map(
-      Parameters.PARAM_INTERNAL_FALLBACK_ICEBERG_FRESHNESS -> "ENFORCED"))
     val connection = mock(classOf[Connection])
     val statement = mock(classOf[Statement])
     when(connection.createStatement()).thenReturn(statement)
@@ -504,7 +482,7 @@ class ParametersSuite extends AnyFunSuite with Matchers {
       .thenThrow(new SQLException("unknown session parameter"))
 
     val thrown = intercept[SQLException] {
-      ServerConnection.applyIcebergFreshnessSessionOverride(connection, params)
+      ServerConnection.applyIcebergFreshnessSessionOverride(connection)
     }
     thrown.getMessage should include ("ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=ENFORCED")
     verify(statement).close()
