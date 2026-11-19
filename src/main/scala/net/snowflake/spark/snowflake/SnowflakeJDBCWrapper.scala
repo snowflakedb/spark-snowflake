@@ -110,7 +110,11 @@ private[snowflake] class JDBCWrapper {
     * Get a connection based on the provided parameters
     */
   def getConnector(params: MergedParameters): ServerConnection =
-    ServerConnection.getServerConnection(params)
+    if (params.ensureIcebergFreshness) {
+      ServerConnection.getFreshnessServerConnection(params)
+    } else {
+      ServerConnection.getServerConnection(params)
+    }
 
   /**
     * Compute the SQL schema string for the given Spark SQL Schema.

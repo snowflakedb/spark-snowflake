@@ -17,8 +17,11 @@
 
 package net.snowflake.spark.snowflake
 
+import org.mockito.Mockito._
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
+
+import java.sql.{Connection, SQLException, Statement}
 
 /**
   * Check validation of parameter config
@@ -431,5 +434,57 @@ class ParametersSuite extends AnyFunSuite with Matchers {
     val paramsWithFullyQualifiedStage = Parameters.mergeParameters(
       minParams ++ Map(Parameters.PARAM_SNOWFLAKE_STAGE -> "mydb.myschema.my_stage"))
     paramsWithFullyQualifiedStage.snowflakeStage shouldBe Some("mydb.myschema.my_stage")
+  }
+
+  test("ensure freshness is off unless the fallback stamp is set") {
+    val plain = Parameters.mergeParameters(minParams)
+    plain.ensureIcebergFreshness shouldBe false
+    plain.sfExtraOptions.keySet should not contain (
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS)
+
+    val off = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "false"))
+    off.ensureIcebergFreshness shouldBe false
+
+    val on = Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true"))
+    on.ensureIcebergFreshness shouldBe true
+  }
+
+  test("ensure freshness sets ENFORCED and zero seconds") {
+    Parameters.ENSURE_FRESHNESS_ALTER_SESSION_SQL shouldBe
+      "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
+        "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0"
+  }
+
+  test("an ensure-freshness stamp changes the JDBC connection cache key") {
+    val plain = new ConnectionCacheKey(Parameters.mergeParameters(minParams))
+    val stamped = new ConnectionCacheKey(Parameters.mergeParameters(minParams ++ Map(
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true")))
+    plain should not equal stamped
+  }
+
+  test("ensure freshness on a caller-supplied connection is rejected before login") {
+    val params = Parameters.mergeParameters(Map(
+      "connection_id" -> "not-a-session",
+      Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true"))
+    val thrown = intercept[IllegalStateException] {
+      DefaultJDBCWrapper.getConnector(params)
+    }
+    thrown.getMessage should include ("caller-supplied")
+  }
+
+  test("a failed freshness ALTER SESSION names the parameter and closes the statement") {
+    val connection = mock(classOf[Connection])
+    val statement = mock(classOf[Statement])
+    when(connection.createStatement()).thenReturn(statement)
+    when(statement.execute(org.mockito.ArgumentMatchers.anyString()))
+      .thenThrow(new SQLException("unknown session parameter"))
+
+    val thrown = intercept[SQLException] {
+      ServerConnection.applyIcebergFreshnessSessionOverride(connection)
+    }
+    thrown.getMessage should include ("ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE=ENFORCED")
+    verify(statement).close()
   }
 }

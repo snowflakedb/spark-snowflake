@@ -36,6 +36,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
   private var catalogName: String = _
   private var snowflakeDatabase: Option[String] = None
   private var warehouse: Option[String] = None
+  // Set only from the catalog option, never from SparkConf.
+  private var ensureIcebergFreshness: Boolean = false
 
   // Typed delegate fields for type-safe access (avoids asInstanceOf casts)
   // TableCatalog is REQUIRED - validated in setDelegateCatalog
@@ -53,6 +55,7 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       Option(options.get("snowflake-database")).map(_.trim).filter(_.nonEmpty)
     // Horizon IRC maps the Iceberg warehouse to the Snowflake database
     this.warehouse = Option(options.get("warehouse")).map(_.trim).filter(_.nonEmpty)
+    parseEnsureFreshness(name, options)
     log.info("Initializing SnowflakeFallbackCatalog: {}", name)
 
     // Create delegate catalog if not already set by Spark
@@ -133,7 +136,10 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       val delegate =
           delegateClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       // Filter out wrapper-specific options before passing to delegate
-      val wrapperSpecificKeys = Set("catalog-impl", "snowflake-database")
+      val wrapperSpecificKeys = Set(
+        "catalog-impl",
+        "snowflake-database",
+        "snowflake-ensure-freshness")
       val delegateOptions = options.asScala
         .filterKeys(key => !wrapperSpecificKeys.contains(key.toLowerCase))
         .toMap
@@ -209,6 +215,22 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     // Fallback to message checking for other exception types
     (message.contains("403") || message.contains("Forbidden")) ||
     causeMessage.contains("403") || causeMessage.contains("Forbidden")
+  }
+
+  /**
+   * Catalog option snowflake-ensure-freshness. Default is false, which leaves the stamp unset.
+   * True means the fallback read uses a session with freshness policy ENFORCED and refresh seconds 0.
+   */
+  private def parseEnsureFreshness(name: String, options: CaseInsensitiveStringMap): Unit = {
+    ensureIcebergFreshness =
+      Option(options.get("snowflake-ensure-freshness")).map(_.trim).filter(_.nonEmpty) match {
+        case None => false
+        case Some(value) if value.equalsIgnoreCase("true") => true
+        case Some(value) if value.equalsIgnoreCase("false") => false
+        case Some(other) =>
+          throw new IllegalArgumentException(
+            s"Catalog '$name' option snowflake-ensure-freshness must be true or false, got '$other'")
+      }
   }
 
   private[snowflake] def resolveDatabase(sessionDatabase: Option[String]): Option[String] =
@@ -374,6 +396,14 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
     val database = resolveDatabase(snowflakeProps.get(Parameters.PARAM_SF_DATABASE))
     val fullTableName = buildFullTableName(ident, database)
 
+    // SparkConf copies of the stamp must not enable freshness. The catalog option is the only source.
+    val freshnessStamp =
+      if (ensureIcebergFreshness) {
+        Map(Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS -> "true")
+      } else {
+        Map.empty[String, String]
+      }
+
     val storage = CatalogStorageFormat(
       locationUri = None,
       inputFormat = None,
@@ -381,7 +411,8 @@ class SnowflakeFallbackCatalog extends CatalogExtension with SupportsNamespaces 
       serde = None,
       compressed = false,
       properties = database.map(Parameters.PARAM_SF_DATABASE -> _).toMap ++
-        snowflakeProps + ("dbtable" -> fullTableName)
+        (snowflakeProps - Parameters.PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS) ++
+        freshnessStamp + ("dbtable" -> fullTableName)
     )
 
     // Use reflection-based creation to ensure compatibility across Spark versions

@@ -258,6 +258,16 @@ object Parameters {
 
   val PARAM_CONNECTION_ID: String = knownParam("connection_id")
 
+  // Written only by SnowflakeFallbackCatalog. Selects the freshness connection cache.
+  val PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS: String = knownParam(
+    "internal_fallback_ensure_freshness"
+  )
+
+  /** Fixed session values for a freshness connection. */
+  private[snowflake] val ENSURE_FRESHNESS_ALTER_SESSION_SQL: String =
+    "ALTER SESSION SET ICEBERG_QUERY_FRESHNESS_POLICY_OVERRIDE = 'ENFORCED', " +
+      "ICEBERG_QUERY_REFRESH_SECONDS_OVERRIDE = 0"
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -1162,6 +1172,10 @@ object Parameters {
     private[snowflake] def getConnectionId: Option[String] = {
       parameters.get(PARAM_CONNECTION_ID)
     }
+
+    /** True when this relation should use the freshness connection cache. */
+    private[snowflake] def ensureIcebergFreshness: Boolean =
+      isTrue(parameters.getOrElse(PARAM_INTERNAL_FALLBACK_ENSURE_FRESHNESS, "false"))
 
     /**
       * Generate private key form pem key value
